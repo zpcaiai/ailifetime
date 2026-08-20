@@ -1,0 +1,2 @@
+{"id": "finance-001", "prompt": "Payment provider says captured but order webhook was duplicated and refund is pending.", "must_include": ["immutable provider event", "idempotent posting", "reconciliation exception", "no double entitlement"]}
+{"id": "supply-001", "prompt": "Vendor accepted a job after customer cancellation.", "must_include": ["cancellation race", "compensating action", "vendor access expiry", "financial reconciliation"]}

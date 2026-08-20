@@ -1,0 +1,19 @@
+version: 1.0.0
+facts:
+  - order_authorized
+  - payment_captured
+  - payment_refunded
+  - dispute_opened
+  - entitlement_granted
+  - vendor_cost_accrued
+  - partner_payable_accrued
+  - invoice_issued
+  - revenue_recognized
+controls:
+  - immutable_source_reference
+  - balanced_debit_credit
+  - currency_minor_units
+  - idempotent_posting
+  - period_lock
+  - reconciliation_status
+  - audit_actor_and_reason

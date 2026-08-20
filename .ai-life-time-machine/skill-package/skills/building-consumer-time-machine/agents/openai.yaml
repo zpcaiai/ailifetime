@@ -1,0 +1,7 @@
+interface:
+  display_name: 消费者人生时光机
+  short_description: 把照片上传转化为可传播、可付费、可留存的消费者体验。
+  default_prompt: Use $building-consumer-time-machine to inspect the repository and
+    implement the next evidence-backed Batch.
+policy:
+  allow_implicit_invocation: true

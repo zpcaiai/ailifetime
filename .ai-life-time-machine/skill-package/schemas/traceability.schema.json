@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Requirement traceability item",
+  "type": "object",
+  "required": [
+    "requirement_id",
+    "source_files",
+    "symbols",
+    "tests",
+    "evidence"
+  ],
+  "properties": {
+    "requirement_id": {
+      "type": "string",
+      "pattern": "^B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])-R0[1-5]$"
+    },
+    "source_files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "symbols": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "tests": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,6 @@
+interface:
+  display_name: "照片书、相框与实物供应链"
+  short_description: "将数字作品扩展为可配置、可生产、可追踪、可售后的纪念礼品业务。"
+  default_prompt: "Use $building-physical-supply-network to inspect the active project profile, choose the requested ready Batch, implement it in the existing repository, run its acceptance commands, and produce schema-valid evidence."
+policy:
+  allow_implicit_invocation: true

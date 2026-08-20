@@ -1,0 +1,7 @@
+interface:
+  display_name: 增长、留存与数据闭环
+  short_description: 建立传播、复购、渠道扩张和单位经济闭环。
+  default_prompt: Use $building-growth-data-loop to inspect the repository and implement
+    the next evidence-backed Batch.
+policy:
+  allow_implicit_invocation: true

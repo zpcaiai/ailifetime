@@ -1,0 +1,113 @@
+{
+  "name": "ai-life-time-machine-commercial-project-factory",
+  "version": "2.0.0",
+  "generated_at": "2026-08-17T00:00:00+08:00",
+  "title": "AI 人生时光机完整商业级项目工厂 Claude Code / Codex Skills Package",
+  "language": [
+    "zh-CN",
+    "en"
+  ],
+  "format": "Agent Skills directory package with project factory, profiles, evidence gates, and release certification",
+  "install_targets": {
+    "codex": ".agents/skills/<skill>/SKILL.md",
+    "claude-code": ".claude/skills/<skill>/SKILL.md",
+    "supporting_bundle": ".ai-life-time-machine/skill-package/"
+  },
+  "counts": {
+    "skills": 22,
+    "batches": 128,
+    "requirements": 640
+  },
+  "coverage": {
+    "consumer": [
+      "marketing site",
+      "consumer web",
+      "iOS/Android",
+      "WeChat mini-program",
+      "family library",
+      "future self"
+    ],
+    "b2b2c": [
+      "partner portal",
+      "studio/kiosk",
+      "gift commerce",
+      "insurance/retirement education",
+      "SDK/API/webhook"
+    ],
+    "commerce": [
+      "catalog",
+      "payments",
+      "IAP",
+      "subscriptions",
+      "gift codes",
+      "refunds",
+      "ledger",
+      "invoice/fapiao",
+      "payouts"
+    ],
+    "operations": [
+      "admin",
+      "moderation",
+      "support",
+      "CRM",
+      "customer success",
+      "notification",
+      "finance close",
+      "vendor supply"
+    ],
+    "platform": [
+      "AI media pipeline",
+      "workflow",
+      "data warehouse",
+      "experiments",
+      "observability",
+      "security",
+      "DR",
+      "multi-region"
+    ],
+    "delivery": [
+      "scaffolder",
+      "profiles",
+      "stack profiles",
+      "batch prompts",
+      "worktree orchestration",
+      "evidence verification",
+      "staged launch"
+    ]
+  },
+  "reference_stack": {
+    "web_and_portals": "Next.js App Router + TypeScript + Tailwind + shadcn/ui",
+    "control_plane": "Java 21 + Spring Boot + Gradle",
+    "media_and_data_workers": "Python 3.12 + FastAPI/worker runtime",
+    "mobile": "Flutter reference; React Native/Expo profile available",
+    "mini_program": "Taro + TypeScript reference; native WeChat adapter permitted",
+    "data": "PostgreSQL + Redis + S3-compatible object storage + analytical warehouse adapter",
+    "workflow": "Temporal preferred; adapt an existing durable workflow engine",
+    "observability": "OpenTelemetry + metrics/logs/traces backend",
+    "delivery": "Docker Compose local; IaC/Kubernetes or existing platform in production"
+  },
+  "global_invariants": [
+    "Illustrative age transformation, not a prediction.",
+    "Purpose-specific revocable consent for every identifiable participant.",
+    "No biometric or interaction signal in regulated/consequential decisioning.",
+    "Private by default; AI labels and provenance are mandatory.",
+    "Child and future-self safeguards fail closed.",
+    "Money, orders, payouts, taxes, and supplier work reconcile to auditable truth.",
+    "Release requires reproducible evidence, not agent assertions."
+  ],
+  "entrypoints": {
+    "readme": "README.md",
+    "inventory": "INVENTORY.md",
+    "complete_scope": "docs/COMPLETE_PROJECT_SCOPE.md",
+    "module_catalog": "docs/MODULE_CATALOG.md",
+    "profiles": "profiles/",
+    "stack_profiles": "stack-profiles/",
+    "master_prompt": "MASTER_BUILD_PROMPT.md",
+    "scaffold": "scripts/scaffold_project.py",
+    "install": "scripts/install_skills.py",
+    "validate": "scripts/validate_package.py",
+    "orchestrate": "scripts/projectctl.py",
+    "prompt": "scripts/generate_batch_prompt.py",
+    "verify": "scripts/verify_release.py"
+  }
+}

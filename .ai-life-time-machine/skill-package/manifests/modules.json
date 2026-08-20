@@ -1,0 +1,2750 @@
+[
+  {
+    "module": "tools/repo-inspector",
+    "batch_id": "B00",
+    "skill": "orchestrating-life-time-machine",
+    "phase": "P0-discovery"
+  },
+  {
+    "module": "docs/baseline",
+    "batch_id": "B00",
+    "skill": "orchestrating-life-time-machine",
+    "phase": "P0-discovery"
+  },
+  {
+    "module": "evidence/baseline",
+    "batch_id": "B00",
+    "skill": "orchestrating-life-time-machine",
+    "phase": "P0-discovery"
+  },
+  {
+    "module": "scripts/dev-doctor",
+    "batch_id": "B00",
+    "skill": "orchestrating-life-time-machine",
+    "phase": "P0-discovery"
+  },
+  {
+    "module": "apps/consumer-web",
+    "batch_id": "B01",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "apps/partner-portal",
+    "batch_id": "B01",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "apps/admin-console",
+    "batch_id": "B01",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "services/control-plane",
+    "batch_id": "B01",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "services/media-worker",
+    "batch_id": "B01",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "packages/contracts",
+    "batch_id": "B01",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "infra/local",
+    "batch_id": "B01",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "packages/contracts",
+    "batch_id": "B02",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "services/control-plane/domain",
+    "batch_id": "B02",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "db/migrations",
+    "batch_id": "B02",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "contracts/openapi",
+    "batch_id": "B02",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "contracts/events",
+    "batch_id": "B02",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "services/identity",
+    "batch_id": "B03",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "services/authorization",
+    "batch_id": "B03",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "packages/auth-client",
+    "batch_id": "B03",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "apps/*/middleware",
+    "batch_id": "B03",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "db/rls",
+    "batch_id": "B03",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "services/consent",
+    "batch_id": "B04",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "services/privacy-rights",
+    "batch_id": "B04",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "apps/consent-ui",
+    "batch_id": "B04",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "packages/policy-engine",
+    "batch_id": "B04",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "services/media-vault",
+    "batch_id": "B05",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "services/deletion-orchestrator",
+    "batch_id": "B05",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "storage/policies",
+    "batch_id": "B05",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "packages/signed-url",
+    "batch_id": "B05",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "apps/consumer-web/landing",
+    "batch_id": "B06",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "services/guest-session",
+    "batch_id": "B06",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "packages/attribution",
+    "batch_id": "B06",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "packages/feature-flags",
+    "batch_id": "B06",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "apps/consumer-web/uploader",
+    "batch_id": "B07",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "services/media-preflight",
+    "batch_id": "B07",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "services/quality-check",
+    "batch_id": "B07",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "packages/capture-guide",
+    "batch_id": "B07",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "apps/consumer-web/editor",
+    "batch_id": "B08",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "services/template-catalog",
+    "batch_id": "B08",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "packages/composition-schema",
+    "batch_id": "B08",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "apps/admin/template-studio",
+    "batch_id": "B08",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "services/generation-control",
+    "batch_id": "B09",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "apps/consumer-web/job-status",
+    "batch_id": "B09",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "packages/job-state-machine",
+    "batch_id": "B09",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "services/notification",
+    "batch_id": "B09",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "services/share",
+    "batch_id": "B10",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "services/export",
+    "batch_id": "B10",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "packages/provenance",
+    "batch_id": "B10",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "apps/consumer-web/gallery",
+    "batch_id": "B10",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "services/library",
+    "batch_id": "B11",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "apps/consumer-web/library",
+    "batch_id": "B11",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "services/household",
+    "batch_id": "B11",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "packages/storage-quota",
+    "batch_id": "B11",
+    "skill": "building-consumer-time-machine",
+    "phase": "P2-consumer"
+  },
+  {
+    "module": "services/provider-gateway",
+    "batch_id": "B12",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "packages/provider-contracts",
+    "batch_id": "B12",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "services/model-registry",
+    "batch_id": "B12",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "services/provider-evals",
+    "batch_id": "B12",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "services/workflow",
+    "batch_id": "B13",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "services/queue",
+    "batch_id": "B13",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "packages/idempotency",
+    "batch_id": "B13",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "services/scheduler",
+    "batch_id": "B13",
+    "skill": "bootstrapping-life-time-machine-platform",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "services/media-worker/age-timeline",
+    "batch_id": "B14",
+    "skill": "building-age-media-pipeline",
+    "phase": "P3-media"
+  },
+  {
+    "module": "services/prompt-policy",
+    "batch_id": "B14",
+    "skill": "building-age-media-pipeline",
+    "phase": "P3-media"
+  },
+  {
+    "module": "packages/timeline-plan",
+    "batch_id": "B14",
+    "skill": "building-age-media-pipeline",
+    "phase": "P3-media"
+  },
+  {
+    "module": "services/result-assembler",
+    "batch_id": "B14",
+    "skill": "building-age-media-pipeline",
+    "phase": "P3-media"
+  },
+  {
+    "module": "services/quality-engine",
+    "batch_id": "B15",
+    "skill": "building-age-media-pipeline",
+    "phase": "P3-media"
+  },
+  {
+    "module": "services/identity-consistency",
+    "batch_id": "B15",
+    "skill": "building-age-media-pipeline",
+    "phase": "P3-media"
+  },
+  {
+    "module": "apps/admin/quality-review",
+    "batch_id": "B15",
+    "skill": "building-age-media-pipeline",
+    "phase": "P3-media"
+  },
+  {
+    "module": "evals/golden-set",
+    "batch_id": "B15",
+    "skill": "building-age-media-pipeline",
+    "phase": "P3-media"
+  },
+  {
+    "module": "services/media-worker/video",
+    "batch_id": "B16",
+    "skill": "building-age-media-pipeline",
+    "phase": "P3-media"
+  },
+  {
+    "module": "services/media-worker/audio",
+    "batch_id": "B16",
+    "skill": "building-age-media-pipeline",
+    "phase": "P3-media"
+  },
+  {
+    "module": "packages/timeline-renderer",
+    "batch_id": "B16",
+    "skill": "building-age-media-pipeline",
+    "phase": "P3-media"
+  },
+  {
+    "module": "services/transcode",
+    "batch_id": "B16",
+    "skill": "building-age-media-pipeline",
+    "phase": "P3-media"
+  },
+  {
+    "module": "services/safety-policy",
+    "batch_id": "B17",
+    "skill": "building-age-media-pipeline",
+    "phase": "P3-media"
+  },
+  {
+    "module": "services/provenance",
+    "batch_id": "B17",
+    "skill": "building-age-media-pipeline",
+    "phase": "P3-media"
+  },
+  {
+    "module": "services/moderation",
+    "batch_id": "B17",
+    "skill": "building-age-media-pipeline",
+    "phase": "P3-media"
+  },
+  {
+    "module": "packages/content-label",
+    "batch_id": "B17",
+    "skill": "building-age-media-pipeline",
+    "phase": "P3-media"
+  },
+  {
+    "module": "services/cost-engine",
+    "batch_id": "B18",
+    "skill": "building-age-media-pipeline",
+    "phase": "P3-media"
+  },
+  {
+    "module": "services/quota",
+    "batch_id": "B18",
+    "skill": "building-age-media-pipeline",
+    "phase": "P3-media"
+  },
+  {
+    "module": "services/cache",
+    "batch_id": "B18",
+    "skill": "building-age-media-pipeline",
+    "phase": "P3-media"
+  },
+  {
+    "module": "apps/admin/cost-console",
+    "batch_id": "B18",
+    "skill": "building-age-media-pipeline",
+    "phase": "P3-media"
+  },
+  {
+    "module": "services/family-graph",
+    "batch_id": "B19",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "apps/consumer-web/family",
+    "batch_id": "B19",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "services/invitations",
+    "batch_id": "B19",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "packages/relationship-policy",
+    "batch_id": "B19",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "services/media-worker/multi-person",
+    "batch_id": "B20",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "services/scene-layout",
+    "batch_id": "B20",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "apps/consumer-web/family-composer",
+    "batch_id": "B20",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "evals/family-golden-set",
+    "batch_id": "B20",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "services/child-safety",
+    "batch_id": "B21",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "packages/age-assurance",
+    "batch_id": "B21",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "apps/guardian-center",
+    "batch_id": "B21",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "services/child-retention",
+    "batch_id": "B21",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "services/future-self",
+    "batch_id": "B22",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "services/narrative-policy",
+    "batch_id": "B22",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "apps/consumer-web/time-capsule",
+    "batch_id": "B22",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "packages/story-schema",
+    "batch_id": "B22",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "services/future-dialogue",
+    "batch_id": "B23",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "services/dialogue-safety",
+    "batch_id": "B23",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "apps/consumer-web/dialogue",
+    "batch_id": "B23",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "services/crisis-routing",
+    "batch_id": "B23",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "services/rituals",
+    "batch_id": "B24",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "services/annual-refresh",
+    "batch_id": "B24",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "apps/consumer-web/archive",
+    "batch_id": "B24",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "services/scheduler",
+    "batch_id": "B24",
+    "skill": "building-family-future-self",
+    "phase": "P4-family"
+  },
+  {
+    "module": "services/catalog",
+    "batch_id": "B25",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "services/pricing",
+    "batch_id": "B25",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "apps/admin/catalog",
+    "batch_id": "B25",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "packages/entitlements",
+    "batch_id": "B25",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "services/checkout",
+    "batch_id": "B26",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "services/payment",
+    "batch_id": "B26",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "services/ledger",
+    "batch_id": "B26",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "apps/consumer-web/checkout",
+    "batch_id": "B26",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "services/subscription",
+    "batch_id": "B27",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "services/credits",
+    "batch_id": "B27",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "services/gifts",
+    "batch_id": "B27",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "apps/consumer-web/billing",
+    "batch_id": "B27",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "services/order",
+    "batch_id": "B28",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "services/delivery",
+    "batch_id": "B28",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "apps/consumer-web/orders",
+    "batch_id": "B28",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "packages/license-policy",
+    "batch_id": "B28",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "services/print-preflight",
+    "batch_id": "B29",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "services/fulfillment",
+    "batch_id": "B29",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "services/shipping",
+    "batch_id": "B29",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "apps/consumer-web/product-customizer",
+    "batch_id": "B29",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "apps/admin/support",
+    "batch_id": "B30",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "services/case-management",
+    "batch_id": "B30",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "services/refund-policy",
+    "batch_id": "B30",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "packages/redaction",
+    "batch_id": "B30",
+    "skill": "building-commerce-fulfillment",
+    "phase": "P5-commerce"
+  },
+  {
+    "module": "services/partner",
+    "batch_id": "B31",
+    "skill": "building-partner-platform",
+    "phase": "P6-partner"
+  },
+  {
+    "module": "services/tenant-config",
+    "batch_id": "B31",
+    "skill": "building-partner-platform",
+    "phase": "P6-partner"
+  },
+  {
+    "module": "apps/partner-portal",
+    "batch_id": "B31",
+    "skill": "building-partner-platform",
+    "phase": "P6-partner"
+  },
+  {
+    "module": "db/partner-rls",
+    "batch_id": "B31",
+    "skill": "building-partner-platform",
+    "phase": "P6-partner"
+  },
+  {
+    "module": "services/partner-onboarding",
+    "batch_id": "B32",
+    "skill": "building-partner-platform",
+    "phase": "P6-partner"
+  },
+  {
+    "module": "apps/partner-portal/onboarding",
+    "batch_id": "B32",
+    "skill": "building-partner-platform",
+    "phase": "P6-partner"
+  },
+  {
+    "module": "services/config-approval",
+    "batch_id": "B32",
+    "skill": "building-partner-platform",
+    "phase": "P6-partner"
+  },
+  {
+    "module": "templates/partner-launch",
+    "batch_id": "B32",
+    "skill": "building-partner-platform",
+    "phase": "P6-partner"
+  },
+  {
+    "module": "services/partner-api",
+    "batch_id": "B33",
+    "skill": "building-partner-platform",
+    "phase": "P6-partner"
+  },
+  {
+    "module": "sdk/typescript",
+    "batch_id": "B33",
+    "skill": "building-partner-platform",
+    "phase": "P6-partner"
+  },
+  {
+    "module": "sdk/java",
+    "batch_id": "B33",
+    "skill": "building-partner-platform",
+    "phase": "P6-partner"
+  },
+  {
+    "module": "sdk/python",
+    "batch_id": "B33",
+    "skill": "building-partner-platform",
+    "phase": "P6-partner"
+  },
+  {
+    "module": "services/webhook",
+    "batch_id": "B33",
+    "skill": "building-partner-platform",
+    "phase": "P6-partner"
+  },
+  {
+    "module": "services/sso",
+    "batch_id": "B33",
+    "skill": "building-partner-platform",
+    "phase": "P6-partner"
+  },
+  {
+    "module": "services/metering",
+    "batch_id": "B34",
+    "skill": "building-partner-platform",
+    "phase": "P6-partner"
+  },
+  {
+    "module": "services/settlement",
+    "batch_id": "B34",
+    "skill": "building-partner-platform",
+    "phase": "P6-partner"
+  },
+  {
+    "module": "services/reconciliation",
+    "batch_id": "B34",
+    "skill": "building-partner-platform",
+    "phase": "P6-partner"
+  },
+  {
+    "module": "apps/partner-portal/finance",
+    "batch_id": "B34",
+    "skill": "building-partner-platform",
+    "phase": "P6-partner"
+  },
+  {
+    "module": "apps/partner-portal/studio",
+    "batch_id": "B35",
+    "skill": "building-channel-solutions",
+    "phase": "P7-channels"
+  },
+  {
+    "module": "apps/kiosk",
+    "batch_id": "B35",
+    "skill": "building-channel-solutions",
+    "phase": "P7-channels"
+  },
+  {
+    "module": "services/studio-workflow",
+    "batch_id": "B35",
+    "skill": "building-channel-solutions",
+    "phase": "P7-channels"
+  },
+  {
+    "module": "services/device-management",
+    "batch_id": "B35",
+    "skill": "building-channel-solutions",
+    "phase": "P7-channels"
+  },
+  {
+    "module": "services/gift-channel",
+    "batch_id": "B36",
+    "skill": "building-channel-solutions",
+    "phase": "P7-channels"
+  },
+  {
+    "module": "apps/gift-builder",
+    "batch_id": "B36",
+    "skill": "building-channel-solutions",
+    "phase": "P7-channels"
+  },
+  {
+    "module": "services/recipient-consent",
+    "batch_id": "B36",
+    "skill": "building-channel-solutions",
+    "phase": "P7-channels"
+  },
+  {
+    "module": "packages/memorial-policy",
+    "batch_id": "B36",
+    "skill": "building-channel-solutions",
+    "phase": "P7-channels"
+  },
+  {
+    "module": "services/retirement-education",
+    "batch_id": "B37",
+    "skill": "building-channel-solutions",
+    "phase": "P7-channels"
+  },
+  {
+    "module": "apps/partner-portal/education",
+    "batch_id": "B37",
+    "skill": "building-channel-solutions",
+    "phase": "P7-channels"
+  },
+  {
+    "module": "packages/regulated-boundary",
+    "batch_id": "B37",
+    "skill": "building-channel-solutions",
+    "phase": "P7-channels"
+  },
+  {
+    "module": "services/content-review",
+    "batch_id": "B37",
+    "skill": "building-channel-solutions",
+    "phase": "P7-channels"
+  },
+  {
+    "module": "services/lead-consent",
+    "batch_id": "B38",
+    "skill": "building-channel-solutions",
+    "phase": "P7-channels"
+  },
+  {
+    "module": "services/crm-handoff",
+    "batch_id": "B38",
+    "skill": "building-channel-solutions",
+    "phase": "P7-channels"
+  },
+  {
+    "module": "apps/partner-portal/leads",
+    "batch_id": "B38",
+    "skill": "building-channel-solutions",
+    "phase": "P7-channels"
+  },
+  {
+    "module": "packages/marketing-policy",
+    "batch_id": "B38",
+    "skill": "building-channel-solutions",
+    "phase": "P7-channels"
+  },
+  {
+    "module": "services/referral",
+    "batch_id": "B39",
+    "skill": "building-growth-data-loop",
+    "phase": "P8-growth"
+  },
+  {
+    "module": "services/affiliate",
+    "batch_id": "B39",
+    "skill": "building-growth-data-loop",
+    "phase": "P8-growth"
+  },
+  {
+    "module": "services/ugc",
+    "batch_id": "B39",
+    "skill": "building-growth-data-loop",
+    "phase": "P8-growth"
+  },
+  {
+    "module": "services/abuse-detection",
+    "batch_id": "B39",
+    "skill": "building-growth-data-loop",
+    "phase": "P8-growth"
+  },
+  {
+    "module": "services/lifecycle",
+    "batch_id": "B40",
+    "skill": "building-growth-data-loop",
+    "phase": "P8-growth"
+  },
+  {
+    "module": "services/notification-preferences",
+    "batch_id": "B40",
+    "skill": "building-growth-data-loop",
+    "phase": "P8-growth"
+  },
+  {
+    "module": "services/campaigns",
+    "batch_id": "B40",
+    "skill": "building-growth-data-loop",
+    "phase": "P8-growth"
+  },
+  {
+    "module": "apps/admin/campaign-builder",
+    "batch_id": "B40",
+    "skill": "building-growth-data-loop",
+    "phase": "P8-growth"
+  },
+  {
+    "module": "services/analytics",
+    "batch_id": "B41",
+    "skill": "building-growth-data-loop",
+    "phase": "P8-growth"
+  },
+  {
+    "module": "warehouse/semantic-layer",
+    "batch_id": "B41",
+    "skill": "building-growth-data-loop",
+    "phase": "P8-growth"
+  },
+  {
+    "module": "apps/admin/analytics",
+    "batch_id": "B41",
+    "skill": "building-growth-data-loop",
+    "phase": "P8-growth"
+  },
+  {
+    "module": "packages/event-quality",
+    "batch_id": "B41",
+    "skill": "building-growth-data-loop",
+    "phase": "P8-growth"
+  },
+  {
+    "module": "services/personalization",
+    "batch_id": "B42",
+    "skill": "building-growth-data-loop",
+    "phase": "P8-growth"
+  },
+  {
+    "module": "services/experimentation",
+    "batch_id": "B42",
+    "skill": "building-growth-data-loop",
+    "phase": "P8-growth"
+  },
+  {
+    "module": "packages/decision-log",
+    "batch_id": "B42",
+    "skill": "building-growth-data-loop",
+    "phase": "P8-growth"
+  },
+  {
+    "module": "apps/admin/experiments",
+    "batch_id": "B42",
+    "skill": "building-growth-data-loop",
+    "phase": "P8-growth"
+  },
+  {
+    "module": "apps/admin-console",
+    "batch_id": "B43",
+    "skill": "building-growth-data-loop",
+    "phase": "P8-growth"
+  },
+  {
+    "module": "services/moderation-queue",
+    "batch_id": "B43",
+    "skill": "building-growth-data-loop",
+    "phase": "P8-growth"
+  },
+  {
+    "module": "services/fraud",
+    "batch_id": "B43",
+    "skill": "building-growth-data-loop",
+    "phase": "P8-growth"
+  },
+  {
+    "module": "services/config-governance",
+    "batch_id": "B43",
+    "skill": "building-growth-data-loop",
+    "phase": "P8-growth"
+  },
+  {
+    "module": "services/policy-engine",
+    "batch_id": "B44",
+    "skill": "securing-operating-life-time-machine",
+    "phase": "P9-trust-ops"
+  },
+  {
+    "module": "security/threat-models",
+    "batch_id": "B44",
+    "skill": "securing-operating-life-time-machine",
+    "phase": "P9-trust-ops"
+  },
+  {
+    "module": "privacy/ropa",
+    "batch_id": "B44",
+    "skill": "securing-operating-life-time-machine",
+    "phase": "P9-trust-ops"
+  },
+  {
+    "module": "security/scanners",
+    "batch_id": "B44",
+    "skill": "securing-operating-life-time-machine",
+    "phase": "P9-trust-ops"
+  },
+  {
+    "module": "compliance/control-matrix",
+    "batch_id": "B44",
+    "skill": "securing-operating-life-time-machine",
+    "phase": "P9-trust-ops"
+  },
+  {
+    "module": "observability/otel",
+    "batch_id": "B45",
+    "skill": "securing-operating-life-time-machine",
+    "phase": "P9-trust-ops"
+  },
+  {
+    "module": "services/slo",
+    "batch_id": "B45",
+    "skill": "securing-operating-life-time-machine",
+    "phase": "P9-trust-ops"
+  },
+  {
+    "module": "apps/admin/operations",
+    "batch_id": "B45",
+    "skill": "securing-operating-life-time-machine",
+    "phase": "P9-trust-ops"
+  },
+  {
+    "module": "services/cost-alerting",
+    "batch_id": "B45",
+    "skill": "securing-operating-life-time-machine",
+    "phase": "P9-trust-ops"
+  },
+  {
+    "module": "infra/backup",
+    "batch_id": "B46",
+    "skill": "securing-operating-life-time-machine",
+    "phase": "P9-trust-ops"
+  },
+  {
+    "module": "infra/dr",
+    "batch_id": "B46",
+    "skill": "securing-operating-life-time-machine",
+    "phase": "P9-trust-ops"
+  },
+  {
+    "module": "security/incident-response",
+    "batch_id": "B46",
+    "skill": "securing-operating-life-time-machine",
+    "phase": "P9-trust-ops"
+  },
+  {
+    "module": "services/deletion-verifier",
+    "batch_id": "B46",
+    "skill": "securing-operating-life-time-machine",
+    "phase": "P9-trust-ops"
+  },
+  {
+    "module": ".github/workflows",
+    "batch_id": "B47",
+    "skill": "securing-operating-life-time-machine",
+    "phase": "P9-trust-ops"
+  },
+  {
+    "module": "infra/iac",
+    "batch_id": "B47",
+    "skill": "securing-operating-life-time-machine",
+    "phase": "P9-trust-ops"
+  },
+  {
+    "module": "scripts/release",
+    "batch_id": "B47",
+    "skill": "securing-operating-life-time-machine",
+    "phase": "P9-trust-ops"
+  },
+  {
+    "module": "security/supply-chain",
+    "batch_id": "B47",
+    "skill": "securing-operating-life-time-machine",
+    "phase": "P9-trust-ops"
+  },
+  {
+    "module": "deploy/manifests",
+    "batch_id": "B47",
+    "skill": "securing-operating-life-time-machine",
+    "phase": "P9-trust-ops"
+  },
+  {
+    "module": "e2e/business-loop",
+    "batch_id": "B48",
+    "skill": "certifying-life-time-machine-release",
+    "phase": "P10-certification"
+  },
+  {
+    "module": "e2e/channel",
+    "batch_id": "B48",
+    "skill": "certifying-life-time-machine-release",
+    "phase": "P10-certification"
+  },
+  {
+    "module": "e2e/abuse",
+    "batch_id": "B48",
+    "skill": "certifying-life-time-machine-release",
+    "phase": "P10-certification"
+  },
+  {
+    "module": "e2e/recovery",
+    "batch_id": "B48",
+    "skill": "certifying-life-time-machine-release",
+    "phase": "P10-certification"
+  },
+  {
+    "module": "fixtures/synthetic",
+    "batch_id": "B48",
+    "skill": "certifying-life-time-machine-release",
+    "phase": "P10-certification"
+  },
+  {
+    "module": "evidence/release",
+    "batch_id": "B49",
+    "skill": "certifying-life-time-machine-release",
+    "phase": "P10-certification"
+  },
+  {
+    "module": "scripts/verify-release",
+    "batch_id": "B49",
+    "skill": "certifying-life-time-machine-release",
+    "phase": "P10-certification"
+  },
+  {
+    "module": "templates/release-certificate",
+    "batch_id": "B49",
+    "skill": "certifying-life-time-machine-release",
+    "phase": "P10-certification"
+  },
+  {
+    "module": "docs/traceability",
+    "batch_id": "B49",
+    "skill": "certifying-life-time-machine-release",
+    "phase": "P10-certification"
+  },
+  {
+    "module": "scripts/orchestrate-batches",
+    "batch_id": "B50",
+    "skill": "orchestrating-life-time-machine",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "orchestration/state",
+    "batch_id": "B50",
+    "skill": "orchestrating-life-time-machine",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "orchestration/locks",
+    "batch_id": "B50",
+    "skill": "orchestrating-life-time-machine",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "templates/agent-handoff",
+    "batch_id": "B50",
+    "skill": "orchestrating-life-time-machine",
+    "phase": "P1-foundation"
+  },
+  {
+    "module": "docs/product-profile",
+    "batch_id": "B51",
+    "skill": "designing-life-time-machine-experience",
+    "phase": "P11-product-experience"
+  },
+  {
+    "module": "config/product-profile",
+    "batch_id": "B51",
+    "skill": "designing-life-time-machine-experience",
+    "phase": "P11-product-experience"
+  },
+  {
+    "module": "tools/profile-validator",
+    "batch_id": "B51",
+    "skill": "designing-life-time-machine-experience",
+    "phase": "P11-product-experience"
+  },
+  {
+    "module": "docs/research",
+    "batch_id": "B52",
+    "skill": "designing-life-time-machine-experience",
+    "phase": "P11-product-experience"
+  },
+  {
+    "module": "docs/personas",
+    "batch_id": "B52",
+    "skill": "designing-life-time-machine-experience",
+    "phase": "P11-product-experience"
+  },
+  {
+    "module": "docs/service-blueprints",
+    "batch_id": "B52",
+    "skill": "designing-life-time-machine-experience",
+    "phase": "P11-product-experience"
+  },
+  {
+    "module": "packages/information-architecture",
+    "batch_id": "B53",
+    "skill": "designing-life-time-machine-experience",
+    "phase": "P11-product-experience"
+  },
+  {
+    "module": "packages/content-model",
+    "batch_id": "B53",
+    "skill": "designing-life-time-machine-experience",
+    "phase": "P11-product-experience"
+  },
+  {
+    "module": "docs/navigation",
+    "batch_id": "B53",
+    "skill": "designing-life-time-machine-experience",
+    "phase": "P11-product-experience"
+  },
+  {
+    "module": "packages/design-tokens",
+    "batch_id": "B54",
+    "skill": "designing-life-time-machine-experience",
+    "phase": "P11-product-experience"
+  },
+  {
+    "module": "packages/web-ui",
+    "batch_id": "B54",
+    "skill": "designing-life-time-machine-experience",
+    "phase": "P11-product-experience"
+  },
+  {
+    "module": "packages/mobile-ui",
+    "batch_id": "B54",
+    "skill": "designing-life-time-machine-experience",
+    "phase": "P11-product-experience"
+  },
+  {
+    "module": "apps/storybook",
+    "batch_id": "B54",
+    "skill": "designing-life-time-machine-experience",
+    "phase": "P11-product-experience"
+  },
+  {
+    "module": "packages/i18n",
+    "batch_id": "B55",
+    "skill": "designing-life-time-machine-experience",
+    "phase": "P11-product-experience"
+  },
+  {
+    "module": "packages/accessibility",
+    "batch_id": "B55",
+    "skill": "designing-life-time-machine-experience",
+    "phase": "P11-product-experience"
+  },
+  {
+    "module": "packages/locale-runtime",
+    "batch_id": "B55",
+    "skill": "designing-life-time-machine-experience",
+    "phase": "P11-product-experience"
+  },
+  {
+    "module": "docs/ux-governance",
+    "batch_id": "B56",
+    "skill": "designing-life-time-machine-experience",
+    "phase": "P11-product-experience"
+  },
+  {
+    "module": "tests/visual",
+    "batch_id": "B56",
+    "skill": "designing-life-time-machine-experience",
+    "phase": "P11-product-experience"
+  },
+  {
+    "module": "tests/usability",
+    "batch_id": "B56",
+    "skill": "designing-life-time-machine-experience",
+    "phase": "P11-product-experience"
+  },
+  {
+    "module": "packages/copy-registry",
+    "batch_id": "B56",
+    "skill": "designing-life-time-machine-experience",
+    "phase": "P11-product-experience"
+  },
+  {
+    "module": "apps/marketing-web",
+    "batch_id": "B57",
+    "skill": "building-marketing-content-platform",
+    "phase": "P12-marketing-content"
+  },
+  {
+    "module": "packages/landing-builder",
+    "batch_id": "B57",
+    "skill": "building-marketing-content-platform",
+    "phase": "P12-marketing-content"
+  },
+  {
+    "module": "packages/seo",
+    "batch_id": "B57",
+    "skill": "building-marketing-content-platform",
+    "phase": "P12-marketing-content"
+  },
+  {
+    "module": "services/content",
+    "batch_id": "B58",
+    "skill": "building-marketing-content-platform",
+    "phase": "P12-marketing-content"
+  },
+  {
+    "module": "apps/editorial-console",
+    "batch_id": "B58",
+    "skill": "building-marketing-content-platform",
+    "phase": "P12-marketing-content"
+  },
+  {
+    "module": "packages/content-sdk",
+    "batch_id": "B58",
+    "skill": "building-marketing-content-platform",
+    "phase": "P12-marketing-content"
+  },
+  {
+    "module": "packages/consent-manager",
+    "batch_id": "B59",
+    "skill": "building-marketing-content-platform",
+    "phase": "P12-marketing-content"
+  },
+  {
+    "module": "services/attribution",
+    "batch_id": "B59",
+    "skill": "building-marketing-content-platform",
+    "phase": "P12-marketing-content"
+  },
+  {
+    "module": "apps/privacy-center",
+    "batch_id": "B59",
+    "skill": "building-marketing-content-platform",
+    "phase": "P12-marketing-content"
+  },
+  {
+    "module": "services/campaign",
+    "batch_id": "B60",
+    "skill": "building-marketing-content-platform",
+    "phase": "P12-marketing-content"
+  },
+  {
+    "module": "packages/deep-links",
+    "batch_id": "B60",
+    "skill": "building-marketing-content-platform",
+    "phase": "P12-marketing-content"
+  },
+  {
+    "module": "apps/campaign-console",
+    "batch_id": "B60",
+    "skill": "building-marketing-content-platform",
+    "phase": "P12-marketing-content"
+  },
+  {
+    "module": "services/share-card",
+    "batch_id": "B61",
+    "skill": "building-marketing-content-platform",
+    "phase": "P12-marketing-content"
+  },
+  {
+    "module": "packages/og-renderer",
+    "batch_id": "B61",
+    "skill": "building-marketing-content-platform",
+    "phase": "P12-marketing-content"
+  },
+  {
+    "module": "apps/media-kit",
+    "batch_id": "B61",
+    "skill": "building-marketing-content-platform",
+    "phase": "P12-marketing-content"
+  },
+  {
+    "module": "apps/trust-center",
+    "batch_id": "B62",
+    "skill": "building-marketing-content-platform",
+    "phase": "P12-marketing-content"
+  },
+  {
+    "module": "apps/status-page",
+    "batch_id": "B62",
+    "skill": "building-marketing-content-platform",
+    "phase": "P12-marketing-content"
+  },
+  {
+    "module": "apps/brand-center",
+    "batch_id": "B62",
+    "skill": "building-marketing-content-platform",
+    "phase": "P12-marketing-content"
+  },
+  {
+    "module": "docs/sales-enablement",
+    "batch_id": "B62",
+    "skill": "building-marketing-content-platform",
+    "phase": "P12-marketing-content"
+  },
+  {
+    "module": "apps/mobile",
+    "batch_id": "B63",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "packages/mobile-core",
+    "batch_id": "B63",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "packages/mobile-api-client",
+    "batch_id": "B63",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "apps/mobile/features/capture",
+    "batch_id": "B64",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "packages/mobile-upload",
+    "batch_id": "B64",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "services/upload-session",
+    "batch_id": "B64",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "apps/mobile/features/editor",
+    "batch_id": "B65",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "apps/mobile/features/library",
+    "batch_id": "B65",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "packages/mobile-media-player",
+    "batch_id": "B65",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "apps/mobile/features/paywall",
+    "batch_id": "B66",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "services/iap-verification",
+    "batch_id": "B66",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "packages/entitlements",
+    "batch_id": "B66",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "apps/mobile/push",
+    "batch_id": "B67",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "apps/mobile/widgets",
+    "batch_id": "B67",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "apps/mobile/share-extension",
+    "batch_id": "B67",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "services/deep-link",
+    "batch_id": "B67",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "apps/mobile/security",
+    "batch_id": "B68",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "apps/mobile/performance",
+    "batch_id": "B68",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "tests/mobile-security",
+    "batch_id": "B68",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "infra/mobile-release",
+    "batch_id": "B69",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "docs/app-store",
+    "batch_id": "B69",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "pipelines/mobile",
+    "batch_id": "B69",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "apps/wechat-mini-program",
+    "batch_id": "B70",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "services/wechat-session",
+    "batch_id": "B70",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "packages/mini-api-client",
+    "batch_id": "B70",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "services/wechat-pay",
+    "batch_id": "B71",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "apps/wechat-mini-program/commerce",
+    "batch_id": "B71",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "services/wechat-messaging",
+    "batch_id": "B71",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "docs/wechat-release",
+    "batch_id": "B72",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "pipelines/mini-program",
+    "batch_id": "B72",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "apps/wechat-mini-program/privacy",
+    "batch_id": "B72",
+    "skill": "building-mobile-and-mini-programs",
+    "phase": "P13-mobile-mini"
+  },
+  {
+    "module": "services/notification-preferences",
+    "batch_id": "B73",
+    "skill": "building-notification-lifecycle-platform",
+    "phase": "P14-notifications"
+  },
+  {
+    "module": "apps/notification-center",
+    "batch_id": "B73",
+    "skill": "building-notification-lifecycle-platform",
+    "phase": "P14-notifications"
+  },
+  {
+    "module": "packages/contact-policy",
+    "batch_id": "B73",
+    "skill": "building-notification-lifecycle-platform",
+    "phase": "P14-notifications"
+  },
+  {
+    "module": "services/notification-router",
+    "batch_id": "B74",
+    "skill": "building-notification-lifecycle-platform",
+    "phase": "P14-notifications"
+  },
+  {
+    "module": "adapters/email",
+    "batch_id": "B74",
+    "skill": "building-notification-lifecycle-platform",
+    "phase": "P14-notifications"
+  },
+  {
+    "module": "adapters/sms",
+    "batch_id": "B74",
+    "skill": "building-notification-lifecycle-platform",
+    "phase": "P14-notifications"
+  },
+  {
+    "module": "adapters/push",
+    "batch_id": "B74",
+    "skill": "building-notification-lifecycle-platform",
+    "phase": "P14-notifications"
+  },
+  {
+    "module": "adapters/wechat",
+    "batch_id": "B74",
+    "skill": "building-notification-lifecycle-platform",
+    "phase": "P14-notifications"
+  },
+  {
+    "module": "services/template-renderer",
+    "batch_id": "B75",
+    "skill": "building-notification-lifecycle-platform",
+    "phase": "P14-notifications"
+  },
+  {
+    "module": "apps/template-console",
+    "batch_id": "B75",
+    "skill": "building-notification-lifecycle-platform",
+    "phase": "P14-notifications"
+  },
+  {
+    "module": "packages/message-schemas",
+    "batch_id": "B75",
+    "skill": "building-notification-lifecycle-platform",
+    "phase": "P14-notifications"
+  },
+  {
+    "module": "services/journey-orchestrator",
+    "batch_id": "B76",
+    "skill": "building-notification-lifecycle-platform",
+    "phase": "P14-notifications"
+  },
+  {
+    "module": "apps/journey-console",
+    "batch_id": "B76",
+    "skill": "building-notification-lifecycle-platform",
+    "phase": "P14-notifications"
+  },
+  {
+    "module": "packages/audience-evaluator",
+    "batch_id": "B76",
+    "skill": "building-notification-lifecycle-platform",
+    "phase": "P14-notifications"
+  },
+  {
+    "module": "services/deliverability",
+    "batch_id": "B77",
+    "skill": "building-notification-lifecycle-platform",
+    "phase": "P14-notifications"
+  },
+  {
+    "module": "apps/deliverability-console",
+    "batch_id": "B77",
+    "skill": "building-notification-lifecycle-platform",
+    "phase": "P14-notifications"
+  },
+  {
+    "module": "runbooks/notifications",
+    "batch_id": "B77",
+    "skill": "building-notification-lifecycle-platform",
+    "phase": "P14-notifications"
+  },
+  {
+    "module": "analytics/notifications",
+    "batch_id": "B78",
+    "skill": "building-notification-lifecycle-platform",
+    "phase": "P14-notifications"
+  },
+  {
+    "module": "services/contact-frequency",
+    "batch_id": "B78",
+    "skill": "building-notification-lifecycle-platform",
+    "phase": "P14-notifications"
+  },
+  {
+    "module": "apps/message-insights",
+    "batch_id": "B78",
+    "skill": "building-notification-lifecycle-platform",
+    "phase": "P14-notifications"
+  },
+  {
+    "module": "apps/help-center",
+    "batch_id": "B79",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "services/help-search",
+    "batch_id": "B79",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "packages/help-widget",
+    "batch_id": "B79",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "services/support",
+    "batch_id": "B80",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "apps/support-console",
+    "batch_id": "B80",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "packages/support-routing",
+    "batch_id": "B80",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "services/support-assistant",
+    "batch_id": "B81",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "apps/support-widget",
+    "batch_id": "B81",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "packages/handoff",
+    "batch_id": "B81",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "services/customer-360",
+    "batch_id": "B82",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "apps/support-console/customer",
+    "batch_id": "B82",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "packages/impersonation-control",
+    "batch_id": "B82",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "services/support-actions",
+    "batch_id": "B83",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "apps/support-console/actions",
+    "batch_id": "B83",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "workflows/remediation",
+    "batch_id": "B83",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "services/partner-crm",
+    "batch_id": "B84",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "apps/sales-console",
+    "batch_id": "B84",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "packages/quote-engine",
+    "batch_id": "B84",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "services/customer-success",
+    "batch_id": "B85",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "apps/cs-console",
+    "batch_id": "B85",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "packages/account-health",
+    "batch_id": "B85",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "services/feedback",
+    "batch_id": "B86",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "apps/quality-console",
+    "batch_id": "B86",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "analytics/voc",
+    "batch_id": "B86",
+    "skill": "building-customer-support-success",
+    "phase": "P15-support-success"
+  },
+  {
+    "module": "services/ledger",
+    "batch_id": "B87",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "packages/money",
+    "batch_id": "B87",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "apps/finance-console",
+    "batch_id": "B87",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "services/reconciliation",
+    "batch_id": "B88",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "apps/finance-console/reconciliation",
+    "batch_id": "B88",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "adapters/payment-statements",
+    "batch_id": "B88",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "services/invoicing",
+    "batch_id": "B89",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "apps/billing-portal",
+    "batch_id": "B89",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "adapters/e-invoice",
+    "batch_id": "B89",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "services/revenue-recognition",
+    "batch_id": "B90",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "analytics/revenue",
+    "batch_id": "B90",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "apps/finance-console/revenue",
+    "batch_id": "B90",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "services/disputes",
+    "batch_id": "B91",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "apps/risk-console",
+    "batch_id": "B91",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "analytics/loss-reserve",
+    "batch_id": "B91",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "services/payouts",
+    "batch_id": "B92",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "apps/partner-portal/payouts",
+    "batch_id": "B92",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "apps/finance-console/payouts",
+    "batch_id": "B92",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "services/cost-allocation",
+    "batch_id": "B93",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "analytics/finops",
+    "batch_id": "B93",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "apps/finance-console/budget",
+    "batch_id": "B93",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "services/finance-close",
+    "batch_id": "B94",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "adapters/accounting",
+    "batch_id": "B94",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "docs/finance-runbooks",
+    "batch_id": "B94",
+    "skill": "building-finance-tax-operations",
+    "phase": "P16-finance"
+  },
+  {
+    "module": "packages/print-configurator",
+    "batch_id": "B95",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "services/render-preflight",
+    "batch_id": "B95",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "apps/product-designer",
+    "batch_id": "B95",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "services/vendor-management",
+    "batch_id": "B96",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "apps/vendor-portal",
+    "batch_id": "B96",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "packages/vendor-capabilities",
+    "batch_id": "B96",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "services/proofing",
+    "batch_id": "B97",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "apps/proof-approval",
+    "batch_id": "B97",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "workflows/production-approval",
+    "batch_id": "B97",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "services/fulfillment-router",
+    "batch_id": "B98",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "services/purchase-orders",
+    "batch_id": "B98",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "workflows/vendor-job",
+    "batch_id": "B98",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "services/shipping",
+    "batch_id": "B99",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "adapters/carriers",
+    "batch_id": "B99",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "apps/order-tracking",
+    "batch_id": "B99",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "services/inventory",
+    "batch_id": "B100",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "apps/vendor-portal/inventory",
+    "batch_id": "B100",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "packages/availability",
+    "batch_id": "B100",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "services/returns",
+    "batch_id": "B101",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "workflows/replacement",
+    "batch_id": "B101",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "apps/support-console/physical-claims",
+    "batch_id": "B101",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "analytics/vendor-performance",
+    "batch_id": "B102",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "services/vendor-scorecard",
+    "batch_id": "B102",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "apps/vendor-portal/quality",
+    "batch_id": "B102",
+    "skill": "building-physical-supply-network",
+    "phase": "P17-physical-supply"
+  },
+  {
+    "module": "apps/developer-portal",
+    "batch_id": "B103",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "services/developer-sandbox",
+    "batch_id": "B103",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "docs/api",
+    "batch_id": "B103",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "services/developer-identity",
+    "batch_id": "B104",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "apps/developer-portal/credentials",
+    "batch_id": "B104",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "packages/scopes",
+    "batch_id": "B104",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "sdks/typescript",
+    "batch_id": "B105",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "sdks/java",
+    "batch_id": "B105",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "sdks/python",
+    "batch_id": "B105",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "sdks/mobile",
+    "batch_id": "B105",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "examples/integrations",
+    "batch_id": "B105",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "services/webhook-delivery",
+    "batch_id": "B106",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "apps/developer-portal/webhooks",
+    "batch_id": "B106",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "packages/webhook-signing",
+    "batch_id": "B106",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "platform/connectors",
+    "batch_id": "B107",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "apps/integration-marketplace",
+    "batch_id": "B107",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "services/connector-runtime",
+    "batch_id": "B107",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "connectors/crm",
+    "batch_id": "B108",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "connectors/cdp",
+    "batch_id": "B108",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "connectors/marketing",
+    "batch_id": "B108",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "connectors/support",
+    "batch_id": "B108",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "connectors/accounting",
+    "batch_id": "B108",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "tools/partner-test-harness",
+    "batch_id": "B109",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "services/sandbox-scenarios",
+    "batch_id": "B109",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "apps/developer-portal/certification",
+    "batch_id": "B109",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "services/api-governance",
+    "batch_id": "B110",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "apps/developer-portal/changelog",
+    "batch_id": "B110",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "docs/deprecation",
+    "batch_id": "B110",
+    "skill": "building-developer-integration-platform",
+    "phase": "P18-developer-platform"
+  },
+  {
+    "module": "packages/analytics-schema",
+    "batch_id": "B111",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "packages/tracking-web",
+    "batch_id": "B111",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "packages/tracking-mobile",
+    "batch_id": "B111",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "services/event-registry",
+    "batch_id": "B111",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "data/ingestion",
+    "batch_id": "B112",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "data/warehouse",
+    "batch_id": "B112",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "data/dbt",
+    "batch_id": "B112",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "data/semantic-layer",
+    "batch_id": "B112",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "apps/analytics-portal",
+    "batch_id": "B113",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "data/marts",
+    "batch_id": "B113",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "docs/dashboard-catalog",
+    "batch_id": "B113",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "data/marts/growth",
+    "batch_id": "B114",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "analytics/attribution",
+    "batch_id": "B114",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "analytics/cohorts",
+    "batch_id": "B114",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "data/marts/unit-economics",
+    "batch_id": "B115",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "analytics/margin",
+    "batch_id": "B115",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "services/cost-insights",
+    "batch_id": "B115",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "services/experimentation",
+    "batch_id": "B116",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "packages/assignment-sdk",
+    "batch_id": "B116",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "apps/experiment-console",
+    "batch_id": "B116",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "data/catalog",
+    "batch_id": "B117",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "data/quality",
+    "batch_id": "B117",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "services/data-governance",
+    "batch_id": "B117",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "evals/model-benchmarks",
+    "batch_id": "B118",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "services/model-registry",
+    "batch_id": "B118",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "apps/ai-quality-console",
+    "batch_id": "B118",
+    "skill": "building-data-intelligence-platform",
+    "phase": "P19-data-intelligence"
+  },
+  {
+    "module": "platform/config",
+    "batch_id": "B119",
+    "skill": "hardening-enterprise-platform",
+    "phase": "P20-enterprise-hardening"
+  },
+  {
+    "module": "platform/secrets",
+    "batch_id": "B119",
+    "skill": "hardening-enterprise-platform",
+    "phase": "P20-enterprise-hardening"
+  },
+  {
+    "module": "apps/admin/config",
+    "batch_id": "B119",
+    "skill": "hardening-enterprise-platform",
+    "phase": "P20-enterprise-hardening"
+  },
+  {
+    "module": "infra/regions",
+    "batch_id": "B120",
+    "skill": "hardening-enterprise-platform",
+    "phase": "P20-enterprise-hardening"
+  },
+  {
+    "module": "infra/cdn",
+    "batch_id": "B120",
+    "skill": "hardening-enterprise-platform",
+    "phase": "P20-enterprise-hardening"
+  },
+  {
+    "module": "infra/dns",
+    "batch_id": "B120",
+    "skill": "hardening-enterprise-platform",
+    "phase": "P20-enterprise-hardening"
+  },
+  {
+    "module": "docs/data-residency",
+    "batch_id": "B120",
+    "skill": "hardening-enterprise-platform",
+    "phase": "P20-enterprise-hardening"
+  },
+  {
+    "module": "tests/performance",
+    "batch_id": "B121",
+    "skill": "hardening-enterprise-platform",
+    "phase": "P20-enterprise-hardening"
+  },
+  {
+    "module": "infra/autoscaling",
+    "batch_id": "B121",
+    "skill": "hardening-enterprise-platform",
+    "phase": "P20-enterprise-hardening"
+  },
+  {
+    "module": "docs/capacity-model",
+    "batch_id": "B121",
+    "skill": "hardening-enterprise-platform",
+    "phase": "P20-enterprise-hardening"
+  },
+  {
+    "module": "tests/chaos",
+    "batch_id": "B122",
+    "skill": "hardening-enterprise-platform",
+    "phase": "P20-enterprise-hardening"
+  },
+  {
+    "module": "platform/failover",
+    "batch_id": "B122",
+    "skill": "hardening-enterprise-platform",
+    "phase": "P20-enterprise-hardening"
+  },
+  {
+    "module": "runbooks/dependencies",
+    "batch_id": "B122",
+    "skill": "hardening-enterprise-platform",
+    "phase": "P20-enterprise-hardening"
+  },
+  {
+    "module": "security/scanners",
+    "batch_id": "B123",
+    "skill": "hardening-enterprise-platform",
+    "phase": "P20-enterprise-hardening"
+  },
+  {
+    "module": "security/pentest",
+    "batch_id": "B123",
+    "skill": "hardening-enterprise-platform",
+    "phase": "P20-enterprise-hardening"
+  },
+  {
+    "module": "pipelines/security",
+    "batch_id": "B123",
+    "skill": "hardening-enterprise-platform",
+    "phase": "P20-enterprise-hardening"
+  },
+  {
+    "module": "compliance/control-library",
+    "batch_id": "B124",
+    "skill": "hardening-enterprise-platform",
+    "phase": "P20-enterprise-hardening"
+  },
+  {
+    "module": "apps/compliance-console",
+    "batch_id": "B124",
+    "skill": "hardening-enterprise-platform",
+    "phase": "P20-enterprise-hardening"
+  },
+  {
+    "module": "evidence/compliance",
+    "batch_id": "B124",
+    "skill": "hardening-enterprise-platform",
+    "phase": "P20-enterprise-hardening"
+  },
+  {
+    "module": "docs/commercial-readiness",
+    "batch_id": "B125",
+    "skill": "launching-complete-commercial-product",
+    "phase": "P21-commercial-launch"
+  },
+  {
+    "module": "runbooks/launch",
+    "batch_id": "B125",
+    "skill": "launching-complete-commercial-product",
+    "phase": "P21-commercial-launch"
+  },
+  {
+    "module": "evidence/readiness",
+    "batch_id": "B125",
+    "skill": "launching-complete-commercial-product",
+    "phase": "P21-commercial-launch"
+  },
+  {
+    "module": "e2e/full-commercial",
+    "batch_id": "B126",
+    "skill": "launching-complete-commercial-product",
+    "phase": "P21-commercial-launch"
+  },
+  {
+    "module": "evidence/commercial-e2e",
+    "batch_id": "B126",
+    "skill": "launching-complete-commercial-product",
+    "phase": "P21-commercial-launch"
+  },
+  {
+    "module": "tools/clean-room",
+    "batch_id": "B126",
+    "skill": "launching-complete-commercial-product",
+    "phase": "P21-commercial-launch"
+  },
+  {
+    "module": "pipelines/release-train",
+    "batch_id": "B127",
+    "skill": "launching-complete-commercial-product",
+    "phase": "P21-commercial-launch"
+  },
+  {
+    "module": "evidence/release",
+    "batch_id": "B127",
+    "skill": "launching-complete-commercial-product",
+    "phase": "P21-commercial-launch"
+  },
+  {
+    "module": "docs/go-live",
+    "batch_id": "B127",
+    "skill": "launching-complete-commercial-product",
+    "phase": "P21-commercial-launch"
+  }
+]

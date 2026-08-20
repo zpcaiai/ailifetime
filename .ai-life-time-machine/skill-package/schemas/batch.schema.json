@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ai-life-time-machine/batch.schema.json",
+  "title": "AI Life Time Machine Batch",
+  "type": "object",
+  "required": [
+    "id",
+    "slug",
+    "title",
+    "phase",
+    "skill",
+    "depends_on",
+    "objective",
+    "business_outcome",
+    "modules",
+    "interfaces",
+    "requirements",
+    "constraints",
+    "negative_cases"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])$"
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "phase": {
+      "type": "string",
+      "minLength": 1
+    },
+    "skill": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "depends_on": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])$"
+      },
+      "uniqueItems": true
+    },
+    "objective": {
+      "type": "string",
+      "minLength": 10
+    },
+    "business_outcome": {
+      "type": "string",
+      "minLength": 10
+    },
+    "modules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "interfaces": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "type": "string",
+        "minLength": 10
+      }
+    },
+    "constraints": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "string"
+      }
+    },
+    "negative_cases": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "string"
+      }
+    },
+    "criticality": {
+      "enum": [
+        "medium",
+        "high",
+        "critical"
+      ]
+    }
+  },
+  "additionalProperties": true
+}

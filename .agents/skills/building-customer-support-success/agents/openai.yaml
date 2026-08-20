@@ -1,0 +1,6 @@
+interface:
+  display_name: "帮助中心、客服、CRM 与客户成功"
+  short_description: "把异常恢复、退款、删除、伙伴启用和客户成功纳入可运营商业系统。"
+  default_prompt: "Use $building-customer-support-success to inspect the active project profile, choose the requested ready Batch, implement it in the existing repository, run its acceptance commands, and produce schema-valid evidence."
+policy:
+  allow_implicit_invocation: true

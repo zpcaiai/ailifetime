@@ -1,0 +1,394 @@
+[
+  {
+    "name": "orchestrating-life-time-machine",
+    "title": "AI 人生时光机总控编排",
+    "description": "Orchestrate the complete AI Life Time Machine build in Claude Code or Codex: inspect an existing repository, select ready batches, isolate worktrees, enforce evidence, and drive the product from baseline through certified release.",
+    "purpose": "负责仓库基线、依赖调度、多 Agent/Worktree、完成报告与全局商业闭环，不直接替代各领域 Skill。",
+    "batches": [
+      "B00",
+      "B50"
+    ],
+    "implicit_invocation": true,
+    "source": "skills/orchestrating-life-time-machine/SKILL.md",
+    "codex_target": ".agents/skills/orchestrating-life-time-machine/SKILL.md",
+    "claude_target": ".claude/skills/orchestrating-life-time-machine/SKILL.md"
+  },
+  {
+    "name": "bootstrapping-life-time-machine-platform",
+    "title": "平台与核心基础设施",
+    "description": "Bootstrap the AI Life Time Machine platform architecture, domain contracts, tenancy, identity, consent, media lifecycle, provider abstraction, and durable workflows.",
+    "purpose": "建立可扩展、可审计、可恢复的产品底座。",
+    "batches": [
+      "B01",
+      "B02",
+      "B03",
+      "B04",
+      "B05",
+      "B12",
+      "B13"
+    ],
+    "implicit_invocation": true,
+    "source": "skills/bootstrapping-life-time-machine-platform/SKILL.md",
+    "codex_target": ".agents/skills/bootstrapping-life-time-machine-platform/SKILL.md",
+    "claude_target": ".claude/skills/bootstrapping-life-time-machine-platform/SKILL.md"
+  },
+  {
+    "name": "building-consumer-time-machine",
+    "title": "消费者人生时光机",
+    "description": "Build the consumer acquisition, upload, editing, generation status, sharing, export, account, and family-library experience for an AI 0–100 age timeline product.",
+    "purpose": "把照片上传转化为可传播、可付费、可留存的消费者体验。",
+    "batches": [
+      "B06",
+      "B07",
+      "B08",
+      "B09",
+      "B10",
+      "B11"
+    ],
+    "implicit_invocation": true,
+    "source": "skills/building-consumer-time-machine/SKILL.md",
+    "codex_target": ".agents/skills/building-consumer-time-machine/SKILL.md",
+    "claude_target": ".claude/skills/building-consumer-time-machine/SKILL.md"
+  },
+  {
+    "name": "building-age-media-pipeline",
+    "title": "年龄影像生成流水线",
+    "description": "Build provider-neutral image and video generation pipelines for illustrative 0–100 age transformations with identity consistency, quality gates, provenance, safety, cost controls, and deterministic recovery.",
+    "purpose": "实现高一致性照片/视频生成，但不宣称预测未来容貌。",
+    "batches": [
+      "B14",
+      "B15",
+      "B16",
+      "B17",
+      "B18"
+    ],
+    "implicit_invocation": true,
+    "source": "skills/building-age-media-pipeline/SKILL.md",
+    "codex_target": ".agents/skills/building-age-media-pipeline/SKILL.md",
+    "claude_target": ".claude/skills/building-age-media-pipeline/SKILL.md"
+  },
+  {
+    "name": "building-family-future-self",
+    "title": "家庭关系与未来自我",
+    "description": "Build consented family graphs, multi-person family scenes, child safeguards, future-self narratives and dialogue, annual rituals, and long-term family memory experiences.",
+    "purpose": "把一次性滤镜升级为家庭关系与未来自我的长期价值。",
+    "batches": [
+      "B19",
+      "B20",
+      "B21",
+      "B22",
+      "B23",
+      "B24"
+    ],
+    "implicit_invocation": true,
+    "source": "skills/building-family-future-self/SKILL.md",
+    "codex_target": ".agents/skills/building-family-future-self/SKILL.md",
+    "claude_target": ".claude/skills/building-family-future-self/SKILL.md"
+  },
+  {
+    "name": "building-commerce-fulfillment",
+    "title": "交易、订阅与履约",
+    "description": "Build catalog, pricing, checkout, payment, refunds, subscriptions, credits, gift codes, digital delivery, physical fulfillment, and customer support for the AI Life Time Machine.",
+    "purpose": "闭合消费者付费、数字交付、实物礼品和售后。",
+    "batches": [
+      "B25",
+      "B26",
+      "B27",
+      "B28",
+      "B29",
+      "B30"
+    ],
+    "implicit_invocation": true,
+    "source": "skills/building-commerce-fulfillment/SKILL.md",
+    "codex_target": ".agents/skills/building-commerce-fulfillment/SKILL.md",
+    "claude_target": ".claude/skills/building-commerce-fulfillment/SKILL.md"
+  },
+  {
+    "name": "building-partner-platform",
+    "title": "B2B2C 合作伙伴平台",
+    "description": "Build the multi-tenant partner control plane, onboarding, contracts, branding, API/SDK/webhooks/SSO, usage metering, settlement, and auditability for B2B2C distribution.",
+    "purpose": "支持影楼、礼品、保险养老等伙伴安全接入与结算。",
+    "batches": [
+      "B31",
+      "B32",
+      "B33",
+      "B34"
+    ],
+    "implicit_invocation": true,
+    "source": "skills/building-partner-platform/SKILL.md",
+    "codex_target": ".agents/skills/building-partner-platform/SKILL.md",
+    "claude_target": ".claude/skills/building-partner-platform/SKILL.md"
+  },
+  {
+    "name": "building-channel-solutions",
+    "title": "渠道解决方案",
+    "description": "Build channel-specific solutions for photo studios, kiosks, memorial and gift commerce, retirement education, and consented CRM lead handoff without biometric scoring or regulated advice.",
+    "purpose": "把通用平台落地为可销售、可交付的行业方案。",
+    "batches": [
+      "B35",
+      "B36",
+      "B37",
+      "B38"
+    ],
+    "implicit_invocation": true,
+    "source": "skills/building-channel-solutions/SKILL.md",
+    "codex_target": ".agents/skills/building-channel-solutions/SKILL.md",
+    "claude_target": ".claude/skills/building-channel-solutions/SKILL.md"
+  },
+  {
+    "name": "building-growth-data-loop",
+    "title": "增长、留存与数据闭环",
+    "description": "Build referral, affiliate, lifecycle, annual reminders, analytics, unit economics, personalization, experimentation, administration, moderation, and fraud controls.",
+    "purpose": "建立传播、复购、渠道扩张和单位经济闭环。",
+    "batches": [
+      "B39",
+      "B40",
+      "B41",
+      "B42",
+      "B43"
+    ],
+    "implicit_invocation": true,
+    "source": "skills/building-growth-data-loop/SKILL.md",
+    "codex_target": ".agents/skills/building-growth-data-loop/SKILL.md",
+    "claude_target": ".claude/skills/building-growth-data-loop/SKILL.md"
+  },
+  {
+    "name": "securing-operating-life-time-machine",
+    "title": "安全、隐私与生产运营",
+    "description": "Secure and operate the AI Life Time Machine with privacy engineering, compliance controls, observability, SLOs, cost management, backup, disaster recovery, incident response, deletion verification, CI/CD, IaC, and rollback.",
+    "purpose": "为人脸、家庭、支付及生成内容建立生产级信任底座。",
+    "batches": [
+      "B44",
+      "B45",
+      "B46",
+      "B47"
+    ],
+    "implicit_invocation": true,
+    "source": "skills/securing-operating-life-time-machine/SKILL.md",
+    "codex_target": ".agents/skills/securing-operating-life-time-machine/SKILL.md",
+    "claude_target": ".claude/skills/securing-operating-life-time-machine/SKILL.md"
+  },
+  {
+    "name": "certifying-life-time-machine-release",
+    "title": "商业闭环与生产发布认证",
+    "description": "Run fail-closed end-to-end business-loop certification and release evidence verification for the AI Life Time Machine, including abuse cases, partner settlement, recovery, deletion, observability, and clean-room reproducibility.",
+    "purpose": "只有所有证据可重放、业务闭环可核验时才允许发布。",
+    "batches": [
+      "B48",
+      "B49"
+    ],
+    "implicit_invocation": false,
+    "source": "skills/certifying-life-time-machine-release/SKILL.md",
+    "codex_target": ".agents/skills/certifying-life-time-machine-release/SKILL.md",
+    "claude_target": ".claude/skills/certifying-life-time-machine-release/SKILL.md"
+  },
+  {
+    "name": "designing-life-time-machine-experience",
+    "title": "产品战略、研究、体验与设计系统",
+    "description": "Design the complete AI Life Time Machine product experience: profiles, research, information architecture, design system, accessibility, localization, and UX governance across every surface.",
+    "purpose": "把产品范围、用户任务、跨端体验和设计质量固化为可验证的平台能力。",
+    "implicit_invocation": true,
+    "batches": [
+      "B51",
+      "B52",
+      "B53",
+      "B54",
+      "B55",
+      "B56"
+    ],
+    "source": "skills/designing-life-time-machine-experience/SKILL.md",
+    "codex_target": ".agents/skills/designing-life-time-machine-experience/SKILL.md",
+    "claude_target": ".claude/skills/designing-life-time-machine-experience/SKILL.md"
+  },
+  {
+    "name": "building-marketing-content-platform",
+    "title": "营销站、CMS、品牌与获客平台",
+    "description": "Build the commercial marketing and content platform for AI Life Time Machine, including SEO, CMS, campaign attribution, consent management, social assets, brand trust, and partner sales materials.",
+    "purpose": "形成从品牌认知、内容获客、活动归因到产品转化的完整入口。",
+    "implicit_invocation": true,
+    "batches": [
+      "B57",
+      "B58",
+      "B59",
+      "B60",
+      "B61",
+      "B62"
+    ],
+    "source": "skills/building-marketing-content-platform/SKILL.md",
+    "codex_target": ".agents/skills/building-marketing-content-platform/SKILL.md",
+    "claude_target": ".claude/skills/building-marketing-content-platform/SKILL.md"
+  },
+  {
+    "name": "building-mobile-and-mini-programs",
+    "title": "iOS/Android App 与微信小程序",
+    "description": "Build production mobile applications and WeChat mini-program surfaces with secure capture, editing, purchases, notifications, deep links, release automation, and cross-platform entitlement consistency.",
+    "purpose": "把核心体验扩展到移动端和中国主流小程序生态，并完成商店发布闭环。",
+    "implicit_invocation": true,
+    "batches": [
+      "B63",
+      "B64",
+      "B65",
+      "B66",
+      "B67",
+      "B68",
+      "B69",
+      "B70",
+      "B71",
+      "B72"
+    ],
+    "source": "skills/building-mobile-and-mini-programs/SKILL.md",
+    "codex_target": ".agents/skills/building-mobile-and-mini-programs/SKILL.md",
+    "claude_target": ".claude/skills/building-mobile-and-mini-programs/SKILL.md"
+  },
+  {
+    "name": "building-notification-lifecycle-platform",
+    "title": "消息通知与用户生命周期平台",
+    "description": "Build a consent-aware multi-channel notification and lifecycle platform covering preferences, templates, journeys, deliverability, retries, suppression, experimentation, and analytics.",
+    "purpose": "支持生成完成、订单、家庭邀请、年度更新、客服和营销触达，同时避免骚扰和重复发送。",
+    "implicit_invocation": true,
+    "batches": [
+      "B73",
+      "B74",
+      "B75",
+      "B76",
+      "B77",
+      "B78"
+    ],
+    "source": "skills/building-notification-lifecycle-platform/SKILL.md",
+    "codex_target": ".agents/skills/building-notification-lifecycle-platform/SKILL.md",
+    "claude_target": ".claude/skills/building-notification-lifecycle-platform/SKILL.md"
+  },
+  {
+    "name": "building-customer-support-success",
+    "title": "帮助中心、客服、CRM 与客户成功",
+    "description": "Build customer support and success operations: help center, ticketing, bot-to-human handoff, customer 360, controlled support actions, CRM, partner onboarding, VOC, and SLA governance.",
+    "purpose": "把异常恢复、退款、删除、伙伴启用和客户成功纳入可运营商业系统。",
+    "implicit_invocation": true,
+    "batches": [
+      "B79",
+      "B80",
+      "B81",
+      "B82",
+      "B83",
+      "B84",
+      "B85",
+      "B86"
+    ],
+    "source": "skills/building-customer-support-success/SKILL.md",
+    "codex_target": ".agents/skills/building-customer-support-success/SKILL.md",
+    "claude_target": ".claude/skills/building-customer-support-success/SKILL.md"
+  },
+  {
+    "name": "building-finance-tax-operations",
+    "title": "财务账本、对账、开票、税务与 FinOps",
+    "description": "Build auditable commercial finance operations including ledgers, reconciliation, invoices and fapiao, revenue recognition, disputes, partner payouts, cloud/AI FinOps, and month-end close.",
+    "purpose": "让订单、退款、平台费、伙伴分账、供应商成本和财税报表能够闭环核对。",
+    "implicit_invocation": true,
+    "batches": [
+      "B87",
+      "B88",
+      "B89",
+      "B90",
+      "B91",
+      "B92",
+      "B93",
+      "B94"
+    ],
+    "source": "skills/building-finance-tax-operations/SKILL.md",
+    "codex_target": ".agents/skills/building-finance-tax-operations/SKILL.md",
+    "claude_target": ".claude/skills/building-finance-tax-operations/SKILL.md"
+  },
+  {
+    "name": "building-physical-supply-network",
+    "title": "照片书、相框与实物供应链",
+    "description": "Build the physical-goods supply network for photo books, frames, gifts, proofs, vendors, production routing, shipping, inventory, returns, replacements, and supplier quality.",
+    "purpose": "将数字作品扩展为可配置、可生产、可追踪、可售后的纪念礼品业务。",
+    "implicit_invocation": true,
+    "batches": [
+      "B95",
+      "B96",
+      "B97",
+      "B98",
+      "B99",
+      "B100",
+      "B101",
+      "B102"
+    ],
+    "source": "skills/building-physical-supply-network/SKILL.md",
+    "codex_target": ".agents/skills/building-physical-supply-network/SKILL.md",
+    "claude_target": ".claude/skills/building-physical-supply-network/SKILL.md"
+  },
+  {
+    "name": "building-developer-integration-platform",
+    "title": "开发者门户、SDK、Webhook 与连接器",
+    "description": "Build the external developer platform with documentation, sandbox, API credentials, SDKs, webhook delivery, connectors, certification, lifecycle governance, and enterprise adapters.",
+    "purpose": "让影楼、礼品、保险养老、企业福利和其他伙伴能够安全、自助、稳定地集成。",
+    "implicit_invocation": true,
+    "batches": [
+      "B103",
+      "B104",
+      "B105",
+      "B106",
+      "B107",
+      "B108",
+      "B109",
+      "B110"
+    ],
+    "source": "skills/building-developer-integration-platform/SKILL.md",
+    "codex_target": ".agents/skills/building-developer-integration-platform/SKILL.md",
+    "claude_target": ".claude/skills/building-developer-integration-platform/SKILL.md"
+  },
+  {
+    "name": "building-data-intelligence-platform",
+    "title": "数据平台、指标、实验与模型评估",
+    "description": "Build the governed data and intelligence platform for events, warehouse models, dashboards, attribution, unit economics, experimentation, data quality, privacy governance, and model evaluation.",
+    "purpose": "以可信数据管理增长、收入、质量、安全和成本，而不是依赖不可复核的报表。",
+    "implicit_invocation": true,
+    "batches": [
+      "B111",
+      "B112",
+      "B113",
+      "B114",
+      "B115",
+      "B116",
+      "B117",
+      "B118"
+    ],
+    "source": "skills/building-data-intelligence-platform/SKILL.md",
+    "codex_target": ".agents/skills/building-data-intelligence-platform/SKILL.md",
+    "claude_target": ".claude/skills/building-data-intelligence-platform/SKILL.md"
+  },
+  {
+    "name": "hardening-enterprise-platform",
+    "title": "企业级配置、韧性、性能与合规证据",
+    "description": "Harden the complete platform with configuration and secrets governance, multi-region resilience, performance and capacity engineering, chaos testing, security assurance, and compliance evidence automation.",
+    "purpose": "使系统能够在企业客户、跨区域、高并发和严格审计环境中稳定运营。",
+    "implicit_invocation": true,
+    "batches": [
+      "B119",
+      "B120",
+      "B121",
+      "B122",
+      "B123",
+      "B124"
+    ],
+    "source": "skills/hardening-enterprise-platform/SKILL.md",
+    "codex_target": ".agents/skills/hardening-enterprise-platform/SKILL.md",
+    "claude_target": ".claude/skills/hardening-enterprise-platform/SKILL.md"
+  },
+  {
+    "name": "launching-complete-commercial-product",
+    "title": "完整商业项目集成、E2E 与分阶段上线",
+    "description": "Integrate and certify the complete commercial AI Life Time Machine product across web, mobile, mini-program, partners, payments, physical fulfillment, support, finance, data, and production rollout.",
+    "purpose": "用商业准备评审、全表面 E2E 和可回滚灰度发布签发最终项目证书。",
+    "implicit_invocation": true,
+    "batches": [
+      "B125",
+      "B126",
+      "B127"
+    ],
+    "source": "skills/launching-complete-commercial-product/SKILL.md",
+    "codex_target": ".agents/skills/launching-complete-commercial-product/SKILL.md",
+    "claude_target": ".claude/skills/launching-complete-commercial-product/SKILL.md"
+  }
+]

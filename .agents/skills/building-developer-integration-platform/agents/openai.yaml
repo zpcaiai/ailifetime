@@ -1,0 +1,6 @@
+interface:
+  display_name: "开发者门户、SDK、Webhook 与连接器"
+  short_description: "让影楼、礼品、保险养老、企业福利和其他伙伴能够安全、自助、稳定地集成。"
+  default_prompt: "Use $building-developer-integration-platform to inspect the active project profile, choose the requested ready Batch, implement it in the existing repository, run its acceptance commands, and produce schema-valid evidence."
+policy:
+  allow_implicit_invocation: true

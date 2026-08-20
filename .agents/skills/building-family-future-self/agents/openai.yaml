@@ -1,0 +1,7 @@
+interface:
+  display_name: 家庭关系与未来自我
+  short_description: 把一次性滤镜升级为家庭关系与未来自我的长期价值。
+  default_prompt: Use $building-family-future-self to inspect the repository and implement
+    the next evidence-backed Batch.
+policy:
+  allow_implicit_invocation: true

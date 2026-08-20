@@ -1,0 +1,9 @@
+.git
+.agents
+.ai-life-time-machine
+.data
+**/build
+**/dist
+**/node_modules
+coverage
+evidence

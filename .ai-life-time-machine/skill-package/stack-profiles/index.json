@@ -1,0 +1,18 @@
+[
+  {
+    "id": "reference-polyglot",
+    "title": "参考多语言企业栈"
+  },
+  {
+    "id": "all-typescript",
+    "title": "全 TypeScript 产品栈"
+  },
+  {
+    "id": "existing-repository-adapter",
+    "title": "既有仓库适配模式"
+  },
+  {
+    "id": "china-cloud-native",
+    "title": "中国云原生部署栈"
+  }
+]

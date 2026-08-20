@@ -1,0 +1,6 @@
+interface:
+  display_name: "产品战略、研究、体验与设计系统"
+  short_description: "把产品范围、用户任务、跨端体验和设计质量固化为可验证的平台能力。"
+  default_prompt: "Use $designing-life-time-machine-experience to inspect the active project profile, choose the requested ready Batch, implement it in the existing repository, run its acceptance commands, and produce schema-valid evidence."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Physical vendor production job",
+  "type": "object",
+  "required": [
+    "id",
+    "tenant_id",
+    "order_id",
+    "vendor_id",
+    "product_snapshot",
+    "state",
+    "idempotency_key",
+    "created_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "order_id": {
+      "type": "string"
+    },
+    "vendor_id": {
+      "type": "string"
+    },
+    "product_snapshot": {
+      "type": "object"
+    },
+    "state": {
+      "enum": [
+        "draft",
+        "proof-required",
+        "awaiting-approval",
+        "queued",
+        "accepted",
+        "in-production",
+        "quality-check",
+        "shipped",
+        "delivered",
+        "cancelled",
+        "failed",
+        "claim-open"
+      ]
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "purchase_order": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "shipping": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

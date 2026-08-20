@@ -1,0 +1,19 @@
+version: 1.0.0
+principles:
+  - shortest_necessary_period
+  - purpose_specific
+  - region_and_contract_aware
+  - legal_hold_is_explicit_and_audited
+  - deletion_propagates_to_cache_cdn_vendor_backup_index
+records:
+  raw_upload:
+    default: short_lived
+    deletion_trigger: completion_or_user_request
+  generated_asset:
+    default: account_or_order_policy
+    deletion_trigger: user_request_consent_revocation_or_expiry
+  consent_evidence:
+    default: policy_and_legal_basis
+  ledger_and_tax:
+    default: statutory_and_audit_requirement
+    note: deletion requests must separate legally retained financial facts from media and optional profile data

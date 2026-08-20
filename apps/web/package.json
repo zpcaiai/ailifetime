@@ -1,0 +1,12 @@
+{
+  "name": "@ltm/web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && cp dist/app.js public/assets/app.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm run build && node --test dist/app.test.js"
+  }
+}

@@ -1,0 +1,52 @@
+version: '1.0'
+rules:
+- Every flag has owner, rationale, default, target environments, expiry date, rollback
+  action, and audit trail.
+- Safety, consent, AI labels, tenant isolation, child controls, payment integrity,
+  and deletion cannot be disabled by an experiment flag.
+- Flags affecting contracts or data writes require compatibility for both states.
+flags:
+- key: consumer.age_timeline.enabled
+  default: false
+  owner: consumer
+  gate: B14+B15+B17
+- key: consumer.public_sharing.enabled
+  default: false
+  owner: trust
+  gate: B10+B17+B44
+- key: media.video.enabled
+  default: false
+  owner: media
+  gate: B16+B18
+- key: family.multi_person.enabled
+  default: false
+  owner: family
+  gate: B19+B20+B21
+- key: future_self.narrative.enabled
+  default: false
+  owner: family
+  gate: B22+B44
+- key: future_self.dialogue.enabled
+  default: false
+  owner: trust
+  gate: B23+B44; explicit allowlist only
+- key: commerce.payments.enabled
+  default: false
+  owner: commerce
+  gate: B25+B26+B28
+- key: fulfillment.physical.enabled
+  default: false
+  owner: commerce
+  gate: B29+B46
+- key: partner.api.production.enabled
+  default: false
+  owner: partner
+  gate: B31+B32+B33+B44
+- key: channel.retirement_education.enabled
+  default: false
+  owner: compliance
+  gate: B37+B44
+- key: growth.public_ugc.enabled
+  default: false
+  owner: trust
+  gate: B39+B43+B44

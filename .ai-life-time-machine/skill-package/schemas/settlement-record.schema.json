@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Partner settlement",
+  "type": "object",
+  "required": [
+    "id",
+    "partner_id",
+    "period_start",
+    "period_end",
+    "currency",
+    "status",
+    "usage_total_minor",
+    "revenue_total_minor",
+    "refund_total_minor",
+    "partner_due_minor",
+    "statement_hash"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "partner_id": {
+      "type": "string"
+    },
+    "period_start": {
+      "type": "string",
+      "format": "date"
+    },
+    "period_end": {
+      "type": "string",
+      "format": "date"
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "reconciling",
+        "disputed",
+        "approved",
+        "locked",
+        "paid"
+      ]
+    },
+    "usage_total_minor": {
+      "type": "integer"
+    },
+    "revenue_total_minor": {
+      "type": "integer"
+    },
+    "refund_total_minor": {
+      "type": "integer"
+    },
+    "partner_due_minor": {
+      "type": "integer"
+    },
+    "statement_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "locked_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,7 @@
+interface:
+  display_name: 商业闭环与生产发布认证
+  short_description: 只有所有证据可重放、业务闭环可核验时才允许发布。
+  default_prompt: Use $certifying-life-time-machine-release to inspect the repository
+    and implement the next evidence-backed Batch.
+policy:
+  allow_implicit_invocation: false

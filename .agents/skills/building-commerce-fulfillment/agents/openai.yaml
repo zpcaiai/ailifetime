@@ -1,0 +1,7 @@
+interface:
+  display_name: 交易、订阅与履约
+  short_description: 闭合消费者付费、数字交付、实物礼品和售后。
+  default_prompt: Use $building-commerce-fulfillment to inspect the repository and
+    implement the next evidence-backed Batch.
+policy:
+  allow_implicit_invocation: true

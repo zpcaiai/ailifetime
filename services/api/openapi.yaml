@@ -1,0 +1,273 @@
+openapi: 3.1.0
+info:
+  title: AI Life Time Machine Runtime API
+  version: 1.0.0
+  description: Tenant-safe command, query, and B00-B127 capability dispatch API.
+servers:
+  - url: http://127.0.0.1:8080
+paths:
+  /health/live:
+    get:
+      operationId: getLiveness
+      responses:
+        "200":
+          description: Process is live.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /health/ready:
+    get:
+      operationId: getReadiness
+      responses:
+        "200":
+          description: Runtime and audit chain are ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Readiness"
+        "503":
+          description: Runtime or audit chain is not ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Readiness"
+  /v1/capabilities:
+    get:
+      operationId: listCapabilities
+      responses:
+        "200":
+          description: The exact B00-B127 executable catalog.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [capabilities, count, requestId]
+                properties:
+                  capabilities:
+                    type: array
+                    minItems: 128
+                    maxItems: 128
+                    items:
+                      $ref: "#/components/schemas/Capability"
+                  count:
+                    const: 128
+                  requestId:
+                    type: string
+    post:
+      operationId: executeCapabilityEnvelope
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [batchId, input]
+              properties:
+                batchId:
+                  $ref: "#/components/schemas/BatchId"
+                input:
+                  type: object
+      responses:
+        "200":
+          $ref: "#/components/responses/DispatchResult"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/capabilities/{batchId}:
+    parameters:
+      - name: batchId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/BatchId"
+    get:
+      operationId: getCapability
+      responses:
+        "200":
+          description: Registered capability metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [capability, requestId]
+                properties:
+                  capability:
+                    $ref: "#/components/schemas/Capability"
+                  requestId:
+                    type: string
+        "404":
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: executeCapability
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          $ref: "#/components/responses/DispatchResult"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/commands:
+    post:
+      operationId: dispatchCommand
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OperationEnvelope"
+      responses:
+        "200":
+          $ref: "#/components/responses/DispatchResult"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/queries:
+    post:
+      operationId: dispatchQuery
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OperationEnvelope"
+      responses:
+        "200":
+          $ref: "#/components/responses/DispatchResult"
+        default:
+          $ref: "#/components/responses/Error"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    Purpose:
+      name: X-Purpose
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 120
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 200
+  schemas:
+    BatchId:
+      type: string
+      pattern: '^B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])$'
+    Capability:
+      type: object
+      required: [batchId, skill, operation, requirements, requiresExternalEvidence]
+      properties:
+        batchId:
+          $ref: "#/components/schemas/BatchId"
+        skill:
+          type: string
+        operation:
+          type: string
+        requirements:
+          type: array
+          minItems: 5
+          maxItems: 5
+          items:
+            type: string
+        requiresExternalEvidence:
+          type: boolean
+    OperationEnvelope:
+      type: object
+      required: [input]
+      properties:
+        command:
+          type: string
+        query:
+          type: string
+        input:
+          type: object
+    Health:
+      type: object
+      required: [status, requestId]
+      properties:
+        status:
+          const: ok
+        requestId:
+          type: string
+    Readiness:
+      type: object
+      required: [ready, database, auditChain, requestId]
+      properties:
+        ready:
+          type: boolean
+        database:
+          enum: [ok, error]
+        auditChain:
+          enum: [ok, error]
+        requestId:
+          type: string
+    Error:
+      type: object
+      required: [error, requestId]
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable, details]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            retryable:
+              type: boolean
+            details:
+              type: object
+        requestId:
+          type: string
+  responses:
+    DispatchResult:
+      description: Dispatch result with request correlation metadata.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data, meta]
+            properties:
+              data: {}
+              meta:
+                type: object
+                properties:
+                  requestId:
+                    type: string
+    Error:
+      description: Stable domain error.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

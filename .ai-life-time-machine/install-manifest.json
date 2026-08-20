@@ -1,0 +1,2006 @@
+{
+  "schema_version": "2.0",
+  "package": "ai-life-time-machine-commercial-project-factory",
+  "version": "2.0.0",
+  "installed_at": "2026-08-20T04:35:51.777474+00:00",
+  "target": "/Users/stephen/Documents/Projects/python/ailifetime/ai-life-time-machine-commercial-project-factory-v2.0.0/product",
+  "hosts": [
+    "codex"
+  ],
+  "profile": "full-commercial",
+  "skill_names": [
+    "orchestrating-life-time-machine",
+    "bootstrapping-life-time-machine-platform",
+    "building-consumer-time-machine",
+    "building-age-media-pipeline",
+    "building-family-future-self",
+    "building-commerce-fulfillment",
+    "building-partner-platform",
+    "building-channel-solutions",
+    "building-growth-data-loop",
+    "securing-operating-life-time-machine",
+    "certifying-life-time-machine-release",
+    "designing-life-time-machine-experience",
+    "building-marketing-content-platform",
+    "building-mobile-and-mini-programs",
+    "building-notification-lifecycle-platform",
+    "building-customer-support-success",
+    "building-finance-tax-operations",
+    "building-physical-supply-network",
+    "building-developer-integration-platform",
+    "building-data-intelligence-platform",
+    "hardening-enterprise-platform",
+    "launching-complete-commercial-product"
+  ],
+  "support_bundle": ".ai-life-time-machine/skill-package",
+  "files": [
+    {
+      "path": ".agents/skills/bootstrapping-life-time-machine-platform/SKILL.md",
+      "sha256": "23619ab03283a8cda08ee6f5a5fa6df536b2c3c2f70ae72d0695becb3a84050d"
+    },
+    {
+      "path": ".agents/skills/bootstrapping-life-time-machine-platform/agents/openai.yaml",
+      "sha256": "e6d19ade866a473c406dc7d915d89bdca934866c7a929c409fe8cfd42e5af0b0"
+    },
+    {
+      "path": ".agents/skills/bootstrapping-life-time-machine-platform/references/B01-monorepo-architecture.md",
+      "sha256": "aa08b382aa2965c404095bf654e13b34a9bd239e653fe5f8031f6860c0812187"
+    },
+    {
+      "path": ".agents/skills/bootstrapping-life-time-machine-platform/references/B02-domain-data-api-event-contracts.md",
+      "sha256": "fa9bdb9b979d1948fe920b7c117840a50531d232413e1df67c7fd25f0ddf7a04"
+    },
+    {
+      "path": ".agents/skills/bootstrapping-life-time-machine-platform/references/B03-identity-rbac-tenancy.md",
+      "sha256": "2d09ca68ac02bff4236473de8e992680a6b1ec3100051d008725ad1cfaa8bf4d"
+    },
+    {
+      "path": ".agents/skills/bootstrapping-life-time-machine-platform/references/B04-consent-rights-guardian.md",
+      "sha256": "57737d63725753c3a33b648829cb361ef7f9840e20587907a0df38e4863bdf29"
+    },
+    {
+      "path": ".agents/skills/bootstrapping-life-time-machine-platform/references/B05-media-lifecycle-deletion.md",
+      "sha256": "88734992b60de6a0168e3484f28f5ef0c4683f30166a2890792b2b92c61b4445"
+    },
+    {
+      "path": ".agents/skills/bootstrapping-life-time-machine-platform/references/B12-provider-abstraction-routing.md",
+      "sha256": "374a75cc033d825e55b1fb51f8d13426873f597e1c96e8c5c521b179fba65a17"
+    },
+    {
+      "path": ".agents/skills/bootstrapping-life-time-machine-platform/references/B13-durable-workflow-orchestration.md",
+      "sha256": "94e1b3f665ee08db870e752cc08c470654f4cfef9c858408a64104de256c3d90"
+    },
+    {
+      "path": ".agents/skills/building-age-media-pipeline/SKILL.md",
+      "sha256": "8c1e4f4228618a3a24a5cffba62c21e8684017181987756e2856cbceeef641a6"
+    },
+    {
+      "path": ".agents/skills/building-age-media-pipeline/agents/openai.yaml",
+      "sha256": "18ff947adac17aa3db24cd4b2341de4acc10d447ed08a5445ccb9c8f51cce412"
+    },
+    {
+      "path": ".agents/skills/building-age-media-pipeline/references/B14-age-timeline-generation.md",
+      "sha256": "30185138e774fd093c65cdd59ff34350695a50cc284ef9d09f283699c5be6d4a"
+    },
+    {
+      "path": ".agents/skills/building-age-media-pipeline/references/B15-identity-consistency-quality.md",
+      "sha256": "300937d36bb9fa24af742cf85fe9d949b87c66f6fc9572085f55359a718288e0"
+    },
+    {
+      "path": ".agents/skills/building-age-media-pipeline/references/B16-video-audio-caption-pipeline.md",
+      "sha256": "0f9567c2cf6049ad8266e3d50e39f9c0a017145ce4b45ad9a5d371254894bda9"
+    },
+    {
+      "path": ".agents/skills/building-age-media-pipeline/references/B17-safety-provenance-labeling.md",
+      "sha256": "11628e2047525b9d3fa524a8c85b2dfecca73283f55efb6c1b728f2da18e0a45"
+    },
+    {
+      "path": ".agents/skills/building-age-media-pipeline/references/B18-cost-latency-cache.md",
+      "sha256": "cad3b9f9a2c3646dee703c0cf27be64df462ac53d1eca49d20ca1aaf667c6247"
+    },
+    {
+      "path": ".agents/skills/building-channel-solutions/SKILL.md",
+      "sha256": "ce2c807f2c333dbc37bfd3a97de85aa736b54bf5f6e4efefc21f785261badf44"
+    },
+    {
+      "path": ".agents/skills/building-channel-solutions/agents/openai.yaml",
+      "sha256": "33bec830fbedbc5d89f27efc799733e64134a1368343a631dc8a89fefb7b52eb"
+    },
+    {
+      "path": ".agents/skills/building-channel-solutions/references/B35-studio-portal-kiosk.md",
+      "sha256": "49135ffd082b5d6bdeb16b2e5a6fd978c85d71a7d30f97b7548b89b6e61af154"
+    },
+    {
+      "path": ".agents/skills/building-channel-solutions/references/B36-gift-memorial-retail-channel.md",
+      "sha256": "42df23d26b8a6061cd3f7a8a786676035b5fc8a59c6fec858cdba49d4f9dbb33"
+    },
+    {
+      "path": ".agents/skills/building-channel-solutions/references/B37-insurance-retirement-education.md",
+      "sha256": "b7efc62795ce40fdedf62e4df92aae9f32600cb20f86424ddb51251ec424258c"
+    },
+    {
+      "path": ".agents/skills/building-channel-solutions/references/B38-consented-crm-lead-handoff.md",
+      "sha256": "1f22c1a5cee916fe6e587cf9eb35cbe86b8d4c768cac2b5962a2ef60accfac4d"
+    },
+    {
+      "path": ".agents/skills/building-commerce-fulfillment/SKILL.md",
+      "sha256": "8d855cfbc8eda432f6c18dac441827811301ecf9d15f1769ff499660a57aa12d"
+    },
+    {
+      "path": ".agents/skills/building-commerce-fulfillment/agents/openai.yaml",
+      "sha256": "6e2fbf2c5228c5aed5dcc54920b41b21e301dc77b5cc700cd232af143fa6dfaf"
+    },
+    {
+      "path": ".agents/skills/building-commerce-fulfillment/references/B25-catalog-pricing-packaging.md",
+      "sha256": "2c4386571466073114248ce723263c762b31dde2f85adbb56350fd7ba72bf53c"
+    },
+    {
+      "path": ".agents/skills/building-commerce-fulfillment/references/B26-checkout-payment-refund.md",
+      "sha256": "d0e8f02220b99f976c76b48f72e7466a2ef9688f17b0712c71a20ff6afd8f547"
+    },
+    {
+      "path": ".agents/skills/building-commerce-fulfillment/references/B27-subscription-credit-gift.md",
+      "sha256": "b588a6d19c75a098a8921ad961db0d5a73c3629934911abb0260e33fff16b84b"
+    },
+    {
+      "path": ".agents/skills/building-commerce-fulfillment/references/B28-orders-digital-delivery.md",
+      "sha256": "699968c213d71d1bf5ee70b32264b3a126b5a61dec6320022720d32f354bf358"
+    },
+    {
+      "path": ".agents/skills/building-commerce-fulfillment/references/B29-physical-product-fulfillment.md",
+      "sha256": "b619f4abd48e32e447727de4fb03587ded61cdde897f76d8950f4912e3e697b7"
+    },
+    {
+      "path": ".agents/skills/building-commerce-fulfillment/references/B30-support-refund-dispute.md",
+      "sha256": "a551cdf5ec19d3595ceedea01679a3f6980e5dfb5cbf8e715163855dd8a096ef"
+    },
+    {
+      "path": ".agents/skills/building-consumer-time-machine/SKILL.md",
+      "sha256": "f14f0714f335a9f0dea2f11dd96e7ca6617edd7e4c9d785bb0d3cbd85c9b5183"
+    },
+    {
+      "path": ".agents/skills/building-consumer-time-machine/agents/openai.yaml",
+      "sha256": "64ea283622c6c0777a79f58a935246c2a6084bd4fc3cec10beef3436abcbd0af"
+    },
+    {
+      "path": ".agents/skills/building-consumer-time-machine/references/B06-acquisition-guest-journey.md",
+      "sha256": "113b3ea2595b52597f59da19e160dccf95ba6a369d545fef0a935dbf01939915"
+    },
+    {
+      "path": ".agents/skills/building-consumer-time-machine/references/B07-photo-intake-quality.md",
+      "sha256": "513bc183f6413d1cb6bbe16adc2fac8867c779b462320780c941f11cbfe5fec1"
+    },
+    {
+      "path": ".agents/skills/building-consumer-time-machine/references/B08-editor-template-composer.md",
+      "sha256": "b2711490d880615dc057d72ef388c49dc09604d471fac4de18f8e460a61a62e0"
+    },
+    {
+      "path": ".agents/skills/building-consumer-time-machine/references/B09-generation-job-status-recovery.md",
+      "sha256": "05f4817405386914893e5e00b616359cfba6bf9308648b59e873539ad9ce82af"
+    },
+    {
+      "path": ".agents/skills/building-consumer-time-machine/references/B10-export-share-labels.md",
+      "sha256": "32c85bcae964e134cfe0f24cda0cd97f7296bc7250a1744d4c969ec43f7f8853"
+    },
+    {
+      "path": ".agents/skills/building-consumer-time-machine/references/B11-account-family-library.md",
+      "sha256": "251581d8e4492a6d48a3a815c4ec9488c75508c78a508c6677415af8bfc74900"
+    },
+    {
+      "path": ".agents/skills/building-customer-support-success/SKILL.md",
+      "sha256": "a9b6834095f67d4bbf74e83869afeec96cfda9a3afb293621987c46955933ef2"
+    },
+    {
+      "path": ".agents/skills/building-customer-support-success/agents/openai.yaml",
+      "sha256": "b0546476bc44e60a42403f440749d53d173ed39236ac7adf7b198c1ec0a3537b"
+    },
+    {
+      "path": ".agents/skills/building-customer-support-success/references/B79-help-center-faq-search.md",
+      "sha256": "9a7a0064db9fad8506f9303fb7c16e3338aa6f843b9dc047c358a78287652936"
+    },
+    {
+      "path": ".agents/skills/building-customer-support-success/references/B80-support-ticket-inbox-sla-routing.md",
+      "sha256": "709f7f600e6e974dee24c8c3068ac3f022577eb9c059b514fe7277a5eb6d9b4b"
+    },
+    {
+      "path": ".agents/skills/building-customer-support-success/references/B81-in-app-support-bot-human-handoff.md",
+      "sha256": "8627d05da121562a67aaab6f1407b03209460aa644c7baa0902d7bf69d841454"
+    },
+    {
+      "path": ".agents/skills/building-customer-support-success/references/B82-customer-360-timeline-impersonation.md",
+      "sha256": "20e9d0a6efd02713647dd48c41845fb6568ef37780a0df75bba98b3d5b914738"
+    },
+    {
+      "path": ".agents/skills/building-customer-support-success/references/B83-support-actions-refund-replacement-data-rights.md",
+      "sha256": "783868fc3cd121dde031a90501cab1d761d73f25ce46901b5e8de8df06cc64b7"
+    },
+    {
+      "path": ".agents/skills/building-customer-support-success/references/B84-partner-sales-crm-quotes-pipeline.md",
+      "sha256": "a9110d483a646978a09164a930f766e5529b2a52ad85f4422281a743125de43e"
+    },
+    {
+      "path": ".agents/skills/building-customer-support-success/references/B85-customer-success-onboarding-health-renewal.md",
+      "sha256": "32be5546d033d13cb5836021db23cb784f186cd407834b76ab80aecb060178ee"
+    },
+    {
+      "path": ".agents/skills/building-customer-support-success/references/B86-csat-nps-voc-support-quality.md",
+      "sha256": "17c8efd33ea985a42919046ffa8b14075ab61e0c8861017253c4864cc75a7b82"
+    },
+    {
+      "path": ".agents/skills/building-data-intelligence-platform/SKILL.md",
+      "sha256": "45f39308cc662b6941a3f34be0ed3a093f3b4d3ef96bb84eadf969b711a8d3f4"
+    },
+    {
+      "path": ".agents/skills/building-data-intelligence-platform/agents/openai.yaml",
+      "sha256": "e6e47d49c8cbf5eb614600be3bd462ad2655ec6f955070e08d9c94442a150f19"
+    },
+    {
+      "path": ".agents/skills/building-data-intelligence-platform/references/B111-event-taxonomy-tracking-sdk-schema-registry.md",
+      "sha256": "5eeb9314d0fd8103481ae6f7f0cc4412d9fe8c2066d555f0d7113834b45decbe"
+    },
+    {
+      "path": ".agents/skills/building-data-intelligence-platform/references/B112-warehouse-ingestion-dbt-semantic-layer.md",
+      "sha256": "ba33f399c95af8441de069f88295f1b280d403c67eefc310f3579e0f52209a6c"
+    },
+    {
+      "path": ".agents/skills/building-data-intelligence-platform/references/B113-product-commerce-partner-ops-dashboards.md",
+      "sha256": "1e04a6bb2f3908bff12f9816defc012e83a4b45203cdf595278c0b9e3ea86f9b"
+    },
+    {
+      "path": ".agents/skills/building-data-intelligence-platform/references/B114-attribution-cohort-retention-ltv.md",
+      "sha256": "4969a8700cefd674d1f0709b63460723fdcf10a2a4d85b51e9681244ad5721a7"
+    },
+    {
+      "path": ".agents/skills/building-data-intelligence-platform/references/B115-revenue-cost-unit-economics-margins.md",
+      "sha256": "6266d1ac98db4a4c7fbbc5581ee97a6bac2a6fef3d1654f093a1f19c99e3cff1"
+    },
+    {
+      "path": ".agents/skills/building-data-intelligence-platform/references/B116-experimentation-statistics-guardrails.md",
+      "sha256": "5ef5d4aa647c0e523a6138f2c0ab6069bb2b13564bd6061b568f18d326681bc1"
+    },
+    {
+      "path": ".agents/skills/building-data-intelligence-platform/references/B117-data-quality-lineage-catalog-pii-governance.md",
+      "sha256": "c8cbdfd6be76ac719f6c3e78b6b85cc98b127d791b3a5176dc930ce0a422b4e3"
+    },
+    {
+      "path": ".agents/skills/building-data-intelligence-platform/references/B118-ai-model-evals-drift-human-rating.md",
+      "sha256": "6fba3304d6611856bfcf178665658e9548458cd34f47f49e5173bf213efadafe"
+    },
+    {
+      "path": ".agents/skills/building-developer-integration-platform/SKILL.md",
+      "sha256": "cad17705a559c34f59592f441c0fc882d48cdef222ac8f73f122648588c20e93"
+    },
+    {
+      "path": ".agents/skills/building-developer-integration-platform/agents/openai.yaml",
+      "sha256": "1e9135476fc727976277466760dbacb17843ab1b73131c7615295a3b9cd188e9"
+    },
+    {
+      "path": ".agents/skills/building-developer-integration-platform/references/B103-developer-portal-api-docs-sandbox.md",
+      "sha256": "6084270e4402f0e2953fcf60d1b9b12086d1dd8f0b28747e3fba120f04603575"
+    },
+    {
+      "path": ".agents/skills/building-developer-integration-platform/references/B104-api-keys-oauth-service-accounts-scopes.md",
+      "sha256": "b271a51f825252dbccfe0ee384901a70f596f6afebf66517ff58d912bf1a8146"
+    },
+    {
+      "path": ".agents/skills/building-developer-integration-platform/references/B105-sdk-generation-versioning-examples.md",
+      "sha256": "cc7ecdee3fed634c02d2300d88f7e68424d3959c74ae4cf86325bdd642baf7cd"
+    },
+    {
+      "path": ".agents/skills/building-developer-integration-platform/references/B106-webhook-console-replay-dlq-signature.md",
+      "sha256": "b63951e7cc1868c705aca1d7fa476aecadc3454630ac4b248604c9532a37e65d"
+    },
+    {
+      "path": ".agents/skills/building-developer-integration-platform/references/B107-connector-framework-integration-marketplace.md",
+      "sha256": "56fba78e308f3bad0b955baf65b9530ffff99ac4fe7dc9ffb6bee325a3b9e188"
+    },
+    {
+      "path": ".agents/skills/building-developer-integration-platform/references/B108-business-system-adapters.md",
+      "sha256": "7ffd0efefeaf9f1d3dc8be79b2a39cc4cb81e78841084a7f2b99190a4cd82189"
+    },
+    {
+      "path": ".agents/skills/building-developer-integration-platform/references/B109-partner-test-harness-certification.md",
+      "sha256": "a9a29289363b1e152c64ba69a072040842672e8f47e44da9e8f352d5f6f3c1c2"
+    },
+    {
+      "path": ".agents/skills/building-developer-integration-platform/references/B110-api-lifecycle-deprecation-status-support.md",
+      "sha256": "fd3f7131eee89711e818d1b2fc03a88d44a1cb338bdf0ee6bad48388d30de818"
+    },
+    {
+      "path": ".agents/skills/building-family-future-self/SKILL.md",
+      "sha256": "e7cbf7c10d95a617afe305384ab08691eff51ff0d4cbcb3740ce66f5bf7f0073"
+    },
+    {
+      "path": ".agents/skills/building-family-future-self/agents/openai.yaml",
+      "sha256": "fe030d53b78d7180ef5b3b114d869f554f0bf2859e97d8ead12bb39150ff11c0"
+    },
+    {
+      "path": ".agents/skills/building-family-future-self/references/B19-family-graph-consent.md",
+      "sha256": "f50efe421c4da6edbc28368f7ead8a9360860882f673863cc0d63c15664e76fd"
+    },
+    {
+      "path": ".agents/skills/building-family-future-self/references/B20-multi-person-family-scenes.md",
+      "sha256": "8a3e99eb8eb17662283be0f313f299f9138a4d08e107ca1aff29f1f185bf70dc"
+    },
+    {
+      "path": ".agents/skills/building-family-future-self/references/B21-child-safeguards.md",
+      "sha256": "1ee68bc6214aa110559964c237a99f2160d5e11f87ed9bba83728e1a837a5aed"
+    },
+    {
+      "path": ".agents/skills/building-family-future-self/references/B22-future-self-narrative.md",
+      "sha256": "ad07d52d0cb8e60e33b2f21055405efee3b31422fdd58fe72de8779102ebbec3"
+    },
+    {
+      "path": ".agents/skills/building-family-future-self/references/B23-future-self-dialogue-safeguards.md",
+      "sha256": "941b1ff2ca694b06fc17bdab6e6b90b1214871b3807569220fafd2900ee40aa2"
+    },
+    {
+      "path": ".agents/skills/building-family-future-self/references/B24-annual-archive-rituals.md",
+      "sha256": "42491791693f809063698520c66598662f4efdad2b04b9dfcda3a395287af2f1"
+    },
+    {
+      "path": ".agents/skills/building-finance-tax-operations/SKILL.md",
+      "sha256": "f752df5096b82d2bd11e2bc9943a96888ed6fdd0afa0174a2f9958316bffface"
+    },
+    {
+      "path": ".agents/skills/building-finance-tax-operations/agents/openai.yaml",
+      "sha256": "3c149c834071834730d15d3fa6799a7f8bee2fc528c4c4a860af0cc6d9808860"
+    },
+    {
+      "path": ".agents/skills/building-finance-tax-operations/references/B87-double-entry-ledger-subledger.md",
+      "sha256": "025fffd27a7052d217196f49f44ec7f7b109993d2f0e80790580943cba437a1b"
+    },
+    {
+      "path": ".agents/skills/building-finance-tax-operations/references/B88-payment-settlement-bank-reconciliation.md",
+      "sha256": "3cb830d7c74f26d4f96d458dbb234148b420c89cf72a9c6bf8d43f7409ed7ab0"
+    },
+    {
+      "path": ".agents/skills/building-finance-tax-operations/references/B89-invoice-receipt-fapiao-tax-profile.md",
+      "sha256": "130cb8bd55ddeaf91906d52149c5f9c066df260def587ae0fe5a9f8a611e7f6f"
+    },
+    {
+      "path": ".agents/skills/building-finance-tax-operations/references/B90-revenue-recognition-deferred-credit.md",
+      "sha256": "58dc3779ecb1ea4b44bf2640e5269011191fb473814c61a6ff241bb2784d71f0"
+    },
+    {
+      "path": ".agents/skills/building-finance-tax-operations/references/B91-chargeback-dispute-fraud-reserve.md",
+      "sha256": "f5fc340682f97fd72e0558a5bfea48b3c7d31c29f8bf09319dfab79ce5bc63a8"
+    },
+    {
+      "path": ".agents/skills/building-finance-tax-operations/references/B92-partner-payout-commission-withholding.md",
+      "sha256": "40eb435a89c9d45573fb878ea59ad696e9979373b8954aabe5118664a238c7da"
+    },
+    {
+      "path": ".agents/skills/building-finance-tax-operations/references/B93-budget-finops-cost-allocation-profitability.md",
+      "sha256": "dd69871eac842585c0b116bdca1e5bc2276e8f9c91fdc6532b5bcd864c6198f0"
+    },
+    {
+      "path": ".agents/skills/building-finance-tax-operations/references/B94-month-end-close-audit-accounting-integration.md",
+      "sha256": "e5ada031dfd2ebd508fd2e59e432b69ee71c47bfc38c5508b6cfa78e7c250e48"
+    },
+    {
+      "path": ".agents/skills/building-growth-data-loop/SKILL.md",
+      "sha256": "b26b089d91430c46d7875d68af2cec8bcfcb0f6e359419670f9eca9a601e5a4b"
+    },
+    {
+      "path": ".agents/skills/building-growth-data-loop/agents/openai.yaml",
+      "sha256": "3d792ac4c08ec74f78b4136f2431f349a57b9648901a529b86417eda57fcf8cb"
+    },
+    {
+      "path": ".agents/skills/building-growth-data-loop/references/B39-referral-affiliate-ugc.md",
+      "sha256": "f6eade15a3a963cafb158470b7c795986272bccb7dc69e6efb523764442483d6"
+    },
+    {
+      "path": ".agents/skills/building-growth-data-loop/references/B40-lifecycle-annual-reminders.md",
+      "sha256": "0b5a820a286de28e75827b02137cd8d686a5b1ca29db48f4b841472ca8d2f379"
+    },
+    {
+      "path": ".agents/skills/building-growth-data-loop/references/B41-analytics-unit-economics.md",
+      "sha256": "436df03770a5c74f1ff79600c0f3f9441b59c5a9a471f749a5f19519305297b9"
+    },
+    {
+      "path": ".agents/skills/building-growth-data-loop/references/B42-personalization-experimentation.md",
+      "sha256": "6278d6cc955175829cae995ecb6e515f30cd075dbfa065565dd2b5b8b526b066"
+    },
+    {
+      "path": ".agents/skills/building-growth-data-loop/references/B43-admin-moderation-fraud.md",
+      "sha256": "676ba5d65871728f62dd2e7f8cc653678bf41ff302a9f30c71b19aa0908a889b"
+    },
+    {
+      "path": ".agents/skills/building-marketing-content-platform/SKILL.md",
+      "sha256": "6b310d971f004c4cc3117f32d5fdca90550f1182e2bd56deb2ce2a59c16845df"
+    },
+    {
+      "path": ".agents/skills/building-marketing-content-platform/agents/openai.yaml",
+      "sha256": "eae8275ec5cecce9da8d5b43ccd525afd877fc190c0483aaa24925626a7700a5"
+    },
+    {
+      "path": ".agents/skills/building-marketing-content-platform/references/B57-marketing-site-seo-landing-builder.md",
+      "sha256": "f506bb1e023f72b309a45d07694ac1c04ef780b3045afa6cca78d8115c1812c1"
+    },
+    {
+      "path": ".agents/skills/building-marketing-content-platform/references/B58-headless-cms-editorial-workflow.md",
+      "sha256": "4f064d1ecd4e9263ffde46bd42cf7660ebd4718e3b417d9012896eca8b7ec21a"
+    },
+    {
+      "path": ".agents/skills/building-marketing-content-platform/references/B59-consent-cmp-cookie-attribution.md",
+      "sha256": "134585ac06be204e89da024e13bc319cc958879578cba78a82f95819e951ffc9"
+    },
+    {
+      "path": ".agents/skills/building-marketing-content-platform/references/B60-campaign-deeplink-utm-qr.md",
+      "sha256": "bd2fe4bbe2fbf7222122708d414ea89dc881cbb04b497dd390693575f989e778"
+    },
+    {
+      "path": ".agents/skills/building-marketing-content-platform/references/B61-social-sharing-og-ugc-media-kit.md",
+      "sha256": "d6a25faf578e4c543a48e28cf980e08505551efb0cb0950bff17f39161b9aa9d"
+    },
+    {
+      "path": ".agents/skills/building-marketing-content-platform/references/B62-brand-trust-status-press-sales-assets.md",
+      "sha256": "3a920ba8e5a450c60f32d134306e6416ef9bdf5cccf97c1fde6ce3ba001d768c"
+    },
+    {
+      "path": ".agents/skills/building-mobile-and-mini-programs/SKILL.md",
+      "sha256": "e1f759eefb26333ec2cfd6953c590126a7627fd1c109e2baedef986aab6ee6e0"
+    },
+    {
+      "path": ".agents/skills/building-mobile-and-mini-programs/agents/openai.yaml",
+      "sha256": "a5385f86ebf1bbe2cb3cfc136bca2b3aa2c0c91f040007e5f393b2fa4bb3b1b5"
+    },
+    {
+      "path": ".agents/skills/building-mobile-and-mini-programs/references/B63-mobile-architecture-auth-offline.md",
+      "sha256": "c43e9f125619c4885976bdc7840bf9030c0d2f8c4a7eb129f0184b9592cd6e16"
+    },
+    {
+      "path": ".agents/skills/building-mobile-and-mini-programs/references/B64-mobile-capture-quality-resumable-upload.md",
+      "sha256": "d0649b03a5c76ce57809e079c8dae03eeb660fec170d28edffdd29bb0364c05f"
+    },
+    {
+      "path": ".agents/skills/building-mobile-and-mini-programs/references/B65-mobile-editor-generation-library-export.md",
+      "sha256": "f732cf1a8657063bb2846c0c0c2fb89f879d676b1ec3a92586e33fa6cf843d95"
+    },
+    {
+      "path": ".agents/skills/building-mobile-and-mini-programs/references/B66-mobile-iap-subscription-restore.md",
+      "sha256": "87a69dd74ed8d9a66d3eec4f0c71486b6aa53e3b21710148a570f5295b50862f"
+    },
+    {
+      "path": ".agents/skills/building-mobile-and-mini-programs/references/B67-mobile-push-deeplink-widgets-sharing.md",
+      "sha256": "f57c836a9fefa048f314a53f8de13b93724488c8fb67cc9cf436a7a5eb2e8cfc"
+    },
+    {
+      "path": ".agents/skills/building-mobile-and-mini-programs/references/B68-mobile-security-performance-accessibility.md",
+      "sha256": "9d4063f8356abf465434f913fa609b6021d4e9e24c75da04b0a2f0c716353935"
+    },
+    {
+      "path": ".agents/skills/building-mobile-and-mini-programs/references/B69-mobile-store-packaging-review-release.md",
+      "sha256": "aa9f991caf73808d5a2b991f00ea3552fc3a26932273b1e745e40fd7b6cc0bc3"
+    },
+    {
+      "path": ".agents/skills/building-mobile-and-mini-programs/references/B70-wechat-mini-program-core-journey.md",
+      "sha256": "7030d7c2469497234c2b95a889da8a41cf949428b487155a2b2c33e351389d0d"
+    },
+    {
+      "path": ".agents/skills/building-mobile-and-mini-programs/references/B71-wechat-payment-share-service-messaging.md",
+      "sha256": "f192e7c329cb998e2e92d9248ee62bf75bdd1a53ecec34d2fe8ae6a5d36849ce"
+    },
+    {
+      "path": ".agents/skills/building-mobile-and-mini-programs/references/B72-wechat-compliance-review-release.md",
+      "sha256": "ad3a14cdc683b795f3994fb36702d57c8b0fc2e3fb6dcb22673fecd8c470b8bc"
+    },
+    {
+      "path": ".agents/skills/building-notification-lifecycle-platform/SKILL.md",
+      "sha256": "71f1c2ffe4bd5b9fd7b189f10022c10a633f27f9000bd7416493aabe6e855117"
+    },
+    {
+      "path": ".agents/skills/building-notification-lifecycle-platform/agents/openai.yaml",
+      "sha256": "aaa14405fa766d81eb7a0bf86a7570646d0a82a368175942fb09333615134e2e"
+    },
+    {
+      "path": ".agents/skills/building-notification-lifecycle-platform/references/B73-notification-preferences-consent-quiet-hours.md",
+      "sha256": "1355d83ce1647d52c80b9764b50bf15a4118f335f29f9a34c6c110238f390708"
+    },
+    {
+      "path": ".agents/skills/building-notification-lifecycle-platform/references/B74-multi-channel-notification-provider-routing.md",
+      "sha256": "24fdcbc8fe1300a69735b1e70a82e265bb99fe5d0c549b95cbfd406cc109797d"
+    },
+    {
+      "path": ".agents/skills/building-notification-lifecycle-platform/references/B75-notification-template-localization-rendering.md",
+      "sha256": "ad43f18fa99f6eda01ce69bce7ebb2b1f89dc78312a9ade634957e29bbd09e48"
+    },
+    {
+      "path": ".agents/skills/building-notification-lifecycle-platform/references/B76-lifecycle-journey-orchestration.md",
+      "sha256": "e14de0763c5e0745a0a34f0f66f39de5685cc6f1acdca9d9bff602737f617f7b"
+    },
+    {
+      "path": ".agents/skills/building-notification-lifecycle-platform/references/B77-deliverability-bounce-complaint-failover.md",
+      "sha256": "47d3007db2b7961d65a03ec17e4aa59498ec02b11a842d8555be8227b2c704c7"
+    },
+    {
+      "path": ".agents/skills/building-notification-lifecycle-platform/references/B78-notification-analytics-experiments-frequency.md",
+      "sha256": "2d8e0fe42226f084b6ee0f305f52cfb620d54c401a1a0b104b24a1069e4b498b"
+    },
+    {
+      "path": ".agents/skills/building-partner-platform/SKILL.md",
+      "sha256": "3ca58dd4eddbf28fe2eca268349be95b27d3df97efc477595c6f23de3ce92b72"
+    },
+    {
+      "path": ".agents/skills/building-partner-platform/agents/openai.yaml",
+      "sha256": "ee063d376dd8a3b49abd76400f2a89140ecd937c0c45c2b592da28b7c914e042"
+    },
+    {
+      "path": ".agents/skills/building-partner-platform/references/B31-partner-multi-tenancy.md",
+      "sha256": "503c8b5494c0421ef7f5174019df89bf989e790a604c29c6f34ab8efef7e54ac"
+    },
+    {
+      "path": ".agents/skills/building-partner-platform/references/B32-partner-onboarding-contract-brand.md",
+      "sha256": "d9b7d8eb1da4b32a513e831a0b992cb8e34fceb68513c76c5272a13c4bdc52bb"
+    },
+    {
+      "path": ".agents/skills/building-partner-platform/references/B33-partner-api-sdk-webhook-sso.md",
+      "sha256": "0eeae8d45cd6928b5041e1a7c05f37c2401c0e21e76bb24be2ec22b04083472e"
+    },
+    {
+      "path": ".agents/skills/building-partner-platform/references/B34-metering-settlement-revenue-share.md",
+      "sha256": "0270360b5f514238d86ba2d5c32e138a306940621988ddd4d2fd5f35d97b2564"
+    },
+    {
+      "path": ".agents/skills/building-physical-supply-network/SKILL.md",
+      "sha256": "a42c0fa009ee9e3027a246c6cceb8305e4eea379edcb39f2a90bd600d10f8bcd"
+    },
+    {
+      "path": ".agents/skills/building-physical-supply-network/agents/openai.yaml",
+      "sha256": "693e2f64a6b2b6c0e2b9c18c43e8705978955ed2e7451646ab3473a5127898c5"
+    },
+    {
+      "path": ".agents/skills/building-physical-supply-network/references/B100-inventory-material-stock-preorder.md",
+      "sha256": "aff00f0e457c616a3b8fa5b017b14bb0e22c9369396d4ba4b0b0fa6ebcd5a34a"
+    },
+    {
+      "path": ".agents/skills/building-physical-supply-network/references/B101-returns-replacements-loss-damage-claims.md",
+      "sha256": "d850df202dbba2d72b8379a8cb1fac25778f1d7251c5e900374bb77456b26514"
+    },
+    {
+      "path": ".agents/skills/building-physical-supply-network/references/B102-vendor-quality-sla-scorecard-settlement.md",
+      "sha256": "f9b76bef16ed5c852386ba7492ebdc9e8bfba35e28bd65b2b980d2a43665ebcb"
+    },
+    {
+      "path": ".agents/skills/building-physical-supply-network/references/B95-print-product-configurator-preflight.md",
+      "sha256": "b311a300ff316250a1edc12c420e4a4d05103c17b0d06acab3ece59523cdfe35"
+    },
+    {
+      "path": ".agents/skills/building-physical-supply-network/references/B96-vendor-onboarding-catalog-capacity-sla.md",
+      "sha256": "2ae988acc20bbc1e205b10833f253e63c55416dc672604fb1a42b527ffaafa5e"
+    },
+    {
+      "path": ".agents/skills/building-physical-supply-network/references/B97-production-proof-customer-approval.md",
+      "sha256": "b74f371f0fe5b1bd03031fafd54bd423c7d5c64fcc371e09323dd791f75239dc"
+    },
+    {
+      "path": ".agents/skills/building-physical-supply-network/references/B98-order-routing-purchase-orders-vendor-jobs.md",
+      "sha256": "9e1b41e35efe84c116718ac50b3aa5d788135a42a9ad80794112d4e3ccc3b4cd"
+    },
+    {
+      "path": ".agents/skills/building-physical-supply-network/references/B99-address-carrier-shipping-tracking.md",
+      "sha256": "48307f0df76e3c6b3905fbd82dcc63e1577117c29327d9278be08e1bd2525eb5"
+    },
+    {
+      "path": ".agents/skills/certifying-life-time-machine-release/SKILL.md",
+      "sha256": "4583d7e81a98904185512a684d4b34169edd55dfd6134f9785fa885b5d9e298f"
+    },
+    {
+      "path": ".agents/skills/certifying-life-time-machine-release/agents/openai.yaml",
+      "sha256": "d9599dde19414cd35684a415f0ea7de2f265cbd6a81216b51c52230616168a69"
+    },
+    {
+      "path": ".agents/skills/certifying-life-time-machine-release/references/B48-business-loop-e2e-certification.md",
+      "sha256": "342a04aef5b601b4b84bbc5dd49bacf8c6fee0ac958f0dbfa943946d844d8433"
+    },
+    {
+      "path": ".agents/skills/certifying-life-time-machine-release/references/B49-release-evidence-certification.md",
+      "sha256": "32f84f6e02009d8b481c750569afd6fb92374deb503a6f9764ca174a8826eb08"
+    },
+    {
+      "path": ".agents/skills/certifying-life-time-machine-release/scripts/verify_release.py",
+      "sha256": "0a1173e762f910a4fc09e62e216feb6206d60c2345e0164d633e89febdb75a56"
+    },
+    {
+      "path": ".agents/skills/designing-life-time-machine-experience/SKILL.md",
+      "sha256": "63a263d2f167ced32c3eb750cdf5131cbbd7321b1c00ea1a086d17f92ef61a34"
+    },
+    {
+      "path": ".agents/skills/designing-life-time-machine-experience/agents/openai.yaml",
+      "sha256": "2041c8a2fb0fbef3724ae93f04d7d4236a1ff912d5b110f666166ff55a416a89"
+    },
+    {
+      "path": ".agents/skills/designing-life-time-machine-experience/references/B51-product-profile-scope-governance.md",
+      "sha256": "80ecdd6b19646c5004776ce88b2bf3d6e1ab89635057095a9f76f9310b2c822a"
+    },
+    {
+      "path": ".agents/skills/designing-life-time-machine-experience/references/B52-research-personas-service-blueprint.md",
+      "sha256": "99acc9305e98c7755f2d94ee8460a0305753b37799229080bbe00a16219bd127"
+    },
+    {
+      "path": ".agents/skills/designing-life-time-machine-experience/references/B53-information-architecture-content-model.md",
+      "sha256": "86de456f88643667e2fccfd92eda7054dea3d629ef4ccf6b7b1b56b77e67326b"
+    },
+    {
+      "path": ".agents/skills/designing-life-time-machine-experience/references/B54-design-system-component-library.md",
+      "sha256": "1a058b981971db44ffd708f8fe4b47aa5eb68677021fdea319e9438c08241f4b"
+    },
+    {
+      "path": ".agents/skills/designing-life-time-machine-experience/references/B55-accessibility-responsive-localization.md",
+      "sha256": "3726adfb16f0d2688d0c8e3c3bd2f5993015ca374b0d9319a491a699a165b1c7"
+    },
+    {
+      "path": ".agents/skills/designing-life-time-machine-experience/references/B56-ux-governance-usability-visual-qa.md",
+      "sha256": "b7f211a7791375a5677585448fc2fcde602719668965daa497b77afe0afb341d"
+    },
+    {
+      "path": ".agents/skills/hardening-enterprise-platform/SKILL.md",
+      "sha256": "6cec5e54a2f9b6f496a0b2939aee10a4ac99b07783eb252c0549a327d441fb2c"
+    },
+    {
+      "path": ".agents/skills/hardening-enterprise-platform/agents/openai.yaml",
+      "sha256": "424b8416b88cc435aa45458f4ea7080e54505b4dfdd7fe93c91fc5b865a61b21"
+    },
+    {
+      "path": ".agents/skills/hardening-enterprise-platform/references/B119-environment-config-secrets-tenant-settings.md",
+      "sha256": "3a68d7cec3764f892a3b6b84e54de57f3facaff5eb7e7b314c768643ca3ef62d"
+    },
+    {
+      "path": ".agents/skills/hardening-enterprise-platform/references/B120-multi-region-china-global-topology-cdn.md",
+      "sha256": "1a5f862ef5de5bbd6e43030024662db3c93c9f64200726992b862eda8443419e"
+    },
+    {
+      "path": ".agents/skills/hardening-enterprise-platform/references/B121-performance-load-capacity-autoscaling.md",
+      "sha256": "b2bbe7ffa8c0a7d84fba9c2bb03cfd1b3d048c4fd0d83aff5baba8a01a43cf20"
+    },
+    {
+      "path": ".agents/skills/hardening-enterprise-platform/references/B122-resilience-chaos-dependency-failover.md",
+      "sha256": "27d01066726e63ae8b9b5833fabd2b8d06de4c121f9f41c1f420c39bbc07f695"
+    },
+    {
+      "path": ".agents/skills/hardening-enterprise-platform/references/B123-supply-chain-security-sbom-sast-dast-pentest.md",
+      "sha256": "35b0a3c7256345fcf2b5127305244c18ddc4de35d92a52596a3b9e5b766c7bad"
+    },
+    {
+      "path": ".agents/skills/hardening-enterprise-platform/references/B124-compliance-evidence-filings-audit-exports.md",
+      "sha256": "712498d79294296d16cd3c08ea83f85f53ade9a84a2472b0c84ea3ed2c3c0bbc"
+    },
+    {
+      "path": ".agents/skills/launching-complete-commercial-product/SKILL.md",
+      "sha256": "4a7969e4b8152fb5f36a6324b0d3c0b4b4290b879e921e697aeaef8cce110bc1"
+    },
+    {
+      "path": ".agents/skills/launching-complete-commercial-product/agents/openai.yaml",
+      "sha256": "9d907dc47855190ea85232d61cfe89068292641446fa50f80e541384ae5b403f"
+    },
+    {
+      "path": ".agents/skills/launching-complete-commercial-product/references/B125-commercial-operations-readiness.md",
+      "sha256": "c768cafe4a503e97497f3ccb5fad436c8e7e1c4f412154f79cf3e6ffcf24ac1e"
+    },
+    {
+      "path": ".agents/skills/launching-complete-commercial-product/references/B126-full-surface-commercial-e2e-certification.md",
+      "sha256": "119e4c7aad30e755df5df4f25bb3959117123716ef5c78e58dc9b02c119e0d3a"
+    },
+    {
+      "path": ".agents/skills/launching-complete-commercial-product/references/B127-staged-production-launch-certificate.md",
+      "sha256": "e184c1c3ac06ae0ef7a8e8cd21ed858c4376ec5dbeac4e4aea067ce5b77490ca"
+    },
+    {
+      "path": ".agents/skills/orchestrating-life-time-machine/SKILL.md",
+      "sha256": "1c031ad8044311df289ff8a53dbc0939159b1c994e59c9d3f4978ee920e9adc1"
+    },
+    {
+      "path": ".agents/skills/orchestrating-life-time-machine/agents/openai.yaml",
+      "sha256": "662cf37f95af8970f2782151844ade051e92cda922e16acaf33537eeeb8ac0bd"
+    },
+    {
+      "path": ".agents/skills/orchestrating-life-time-machine/references/B00-repository-discovery-baseline.md",
+      "sha256": "caf370d195a6f018c783753c730c641076401e6ddddb3030dd3d17ce8e441344"
+    },
+    {
+      "path": ".agents/skills/orchestrating-life-time-machine/references/B50-multi-agent-worktree-pr-resume.md",
+      "sha256": "53bc8cb95924b7e3c078b5e500096d8f3606f9e011a58027bed6237fee88c4e6"
+    },
+    {
+      "path": ".agents/skills/orchestrating-life-time-machine/scripts/list_batches.py",
+      "sha256": "753db5c67350d3434f8389b07cfbb15878bac7954e36049d683931b1a1cee4cc"
+    },
+    {
+      "path": ".agents/skills/orchestrating-life-time-machine/scripts/orchestrate_batches.py",
+      "sha256": "3eb3296a42ad059d0b88d78e01287ea5d52272250b6db66498a09940bbe45696"
+    },
+    {
+      "path": ".agents/skills/securing-operating-life-time-machine/SKILL.md",
+      "sha256": "35576bbe00135d8084c73779e2cdfa428b8ff4f5a50a9d5dd2c96d4f5aaf9ff3"
+    },
+    {
+      "path": ".agents/skills/securing-operating-life-time-machine/agents/openai.yaml",
+      "sha256": "7d323445062174bc5cbfcb2e5a42dae346533c9da4d8c241a009fda0693abcd4"
+    },
+    {
+      "path": ".agents/skills/securing-operating-life-time-machine/references/B44-privacy-security-compliance.md",
+      "sha256": "6a093d655c6d3b76760b2c20dd82af4a37dc0b9803bc29b7b9e6c8c46ff3827a"
+    },
+    {
+      "path": ".agents/skills/securing-operating-life-time-machine/references/B45-observability-slo-cost.md",
+      "sha256": "352e28175beb1e4748be885ff1f61133796b8a6900c2d9c088ca35f6fc56b351"
+    },
+    {
+      "path": ".agents/skills/securing-operating-life-time-machine/references/B46-backup-dr-incident-deletion.md",
+      "sha256": "95d6f1fb9820e5cd05f3778d14493f1cb6542f77a91324015c3ae9e37d7b1fca"
+    },
+    {
+      "path": ".agents/skills/securing-operating-life-time-machine/references/B47-cicd-iac-rollback.md",
+      "sha256": "e4a4d1275c403f08d73143b0595728a189af236862191049e81d23b31edb13de"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/AGENTS.md.example",
+      "sha256": "a7d0fe92dc9b6dfde5025ae2240e4076ce86fac91546c0010ca35791106eb744"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/ARCHITECTURE.md",
+      "sha256": "af0ae0634961c8637b3eac1f67936202a319e25adbc5d63dcc92ac8156bb09f2"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/BUSINESS_LOOP.md",
+      "sha256": "0c833c871868b4c2b6062d887b2cc01dc35211c90ae0d85bf51273f46177d8ec"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/CHANGELOG.md",
+      "sha256": "73eb1bfa8083b49d61ecb231304cd3149ff21673f31b25a633a913139779eb79"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/CHECKSUMS.sha256",
+      "sha256": "6f5fe4261c7e6d94a4562a77cf269fc6874c53ff0728c03f13345297d8ddb401"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/CLAUDE.md.example",
+      "sha256": "a9df5f5e70229c499fc22d083fa1091a606fd232bea067e08bddd38f9951782a"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/INVENTORY.md",
+      "sha256": "5f2ff75c5a515087b0d4533c5de5ec52d26602bc69a78b80cf61a33287ddbd6f"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/LICENSE-NOTICE.md",
+      "sha256": "09c7037d4c0b76eca84554e32bfb965c5f1b4e327ba8c716d3a15ef37c81e4e4"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/MASTER_BUILD_PROMPT.md",
+      "sha256": "6f2c7916fef289a1279594aec23ed7f0eee9a0096e55989e67c8bbd55f8810fd"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/Makefile",
+      "sha256": "438ca8b71a72cb212765b33f64099f5db23a21c289a750fa9ce8575ab2348555"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/PRODUCT_BLUEPRINT.md",
+      "sha256": "1b6c03ba8904313bc94c0549dc68efcc7b26db2e737715329475bfbc3e3f0c7e"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/README.md",
+      "sha256": "9939097ba8fb523634bd1249f0946426fc32bbb3fa6f8bd94e0bf3ac4eb13003"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/ROADMAP_AND_DEPENDENCIES.md",
+      "sha256": "76c0d0de06af6331c60bb1085716a8cc8d3d9b08e8319c9131cfce1484a46b8c"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/SOURCES.md",
+      "sha256": "d5a28f1b9401881f5a8fcfdaf05483f8757cc7cef0cec9d6fef0aae5f1cbf112"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/VERIFICATION_REPORT.md",
+      "sha256": "ff598b5f4f326815222bb8fac04956feef4ad9f2d030b1d519b655db3b4abd50"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/contracts/analytics-events.yaml",
+      "sha256": "5741fb78ee460157e9d6c53db7b90de7dda3138ef35bb92d10fcb7615f42a913"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/contracts/data-classification.yaml",
+      "sha256": "0cad641547a4e3d1ab47e4395f01f5890305b3d08bd8d066d60f2f21d40679b6"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/contracts/db-schema.sql",
+      "sha256": "d47d80eb7d8e0adf8cb70bddc7a9c793a7a656602baf838b9e702142324639f5"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/contracts/error-catalog.yaml",
+      "sha256": "194e0e6c5af2258b3239c6392baed229b90b97edad932917417b111d20d7b07c"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/contracts/events.yaml",
+      "sha256": "5db79359c665053fca2ba745c113c8d0037dde081638ba4a5cbd068f18d67730"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/contracts/feature-flags.yaml",
+      "sha256": "847973b9f7da3148c58b61907b659cc8ef2b0d3d4c746c8774d048a3854685c7"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/contracts/finance-events.yaml",
+      "sha256": "aa28326e3926a2c5186e8eaaad8c9886f5bf9ea6d0d2d0e472cfa2c4779ad31d"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/contracts/fulfillment-events.yaml",
+      "sha256": "27dd77cd81fdd528023c8dce506e2378488df608884212cb04280fc5788af9d4"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/contracts/notification-events.yaml",
+      "sha256": "fa6de8af88a450f4632f5b12fb534c89cb8b3c73fe67f23fd4227102123269f0"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/contracts/openapi.yaml",
+      "sha256": "216d8b9f97281b9e5dfe73840558eaeefe884649b892d571bc5b12f17f2a5192"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/contracts/permissions.yaml",
+      "sha256": "d60a2a804f0772da4490822814991d4fe81800ebd3d10b6e3acd7c997cdedb29"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/contracts/retention-policy.yaml",
+      "sha256": "4af3ab9929499cd39ecc9ff320bb9ac6c91da8374bb0dc582e574ea42edfd974"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/docs/CHANNEL_ACCEPTANCE_MATRIX.md",
+      "sha256": "9b213ddb1c1a67a427ca221da350e8ff80cb6dcc7786808463d236d1051254b8"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/docs/COMMERCIAL_READINESS_MATRIX.md",
+      "sha256": "3e8ee7dc46822784dc3969a10426f40d0c396d0778e5387c8dbe218d51c7c656"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/docs/COMPLETE_PROJECT_SCOPE.md",
+      "sha256": "e39edcb15df99299107168ce5925dc1288afd6c5ece07a24a5ad68818206f152"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/docs/IMPLEMENTATION_CONTROL_MATRIX.md",
+      "sha256": "bb876ecbba83ab45434589bd4642c5ddaabd8fd87372f9cc7afad771d3f9ce5e"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/docs/KPI_AND_UNIT_ECONOMICS.md",
+      "sha256": "afd41734f073d4d86145a8d12622a9413fbeb1994e7ec9fe3adea9c6e94be9f8"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/docs/MODULE_CATALOG.md",
+      "sha256": "e70a0972d570bc56117411c895f49d078fe5e03de839ac5bbe0f800d7e1c681a"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/docs/PROFILE_GUIDE.md",
+      "sha256": "cb26aac869cda52c1072bbf761c047e6ac92eabb44d2dd6773a2677274b0513b"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/docs/PROJECT_FACTORY.md",
+      "sha256": "536f5f319293a0b0221eedce7967b5506d1b8fd11214455426dd13489da47e85"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/docs/RELEASE_GATES.md",
+      "sha256": "a6ff3a534df035ccd8c61a1bf6947d0b20da1f3deae241c79dad1c27eb3f4467"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/docs/STACK_PROFILES.md",
+      "sha256": "dad32a18e190402c4a50bc6cb71b3c4045c44c18e8c6bc9fb78082e9b50edea4"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/docs/SURFACE_MATRIX.md",
+      "sha256": "7444504083e7da12112d32fa3695ffcbba32365e66824de5e9594fc988390841"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/evals/batch-acceptance-evals.jsonl",
+      "sha256": "f1825233810b82a9255431736d845b7cb65f070ce5974ea3c3adccabbd6ef573"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/evals/business-loop-e2e.jsonl",
+      "sha256": "f0c0ac2191b7d7f58f3695b4d2e59f3d4d1fc54e6df4f771607d244cbb339e5d"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/evals/commercial-peripheral-e2e.jsonl",
+      "sha256": "2ff5b021bc2f5ddb665d9bb8a5540425f747e3532d5fb8a996e0c8ed3d345e85"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/evals/developer-data-evals.jsonl",
+      "sha256": "b48733c6d5ec1ed5ba18b44302d6eebace85fe4a5b6715bfa3ca09711348d52a"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/evals/finance-supply-evals.jsonl",
+      "sha256": "8236e36571cc57cdf1cecf4a28ad9dedf98b5898535611b2499a0f3d81649c14"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/evals/mobile-mini-evals.jsonl",
+      "sha256": "26c612ebc5c032256a26783a087a28c896309caab1f1a4abff5699f5a927abcf"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/evals/negative-abuse-evals.jsonl",
+      "sha256": "8d48bbdd6fa29a14a61aa31cf505a2126a989ad98a83e4337c7d378bda16693a"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/evals/skill-trigger-evals.jsonl",
+      "sha256": "21a1b78034d986e069483c16c47bb133ef952bf7dc37932a15adefb13ae9ebb6"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/examples/README.md",
+      "sha256": "6c98a6074b79e959ef4cc5346a822a0dca6be0d023a9a4b163221052957cd65d"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/examples/claude-parallel-batches.md",
+      "sha256": "58cc0016e8d03b8d831fce943c895444f938391d5a3d7e6483e1942d0f1b3e68"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/examples/codex-b00-prompt.md",
+      "sha256": "fc9fccfd9609dd0acc2db6f115661f67ad55f148be17503430735ddb7cb33c6e"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/examples/partner-pilot-prompt.md",
+      "sha256": "ad27d1cea223f35b2e70c2a7c64bd27d018fa0403be9a74f3bc011d3e25414b3"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/examples/release-certification-prompt.md",
+      "sha256": "00b8fc39811c49284a79ad96ff3bcd746263a131b2700e7c30beab57e2b7b3a0"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/manifest.json",
+      "sha256": "fd43a5aa6680588c8c191ecbae8da3c29c97740bb3bdf1d61dc910f072c6f69d"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/manifest.yaml",
+      "sha256": "fd43a5aa6680588c8c191ecbae8da3c29c97740bb3bdf1d61dc910f072c6f69d"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/manifests/batches.json",
+      "sha256": "f5773df5ee5ee3469add911d3613adec7ee00afd257bf2dcda8182f1e4b68927"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/manifests/batches.yaml",
+      "sha256": "f5773df5ee5ee3469add911d3613adec7ee00afd257bf2dcda8182f1e4b68927"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/manifests/dependency-graph.dot",
+      "sha256": "7c35f6ff860228b28c4669bbfed0a95c21ffa7d4d131a9b220e26a2a3b1c181e"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/manifests/modules.json",
+      "sha256": "c26aaed771c8b77216f8dfe9348b70287d03e045928c33c1c4a1498680acaccb"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/manifests/requirements.jsonl",
+      "sha256": "e8505de279d74a2995548f8eaad0a49da11bd7ad51c19d98a0f34a3e27b00709"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/manifests/skills.json",
+      "sha256": "80d83e1b86fa2f57cd683ea9fef8b9e5d92d1e11b0ae59abc213567fff6002a3"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/manifests/skills.yaml",
+      "sha256": "80d83e1b86fa2f57cd683ea9fef8b9e5d92d1e11b0ae59abc213567fff6002a3"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/manifests/topological-order.json",
+      "sha256": "8b38948154a24f9fbe4ad13d52ca048433f7e8fd41b7137e961f409994a1046b"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/profiles/b2b2c-standard.json",
+      "sha256": "f6c1cf76380bb3431654982c79b22d729fed240903ca47e947d7fb3129dd7627"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/profiles/b2b2c-standard.yaml",
+      "sha256": "f6c1cf76380bb3431654982c79b22d729fed240903ca47e947d7fb3129dd7627"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/profiles/china-commercial.json",
+      "sha256": "3ff0d344a5fe58f6ab9242daad50a69f8e8829af069bef656ce3d6d626c712b3"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/profiles/china-commercial.yaml",
+      "sha256": "3ff0d344a5fe58f6ab9242daad50a69f8e8829af069bef656ce3d6d626c712b3"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/profiles/consumer-web.json",
+      "sha256": "30e7b9938f5f0dc92580be3f7e3773ce87d04c32ce035c9e0264fd03e5037fee"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/profiles/consumer-web.yaml",
+      "sha256": "30e7b9938f5f0dc92580be3f7e3773ce87d04c32ce035c9e0264fd03e5037fee"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/profiles/full-b2c.json",
+      "sha256": "c99549c9589d3aedf722c93068db712722f1b37b5fb46df8b71ad01db8564592"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/profiles/full-b2c.yaml",
+      "sha256": "c99549c9589d3aedf722c93068db712722f1b37b5fb46df8b71ad01db8564592"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/profiles/full-commercial.json",
+      "sha256": "fdab5d5d0839abe8ab02bce0a71aae5a9cee8934d2e45b3c70b05cea52237b9d"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/profiles/full-commercial.yaml",
+      "sha256": "fdab5d5d0839abe8ab02bce0a71aae5a9cee8934d2e45b3c70b05cea52237b9d"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/profiles/global-enterprise.json",
+      "sha256": "d03134a89897c3a91d35e2a89ca81a2bf2b1509dc34d3e93767e4bc3e9a5732f"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/profiles/global-enterprise.yaml",
+      "sha256": "d03134a89897c3a91d35e2a89ca81a2bf2b1509dc34d3e93767e4bc3e9a5732f"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/profiles/index.json",
+      "sha256": "5cd87c2c006e29b18f5fef63dfaf9b2ab7131825c3e95570d70e1ee77f3dc810"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/profiles/lean-mvp.json",
+      "sha256": "03ac6e1e8696de9944222c598beee93fd4e128e7172da50d2812a7c17401286f"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/profiles/lean-mvp.yaml",
+      "sha256": "03ac6e1e8696de9944222c598beee93fd4e128e7172da50d2812a7c17401286f"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/schemas/api-credential.schema.json",
+      "sha256": "0ee95ec08b62ef950963d968dd8950d34239ba2131b2ae08f17c3a1d37a0842e"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/schemas/batch.schema.json",
+      "sha256": "b46d4e982b708da309f45d12fe3190fb9fe0c9badbd7c3fa293068f1288f52b8"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/schemas/completion-report.schema.json",
+      "sha256": "ba08193a42437eb2bb80796e86eb6a3af966019473c3ae1763dca7f03ed72022"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/schemas/consent-record.schema.json",
+      "sha256": "e0462f876dfefe7bcf62f6bec76a4938e60c45b22180ebae18db8fdb1de2daca"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/schemas/evidence-record.schema.json",
+      "sha256": "bdb6903a1f40248a22ab3104c165e5545b0a10def2da8eea53136766126e4f21"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/schemas/experiment.schema.json",
+      "sha256": "4cc33760633a86802ff9c4e57ffa71d01983e83bdb907136709ee6ab6b2c2b8b"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/schemas/finance-entry.schema.json",
+      "sha256": "272ab4fab3ca4a803384475314872e837a9ccbc6cbca50bf3b2bae6efe61e22b"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/schemas/generation-job.schema.json",
+      "sha256": "c4135b0427454876e62e03bafb714103a434698caa1fd9998811d5b896cabdaf"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/schemas/invoice.schema.json",
+      "sha256": "f8bb378698b293ab63ec39e5427d8e42c148780cd24b2c6d055f0b1ef0f2eba1"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/schemas/orchestration-state.schema.json",
+      "sha256": "8e03d68ad3ad704a66f6648df10711a9615395fa545254af5bf7731ad36e2880"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/schemas/partner-config.schema.json",
+      "sha256": "78937fa37919d34a2f9b23f3f50bebd76e9aa359df72a9a02cf6975497eea32a"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/schemas/project-profile.schema.json",
+      "sha256": "0bd84ca8616d6a06dcfb2c33e0115aeba5132be05ff32df8e0ef5900eadf3331"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/schemas/release-manifest.schema.json",
+      "sha256": "21ffe6b33e075573227d6a6fd8e6dfb16177dd3327890f58eee45a8c38b2bf26"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/schemas/settlement-record.schema.json",
+      "sha256": "5d200c2ae8d258f418c79f3f911b5ab208278a6ced82838be6cd8d49a307b003"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/schemas/support-ticket.schema.json",
+      "sha256": "255d3b0839d6f021d837d74120b31534ba25a1be5529b59c9ad230dbc76ad5b7"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/schemas/traceability.schema.json",
+      "sha256": "a1bb36810af7a2c88fee9c645af317539ed39f4f0b2016b852966b34397dd426"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/schemas/vendor-job.schema.json",
+      "sha256": "d9e51b5c282e9c02b568ade00f5f0663f470846d23e99ad8b1f0871a112b51b2"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/scripts/doctor.py",
+      "sha256": "12083e113ab22ab404d7fc780e1ae8fb56fd18367a70f975f8a6359b5a1e1e1f"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/scripts/generate_batch_prompt.py",
+      "sha256": "745207c1ed2fcc0ee97ede678d01d54e7ae45b71cdb8e45ab3320b24a5729182"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/scripts/generate_checksums.py",
+      "sha256": "b4240ca291714a4affd86a2ee141ef383232d66c42402099a08160eeba973843"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/scripts/install_skills.py",
+      "sha256": "61bc122871a28ee82e402e750a56a9a8e1a947685d3563e59e97c4b90e1887b8"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/scripts/list_batches.py",
+      "sha256": "3e812ff230963da7d25f0fae6a13b025cf1e41764d5f0327200d74f40fd3149f"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/scripts/orchestrate_batches.py",
+      "sha256": "4d7185820ee989ab1914df52106a2b0a11aa6598ec55a4c0ace6201966db239b"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/scripts/projectctl.py",
+      "sha256": "82bf9532e8d84875551cd45b4260a55830ebff4073d25495c0432e3d73dc2461"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/scripts/render_backlog.py",
+      "sha256": "450f4567346e6108bd1f6523cd5fcc808e1ceac6f21365210ad6402154c0ab03"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/scripts/scaffold_project.py",
+      "sha256": "061c33af5399f4e4a9813884a7d1b83cbcba243d18f60c9e4d3f60f7c07da923"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/scripts/uninstall_skills.py",
+      "sha256": "a1c8993ec1a86799d3d7a212d560615ee9f1eb3aadbc6ff8dad66facf44a84bc"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/scripts/validate_package.py",
+      "sha256": "62322a287a48657d9d9a852fe47f93a9ce9f47ff090faf771aea30bd319b5d71"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/scripts/verify_release.py",
+      "sha256": "bed055cc8efa05bb1db4cd0b1995a6ec9342cb1beb945fef8ea7d0cdcf5a76fb"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/bootstrapping-life-time-machine-platform/SKILL.md",
+      "sha256": "23619ab03283a8cda08ee6f5a5fa6df536b2c3c2f70ae72d0695becb3a84050d"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/bootstrapping-life-time-machine-platform/agents/openai.yaml",
+      "sha256": "e6d19ade866a473c406dc7d915d89bdca934866c7a929c409fe8cfd42e5af0b0"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/bootstrapping-life-time-machine-platform/references/B01-monorepo-architecture.md",
+      "sha256": "aa08b382aa2965c404095bf654e13b34a9bd239e653fe5f8031f6860c0812187"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/bootstrapping-life-time-machine-platform/references/B02-domain-data-api-event-contracts.md",
+      "sha256": "fa9bdb9b979d1948fe920b7c117840a50531d232413e1df67c7fd25f0ddf7a04"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/bootstrapping-life-time-machine-platform/references/B03-identity-rbac-tenancy.md",
+      "sha256": "2d09ca68ac02bff4236473de8e992680a6b1ec3100051d008725ad1cfaa8bf4d"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/bootstrapping-life-time-machine-platform/references/B04-consent-rights-guardian.md",
+      "sha256": "57737d63725753c3a33b648829cb361ef7f9840e20587907a0df38e4863bdf29"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/bootstrapping-life-time-machine-platform/references/B05-media-lifecycle-deletion.md",
+      "sha256": "88734992b60de6a0168e3484f28f5ef0c4683f30166a2890792b2b92c61b4445"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/bootstrapping-life-time-machine-platform/references/B12-provider-abstraction-routing.md",
+      "sha256": "374a75cc033d825e55b1fb51f8d13426873f597e1c96e8c5c521b179fba65a17"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/bootstrapping-life-time-machine-platform/references/B13-durable-workflow-orchestration.md",
+      "sha256": "94e1b3f665ee08db870e752cc08c470654f4cfef9c858408a64104de256c3d90"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-age-media-pipeline/SKILL.md",
+      "sha256": "8c1e4f4228618a3a24a5cffba62c21e8684017181987756e2856cbceeef641a6"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-age-media-pipeline/agents/openai.yaml",
+      "sha256": "18ff947adac17aa3db24cd4b2341de4acc10d447ed08a5445ccb9c8f51cce412"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-age-media-pipeline/references/B14-age-timeline-generation.md",
+      "sha256": "30185138e774fd093c65cdd59ff34350695a50cc284ef9d09f283699c5be6d4a"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-age-media-pipeline/references/B15-identity-consistency-quality.md",
+      "sha256": "300937d36bb9fa24af742cf85fe9d949b87c66f6fc9572085f55359a718288e0"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-age-media-pipeline/references/B16-video-audio-caption-pipeline.md",
+      "sha256": "0f9567c2cf6049ad8266e3d50e39f9c0a017145ce4b45ad9a5d371254894bda9"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-age-media-pipeline/references/B17-safety-provenance-labeling.md",
+      "sha256": "11628e2047525b9d3fa524a8c85b2dfecca73283f55efb6c1b728f2da18e0a45"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-age-media-pipeline/references/B18-cost-latency-cache.md",
+      "sha256": "cad3b9f9a2c3646dee703c0cf27be64df462ac53d1eca49d20ca1aaf667c6247"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-channel-solutions/SKILL.md",
+      "sha256": "ce2c807f2c333dbc37bfd3a97de85aa736b54bf5f6e4efefc21f785261badf44"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-channel-solutions/agents/openai.yaml",
+      "sha256": "33bec830fbedbc5d89f27efc799733e64134a1368343a631dc8a89fefb7b52eb"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-channel-solutions/references/B35-studio-portal-kiosk.md",
+      "sha256": "49135ffd082b5d6bdeb16b2e5a6fd978c85d71a7d30f97b7548b89b6e61af154"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-channel-solutions/references/B36-gift-memorial-retail-channel.md",
+      "sha256": "42df23d26b8a6061cd3f7a8a786676035b5fc8a59c6fec858cdba49d4f9dbb33"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-channel-solutions/references/B37-insurance-retirement-education.md",
+      "sha256": "b7efc62795ce40fdedf62e4df92aae9f32600cb20f86424ddb51251ec424258c"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-channel-solutions/references/B38-consented-crm-lead-handoff.md",
+      "sha256": "1f22c1a5cee916fe6e587cf9eb35cbe86b8d4c768cac2b5962a2ef60accfac4d"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-commerce-fulfillment/SKILL.md",
+      "sha256": "8d855cfbc8eda432f6c18dac441827811301ecf9d15f1769ff499660a57aa12d"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-commerce-fulfillment/agents/openai.yaml",
+      "sha256": "6e2fbf2c5228c5aed5dcc54920b41b21e301dc77b5cc700cd232af143fa6dfaf"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-commerce-fulfillment/references/B25-catalog-pricing-packaging.md",
+      "sha256": "2c4386571466073114248ce723263c762b31dde2f85adbb56350fd7ba72bf53c"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-commerce-fulfillment/references/B26-checkout-payment-refund.md",
+      "sha256": "d0e8f02220b99f976c76b48f72e7466a2ef9688f17b0712c71a20ff6afd8f547"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-commerce-fulfillment/references/B27-subscription-credit-gift.md",
+      "sha256": "b588a6d19c75a098a8921ad961db0d5a73c3629934911abb0260e33fff16b84b"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-commerce-fulfillment/references/B28-orders-digital-delivery.md",
+      "sha256": "699968c213d71d1bf5ee70b32264b3a126b5a61dec6320022720d32f354bf358"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-commerce-fulfillment/references/B29-physical-product-fulfillment.md",
+      "sha256": "b619f4abd48e32e447727de4fb03587ded61cdde897f76d8950f4912e3e697b7"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-commerce-fulfillment/references/B30-support-refund-dispute.md",
+      "sha256": "a551cdf5ec19d3595ceedea01679a3f6980e5dfb5cbf8e715163855dd8a096ef"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-consumer-time-machine/SKILL.md",
+      "sha256": "f14f0714f335a9f0dea2f11dd96e7ca6617edd7e4c9d785bb0d3cbd85c9b5183"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-consumer-time-machine/agents/openai.yaml",
+      "sha256": "64ea283622c6c0777a79f58a935246c2a6084bd4fc3cec10beef3436abcbd0af"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-consumer-time-machine/references/B06-acquisition-guest-journey.md",
+      "sha256": "113b3ea2595b52597f59da19e160dccf95ba6a369d545fef0a935dbf01939915"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-consumer-time-machine/references/B07-photo-intake-quality.md",
+      "sha256": "513bc183f6413d1cb6bbe16adc2fac8867c779b462320780c941f11cbfe5fec1"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-consumer-time-machine/references/B08-editor-template-composer.md",
+      "sha256": "b2711490d880615dc057d72ef388c49dc09604d471fac4de18f8e460a61a62e0"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-consumer-time-machine/references/B09-generation-job-status-recovery.md",
+      "sha256": "05f4817405386914893e5e00b616359cfba6bf9308648b59e873539ad9ce82af"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-consumer-time-machine/references/B10-export-share-labels.md",
+      "sha256": "32c85bcae964e134cfe0f24cda0cd97f7296bc7250a1744d4c969ec43f7f8853"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-consumer-time-machine/references/B11-account-family-library.md",
+      "sha256": "251581d8e4492a6d48a3a815c4ec9488c75508c78a508c6677415af8bfc74900"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-customer-support-success/SKILL.md",
+      "sha256": "a9b6834095f67d4bbf74e83869afeec96cfda9a3afb293621987c46955933ef2"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-customer-support-success/agents/openai.yaml",
+      "sha256": "b0546476bc44e60a42403f440749d53d173ed39236ac7adf7b198c1ec0a3537b"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-customer-support-success/references/B79-help-center-faq-search.md",
+      "sha256": "9a7a0064db9fad8506f9303fb7c16e3338aa6f843b9dc047c358a78287652936"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-customer-support-success/references/B80-support-ticket-inbox-sla-routing.md",
+      "sha256": "709f7f600e6e974dee24c8c3068ac3f022577eb9c059b514fe7277a5eb6d9b4b"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-customer-support-success/references/B81-in-app-support-bot-human-handoff.md",
+      "sha256": "8627d05da121562a67aaab6f1407b03209460aa644c7baa0902d7bf69d841454"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-customer-support-success/references/B82-customer-360-timeline-impersonation.md",
+      "sha256": "20e9d0a6efd02713647dd48c41845fb6568ef37780a0df75bba98b3d5b914738"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-customer-support-success/references/B83-support-actions-refund-replacement-data-rights.md",
+      "sha256": "783868fc3cd121dde031a90501cab1d761d73f25ce46901b5e8de8df06cc64b7"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-customer-support-success/references/B84-partner-sales-crm-quotes-pipeline.md",
+      "sha256": "a9110d483a646978a09164a930f766e5529b2a52ad85f4422281a743125de43e"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-customer-support-success/references/B85-customer-success-onboarding-health-renewal.md",
+      "sha256": "32be5546d033d13cb5836021db23cb784f186cd407834b76ab80aecb060178ee"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-customer-support-success/references/B86-csat-nps-voc-support-quality.md",
+      "sha256": "17c8efd33ea985a42919046ffa8b14075ab61e0c8861017253c4864cc75a7b82"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-data-intelligence-platform/SKILL.md",
+      "sha256": "45f39308cc662b6941a3f34be0ed3a093f3b4d3ef96bb84eadf969b711a8d3f4"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-data-intelligence-platform/agents/openai.yaml",
+      "sha256": "e6e47d49c8cbf5eb614600be3bd462ad2655ec6f955070e08d9c94442a150f19"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-data-intelligence-platform/references/B111-event-taxonomy-tracking-sdk-schema-registry.md",
+      "sha256": "5eeb9314d0fd8103481ae6f7f0cc4412d9fe8c2066d555f0d7113834b45decbe"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-data-intelligence-platform/references/B112-warehouse-ingestion-dbt-semantic-layer.md",
+      "sha256": "ba33f399c95af8441de069f88295f1b280d403c67eefc310f3579e0f52209a6c"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-data-intelligence-platform/references/B113-product-commerce-partner-ops-dashboards.md",
+      "sha256": "1e04a6bb2f3908bff12f9816defc012e83a4b45203cdf595278c0b9e3ea86f9b"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-data-intelligence-platform/references/B114-attribution-cohort-retention-ltv.md",
+      "sha256": "4969a8700cefd674d1f0709b63460723fdcf10a2a4d85b51e9681244ad5721a7"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-data-intelligence-platform/references/B115-revenue-cost-unit-economics-margins.md",
+      "sha256": "6266d1ac98db4a4c7fbbc5581ee97a6bac2a6fef3d1654f093a1f19c99e3cff1"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-data-intelligence-platform/references/B116-experimentation-statistics-guardrails.md",
+      "sha256": "5ef5d4aa647c0e523a6138f2c0ab6069bb2b13564bd6061b568f18d326681bc1"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-data-intelligence-platform/references/B117-data-quality-lineage-catalog-pii-governance.md",
+      "sha256": "c8cbdfd6be76ac719f6c3e78b6b85cc98b127d791b3a5176dc930ce0a422b4e3"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-data-intelligence-platform/references/B118-ai-model-evals-drift-human-rating.md",
+      "sha256": "6fba3304d6611856bfcf178665658e9548458cd34f47f49e5173bf213efadafe"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-developer-integration-platform/SKILL.md",
+      "sha256": "cad17705a559c34f59592f441c0fc882d48cdef222ac8f73f122648588c20e93"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-developer-integration-platform/agents/openai.yaml",
+      "sha256": "1e9135476fc727976277466760dbacb17843ab1b73131c7615295a3b9cd188e9"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-developer-integration-platform/references/B103-developer-portal-api-docs-sandbox.md",
+      "sha256": "6084270e4402f0e2953fcf60d1b9b12086d1dd8f0b28747e3fba120f04603575"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-developer-integration-platform/references/B104-api-keys-oauth-service-accounts-scopes.md",
+      "sha256": "b271a51f825252dbccfe0ee384901a70f596f6afebf66517ff58d912bf1a8146"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-developer-integration-platform/references/B105-sdk-generation-versioning-examples.md",
+      "sha256": "cc7ecdee3fed634c02d2300d88f7e68424d3959c74ae4cf86325bdd642baf7cd"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-developer-integration-platform/references/B106-webhook-console-replay-dlq-signature.md",
+      "sha256": "b63951e7cc1868c705aca1d7fa476aecadc3454630ac4b248604c9532a37e65d"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-developer-integration-platform/references/B107-connector-framework-integration-marketplace.md",
+      "sha256": "56fba78e308f3bad0b955baf65b9530ffff99ac4fe7dc9ffb6bee325a3b9e188"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-developer-integration-platform/references/B108-business-system-adapters.md",
+      "sha256": "7ffd0efefeaf9f1d3dc8be79b2a39cc4cb81e78841084a7f2b99190a4cd82189"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-developer-integration-platform/references/B109-partner-test-harness-certification.md",
+      "sha256": "a9a29289363b1e152c64ba69a072040842672e8f47e44da9e8f352d5f6f3c1c2"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-developer-integration-platform/references/B110-api-lifecycle-deprecation-status-support.md",
+      "sha256": "fd3f7131eee89711e818d1b2fc03a88d44a1cb338bdf0ee6bad48388d30de818"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-family-future-self/SKILL.md",
+      "sha256": "e7cbf7c10d95a617afe305384ab08691eff51ff0d4cbcb3740ce66f5bf7f0073"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-family-future-self/agents/openai.yaml",
+      "sha256": "fe030d53b78d7180ef5b3b114d869f554f0bf2859e97d8ead12bb39150ff11c0"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-family-future-self/references/B19-family-graph-consent.md",
+      "sha256": "f50efe421c4da6edbc28368f7ead8a9360860882f673863cc0d63c15664e76fd"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-family-future-self/references/B20-multi-person-family-scenes.md",
+      "sha256": "8a3e99eb8eb17662283be0f313f299f9138a4d08e107ca1aff29f1f185bf70dc"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-family-future-self/references/B21-child-safeguards.md",
+      "sha256": "1ee68bc6214aa110559964c237a99f2160d5e11f87ed9bba83728e1a837a5aed"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-family-future-self/references/B22-future-self-narrative.md",
+      "sha256": "ad07d52d0cb8e60e33b2f21055405efee3b31422fdd58fe72de8779102ebbec3"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-family-future-self/references/B23-future-self-dialogue-safeguards.md",
+      "sha256": "941b1ff2ca694b06fc17bdab6e6b90b1214871b3807569220fafd2900ee40aa2"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-family-future-self/references/B24-annual-archive-rituals.md",
+      "sha256": "42491791693f809063698520c66598662f4efdad2b04b9dfcda3a395287af2f1"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-finance-tax-operations/SKILL.md",
+      "sha256": "f752df5096b82d2bd11e2bc9943a96888ed6fdd0afa0174a2f9958316bffface"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-finance-tax-operations/agents/openai.yaml",
+      "sha256": "3c149c834071834730d15d3fa6799a7f8bee2fc528c4c4a860af0cc6d9808860"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-finance-tax-operations/references/B87-double-entry-ledger-subledger.md",
+      "sha256": "025fffd27a7052d217196f49f44ec7f7b109993d2f0e80790580943cba437a1b"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-finance-tax-operations/references/B88-payment-settlement-bank-reconciliation.md",
+      "sha256": "3cb830d7c74f26d4f96d458dbb234148b420c89cf72a9c6bf8d43f7409ed7ab0"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-finance-tax-operations/references/B89-invoice-receipt-fapiao-tax-profile.md",
+      "sha256": "130cb8bd55ddeaf91906d52149c5f9c066df260def587ae0fe5a9f8a611e7f6f"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-finance-tax-operations/references/B90-revenue-recognition-deferred-credit.md",
+      "sha256": "58dc3779ecb1ea4b44bf2640e5269011191fb473814c61a6ff241bb2784d71f0"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-finance-tax-operations/references/B91-chargeback-dispute-fraud-reserve.md",
+      "sha256": "f5fc340682f97fd72e0558a5bfea48b3c7d31c29f8bf09319dfab79ce5bc63a8"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-finance-tax-operations/references/B92-partner-payout-commission-withholding.md",
+      "sha256": "40eb435a89c9d45573fb878ea59ad696e9979373b8954aabe5118664a238c7da"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-finance-tax-operations/references/B93-budget-finops-cost-allocation-profitability.md",
+      "sha256": "dd69871eac842585c0b116bdca1e5bc2276e8f9c91fdc6532b5bcd864c6198f0"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-finance-tax-operations/references/B94-month-end-close-audit-accounting-integration.md",
+      "sha256": "e5ada031dfd2ebd508fd2e59e432b69ee71c47bfc38c5508b6cfa78e7c250e48"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-growth-data-loop/SKILL.md",
+      "sha256": "b26b089d91430c46d7875d68af2cec8bcfcb0f6e359419670f9eca9a601e5a4b"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-growth-data-loop/agents/openai.yaml",
+      "sha256": "3d792ac4c08ec74f78b4136f2431f349a57b9648901a529b86417eda57fcf8cb"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-growth-data-loop/references/B39-referral-affiliate-ugc.md",
+      "sha256": "f6eade15a3a963cafb158470b7c795986272bccb7dc69e6efb523764442483d6"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-growth-data-loop/references/B40-lifecycle-annual-reminders.md",
+      "sha256": "0b5a820a286de28e75827b02137cd8d686a5b1ca29db48f4b841472ca8d2f379"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-growth-data-loop/references/B41-analytics-unit-economics.md",
+      "sha256": "436df03770a5c74f1ff79600c0f3f9441b59c5a9a471f749a5f19519305297b9"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-growth-data-loop/references/B42-personalization-experimentation.md",
+      "sha256": "6278d6cc955175829cae995ecb6e515f30cd075dbfa065565dd2b5b8b526b066"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-growth-data-loop/references/B43-admin-moderation-fraud.md",
+      "sha256": "676ba5d65871728f62dd2e7f8cc653678bf41ff302a9f30c71b19aa0908a889b"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-marketing-content-platform/SKILL.md",
+      "sha256": "6b310d971f004c4cc3117f32d5fdca90550f1182e2bd56deb2ce2a59c16845df"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-marketing-content-platform/agents/openai.yaml",
+      "sha256": "eae8275ec5cecce9da8d5b43ccd525afd877fc190c0483aaa24925626a7700a5"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-marketing-content-platform/references/B57-marketing-site-seo-landing-builder.md",
+      "sha256": "f506bb1e023f72b309a45d07694ac1c04ef780b3045afa6cca78d8115c1812c1"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-marketing-content-platform/references/B58-headless-cms-editorial-workflow.md",
+      "sha256": "4f064d1ecd4e9263ffde46bd42cf7660ebd4718e3b417d9012896eca8b7ec21a"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-marketing-content-platform/references/B59-consent-cmp-cookie-attribution.md",
+      "sha256": "134585ac06be204e89da024e13bc319cc958879578cba78a82f95819e951ffc9"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-marketing-content-platform/references/B60-campaign-deeplink-utm-qr.md",
+      "sha256": "bd2fe4bbe2fbf7222122708d414ea89dc881cbb04b497dd390693575f989e778"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-marketing-content-platform/references/B61-social-sharing-og-ugc-media-kit.md",
+      "sha256": "d6a25faf578e4c543a48e28cf980e08505551efb0cb0950bff17f39161b9aa9d"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-marketing-content-platform/references/B62-brand-trust-status-press-sales-assets.md",
+      "sha256": "3a920ba8e5a450c60f32d134306e6416ef9bdf5cccf97c1fde6ce3ba001d768c"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-mobile-and-mini-programs/SKILL.md",
+      "sha256": "e1f759eefb26333ec2cfd6953c590126a7627fd1c109e2baedef986aab6ee6e0"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-mobile-and-mini-programs/agents/openai.yaml",
+      "sha256": "a5385f86ebf1bbe2cb3cfc136bca2b3aa2c0c91f040007e5f393b2fa4bb3b1b5"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-mobile-and-mini-programs/references/B63-mobile-architecture-auth-offline.md",
+      "sha256": "c43e9f125619c4885976bdc7840bf9030c0d2f8c4a7eb129f0184b9592cd6e16"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-mobile-and-mini-programs/references/B64-mobile-capture-quality-resumable-upload.md",
+      "sha256": "d0649b03a5c76ce57809e079c8dae03eeb660fec170d28edffdd29bb0364c05f"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-mobile-and-mini-programs/references/B65-mobile-editor-generation-library-export.md",
+      "sha256": "f732cf1a8657063bb2846c0c0c2fb89f879d676b1ec3a92586e33fa6cf843d95"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-mobile-and-mini-programs/references/B66-mobile-iap-subscription-restore.md",
+      "sha256": "87a69dd74ed8d9a66d3eec4f0c71486b6aa53e3b21710148a570f5295b50862f"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-mobile-and-mini-programs/references/B67-mobile-push-deeplink-widgets-sharing.md",
+      "sha256": "f57c836a9fefa048f314a53f8de13b93724488c8fb67cc9cf436a7a5eb2e8cfc"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-mobile-and-mini-programs/references/B68-mobile-security-performance-accessibility.md",
+      "sha256": "9d4063f8356abf465434f913fa609b6021d4e9e24c75da04b0a2f0c716353935"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-mobile-and-mini-programs/references/B69-mobile-store-packaging-review-release.md",
+      "sha256": "aa9f991caf73808d5a2b991f00ea3552fc3a26932273b1e745e40fd7b6cc0bc3"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-mobile-and-mini-programs/references/B70-wechat-mini-program-core-journey.md",
+      "sha256": "7030d7c2469497234c2b95a889da8a41cf949428b487155a2b2c33e351389d0d"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-mobile-and-mini-programs/references/B71-wechat-payment-share-service-messaging.md",
+      "sha256": "f192e7c329cb998e2e92d9248ee62bf75bdd1a53ecec34d2fe8ae6a5d36849ce"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-mobile-and-mini-programs/references/B72-wechat-compliance-review-release.md",
+      "sha256": "ad3a14cdc683b795f3994fb36702d57c8b0fc2e3fb6dcb22673fecd8c470b8bc"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-notification-lifecycle-platform/SKILL.md",
+      "sha256": "71f1c2ffe4bd5b9fd7b189f10022c10a633f27f9000bd7416493aabe6e855117"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-notification-lifecycle-platform/agents/openai.yaml",
+      "sha256": "aaa14405fa766d81eb7a0bf86a7570646d0a82a368175942fb09333615134e2e"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-notification-lifecycle-platform/references/B73-notification-preferences-consent-quiet-hours.md",
+      "sha256": "1355d83ce1647d52c80b9764b50bf15a4118f335f29f9a34c6c110238f390708"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-notification-lifecycle-platform/references/B74-multi-channel-notification-provider-routing.md",
+      "sha256": "24fdcbc8fe1300a69735b1e70a82e265bb99fe5d0c549b95cbfd406cc109797d"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-notification-lifecycle-platform/references/B75-notification-template-localization-rendering.md",
+      "sha256": "ad43f18fa99f6eda01ce69bce7ebb2b1f89dc78312a9ade634957e29bbd09e48"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-notification-lifecycle-platform/references/B76-lifecycle-journey-orchestration.md",
+      "sha256": "e14de0763c5e0745a0a34f0f66f39de5685cc6f1acdca9d9bff602737f617f7b"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-notification-lifecycle-platform/references/B77-deliverability-bounce-complaint-failover.md",
+      "sha256": "47d3007db2b7961d65a03ec17e4aa59498ec02b11a842d8555be8227b2c704c7"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-notification-lifecycle-platform/references/B78-notification-analytics-experiments-frequency.md",
+      "sha256": "2d8e0fe42226f084b6ee0f305f52cfb620d54c401a1a0b104b24a1069e4b498b"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-partner-platform/SKILL.md",
+      "sha256": "3ca58dd4eddbf28fe2eca268349be95b27d3df97efc477595c6f23de3ce92b72"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-partner-platform/agents/openai.yaml",
+      "sha256": "ee063d376dd8a3b49abd76400f2a89140ecd937c0c45c2b592da28b7c914e042"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-partner-platform/references/B31-partner-multi-tenancy.md",
+      "sha256": "503c8b5494c0421ef7f5174019df89bf989e790a604c29c6f34ab8efef7e54ac"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-partner-platform/references/B32-partner-onboarding-contract-brand.md",
+      "sha256": "d9b7d8eb1da4b32a513e831a0b992cb8e34fceb68513c76c5272a13c4bdc52bb"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-partner-platform/references/B33-partner-api-sdk-webhook-sso.md",
+      "sha256": "0eeae8d45cd6928b5041e1a7c05f37c2401c0e21e76bb24be2ec22b04083472e"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-partner-platform/references/B34-metering-settlement-revenue-share.md",
+      "sha256": "0270360b5f514238d86ba2d5c32e138a306940621988ddd4d2fd5f35d97b2564"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-physical-supply-network/SKILL.md",
+      "sha256": "a42c0fa009ee9e3027a246c6cceb8305e4eea379edcb39f2a90bd600d10f8bcd"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-physical-supply-network/agents/openai.yaml",
+      "sha256": "693e2f64a6b2b6c0e2b9c18c43e8705978955ed2e7451646ab3473a5127898c5"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-physical-supply-network/references/B100-inventory-material-stock-preorder.md",
+      "sha256": "aff00f0e457c616a3b8fa5b017b14bb0e22c9369396d4ba4b0b0fa6ebcd5a34a"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-physical-supply-network/references/B101-returns-replacements-loss-damage-claims.md",
+      "sha256": "d850df202dbba2d72b8379a8cb1fac25778f1d7251c5e900374bb77456b26514"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-physical-supply-network/references/B102-vendor-quality-sla-scorecard-settlement.md",
+      "sha256": "f9b76bef16ed5c852386ba7492ebdc9e8bfba35e28bd65b2b980d2a43665ebcb"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-physical-supply-network/references/B95-print-product-configurator-preflight.md",
+      "sha256": "b311a300ff316250a1edc12c420e4a4d05103c17b0d06acab3ece59523cdfe35"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-physical-supply-network/references/B96-vendor-onboarding-catalog-capacity-sla.md",
+      "sha256": "2ae988acc20bbc1e205b10833f253e63c55416dc672604fb1a42b527ffaafa5e"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-physical-supply-network/references/B97-production-proof-customer-approval.md",
+      "sha256": "b74f371f0fe5b1bd03031fafd54bd423c7d5c64fcc371e09323dd791f75239dc"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-physical-supply-network/references/B98-order-routing-purchase-orders-vendor-jobs.md",
+      "sha256": "9e1b41e35efe84c116718ac50b3aa5d788135a42a9ad80794112d4e3ccc3b4cd"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/building-physical-supply-network/references/B99-address-carrier-shipping-tracking.md",
+      "sha256": "48307f0df76e3c6b3905fbd82dcc63e1577117c29327d9278be08e1bd2525eb5"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/certifying-life-time-machine-release/SKILL.md",
+      "sha256": "4583d7e81a98904185512a684d4b34169edd55dfd6134f9785fa885b5d9e298f"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/certifying-life-time-machine-release/agents/openai.yaml",
+      "sha256": "d9599dde19414cd35684a415f0ea7de2f265cbd6a81216b51c52230616168a69"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/certifying-life-time-machine-release/references/B48-business-loop-e2e-certification.md",
+      "sha256": "342a04aef5b601b4b84bbc5dd49bacf8c6fee0ac958f0dbfa943946d844d8433"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/certifying-life-time-machine-release/references/B49-release-evidence-certification.md",
+      "sha256": "32f84f6e02009d8b481c750569afd6fb92374deb503a6f9764ca174a8826eb08"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/certifying-life-time-machine-release/scripts/verify_release.py",
+      "sha256": "0a1173e762f910a4fc09e62e216feb6206d60c2345e0164d633e89febdb75a56"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/designing-life-time-machine-experience/SKILL.md",
+      "sha256": "63a263d2f167ced32c3eb750cdf5131cbbd7321b1c00ea1a086d17f92ef61a34"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/designing-life-time-machine-experience/agents/openai.yaml",
+      "sha256": "2041c8a2fb0fbef3724ae93f04d7d4236a1ff912d5b110f666166ff55a416a89"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/designing-life-time-machine-experience/references/B51-product-profile-scope-governance.md",
+      "sha256": "80ecdd6b19646c5004776ce88b2bf3d6e1ab89635057095a9f76f9310b2c822a"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/designing-life-time-machine-experience/references/B52-research-personas-service-blueprint.md",
+      "sha256": "99acc9305e98c7755f2d94ee8460a0305753b37799229080bbe00a16219bd127"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/designing-life-time-machine-experience/references/B53-information-architecture-content-model.md",
+      "sha256": "86de456f88643667e2fccfd92eda7054dea3d629ef4ccf6b7b1b56b77e67326b"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/designing-life-time-machine-experience/references/B54-design-system-component-library.md",
+      "sha256": "1a058b981971db44ffd708f8fe4b47aa5eb68677021fdea319e9438c08241f4b"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/designing-life-time-machine-experience/references/B55-accessibility-responsive-localization.md",
+      "sha256": "3726adfb16f0d2688d0c8e3c3bd2f5993015ca374b0d9319a491a699a165b1c7"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/designing-life-time-machine-experience/references/B56-ux-governance-usability-visual-qa.md",
+      "sha256": "b7f211a7791375a5677585448fc2fcde602719668965daa497b77afe0afb341d"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/hardening-enterprise-platform/SKILL.md",
+      "sha256": "6cec5e54a2f9b6f496a0b2939aee10a4ac99b07783eb252c0549a327d441fb2c"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/hardening-enterprise-platform/agents/openai.yaml",
+      "sha256": "424b8416b88cc435aa45458f4ea7080e54505b4dfdd7fe93c91fc5b865a61b21"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/hardening-enterprise-platform/references/B119-environment-config-secrets-tenant-settings.md",
+      "sha256": "3a68d7cec3764f892a3b6b84e54de57f3facaff5eb7e7b314c768643ca3ef62d"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/hardening-enterprise-platform/references/B120-multi-region-china-global-topology-cdn.md",
+      "sha256": "1a5f862ef5de5bbd6e43030024662db3c93c9f64200726992b862eda8443419e"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/hardening-enterprise-platform/references/B121-performance-load-capacity-autoscaling.md",
+      "sha256": "b2bbe7ffa8c0a7d84fba9c2bb03cfd1b3d048c4fd0d83aff5baba8a01a43cf20"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/hardening-enterprise-platform/references/B122-resilience-chaos-dependency-failover.md",
+      "sha256": "27d01066726e63ae8b9b5833fabd2b8d06de4c121f9f41c1f420c39bbc07f695"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/hardening-enterprise-platform/references/B123-supply-chain-security-sbom-sast-dast-pentest.md",
+      "sha256": "35b0a3c7256345fcf2b5127305244c18ddc4de35d92a52596a3b9e5b766c7bad"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/hardening-enterprise-platform/references/B124-compliance-evidence-filings-audit-exports.md",
+      "sha256": "712498d79294296d16cd3c08ea83f85f53ade9a84a2472b0c84ea3ed2c3c0bbc"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/launching-complete-commercial-product/SKILL.md",
+      "sha256": "4a7969e4b8152fb5f36a6324b0d3c0b4b4290b879e921e697aeaef8cce110bc1"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/launching-complete-commercial-product/agents/openai.yaml",
+      "sha256": "9d907dc47855190ea85232d61cfe89068292641446fa50f80e541384ae5b403f"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/launching-complete-commercial-product/references/B125-commercial-operations-readiness.md",
+      "sha256": "c768cafe4a503e97497f3ccb5fad436c8e7e1c4f412154f79cf3e6ffcf24ac1e"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/launching-complete-commercial-product/references/B126-full-surface-commercial-e2e-certification.md",
+      "sha256": "119e4c7aad30e755df5df4f25bb3959117123716ef5c78e58dc9b02c119e0d3a"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/launching-complete-commercial-product/references/B127-staged-production-launch-certificate.md",
+      "sha256": "e184c1c3ac06ae0ef7a8e8cd21ed858c4376ec5dbeac4e4aea067ce5b77490ca"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/orchestrating-life-time-machine/SKILL.md",
+      "sha256": "1c031ad8044311df289ff8a53dbc0939159b1c994e59c9d3f4978ee920e9adc1"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/orchestrating-life-time-machine/agents/openai.yaml",
+      "sha256": "662cf37f95af8970f2782151844ade051e92cda922e16acaf33537eeeb8ac0bd"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/orchestrating-life-time-machine/references/B00-repository-discovery-baseline.md",
+      "sha256": "caf370d195a6f018c783753c730c641076401e6ddddb3030dd3d17ce8e441344"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/orchestrating-life-time-machine/references/B50-multi-agent-worktree-pr-resume.md",
+      "sha256": "53bc8cb95924b7e3c078b5e500096d8f3606f9e011a58027bed6237fee88c4e6"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/orchestrating-life-time-machine/scripts/list_batches.py",
+      "sha256": "753db5c67350d3434f8389b07cfbb15878bac7954e36049d683931b1a1cee4cc"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/orchestrating-life-time-machine/scripts/orchestrate_batches.py",
+      "sha256": "3eb3296a42ad059d0b88d78e01287ea5d52272250b6db66498a09940bbe45696"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/securing-operating-life-time-machine/SKILL.md",
+      "sha256": "35576bbe00135d8084c73779e2cdfa428b8ff4f5a50a9d5dd2c96d4f5aaf9ff3"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/securing-operating-life-time-machine/agents/openai.yaml",
+      "sha256": "7d323445062174bc5cbfcb2e5a42dae346533c9da4d8c241a009fda0693abcd4"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/securing-operating-life-time-machine/references/B44-privacy-security-compliance.md",
+      "sha256": "6a093d655c6d3b76760b2c20dd82af4a37dc0b9803bc29b7b9e6c8c46ff3827a"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/securing-operating-life-time-machine/references/B45-observability-slo-cost.md",
+      "sha256": "352e28175beb1e4748be885ff1f61133796b8a6900c2d9c088ca35f6fc56b351"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/securing-operating-life-time-machine/references/B46-backup-dr-incident-deletion.md",
+      "sha256": "95d6f1fb9820e5cd05f3778d14493f1cb6542f77a91324015c3ae9e37d7b1fca"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/skills/securing-operating-life-time-machine/references/B47-cicd-iac-rollback.md",
+      "sha256": "e4a4d1275c403f08d73143b0595728a189af236862191049e81d23b31edb13de"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/stack-profiles/all-typescript.json",
+      "sha256": "9b1170133cfb819315138b632a61e29f019edfce049c3f45a9b1494f022069f7"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/stack-profiles/all-typescript.yaml",
+      "sha256": "9b1170133cfb819315138b632a61e29f019edfce049c3f45a9b1494f022069f7"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/stack-profiles/china-cloud-native.json",
+      "sha256": "362234e0ee1170ea0b1f546d65a0feaaae6f31d7a05802a8b64ccdf86f3d8412"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/stack-profiles/china-cloud-native.yaml",
+      "sha256": "362234e0ee1170ea0b1f546d65a0feaaae6f31d7a05802a8b64ccdf86f3d8412"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/stack-profiles/existing-repository-adapter.json",
+      "sha256": "8c34759a1dd0701e8184171f0433d54cba46d3f61b4bb5263b1d50934b4f3aa2"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/stack-profiles/existing-repository-adapter.yaml",
+      "sha256": "8c34759a1dd0701e8184171f0433d54cba46d3f61b4bb5263b1d50934b4f3aa2"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/stack-profiles/index.json",
+      "sha256": "fa3e9074b7b969f29f7e2339ef363f239cd152d8e37ef542e673fd08125683b5"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/stack-profiles/reference-polyglot.json",
+      "sha256": "8fec11abad9b6c5b0c5812e72274914411099ee7dba648843b463bda2867908c"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/stack-profiles/reference-polyglot.yaml",
+      "sha256": "8fec11abad9b6c5b0c5812e72274914411099ee7dba648843b463bda2867908c"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/starter/repository/.env.example",
+      "sha256": "c51ccc0b491dc126ce17eee4b908b953665c92d0daf4c065e39ef25cb3a3127d"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/starter/repository/.gitignore",
+      "sha256": "83ae76f9459d61ac21b0189b18e9024fb84009ee3a24b8cb1f32665bf31b83ec"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/starter/repository/Makefile",
+      "sha256": "a549ca5c448f0bf9bfc061043376f5db0472a64f790c2e9687a126dfe9791c8a"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/starter/repository/README.md.tmpl",
+      "sha256": "59673f1894cd3a082e74c22fcca6487c673f0cfc9ccf817287578a4436f78c14"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/starter/repository/apps/README.md",
+      "sha256": "7653cb409e197a858878ab4787d50a4d85113b4c3f672ea20c2fd92cef74bf66"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/starter/repository/compose.yaml",
+      "sha256": "ec6ec746b53c0e47365ea7c7e38dcce2ce5896b5085c5913862644e28c2f9b66"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/starter/repository/docs/PROJECT_FACTORY.md",
+      "sha256": "792c452f6e2623d3ebafcd6d3d131b09f5951f6cf656a9c624ab29bd3a225175"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/starter/repository/infra/README.md",
+      "sha256": "5160f9806d934b89a20a10b1ffe946f31861f5b120fb4f9adad452049e754eb6"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/starter/repository/package.json",
+      "sha256": "747e89d6f32cec189589228b3e26c25d61a1067aea81eb231596fe522229545f"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/starter/repository/packages/README.md",
+      "sha256": "102e13c95fedb7f8f4996235e5582e2786626dc39fc58905e329ddc23405c60f"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/starter/repository/pnpm-workspace.yaml",
+      "sha256": "e56067a24c6e74ad1d8724d61afefe9cf4825d0f98ea8407ccfed4a6d0468e0a"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/starter/repository/services/README.md",
+      "sha256": "345ecbb4dc280020d9687806b33db3f9fbe886693151f20a7aa4bf55a5c362ca"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/starter/repository/turbo.json",
+      "sha256": "619433d29518640b2136d9716f828d88a5e9a45b28667bd27f3a0e3fa48608d6"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/templates/adr-template.md",
+      "sha256": "67c68dd9e3391d2c9e9a98cebea101a1c604378b30541d230863eaca9ee6c54d"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/templates/agent-handoff.md",
+      "sha256": "e13035560116f6f6f0cc727a71491d452809175525c0c38ab3423cb7f067dffb"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/templates/app-store-release-checklist.md",
+      "sha256": "90fffce801c958751c13fd9cf341858c423f645650229cb251d2b50cb7cdbd00"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/templates/batch-plan.md",
+      "sha256": "c9c399911d24ede40cde08400a998b0d8fb445d72e37ec9d97f3ffe620b7b6ea"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/templates/commercial-readiness-review.md",
+      "sha256": "32cc9eee4054823393af7e7986182016f0b9d95d95c66357cf20219b0012f66e"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/templates/completion-report.example.json",
+      "sha256": "12c2f5ae9f57dfdf6655c20423c9905227d3bbbf8ecba98d664205919078342c"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/templates/incident-runbook.md",
+      "sha256": "1420b7dbc6375b6e903b7050758e2693d8ee9449953b25ccfc0f2e43748581cd"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/templates/month-end-close-checklist.md",
+      "sha256": "dd58e730189ad1e06c06a403234d4f86746eba2dba141befb6ffa4cdde114deb"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/templates/partner-launch-checklist.md",
+      "sha256": "b4330931354fe0e06a3396f5fdcb6559520181bb39608355fc45ce001119ec78"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/templates/privacy-impact-assessment-template.md",
+      "sha256": "f5c9fa80ef6c9640f80b18ba3c546d1d331b4f92db08024d956cea54aff569ca"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/templates/project-profile.example.json",
+      "sha256": "fdab5d5d0839abe8ab02bce0a71aae5a9cee8934d2e45b3c70b05cea52237b9d"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/templates/release-certificate.template.json",
+      "sha256": "852f7c258fa0733d70a695449020a040233245987dcd3c2591e7794b9b12110b"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/templates/threat-model-template.md",
+      "sha256": "76c88a246d816e988ef8cae79b8fbd6790c93fc30564ab192be845370f02f852"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/templates/vendor-onboarding-checklist.md",
+      "sha256": "170b99e091d7c9cbc259ed3a028920359597d5485d4904c04f43ef3a50d5c29c"
+    },
+    {
+      "path": ".ai-life-time-machine/skill-package/tests/test_package.py",
+      "sha256": "ed12eb6e43bb082922956a9d4bf580f7295c19c40ef10dcfc38c716801997d9d"
+    }
+  ]
+}

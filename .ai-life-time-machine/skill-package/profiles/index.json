@@ -1,0 +1,44 @@
+[
+  {
+    "id": "b2b2c-standard",
+    "title": "B2B2C 标准商业版",
+    "required_batches": 104,
+    "release_gate": "B124"
+  },
+  {
+    "id": "china-commercial",
+    "title": "中国大陆完整商业版",
+    "required_batches": 128,
+    "release_gate": "B127"
+  },
+  {
+    "id": "consumer-web",
+    "title": "消费者 Web 商业版",
+    "required_batches": 104,
+    "release_gate": "B124"
+  },
+  {
+    "id": "full-b2c",
+    "title": "完整 B2C 多端版",
+    "required_batches": 114,
+    "release_gate": "B124"
+  },
+  {
+    "id": "full-commercial",
+    "title": "完整商业级项目",
+    "required_batches": 128,
+    "release_gate": "B127"
+  },
+  {
+    "id": "global-enterprise",
+    "title": "全球企业商业版",
+    "required_batches": 111,
+    "release_gate": "B124"
+  },
+  {
+    "id": "lean-mvp",
+    "title": "精简付费 MVP",
+    "required_batches": 87,
+    "release_gate": "profile-certificate"
+  }
+]

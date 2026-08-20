@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI Life Time Machine project profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "package",
+    "package_version",
+    "id",
+    "title",
+    "seed_batches",
+    "required_batches",
+    "optional_batches",
+    "required_release_gate",
+    "channels",
+    "regions",
+    "feature_flags",
+    "stack_profile"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "package": {
+      "const": "ai-life-time-machine-commercial-project-factory"
+    },
+    "package_version": {
+      "const": "2.0.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "new",
+        "adapt",
+        "new-or-adapt"
+      ]
+    },
+    "seed_batches": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/batch"
+      },
+      "uniqueItems": true
+    },
+    "required_batches": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/batch"
+      },
+      "uniqueItems": true
+    },
+    "optional_batches": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/batch"
+      },
+      "uniqueItems": true
+    },
+    "excluded_batches": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/batch"
+      },
+      "uniqueItems": true
+    },
+    "required_release_gate": {
+      "type": "string"
+    },
+    "channels": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "regions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "feature_flags": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "boolean",
+          "string",
+          "number"
+        ]
+      }
+    },
+    "stack_profile": {
+      "type": "string"
+    },
+    "invariants": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "$defs": {
+    "batch": {
+      "type": "string",
+      "pattern": "^B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])$"
+    }
+  }
+}

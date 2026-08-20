@@ -1,0 +1,6 @@
+interface:
+  display_name: "营销站、CMS、品牌与获客平台"
+  short_description: "形成从品牌认知、内容获客、活动归因到产品转化的完整入口。"
+  default_prompt: "Use $building-marketing-content-platform to inspect the active project profile, choose the requested ready Batch, implement it in the existing repository, run its acceptance commands, and produce schema-valid evidence."
+policy:
+  allow_implicit_invocation: true

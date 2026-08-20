@@ -1,0 +1,6 @@
+interface:
+  display_name: "财务账本、对账、开票、税务与 FinOps"
+  short_description: "让订单、退款、平台费、伙伴分账、供应商成本和财税报表能够闭环核对。"
+  default_prompt: "Use $building-finance-tax-operations to inspect the active project profile, choose the requested ready Batch, implement it in the existing repository, run its acceptance commands, and produce schema-valid evidence."
+policy:
+  allow_implicit_invocation: true

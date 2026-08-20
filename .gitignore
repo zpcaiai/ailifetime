@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+dist/
+build/
+apps/web/public/assets/app.js
+.gradle/
+.venv/
+.data/
+__pycache__/
+*.pyc
+coverage/
+playwright-report/
+evidence/**/runtime/private/
+.ai-life-time-machine/state/*.lock

@@ -1,0 +1,1293 @@
+{
+  "schema_version": "2.0",
+  "package": "ai-life-time-machine-commercial-project-factory",
+  "package_version": "2.0.0",
+  "profile_id": "full-commercial",
+  "profile_sha256": "75b3eab62a00405e962b46610762333edfd09c3471e10a23052b8d5e3960640b",
+  "repo_root": "/Users/stephen/Documents/Projects/python/ailifetime/ai-life-time-machine-commercial-project-factory-v2.0.0/product",
+  "base_commit": "unknown",
+  "revision": 3,
+  "updated_at": "2026-08-20T05:28:28.303562+00:00",
+  "batches": {
+    "B00": {
+      "included": true,
+      "state": "ready",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B01": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B51": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B02": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B52": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B03": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B12": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B04": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B25": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B13": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B05": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B06": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B31": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B26": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B50": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B07": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B32": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B27": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B08": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B14": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B33": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B09": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B15": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B34": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B16": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B87": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B17": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B18": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B88": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B89": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B10": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B92": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B11": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B28": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B39": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B19": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B22": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B29": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B35": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B90": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B20": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B21": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B53": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B23": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B30": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B54": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B24": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B37": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B44": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B43": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B55": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B63": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B70": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B95": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B36": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B40": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B38": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B45": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B82": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B91": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B64": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B66": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B71": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B96": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B41": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B73": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B46": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B65": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B97": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B42": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B56": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B57": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B93": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B111": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B74": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B47": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B67": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B98": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B58": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B59": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B61": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B94": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B112": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B75": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B80": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B48": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B72": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B119": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B68": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B99": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B100": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B62": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B103": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B60": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B113": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B117": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B76": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B79": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B83": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B49": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B120": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B69": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B84": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B104": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B123": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B118": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B77": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B81": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B101": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B121": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B85": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B105": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B106": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B78": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B102": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B122": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B86": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B107": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B114": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B116": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B115": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B108": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B109": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B110": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B124": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B125": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B126": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    },
+    "B127": {
+      "included": true,
+      "state": "planned",
+      "worktree": null,
+      "branch": null,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "completion_report": null,
+      "notes": null
+    }
+  }
+}

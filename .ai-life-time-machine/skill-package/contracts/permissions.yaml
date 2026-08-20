@@ -1,0 +1,91 @@
+version: '1.0'
+principles:
+- default deny
+- server-side resource authorization
+- tenant and purpose context mandatory
+- step-up for sensitive actions
+- audit all privileged reads
+roles:
+  consumer:
+  - own:projects:*
+  - own:orders:read
+  - own:shares:*
+  - own:privacy:*
+  - household:invites:respond
+  household_admin:
+  - household:members:invite
+  - household:albums:manage
+  - no:adult-consent-on-behalf
+  guardian:
+  - minor:consent:grant-with-verification
+  - minor:privacy:manage
+  - minor:public-share:restricted
+  partner_employee:
+  - tenant:customer-sessions:create
+  - tenant:orders:read-limited
+  - tenant:media:no-direct-download
+  partner_admin:
+  - tenant:users:manage
+  - tenant:config:read
+  - tenant:usage:read
+  - tenant:keys:rotate
+  studio_operator:
+  - tenant:studio-session:manage
+  - customer:media:temporary-view
+  - no:customer-consent-on-behalf
+  support_agent:
+  - case:read-redacted
+  - case:remedy:limited
+  - media:temporary-unblur-with-reason
+  moderator:
+  - moderation:case:decide
+  - media:controlled-view
+  - no:payment
+  privacy_officer:
+  - privacy:case:manage
+  - legal-hold:request
+  - data-map:read
+  finance_operator:
+  - ledger:read
+  - refund:request
+  - settlement:prepare
+  - no:raw-media
+  platform_admin:
+  - config:request
+  - tenant:suspend
+  - no:unlogged-break-glass
+  auditor:
+  - audit:read
+  - evidence:read
+  - no:write
+  service_account:
+  - explicit-scopes-only
+  - no:interactive-login
+sensitive_actions:
+  refund_high_value:
+    step_up: true
+    two_person: true
+    reason: true
+  settlement_adjustment:
+    step_up: true
+    two_person: true
+    reason: true
+  raw_media_view:
+    step_up: true
+    ticket: true
+    watermark: true
+    time_limited: true
+  legal_hold:
+    two_person: true
+    legal_basis: true
+    expiry: true
+  partner_production_enable:
+    two_person: true
+    launch_gate: true
+  global_share_revoke:
+    two_person: true
+    incident_ref: true
+  break_glass:
+    step_up: true
+    incident_ref: true
+    post_review: true

@@ -1,0 +1,398 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ai-life-time-machine/completion-report.schema.json",
+  "title": "Batch completion report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "package_version",
+    "batch_id",
+    "status",
+    "repo_root",
+    "base_commit",
+    "started_at",
+    "completed_at",
+    "agent",
+    "dependencies",
+    "changed_files",
+    "entrypoints",
+    "tests",
+    "evidence",
+    "traceability",
+    "risks",
+    "follow_ups",
+    "assertions",
+    "result_commit",
+    "blockers"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "package_version": {
+      "type": "string"
+    },
+    "batch_id": {
+      "type": "string",
+      "pattern": "^B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])$"
+    },
+    "status": {
+      "enum": [
+        "passed",
+        "blocked",
+        "failed"
+      ]
+    },
+    "repo_root": {
+      "type": "string",
+      "minLength": 1
+    },
+    "base_commit": {
+      "type": "string",
+      "minLength": 7
+    },
+    "result_commit": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 7
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "agent": {
+      "type": "object",
+      "required": [
+        "host",
+        "session_id"
+      ],
+      "properties": {
+        "host": {
+          "enum": [
+            "claude-code",
+            "codex",
+            "human",
+            "other"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "worktree": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "batch_id",
+          "report_path",
+          "sha256",
+          "status"
+        ],
+        "properties": {
+          "batch_id": {
+            "type": "string",
+            "pattern": "^B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])$"
+          },
+          "report_path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "status": {
+            "const": "passed"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "changed_files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "change"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "change": {
+            "enum": [
+              "added",
+              "modified",
+              "deleted",
+              "renamed"
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "entrypoints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "contracts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "migrations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "scope",
+          "command",
+          "exit_code",
+          "status",
+          "artifact"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "lint",
+              "type",
+              "unit",
+              "integration",
+              "contract",
+              "e2e",
+              "negative",
+              "mutation",
+              "migration",
+              "security",
+              "privacy",
+              "performance",
+              "recovery",
+              "other",
+              "accessibility",
+              "visual",
+              "finance",
+              "fulfillment",
+              "deliverability",
+              "data-quality",
+              "chaos"
+            ]
+          },
+          "command": {
+            "type": "string"
+          },
+          "exit_code": {
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "passed",
+              "failed",
+              "skipped"
+            ]
+          },
+          "artifact": {
+            "type": "string"
+          },
+          "duration_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "evidence-record.schema.json"
+      }
+    },
+    "traceability": {
+      "type": "array",
+      "items": {
+        "$ref": "traceability.schema.json"
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "severity",
+          "description",
+          "disposition"
+        ],
+        "properties": {
+          "severity": {
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "disposition": {
+            "enum": [
+              "resolved",
+              "accepted",
+              "blocked"
+            ]
+          },
+          "owner": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "follow_ups": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "assertions": {
+      "type": "object",
+      "required": [
+        "no_placeholders",
+        "no_skipped_required_tests",
+        "no_fake_evidence",
+        "no_real_customer_media",
+        "no_secrets",
+        "clean_room_reproducible"
+      ],
+      "properties": {
+        "no_placeholders": {
+          "const": true
+        },
+        "no_skipped_required_tests": {
+          "const": true
+        },
+        "no_fake_evidence": {
+          "const": true
+        },
+        "no_real_customer_media": {
+          "const": true
+        },
+        "no_secrets": {
+          "const": true
+        },
+        "clean_room_reproducible": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "passed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "result_commit": {
+            "type": "string",
+            "minLength": 7
+          },
+          "blockers": {
+            "maxItems": 0
+          }
+        },
+        "required": [
+          "result_commit"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "blocked",
+              "failed"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "blockers"
+        ],
+        "properties": {
+          "blockers": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

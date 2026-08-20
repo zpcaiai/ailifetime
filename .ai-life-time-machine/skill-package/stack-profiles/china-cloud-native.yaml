@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "package_version": "2.0.0",
+  "id": "china-cloud-native",
+  "title": "中国云原生部署栈",
+  "description": "保留供应商抽象，面向中国大陆网络、对象存储、短信、支付、小程序和备案环境。",
+  "web": "Next.js/React or existing",
+  "backend": "Java Spring Boot",
+  "workers": "Python + Java",
+  "mobile": "Flutter",
+  "mini_program": "Taro/微信原生",
+  "data": "PostgreSQL-compatible + Redis + domestic S3-compatible storage",
+  "workflow": "Temporal-compatible durable workflow",
+  "observability": "OpenTelemetry + domestic backend",
+  "deployment": "Kubernetes/IaC on selected compliant cloud",
+  "adapt_existing_first": true
+}

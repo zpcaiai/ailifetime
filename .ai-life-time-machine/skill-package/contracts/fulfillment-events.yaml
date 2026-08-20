@@ -1,0 +1,20 @@
+version: 1.0.0
+states:
+  - proof_required
+  - awaiting_customer_approval
+  - routed
+  - vendor_accepted
+  - in_production
+  - quality_check
+  - shipped
+  - delivered
+  - replacement_requested
+  - claim_open
+  - cancelled
+controls:
+  - immutable_product_snapshot
+  - media_access_expiry
+  - idempotent_purchase_order
+  - address_minimization
+  - vendor_deletion_receipt
+  - shipment_and_claim_reconciliation

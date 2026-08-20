@@ -1,0 +1,6 @@
+interface:
+  display_name: "企业级配置、韧性、性能与合规证据"
+  short_description: "使系统能够在企业客户、跨区域、高并发和严格审计环境中稳定运营。"
+  default_prompt: "Use $hardening-enterprise-platform to inspect the active project profile, choose the requested ready Batch, implement it in the existing repository, run its acceptance commands, and produce schema-valid evidence."
+policy:
+  allow_implicit_invocation: true

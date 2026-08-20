@@ -1,0 +1,24 @@
+{
+  "schema_version": "2.0",
+  "package": "ai-life-time-machine-commercial-project-factory",
+  "package_version": "2.0.0",
+  "project_name": "AI Life Time Machine",
+  "mode": "new",
+  "profile": "full-commercial",
+  "stack": "all-typescript",
+  "scaffolded_files": [
+    ".env.example",
+    ".gitignore",
+    "Makefile",
+    "README.md",
+    "apps/README.md",
+    "compose.yaml",
+    "docs/PROJECT_FACTORY.md",
+    "infra/README.md",
+    "package.json",
+    "packages/README.md",
+    "pnpm-workspace.yaml",
+    "services/README.md",
+    "turbo.json"
+  ]
+}

@@ -1,0 +1,6 @@
+interface:
+  display_name: "数据平台、指标、实验与模型评估"
+  short_description: "以可信数据管理增长、收入、质量、安全和成本，而不是依赖不可复核的报表。"
+  default_prompt: "Use $building-data-intelligence-platform to inspect the active project profile, choose the requested ready Batch, implement it in the existing repository, run its acceptance commands, and produce schema-valid evidence."
+policy:
+  allow_implicit_invocation: true

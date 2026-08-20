@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Evidence record",
+  "type": "object",
+  "required": [
+    "type",
+    "path",
+    "sha256",
+    "created_at",
+    "producer",
+    "supports"
+  ],
+  "properties": {
+    "type": {
+      "enum": [
+        "command-log",
+        "test-result",
+        "runtime-capture",
+        "database-assertion",
+        "event-assertion",
+        "object-manifest",
+        "security-scan",
+        "privacy-review",
+        "slo-report",
+        "financial-reconciliation",
+        "restore-test",
+        "deletion-receipt",
+        "other"
+      ]
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "producer": {
+      "type": "string",
+      "minLength": 1
+    },
+    "supports": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])-R0[1-5]$"
+      }
+    },
+    "contains_sensitive_data": {
+      "type": "boolean",
+      "default": false
+    },
+    "redaction": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "notes": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

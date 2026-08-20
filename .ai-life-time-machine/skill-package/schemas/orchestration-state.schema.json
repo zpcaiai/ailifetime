@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Profile-aware Batch orchestration state",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "package",
+    "package_version",
+    "profile_id",
+    "profile_sha256",
+    "repo_root",
+    "base_commit",
+    "revision",
+    "updated_at",
+    "batches"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "2.0"
+    },
+    "package": {
+      "const": "ai-life-time-machine-commercial-project-factory"
+    },
+    "package_version": {
+      "const": "2.0.0"
+    },
+    "profile_id": {
+      "type": "string"
+    },
+    "profile_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "repo_root": {
+      "type": "string"
+    },
+    "base_commit": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "batches": {
+      "type": "object",
+      "minProperties": 128,
+      "maxProperties": 128,
+      "patternProperties": {
+        "^B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])$": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "included",
+            "state"
+          ],
+          "properties": {
+            "included": {
+              "type": "boolean"
+            },
+            "state": {
+              "enum": [
+                "excluded",
+                "planned",
+                "ready",
+                "running",
+                "blocked",
+                "failed",
+                "review",
+                "merged",
+                "certified"
+              ]
+            },
+            "worktree": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "branch": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "lease_owner": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "lease_expires_at": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            },
+            "completion_report": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "notes": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

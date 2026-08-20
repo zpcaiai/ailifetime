@@ -1,0 +1,6 @@
+interface:
+  display_name: "完整商业项目集成、E2E 与分阶段上线"
+  short_description: "用商业准备评审、全表面 E2E 和可回滚灰度发布签发最终项目证书。"
+  default_prompt: "Use $launching-complete-commercial-product to inspect the active project profile, choose the requested ready Batch, implement it in the existing repository, run its acceptance commands, and produce schema-valid evidence."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,7 @@
+interface:
+  display_name: 安全、隐私与生产运营
+  short_description: 为人脸、家庭、支付及生成内容建立生产级信任底座。
+  default_prompt: Use $securing-operating-life-time-machine to inspect the repository
+    and implement the next evidence-backed Batch.
+policy:
+  allow_implicit_invocation: true

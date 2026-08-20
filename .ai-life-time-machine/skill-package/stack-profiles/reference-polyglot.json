@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "package_version": "2.0.0",
+  "id": "reference-polyglot",
+  "title": "参考多语言企业栈",
+  "description": "适合利用 TypeScript、Java、Python、Flutter 的专业边界。",
+  "web": "Next.js App Router + TypeScript + Tailwind + shadcn/ui",
+  "backend": "Java 21 + Spring Boot + Gradle",
+  "workers": "Python 3.12 + FastAPI/Temporal workers",
+  "mobile": "Flutter",
+  "mini_program": "Taro + TypeScript",
+  "data": "PostgreSQL + Redis + S3-compatible storage",
+  "workflow": "Temporal",
+  "observability": "OpenTelemetry",
+  "deployment": "Docker Compose local; Kubernetes/IaC or existing production platform",
+  "adapt_existing_first": true
+}

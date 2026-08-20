@@ -1,0 +1,14 @@
+version: 1.0.0
+classes:
+  public: [published_marketing_content, public_help_content]
+  internal: [non_sensitive_configuration, aggregate_metrics]
+  confidential: [orders, support_tickets, partner_contract_metadata, invoices]
+  restricted: [raw_face_media, derived_face_media, consent_evidence, child_media, private_future_self_content, payment_tokens]
+rules:
+  restricted:
+    encryption: required
+    least_privilege: required
+    purpose_binding: required
+    raw_log_prohibition: required
+    deletion_propagation: required
+    production_copy_to_dev: prohibited

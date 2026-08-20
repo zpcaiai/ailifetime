@@ -1,0 +1,6 @@
+interface:
+  display_name: "iOS/Android App 与微信小程序"
+  short_description: "把核心体验扩展到移动端和中国主流小程序生态，并完成商店发布闭环。"
+  default_prompt: "Use $building-mobile-and-mini-programs to inspect the active project profile, choose the requested ready Batch, implement it in the existing repository, run its acceptance commands, and produce schema-valid evidence."
+policy:
+  allow_implicit_invocation: true

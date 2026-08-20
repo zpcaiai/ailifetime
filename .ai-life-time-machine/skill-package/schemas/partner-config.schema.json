@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Partner configuration",
+  "type": "object",
+  "required": [
+    "partner_id",
+    "version",
+    "status",
+    "regions",
+    "allowed_products",
+    "retention_policy",
+    "brand",
+    "commercial",
+    "security",
+    "approved_by"
+  ],
+  "properties": {
+    "partner_id": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "sandbox",
+        "pilot",
+        "production",
+        "suspended",
+        "terminated"
+      ]
+    },
+    "regions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "allowed_products": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "retention_policy": {
+      "type": "object",
+      "required": [
+        "source_days",
+        "derived_days"
+      ],
+      "properties": {
+        "source_days": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "derived_days": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
+    "brand": {
+      "type": "object"
+    },
+    "commercial": {
+      "type": "object"
+    },
+    "security": {
+      "type": "object"
+    },
+    "approved_by": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "string"
+      }
+    },
+    "effective_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

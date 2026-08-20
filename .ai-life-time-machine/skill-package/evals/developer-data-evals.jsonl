@@ -1,0 +1,2 @@
+{"id": "api-001", "prompt": "Replay a failed partner webhook without creating a second order.", "must_include": ["signature", "event id", "idempotency", "dead-letter/replay audit"]}
+{"id": "data-001", "prompt": "A dashboard total differs from ledger revenue.", "must_include": ["ledger is accounting truth", "definition/coverage reconciliation", "data quality incident"]}

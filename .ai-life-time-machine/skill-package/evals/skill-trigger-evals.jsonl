@@ -1,0 +1,66 @@
+{"prompt": "Inspect this repository and continue the AI Life Time Machine implementation from the next unblocked batch.", "expected_skill": "orchestrating-life-time-machine", "should_trigger": true}
+{"prompt": "Plan Claude Code and Codex worktrees for the full 51-batch product and require evidence before merge.", "expected_skill": "orchestrating-life-time-machine", "should_trigger": true}
+{"prompt": "Resume the long-running Life Time Machine build from prior completion reports.", "expected_skill": "orchestrating-life-time-machine", "should_trigger": true}
+{"prompt": "Write a marketing slogan for a photo app.", "expected_skill": "orchestrating-life-time-machine", "should_trigger": false}
+{"prompt": "Explain what facial aging is in general.", "expected_skill": "orchestrating-life-time-machine", "should_trigger": false}
+{"prompt": "Create a single image of an older fictional person.", "expected_skill": "orchestrating-life-time-machine", "should_trigger": false}
+{"prompt": "Set up the tenancy, consent, media lifecycle and durable workflow foundation for the AI age timeline product.", "expected_skill": "bootstrapping-life-time-machine-platform", "should_trigger": true}
+{"prompt": "Create the domain, API, event and database contracts for the Life Time Machine.", "expected_skill": "bootstrapping-life-time-machine-platform", "should_trigger": true}
+{"prompt": "Implement provider abstraction and idempotent workflow orchestration.", "expected_skill": "bootstrapping-life-time-machine-platform", "should_trigger": true}
+{"prompt": "Write a marketing slogan for a photo app.", "expected_skill": "bootstrapping-life-time-machine-platform", "should_trigger": false}
+{"prompt": "Explain what facial aging is in general.", "expected_skill": "bootstrapping-life-time-machine-platform", "should_trigger": false}
+{"prompt": "Create a single image of an older fictional person.", "expected_skill": "bootstrapping-life-time-machine-platform", "should_trigger": false}
+{"prompt": "Build the upload, age timeline editor, job progress and revocable sharing experience.", "expected_skill": "building-consumer-time-machine", "should_trigger": true}
+{"prompt": "Implement the mobile consumer flow from landing page to private gallery.", "expected_skill": "building-consumer-time-machine", "should_trigger": true}
+{"prompt": "Add photo quality preflight and account/family library.", "expected_skill": "building-consumer-time-machine", "should_trigger": true}
+{"prompt": "Write a marketing slogan for a photo app.", "expected_skill": "building-consumer-time-machine", "should_trigger": false}
+{"prompt": "Explain what facial aging is in general.", "expected_skill": "building-consumer-time-machine", "should_trigger": false}
+{"prompt": "Create a single image of an older fictional person.", "expected_skill": "building-consumer-time-machine", "should_trigger": false}
+{"prompt": "Implement 0–100 age image generation with identity consistency and quality gates.", "expected_skill": "building-age-media-pipeline", "should_trigger": true}
+{"prompt": "Add video interpolation, labels, provenance and provider failover for age transformations.", "expected_skill": "building-age-media-pipeline", "should_trigger": true}
+{"prompt": "Reduce generation cost without cross-user face caching.", "expected_skill": "building-age-media-pipeline", "should_trigger": true}
+{"prompt": "Write a marketing slogan for a photo app.", "expected_skill": "building-age-media-pipeline", "should_trigger": false}
+{"prompt": "Explain what facial aging is in general.", "expected_skill": "building-age-media-pipeline", "should_trigger": false}
+{"prompt": "Create a single image of an older fictional person.", "expected_skill": "building-age-media-pipeline", "should_trigger": false}
+{"prompt": "Build couples and three-generation shared aging projects with consent for each person.", "expected_skill": "building-family-future-self", "should_trigger": true}
+{"prompt": "Implement future-self letters and safe AI dialogue with memory controls.", "expected_skill": "building-family-future-self", "should_trigger": true}
+{"prompt": "Add annual family archives and child safeguards.", "expected_skill": "building-family-future-self", "should_trigger": true}
+{"prompt": "Write a marketing slogan for a photo app.", "expected_skill": "building-family-future-self", "should_trigger": false}
+{"prompt": "Explain what facial aging is in general.", "expected_skill": "building-family-future-self", "should_trigger": false}
+{"prompt": "Create a single image of an older fictional person.", "expected_skill": "building-family-future-self", "should_trigger": false}
+{"prompt": "Implement pricing, payment, credits, digital delivery and print fulfillment.", "expected_skill": "building-commerce-fulfillment", "should_trigger": true}
+{"prompt": "Add gift codes, subscriptions, refunds and customer support for generated family products.", "expected_skill": "building-commerce-fulfillment", "should_trigger": true}
+{"prompt": "Build a photo-book order workflow tied to generation results.", "expected_skill": "building-commerce-fulfillment", "should_trigger": true}
+{"prompt": "Write a marketing slogan for a photo app.", "expected_skill": "building-commerce-fulfillment", "should_trigger": false}
+{"prompt": "Explain what facial aging is in general.", "expected_skill": "building-commerce-fulfillment", "should_trigger": false}
+{"prompt": "Create a single image of an older fictional person.", "expected_skill": "building-commerce-fulfillment", "should_trigger": false}
+{"prompt": "Build a multi-tenant API/SDK and monthly settlement for photo studio partners.", "expected_skill": "building-partner-platform", "should_trigger": true}
+{"prompt": "Add partner onboarding, contracts, white-label configuration and signed webhooks.", "expected_skill": "building-partner-platform", "should_trigger": true}
+{"prompt": "Implement partner usage metering and revenue share reconciliation.", "expected_skill": "building-partner-platform", "should_trigger": true}
+{"prompt": "Write a marketing slogan for a photo app.", "expected_skill": "building-partner-platform", "should_trigger": false}
+{"prompt": "Explain what facial aging is in general.", "expected_skill": "building-partner-platform", "should_trigger": false}
+{"prompt": "Create a single image of an older fictional person.", "expected_skill": "building-partner-platform", "should_trigger": false}
+{"prompt": "Create the photo studio kiosk and customer approval workflow.", "expected_skill": "building-channel-solutions", "should_trigger": true}
+{"prompt": "Build a retirement education experience that cannot feed underwriting.", "expected_skill": "building-channel-solutions", "should_trigger": true}
+{"prompt": "Implement gift recipient claim and consented CRM handoff.", "expected_skill": "building-channel-solutions", "should_trigger": true}
+{"prompt": "Write a marketing slogan for a photo app.", "expected_skill": "building-channel-solutions", "should_trigger": false}
+{"prompt": "Explain what facial aging is in general.", "expected_skill": "building-channel-solutions", "should_trigger": false}
+{"prompt": "Create a single image of an older fictional person.", "expected_skill": "building-channel-solutions", "should_trigger": false}
+{"prompt": "Add referrals, annual lifecycle messages, unit economics and experimentation.", "expected_skill": "building-growth-data-loop", "should_trigger": true}
+{"prompt": "Build moderation, fraud and admin governance for the AI family product.", "expected_skill": "building-growth-data-loop", "should_trigger": true}
+{"prompt": "Define a trusted analytics semantic layer for the commercial funnel.", "expected_skill": "building-growth-data-loop", "should_trigger": true}
+{"prompt": "Write a marketing slogan for a photo app.", "expected_skill": "building-growth-data-loop", "should_trigger": false}
+{"prompt": "Explain what facial aging is in general.", "expected_skill": "building-growth-data-loop", "should_trigger": false}
+{"prompt": "Create a single image of an older fictional person.", "expected_skill": "building-growth-data-loop", "should_trigger": false}
+{"prompt": "Perform privacy, face-data, AI-label and anthropomorphic-interaction engineering hardening.", "expected_skill": "securing-operating-life-time-machine", "should_trigger": true}
+{"prompt": "Add SLOs, disaster recovery, deletion verification and signed CI/CD releases.", "expected_skill": "securing-operating-life-time-machine", "should_trigger": true}
+{"prompt": "Threat-model and operate the multi-tenant face-generation platform.", "expected_skill": "securing-operating-life-time-machine", "should_trigger": true}
+{"prompt": "Write a marketing slogan for a photo app.", "expected_skill": "securing-operating-life-time-machine", "should_trigger": false}
+{"prompt": "Explain what facial aging is in general.", "expected_skill": "securing-operating-life-time-machine", "should_trigger": false}
+{"prompt": "Create a single image of an older fictional person.", "expected_skill": "securing-operating-life-time-machine", "should_trigger": false}
+{"prompt": "Run the fail-closed production release certification for all commercial loops.", "expected_skill": "certifying-life-time-machine-release", "should_trigger": true}
+{"prompt": "Verify every batch report, clean-room build, abuse case, deletion and partner settlement before release.", "expected_skill": "certifying-life-time-machine-release", "should_trigger": true}
+{"prompt": "Generate a release certificate only when all evidence passes.", "expected_skill": "certifying-life-time-machine-release", "should_trigger": true}
+{"prompt": "Write a marketing slogan for a photo app.", "expected_skill": "certifying-life-time-machine-release", "should_trigger": false}
+{"prompt": "Explain what facial aging is in general.", "expected_skill": "certifying-life-time-machine-release", "should_trigger": false}
+{"prompt": "Create a single image of an older fictional person.", "expected_skill": "certifying-life-time-machine-release", "should_trigger": false}

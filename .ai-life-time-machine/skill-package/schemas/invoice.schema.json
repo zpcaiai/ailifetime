@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Invoice/fapiao request",
+  "type": "object",
+  "required": [
+    "id",
+    "tenant_id",
+    "order_ids",
+    "jurisdiction",
+    "currency",
+    "status",
+    "buyer",
+    "lines",
+    "created_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "order_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "jurisdiction": {
+      "type": "string"
+    },
+    "currency": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "pending",
+        "issued",
+        "failed",
+        "red-letter-pending",
+        "cancelled"
+      ]
+    },
+    "buyer": {
+      "type": "object"
+    },
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "tax_total_minor": {
+      "type": "integer"
+    },
+    "gross_total_minor": {
+      "type": "integer"
+    },
+    "provider_reference": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

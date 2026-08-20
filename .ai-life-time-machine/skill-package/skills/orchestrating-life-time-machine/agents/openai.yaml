@@ -1,0 +1,7 @@
+interface:
+  display_name: AI 人生时光机总控编排
+  short_description: 负责仓库基线、依赖调度、多 Agent/Worktree、完成报告与全局商业闭环，不直接替代各领域 Skill。
+  default_prompt: Use $orchestrating-life-time-machine to inspect the repository and
+    implement the next evidence-backed Batch.
+policy:
+  allow_implicit_invocation: true

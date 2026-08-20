@@ -1,0 +1,23 @@
+version: 1.0.0
+rules:
+  - no_raw_media
+  - no_face_embeddings
+  - no_full_prompts_or_private_future_self_text
+  - stable_event_id_and_schema_version
+  - consent_and_region_aware_collection
+events:
+  - name: acquisition_session_started
+    owner: growth
+    required: [event_id, occurred_at, anonymous_or_account_id, source, campaign, consent_state]
+  - name: generation_completed
+    owner: media
+    required: [event_id, occurred_at, tenant_id, project_id, job_id, quality_band, latency_ms, cost_minor]
+  - name: order_financial_state_changed
+    owner: commerce
+    required: [event_id, occurred_at, tenant_id, order_id, state, currency, amount_minor]
+  - name: vendor_job_state_changed
+    owner: fulfillment
+    required: [event_id, occurred_at, tenant_id, vendor_job_id, state, vendor_id]
+  - name: support_ticket_state_changed
+    owner: support
+    required: [event_id, occurred_at, tenant_id, ticket_id, state, category, priority]

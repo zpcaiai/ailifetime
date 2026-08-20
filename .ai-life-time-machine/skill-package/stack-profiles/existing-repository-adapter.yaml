@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "package_version": "2.0.0",
+  "id": "existing-repository-adapter",
+  "title": "既有仓库适配模式",
+  "description": "不规定语言；B00 发现现有边界后生成最小迁移和模块映射。",
+  "web": "existing",
+  "backend": "existing",
+  "workers": "existing",
+  "mobile": "existing-or-profile-selected",
+  "mini_program": "existing-or-profile-selected",
+  "data": "existing",
+  "workflow": "existing durable engine or Temporal adapter",
+  "observability": "existing + OpenTelemetry bridge",
+  "deployment": "existing",
+  "adapt_existing_first": true
+}

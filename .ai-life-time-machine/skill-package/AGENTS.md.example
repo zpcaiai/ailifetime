@@ -1,0 +1,11 @@
+# AGENTS.md — AI Life Time Machine project rules
+
+- Active scope: `.ai-life-time-machine/project-profile.json`.
+- Read B00 baseline and current repository before proposing architecture.
+- Use `projectctl.py --repo . ready`; implement only a ready Batch.
+- Load the matching `.agents/skills/<skill>/SKILL.md` and one Batch reference.
+- Do not create parallel services when an existing capability can be adapted.
+- Every Requirement needs source, symbol, test, runtime evidence and commit.
+- Never access production customer media, secrets or irreversible infrastructure.
+- Preserve illustrative-not-predictive, consent, child, privacy, deletion, provenance, no-consequential-biometric-decisioning, finance and tenant controls.
+- Run `verify_release.py` before claiming completion.

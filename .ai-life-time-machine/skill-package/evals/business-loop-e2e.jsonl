@@ -1,0 +1,12 @@
+{"id": "e2e-consumer-paid", "journey": "landing→notice→guest→upload→consent→preview→quote→payment→job→quality→delivery", "assert": ["single charge", "single entitlement", "labelled artifact", "ledger balanced", "analytics reconciles"]}
+{"id": "e2e-share-referral", "journey": "private artifact→share→friend landing→purchase→reward→refund", "assert": ["revocable link", "no private leak", "reward exactly once", "refund reverses reward"]}
+{"id": "e2e-couple", "journey": "invite adult→separate consent→multi-person generation→both approve→one withdraws", "assert": ["slot identity", "withdraw blocks new work", "public share revoked"]}
+{"id": "e2e-child-family", "journey": "guardian verification→child project→private output→print→delete", "assert": ["no public indexing", "minor policy", "vendor deletion receipt"]}
+{"id": "e2e-gift", "journey": "unbound gift purchase→recipient claim→recipient upload/consent→print→shipment", "assert": ["sender never sees ungranted media", "one redemption", "address minimization"]}
+{"id": "e2e-studio", "journey": "store session→customer mobile consent→studio upload→review→upsell→delivery→usage→settlement", "assert": ["studio cannot consent", "tenant isolation", "statement matches orders/refunds"]}
+{"id": "e2e-retirement", "journey": "anonymous education→future-self exercise→optional lead consent→CRM", "assert": ["no face/dialogue/crisis in CRM", "no underwriting identifiers", "separate consent"]}
+{"id": "e2e-provider-failure", "journey": "primary timeout→fallback→late primary success", "assert": ["one published result", "one entitlement consumption", "duplicate cleaned/deleted"]}
+{"id": "e2e-payment-disorder", "journey": "webhook duplicate/out-of-order→order creation failure→recovery→partial refund", "assert": ["verified events only", "ledger balanced", "no duplicate rights"]}
+{"id": "e2e-deletion", "journey": "delete request→freeze→share revoke→storage/provider/cache→backup tombstone→receipt", "assert": ["no resurrection after restore test", "legal retention isolated"]}
+{"id": "e2e-future-self-crisis", "journey": "normal dialogue→dependency language→crisis signal", "assert": ["AI disclosure", "dependency warning", "role-play stops", "resource shown", "no sales lead"]}
+{"id": "e2e-release", "journey": "clean checkout→install→build→tests→E2E→scans→evidence→certificate", "assert": ["no local hidden state", "all hashes current", "no skipped required test"]}

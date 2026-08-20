@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "package_version": "2.0.0",
+  "id": "all-typescript",
+  "title": "全 TypeScript 产品栈",
+  "description": "适合小团队快速交付，仍保持领域边界和独立 worker。",
+  "web": "Next.js App Router + TypeScript",
+  "backend": "NestJS/Fastify + TypeScript",
+  "workers": "Node.js workers + Python only where model tooling requires",
+  "mobile": "React Native / Expo",
+  "mini_program": "Taro + TypeScript",
+  "data": "PostgreSQL + Redis + S3-compatible storage",
+  "workflow": "Temporal TypeScript SDK",
+  "observability": "OpenTelemetry",
+  "deployment": "Docker Compose + managed containers/serverless",
+  "adapt_existing_first": true
+}

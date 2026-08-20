@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Controlled experiment",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "hypothesis",
+    "population",
+    "variants",
+    "primary_metric",
+    "guardrails",
+    "status"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "hypothesis": {
+      "type": "string"
+    },
+    "population": {
+      "type": "object"
+    },
+    "variants": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object"
+      }
+    },
+    "primary_metric": {
+      "type": "string"
+    },
+    "guardrails": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "review",
+        "running",
+        "paused",
+        "completed",
+        "invalidated"
+      ]
+    },
+    "assignment_unit": {
+      "enum": [
+        "account",
+        "guest",
+        "family",
+        "partner",
+        "store"
+      ]
+    },
+    "analysis_plan": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

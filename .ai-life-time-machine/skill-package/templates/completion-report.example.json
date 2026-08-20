@@ -1,0 +1,89 @@
+{
+  "schema_version": "1.0",
+  "package_version": "2.0.0",
+  "batch_id": "B00",
+  "status": "blocked",
+  "repo_root": "/absolute/path/to/repository",
+  "base_commit": "0000000",
+  "result_commit": null,
+  "started_at": "2026-08-14T00:00:00Z",
+  "completed_at": "2026-08-14T00:00:01Z",
+  "agent": {
+    "host": "human",
+    "model": null,
+    "session_id": "example-only",
+    "worktree": null
+  },
+  "dependencies": [],
+  "changed_files": [],
+  "entrypoints": [],
+  "contracts": [],
+  "migrations": [],
+  "tests": [
+    {
+      "name": "example",
+      "scope": "other",
+      "command": "false # replace with repo-native command",
+      "exit_code": 1,
+      "status": "failed",
+      "artifact": "evidence/B00/test-results/example.txt",
+      "duration_ms": 1
+    }
+  ],
+  "evidence": [
+    {
+      "type": "other",
+      "path": "evidence/B00/example.txt",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "created_at": "2026-08-14T00:00:01Z",
+      "producer": "example-only",
+      "supports": [
+        "B00-R01"
+      ],
+      "contains_sensitive_data": false,
+      "redaction": null,
+      "notes": "Template record; replace."
+    }
+  ],
+  "traceability": [
+    {
+      "requirement_id": "B00-R01",
+      "source_files": [
+        "replace-me"
+      ],
+      "symbols": [
+        "replace-me"
+      ],
+      "tests": [
+        "replace-me"
+      ],
+      "evidence": [
+        "evidence/B00/example.txt"
+      ],
+      "notes": "Template only."
+    }
+  ],
+  "risks": [
+    {
+      "severity": "high",
+      "description": "Example report is intentionally incomplete.",
+      "disposition": "blocked",
+      "owner": "replace-me",
+      "expires_at": null
+    }
+  ],
+  "follow_ups": [
+    "Replace all example values and validate evidence hashes."
+  ],
+  "blockers": [
+    "This is an example, not a passing report."
+  ],
+  "assertions": {
+    "no_placeholders": true,
+    "no_skipped_required_tests": true,
+    "no_fake_evidence": true,
+    "no_real_customer_media": true,
+    "no_secrets": true,
+    "clean_room_reproducible": false
+  }
+}

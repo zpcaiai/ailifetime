@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Commercial release manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "package_version",
+    "profile",
+    "repository_commit",
+    "artifacts",
+    "database_contracts",
+    "api_contracts",
+    "mobile_releases",
+    "mini_program_release",
+    "configuration_snapshot",
+    "sbom",
+    "approvals",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "package_version": {
+      "const": "2.0.0"
+    },
+    "profile": {
+      "type": "string"
+    },
+    "repository_commit": {
+      "type": "string",
+      "minLength": 7
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/artifact"
+      }
+    },
+    "database_contracts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/artifact"
+      }
+    },
+    "api_contracts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/artifact"
+      }
+    },
+    "mobile_releases": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "mini_program_release": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "configuration_snapshot": {
+      "$ref": "#/$defs/artifact"
+    },
+    "sbom": {
+      "$ref": "#/$defs/artifact"
+    },
+    "approvals": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": [
+        "name",
+        "uri",
+        "sha256"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "uri": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    }
+  }
+}

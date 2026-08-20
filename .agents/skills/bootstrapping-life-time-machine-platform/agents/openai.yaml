@@ -1,0 +1,7 @@
+interface:
+  display_name: 平台与核心基础设施
+  short_description: 建立可扩展、可审计、可恢复的产品底座。
+  default_prompt: Use $bootstrapping-life-time-machine-platform to inspect the repository
+    and implement the next evidence-backed Batch.
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,7 @@
+interface:
+  display_name: B2B2C 合作伙伴平台
+  short_description: 支持影楼、礼品、保险养老等伙伴安全接入与结算。
+  default_prompt: Use $building-partner-platform to inspect the repository and implement
+    the next evidence-backed Batch.
+policy:
+  allow_implicit_invocation: true

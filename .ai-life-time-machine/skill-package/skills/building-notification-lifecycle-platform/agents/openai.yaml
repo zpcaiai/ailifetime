@@ -1,0 +1,6 @@
+interface:
+  display_name: "消息通知与用户生命周期平台"
+  short_description: "支持生成完成、订单、家庭邀请、年度更新、客服和营销触达，同时避免骚扰和重复发送。"
+  default_prompt: "Use $building-notification-lifecycle-platform to inspect the active project profile, choose the requested ready Batch, implement it in the existing repository, run its acceptance commands, and produce schema-valid evidence."
+policy:
+  allow_implicit_invocation: true

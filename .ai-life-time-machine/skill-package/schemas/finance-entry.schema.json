@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Double-entry journal entry",
+  "type": "object",
+  "required": [
+    "id",
+    "tenant_id",
+    "source_type",
+    "source_id",
+    "currency",
+    "posted_at",
+    "lines",
+    "idempotency_key"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "source_type": {
+      "type": "string"
+    },
+    "source_id": {
+      "type": "string"
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "posted_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "lines": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": [
+          "account",
+          "direction",
+          "amount_minor"
+        ],
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "direction": {
+            "enum": [
+              "debit",
+              "credit"
+            ]
+          },
+          "amount_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "dimension": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

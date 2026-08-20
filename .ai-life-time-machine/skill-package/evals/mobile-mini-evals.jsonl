@@ -1,0 +1,2 @@
+{"id": "mobile-001", "prompt": "Restore a subscription purchased on iOS after login on Web.", "must_include": ["server entitlement", "signed store verification", "idempotency", "cross-platform consistency"]}
+{"id": "mini-001", "prompt": "A WeChat share card is opened after participant consent is revoked.", "must_include": ["server reauthorization", "share revoked", "fail closed"]}

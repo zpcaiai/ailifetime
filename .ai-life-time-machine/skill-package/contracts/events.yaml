@@ -1,0 +1,116 @@
+schema_version: '1.0'
+envelope:
+  required:
+  - event_id
+  - event_type
+  - event_version
+  - occurred_at
+  - producer
+  - tenant_id
+  - subject_id
+  - trace_id
+  - data
+  fields:
+    event_id: UUID/ULID; globally unique
+    event_type: dot-delimited stable name
+    event_version: positive integer
+    occurred_at: UTC RFC3339
+    producer: service and deployment version
+    tenant_id: required; platform tenant for B2C
+    subject_id: aggregate ID
+    actor_ref: pseudonymous actor ID when needed
+    trace_id: OpenTelemetry trace correlation
+    data: minimal payload; no raw face media, payment credentials, or private dialogue
+    privacy: classification, purpose, retention class
+delivery:
+  mode: at-least-once
+  outbox_required: true
+  consumer_deduplication: event_id
+  ordering: per aggregate when required
+  unknown_version: quarantine
+  replay: authorization and current-policy recheck required
+events:
+- type: consent.granted
+  owner: consent
+  purpose: Record active participant authorization
+- type: consent.withdrawn
+  owner: consent
+  purpose: Stop new processing and start revocation/deletion propagation
+- type: media.asset.accepted
+  owner: media-vault
+  purpose: Asset passed file and quality preflight
+- type: media.asset.expired
+  owner: media-vault
+  purpose: Retention expiry scheduled
+- type: project.locked
+  owner: project
+  purpose: Composition snapshot locked for purchase/generation
+- type: generation.job.created
+  owner: generation-control
+  purpose: Durable job accepted
+- type: generation.job.stage-changed
+  owner: generation-control
+  purpose: State/progress milestone
+- type: generation.job.completed
+  owner: generation-control
+  purpose: Ready or partial result manifest
+- type: generation.job.failed
+  owner: generation-control
+  purpose: Terminal or operator-required failure
+- type: quality.gate.failed
+  owner: quality-engine
+  purpose: Artifact cannot be published
+- type: artifact.published
+  owner: delivery
+  purpose: Labelled/provenance-bound artifact ready
+- type: share.created
+  owner: share
+  purpose: Revocable link activated
+- type: share.revoked
+  owner: share
+  purpose: Origin and edge access invalidated
+- type: checkout.quoted
+  owner: pricing
+  purpose: Server-signed price and entitlement snapshot
+- type: payment.succeeded
+  owner: payment
+  purpose: Verified provider payment
+- type: payment.refunded
+  owner: payment
+  purpose: Verified refund/partial refund
+- type: order.created
+  owner: order
+  purpose: Commercial order aggregate created
+- type: order.fulfilled
+  owner: order
+  purpose: Digital/physical order delivered
+- type: fulfillment.shipped
+  owner: fulfillment
+  purpose: Physical carrier tracking available
+- type: subscription.changed
+  owner: subscription
+  purpose: Lifecycle/entitlement transition
+- type: gift.redeemed
+  owner: gifts
+  purpose: Gift assigned exactly once
+- type: partner.usage.recorded
+  owner: metering
+  purpose: Immutable billable usage
+- type: settlement.locked
+  owner: settlement
+  purpose: Partner statement immutable
+- type: privacy.request.submitted
+  owner: privacy-rights
+  purpose: Data-rights case opened
+- type: privacy.deletion.completed
+  owner: deletion-orchestrator
+  purpose: Deletion receipt finalized
+- type: moderation.case.opened
+  owner: moderation
+  purpose: Safety/rights review required
+- type: future-self.safety-escalated
+  owner: dialogue-safety
+  purpose: Role-play stopped and safe handoff shown; no message body
+- type: lifecycle.preference.changed
+  owner: notification-preferences
+  purpose: Suppression and channel choices updated

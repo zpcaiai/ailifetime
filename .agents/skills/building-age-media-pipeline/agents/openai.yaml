@@ -1,0 +1,7 @@
+interface:
+  display_name: 年龄影像生成流水线
+  short_description: 实现高一致性照片/视频生成，但不宣称预测未来容貌。
+  default_prompt: Use $building-age-media-pipeline to inspect the repository and implement
+    the next evidence-backed Batch.
+policy:
+  allow_implicit_invocation: true

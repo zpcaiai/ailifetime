@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Support ticket",
+  "type": "object",
+  "required": [
+    "id",
+    "tenant_id",
+    "requester_id",
+    "channel",
+    "category",
+    "priority",
+    "status",
+    "created_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "requester_id": {
+      "type": "string"
+    },
+    "channel": {
+      "enum": [
+        "web",
+        "email",
+        "chat",
+        "phone",
+        "wechat",
+        "partner",
+        "internal"
+      ]
+    },
+    "category": {
+      "enum": [
+        "generation",
+        "consent",
+        "privacy",
+        "billing",
+        "refund",
+        "fulfillment",
+        "account",
+        "partner",
+        "abuse",
+        "other"
+      ]
+    },
+    "priority": {
+      "enum": [
+        "p0",
+        "p1",
+        "p2",
+        "p3"
+      ]
+    },
+    "status": {
+      "enum": [
+        "new",
+        "triaged",
+        "waiting-customer",
+        "waiting-internal",
+        "resolved",
+        "closed"
+      ]
+    },
+    "case_reason": {
+      "type": "string"
+    },
+    "linked_resources": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "sla_due_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

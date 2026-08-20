@@ -1,0 +1,10 @@
+# CLAUDE.md — AI Life Time Machine project rules
+
+- Active scope: `.ai-life-time-machine/project-profile.json`.
+- Start with B00 and inspect the actual repository.
+- Use `projectctl.py --repo . ready`; invoke only the matching `/skill-name` and reference.
+- Produce a file-level plan before edits; respect worktree ownership.
+- Every Requirement maps to source, symbol, test, evidence and commit.
+- Never use real customer media or production secrets in development/evidence.
+- Safety, consent, child protection, privacy, deletion, AI provenance, tenant isolation and financial integrity are non-waivable.
+- A verbal “done” is not completion; `verify_release.py` must pass.

@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0",
+  "package_version": "2.0.0",
+  "release_id": "<release-id>",
+  "commit": "<git-sha>",
+  "artifacts": [
+    {
+      "name": "<artifact>",
+      "digest": "sha256:<digest>"
+    }
+  ],
+  "configuration": {
+    "policy_version": "<version>",
+    "model_registry_digest": "<digest>",
+    "contract_digest": "<digest>",
+    "migration_head": "<id>"
+  },
+  "batch_reports": {
+    "required": [
+      "B00-B127"
+    ],
+    "validated_count": 0,
+    "index_digest": "<digest>"
+  },
+  "gates": {
+    "build": false,
+    "tests": false,
+    "contracts": false,
+    "migrations": false,
+    "security": false,
+    "privacy": false,
+    "child_safety": false,
+    "future_self_safety": false,
+    "ai_labels": false,
+    "financial_reconciliation": false,
+    "partner_isolation": false,
+    "deletion": false,
+    "restore": false,
+    "slo": false,
+    "business_loop_e2e": false,
+    "clean_room": false
+  },
+  "open_risks": [],
+  "approvals": [],
+  "issued_at": "<RFC3339>",
+  "status": "blocked"
+}

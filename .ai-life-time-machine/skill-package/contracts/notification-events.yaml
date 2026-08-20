@@ -1,0 +1,19 @@
+version: 1.0.0
+commands:
+  - notification.requested
+  - notification.cancelled
+events:
+  - notification.rendered
+  - notification.sent
+  - notification.delivered
+  - notification.bounced
+  - notification.complained
+  - notification.suppressed
+  - notification.failed
+required_controls:
+  - purpose_specific_preference
+  - quiet_hours_and_frequency_cap
+  - idempotency_key
+  - template_version
+  - provider_message_id
+  - no_sensitive_content_in_lock_screen_or_sms

@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Consent record",
+  "type": "object",
+  "required": [
+    "id",
+    "tenant_id",
+    "participant_id",
+    "grantor_id",
+    "purpose",
+    "scope",
+    "policy_version",
+    "status",
+    "evidence_hash",
+    "granted_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "participant_id": {
+      "type": "string"
+    },
+    "grantor_id": {
+      "type": "string"
+    },
+    "grantor_capacity": {
+      "enum": [
+        "self",
+        "guardian",
+        "authorized-agent",
+        "other"
+      ]
+    },
+    "purpose": {
+      "enum": [
+        "age-transformation",
+        "family-scene",
+        "private-storage",
+        "public-sharing",
+        "printing",
+        "marketing-display",
+        "voice-generation",
+        "future-self-memory",
+        "partner-delivery"
+      ]
+    },
+    "scope": {
+      "type": "object"
+    },
+    "policy_version": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "active",
+        "expired",
+        "withdrawn",
+        "disputed",
+        "superseded"
+      ]
+    },
+    "evidence_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "granted_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "withdrawn_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

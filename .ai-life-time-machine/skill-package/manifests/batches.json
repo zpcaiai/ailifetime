@@ -1,0 +1,6845 @@
+[
+  {
+    "id": "B00",
+    "slug": "repository-discovery-baseline",
+    "title": "仓库发现、现状审计与可执行基线",
+    "phase": "P0-discovery",
+    "depends_on": [],
+    "skill": "orchestrating-life-time-machine",
+    "objective": "在不臆测现有实现的前提下，建立仓库、运行环境、依赖、测试、数据与风险基线。",
+    "business_outcome": "让 Claude Code/Codex 在真实代码与可重放证据上继续工作，而不是另起炉灶或覆盖已有系统。",
+    "modules": [
+      "tools/repo-inspector",
+      "docs/baseline",
+      "evidence/baseline",
+      "scripts/dev-doctor"
+    ],
+    "interfaces": [
+      "git status/diff/log",
+      "build manifests",
+      "test commands",
+      "runtime health endpoints"
+    ],
+    "requirements": [
+      "自动识别单仓/多仓/monorepo、语言、框架、构建工具、运行入口、数据库迁移和部署目录，并生成机器可读 inventory.json。",
+      "执行或最小化复现现有 build、lint、unit、integration、e2e 命令，记录通过、失败、跳过与缺失原因，不得把未运行标成通过。",
+      "梳理已有领域模型、API、队列、存储、认证、支付、AI 提供商和可观测性能力，映射到 B01–B127 的复用/新增/替换决策。",
+      "创建基线威胁清单、技术债清单、许可证/秘密泄露扫描结果及不可逆操作清单，所有写操作在用户仓库中最小化。",
+      "输出 baseline-report.md、inventory.json、command-log.ndjson 和首轮依赖计划；后续批次必须引用对应基线证据。"
+    ],
+    "constraints": [
+      "只读优先；未经明确要求不得删除、迁移生产数据或改写 Git 历史。",
+      "命令、版本、退出码、时间戳与工作目录必须记录。",
+      "发现已有能力时优先适配，不重复实现平行系统。"
+    ],
+    "negative_cases": [
+      "仓库不可构建",
+      "测试依赖外部密钥",
+      "工作区存在未提交修改"
+    ],
+    "criticality": "high",
+    "reference": "skills/orchestrating-life-time-machine/references/B00-repository-discovery-baseline.md",
+    "requirement_ids": [
+      "B00-R01",
+      "B00-R02",
+      "B00-R03",
+      "B00-R04",
+      "B00-R05"
+    ],
+    "topological_index": 0
+  },
+  {
+    "id": "B01",
+    "slug": "monorepo-architecture",
+    "title": "Monorepo、服务边界与本地开发底座",
+    "phase": "P1-foundation",
+    "depends_on": [
+      "B00"
+    ],
+    "skill": "bootstrapping-life-time-machine-platform",
+    "objective": "建立可独立构建、可组合运行、适合多 Agent 并行开发的工程骨架。",
+    "business_outcome": "形成消费者端、伙伴端、控制面、媒体面和共享契约可持续演进的代码组织。",
+    "modules": [
+      "apps/consumer-web",
+      "apps/partner-portal",
+      "apps/admin-console",
+      "services/control-plane",
+      "services/media-worker",
+      "packages/contracts",
+      "infra/local"
+    ],
+    "interfaces": [
+      "Gradle/npm/pnpm/uv workspaces",
+      "Docker Compose",
+      "health/readiness endpoints"
+    ],
+    "requirements": [
+      "创建或适配 monorepo，默认参考 Next.js/TypeScript、Java 21 Spring Boot、Python 3.12 FastAPI worker，但必须尊重 B00 现有技术栈。",
+      "定义 bounded context 与依赖方向，禁止 UI 直接访问数据库、媒体 worker 绕过控制面修改商业状态、跨租户共享可变状态。",
+      "提供一条命令启动 PostgreSQL、Redis、对象存储、工作流引擎及最小应用，健康检查必须区分 liveness/readiness。",
+      "建立统一格式化、lint、类型检查、测试、数据库迁移、契约生成和本地种子数据命令。",
+      "为多 Agent 开发定义模块所有权、代码所有者、共享契约变更规则和兼容性策略。"
+    ],
+    "constraints": [
+      "服务边界以业务能力和故障隔离为准，不因技术偏好过度拆分。",
+      "默认开发环境不得依赖真实支付、真实短信或生产 AI 密钥。",
+      "所有示例密钥均为无效占位且被 secret scan 识别。"
+    ],
+    "negative_cases": [
+      "端口冲突",
+      "缺少容器运行时",
+      "某子项目已有不同包管理器"
+    ],
+    "criticality": "high",
+    "reference": "skills/bootstrapping-life-time-machine-platform/references/B01-monorepo-architecture.md",
+    "requirement_ids": [
+      "B01-R01",
+      "B01-R02",
+      "B01-R03",
+      "B01-R04",
+      "B01-R05"
+    ],
+    "topological_index": 1
+  },
+  {
+    "id": "B02",
+    "slug": "domain-data-api-event-contracts",
+    "title": "领域模型、数据库、API 与事件契约",
+    "phase": "P1-foundation",
+    "depends_on": [
+      "B01"
+    ],
+    "skill": "bootstrapping-life-time-machine-platform",
+    "objective": "建立贯穿消费者、生成、家庭、交易、伙伴与合规的数据和接口语言。",
+    "business_outcome": "避免各批次自行发明不兼容字段，使业务状态、幂等性和审计链可验证。",
+    "modules": [
+      "packages/contracts",
+      "services/control-plane/domain",
+      "db/migrations",
+      "contracts/openapi",
+      "contracts/events"
+    ],
+    "interfaces": [
+      "OpenAPI 3.1",
+      "JSON Schema",
+      "CloudEvents-like envelope",
+      "PostgreSQL migrations"
+    ],
+    "requirements": [
+      "定义用户、主体、资产、同意、生成任务、作品、分享、家庭、订单、商品、伙伴、结算、删除请求和审计记录的聚合边界。",
+      "为所有资源规定全局 ID、tenant_id、actor_id、状态机版本、created_at/updated_at、软删/硬删语义和乐观并发字段。",
+      "发布版本化 OpenAPI、事件目录和 JSON Schema，并建立 breaking-change 检测与消费者契约测试。",
+      "定义事务内 outbox/inbox、幂等键、去重窗口、事件重放和未知事件版本隔离策略。",
+      "生成数据库迁移、种子数据和数据字典；敏感字段必须标注分类、保留期、加密与访问目的。"
+    ],
+    "constraints": [
+      "金额使用最小货币单位和 ISO 货币码；时间统一 UTC 存储。",
+      "状态迁移只能由领域服务执行并产生审计事件。",
+      "事件载荷不得包含原始人脸图像、支付凭证或不必要的敏感信息。"
+    ],
+    "negative_cases": [
+      "重复事件",
+      "旧客户端发送未知字段",
+      "迁移中途失败"
+    ],
+    "criticality": "high",
+    "reference": "skills/bootstrapping-life-time-machine-platform/references/B02-domain-data-api-event-contracts.md",
+    "requirement_ids": [
+      "B02-R01",
+      "B02-R02",
+      "B02-R03",
+      "B02-R04",
+      "B02-R05"
+    ],
+    "topological_index": 3
+  },
+  {
+    "id": "B03",
+    "slug": "identity-rbac-tenancy",
+    "title": "身份认证、RBAC/ABAC 与租户隔离",
+    "phase": "P1-foundation",
+    "depends_on": [
+      "B01",
+      "B02"
+    ],
+    "skill": "bootstrapping-life-time-machine-platform",
+    "objective": "为消费者、家庭成员、员工、伙伴和系统服务建立统一身份与授权边界。",
+    "business_outcome": "确保任何渠道扩张都不会把个人资产、伙伴数据和后台权限混在一起。",
+    "modules": [
+      "services/identity",
+      "services/authorization",
+      "packages/auth-client",
+      "apps/*/middleware",
+      "db/rls"
+    ],
+    "interfaces": [
+      "OIDC/OAuth2",
+      "session API",
+      "service credentials",
+      "permission decision API"
+    ],
+    "requirements": [
+      "实现消费者、匿名访客升级、伙伴员工、平台运营、客服、审核员、财务和服务账户的身份模型。",
+      "采用 RBAC 加资源/目的/租户属性的授权决策；关键操作要求 step-up authentication 和短期授权上下文。",
+      "在应用层与数据库层双重执行 tenant_id/owner_id 隔离，并提供跨租户渗透测试。",
+      "会话、刷新令牌、设备撤销、密码/无密码登录、SSO 和服务间凭据必须支持轮换、过期和审计。",
+      "后台批量导出、代客操作、退款、数据删除与结算调整必须使用最小权限、理由字段和双人复核策略。"
+    ],
+    "constraints": [
+      "客户端传入的 tenant_id/role 不得作为授权事实。",
+      "服务账户不得登录消费者 UI。",
+      "默认拒绝未知权限与缺失资源上下文。"
+    ],
+    "negative_cases": [
+      "水平越权",
+      "伪造伙伴头",
+      "被撤销令牌重放"
+    ],
+    "criticality": "high",
+    "reference": "skills/bootstrapping-life-time-machine-platform/references/B03-identity-rbac-tenancy.md",
+    "requirement_ids": [
+      "B03-R01",
+      "B03-R02",
+      "B03-R03",
+      "B03-R04",
+      "B03-R05"
+    ],
+    "topological_index": 5
+  },
+  {
+    "id": "B04",
+    "slug": "consent-rights-guardian",
+    "title": "同意、肖像授权、监护与数据主体权利",
+    "phase": "P1-foundation",
+    "depends_on": [
+      "B02",
+      "B03"
+    ],
+    "skill": "bootstrapping-life-time-machine-platform",
+    "objective": "把每张可识别人物照片的合法授权、用途、期限和撤回做成可执行产品能力。",
+    "business_outcome": "使家庭场景、未成年人、影楼代客上传和伙伴分发可审计、可撤回、可删除。",
+    "modules": [
+      "services/consent",
+      "services/privacy-rights",
+      "apps/consent-ui",
+      "packages/policy-engine"
+    ],
+    "interfaces": [
+      "consent API",
+      "guardian verification",
+      "rights request API",
+      "consent receipt"
+    ],
+    "requirements": [
+      "为上传者本人、其他成年人、未成年人、影楼顾客和伙伴代理建立不同的同意旅程与证据要求。",
+      "同意记录必须绑定人物/资产、处理目的、产品功能、渠道、隐私政策版本、期限、撤回状态和证据哈希。",
+      "实现访问、更正、导出、撤回、删除、限制处理和申诉工作流，并把请求传播到对象存储、缓存、派生物和下游处理者。",
+      "未成年人场景默认关闭公开分享、未来自我对话和营销用途；监护授权必须独立于一般服务条款。",
+      "在同意缺失、过期、范围不符或争议处理中 fail closed，并为客服提供最小化、脱敏的解释页面。"
+    ],
+    "constraints": [
+      "勾选服务条款不能替代特定敏感信息/肖像授权。",
+      "撤回后不得继续新生成或营销使用，法定义务留存需单独标记。",
+      "不得用暗黑模式诱导授权。"
+    ],
+    "negative_cases": [
+      "上传前任或陌生人照片",
+      "监护关系无法验证",
+      "用户撤回后重试旧任务"
+    ],
+    "criticality": "high",
+    "reference": "skills/bootstrapping-life-time-machine-platform/references/B04-consent-rights-guardian.md",
+    "requirement_ids": [
+      "B04-R01",
+      "B04-R02",
+      "B04-R03",
+      "B04-R04",
+      "B04-R05"
+    ],
+    "topological_index": 7
+  },
+  {
+    "id": "B05",
+    "slug": "media-lifecycle-deletion",
+    "title": "媒体资产生命周期、加密与可验证删除",
+    "phase": "P1-foundation",
+    "depends_on": [
+      "B01",
+      "B02",
+      "B04"
+    ],
+    "skill": "bootstrapping-life-time-machine-platform",
+    "objective": "安全管理原图、中间件、特征、生成结果、缩略图、导出物与日志中的媒体引用。",
+    "business_outcome": "把“照片不训练、按期删除、用户可彻底删除”变成可证明的系统行为。",
+    "modules": [
+      "services/media-vault",
+      "services/deletion-orchestrator",
+      "storage/policies",
+      "packages/signed-url"
+    ],
+    "interfaces": [
+      "multipart upload",
+      "signed URL",
+      "asset manifest",
+      "deletion receipt API"
+    ],
+    "requirements": [
+      "实现隔离上传区、恶意文件检查、格式归一、元数据清理、加密存储和不可猜测对象键。",
+      "为原图、中间帧、嵌入/特征、结果、分享副本、打印文件和备份定义不同保留期及 legal hold 规则。",
+      "所有下载使用短时、受众绑定、目的绑定的签名 URL；禁止公开 bucket 和永久链接。",
+      "实现跨主库、对象存储、缓存、搜索索引、队列、日志引用和供应商的删除编排，产生逐项 deletion receipt。",
+      "提供自动过期任务、孤儿对象扫描、备份到期验证和删除失败补偿；任何缺口进入告警与人工队列。"
+    ],
+    "constraints": [
+      "不得把原图写入普通应用日志或错误追踪。",
+      "供应商返回删除成功不等于完成，必须保存请求与回执证据。",
+      "legal hold 必须有合法理由、授权人、期限和解除流程。"
+    ],
+    "negative_cases": [
+      "对象存储删除部分失败",
+      "CDN 仍缓存旧文件",
+      "供应商删除 API 超时"
+    ],
+    "criticality": "high",
+    "reference": "skills/bootstrapping-life-time-machine-platform/references/B05-media-lifecycle-deletion.md",
+    "requirement_ids": [
+      "B05-R01",
+      "B05-R02",
+      "B05-R03",
+      "B05-R04",
+      "B05-R05"
+    ],
+    "topological_index": 10
+  },
+  {
+    "id": "B06",
+    "slug": "acquisition-guest-journey",
+    "title": "获客落地页、匿名体验与账户升级",
+    "phase": "P2-consumer",
+    "depends_on": [
+      "B02",
+      "B03",
+      "B04"
+    ],
+    "skill": "building-consumer-time-machine",
+    "objective": "建立从广告/分享/伙伴入口到首次高价值预览的低摩擦旅程。",
+    "business_outcome": "提高上传、预览、注册与付费转化，同时在收集照片前完成必要告知。",
+    "modules": [
+      "apps/consumer-web/landing",
+      "services/guest-session",
+      "packages/attribution",
+      "packages/feature-flags"
+    ],
+    "interfaces": [
+      "guest session API",
+      "campaign attribution",
+      "consent preflight",
+      "deep links"
+    ],
+    "requirements": [
+      "实现“看见 80 岁的自己”“一家人一起变老”“给未来自己的信”等可实验落地页和可访问性版本。",
+      "匿名会话只能持有短期、最小化状态；在跨设备保存、支付或家庭协作前引导账户升级并安全合并。",
+      "记录来源、创意、伙伴、推荐码和实验分组，但不得在同意前写入不必要的敏感画像。",
+      "上传前展示示意性年龄变换、AI 生成标识、人物授权、删除期限、收费和退款边界。",
+      "提供低带宽、移动端、失败恢复和无障碍流程；漏斗事件必须可去重且不含原始照片。"
+    ],
+    "constraints": [
+      "落地页不得宣称科学预测寿命、健康或真实未来容貌。",
+      "访客 token 只允许访问本会话资源。",
+      "实验不得改变必要隐私告知或安全门槛。"
+    ],
+    "negative_cases": [
+      "分享链接过期",
+      "访客升级时邮箱已存在",
+      "广告拦截导致埋点缺失"
+    ],
+    "criticality": "medium",
+    "reference": "skills/building-consumer-time-machine/references/B06-acquisition-guest-journey.md",
+    "requirement_ids": [
+      "B06-R01",
+      "B06-R02",
+      "B06-R03",
+      "B06-R04",
+      "B06-R05"
+    ],
+    "topological_index": 11
+  },
+  {
+    "id": "B07",
+    "slug": "photo-intake-quality",
+    "title": "照片采集、人物检测与质量预检",
+    "phase": "P2-consumer",
+    "depends_on": [
+      "B05",
+      "B06"
+    ],
+    "skill": "building-consumer-time-machine",
+    "objective": "在昂贵生成前确认照片可处理、人物已授权且质量足以稳定输出。",
+    "business_outcome": "降低失败成本、退款和身份漂移，给用户可操作的重拍建议。",
+    "modules": [
+      "apps/consumer-web/uploader",
+      "services/media-preflight",
+      "services/quality-check",
+      "packages/capture-guide"
+    ],
+    "interfaces": [
+      "upload session API",
+      "quality score API",
+      "participant declaration"
+    ],
+    "requirements": [
+      "支持相册、相机、影楼导入和伙伴受控上传，强制 MIME/魔数/尺寸/大小/病毒检测。",
+      "检测人脸数量、遮挡、分辨率、角度、光照、运动模糊、裁切和重复照片，输出可解释的质量维度。",
+      "让用户逐一声明可识别人物与授权关系；人物数量与同意记录不一致时禁止继续。",
+      "提供自动裁切、背景建议和重拍引导，但不得进行未告知的人脸识别搜索或身份匹配。",
+      "把质量阈值、人工 override、模型版本与最终生成结果关联，用于后续质量回归和退款归因。"
+    ],
+    "constraints": [
+      "预检分数只能用于生成质量，不得推断种族、健康、人格或保险风险。",
+      "低分 override 必须明确告知可能失败并记录用户选择。",
+      "EXIF 位置默认移除。"
+    ],
+    "negative_cases": [
+      "多人照片只声明一人",
+      "超大畸形图片",
+      "同一照片反复上传刷额度"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-consumer-time-machine/references/B07-photo-intake-quality.md",
+    "requirement_ids": [
+      "B07-R01",
+      "B07-R02",
+      "B07-R03",
+      "B07-R04",
+      "B07-R05"
+    ],
+    "topological_index": 15
+  },
+  {
+    "id": "B08",
+    "slug": "editor-template-composer",
+    "title": "年龄轴编辑器、模板与场景编排",
+    "phase": "P2-consumer",
+    "depends_on": [
+      "B07"
+    ],
+    "skill": "building-consumer-time-machine",
+    "objective": "让用户在生成前定义年龄节点、视觉风格、关系场景、版式和输出组合。",
+    "business_outcome": "把通用生成能力包装为可销售的作品模板与渠道 SKU。",
+    "modules": [
+      "apps/consumer-web/editor",
+      "services/template-catalog",
+      "packages/composition-schema",
+      "apps/admin/template-studio"
+    ],
+    "interfaces": [
+      "template API",
+      "composition draft API",
+      "preview manifest"
+    ],
+    "requirements": [
+      "提供默认 0/5/10/18/25/35/45/55/65/75/85/100 岁节点及可配置方案，当前年龄作为连续性锚点。",
+      "模板必须声明支持人数、年龄范围、输出比例、所需授权、供应商能力、成本级别和渠道许可。",
+      "实现照片/视频/宫格/卡片/家庭场景编辑，保存版本化 composition draft 并支持返回继续。",
+      "所有文案和模板使用“示意性年龄变换”；健康、财富、寿命、职业结果只能作为虚构情景且需明确标注。",
+      "管理员发布模板前必须通过样例、版权、内容安全、成本、延迟和多肤色/年龄质量评审。"
+    ],
+    "constraints": [
+      "模板不能绕过 B04 同意或 B17 标识。",
+      "未成年人模板默认私密且禁用成人化、性感化和不适当职业情景。",
+      "模板版本发布后不可静默改写已购买订单。"
+    ],
+    "negative_cases": [
+      "模板被下架但草稿仍引用",
+      "输入人数超出模板上限",
+      "供应商不支持某比例"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-consumer-time-machine/references/B08-editor-template-composer.md",
+    "requirement_ids": [
+      "B08-R01",
+      "B08-R02",
+      "B08-R03",
+      "B08-R04",
+      "B08-R05"
+    ],
+    "topological_index": 18
+  },
+  {
+    "id": "B09",
+    "slug": "generation-job-status-recovery",
+    "title": "生成任务、进度、取消与恢复",
+    "phase": "P2-consumer",
+    "depends_on": [
+      "B08",
+      "B12",
+      "B13"
+    ],
+    "skill": "building-consumer-time-machine",
+    "objective": "把多阶段媒体生成呈现为可取消、可重试、可恢复、可解释的用户任务。",
+    "business_outcome": "即使供应商超时或页面关闭，订单和额度也不会重复扣除或丢失。",
+    "modules": [
+      "services/generation-control",
+      "apps/consumer-web/job-status",
+      "packages/job-state-machine",
+      "services/notification"
+    ],
+    "interfaces": [
+      "generation jobs API",
+      "SSE/WebSocket/polling",
+      "cancel/retry API"
+    ],
+    "requirements": [
+      "定义 queued/preflight/running/quality-review/ready/partial/failed/cancelled/expired 状态与合法迁移。",
+      "提交使用客户幂等键和服务端 request fingerprint；重复请求返回同一任务而非二次扣费。",
+      "进度来自真实工作流里程碑并可降级为轮询；不得用虚假百分比掩盖未知状态。",
+      "支持安全取消、断点续跑、选择性重试、部分结果交付和超时补偿，退款/额度动作与任务状态一致。",
+      "页面刷新、跨设备登录和通知深链都能恢复任务；客服看到相关 trace、供应商调用和用户可见错误码。"
+    ],
+    "constraints": [
+      "取消不保证已发送供应商的计算立即停止，但必须阻止后续发布并处理成本。",
+      "重试不得复用已撤回同意或已删除源资产。",
+      "状态机未知状态默认隔离。"
+    ],
+    "negative_cases": [
+      "双击提交",
+      "worker 完成但事件丢失",
+      "支付成功后任务创建失败"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-consumer-time-machine/references/B09-generation-job-status-recovery.md",
+    "requirement_ids": [
+      "B09-R01",
+      "B09-R02",
+      "B09-R03",
+      "B09-R04",
+      "B09-R05"
+    ],
+    "topological_index": 21
+  },
+  {
+    "id": "B10",
+    "slug": "export-share-labels",
+    "title": "作品导出、可撤销分享与 AI 标识",
+    "phase": "P2-consumer",
+    "depends_on": [
+      "B09",
+      "B17"
+    ],
+    "skill": "building-consumer-time-machine",
+    "objective": "把生成结果安全导出为可分享内容，同时保留来源、授权和撤销能力。",
+    "business_outcome": "形成病毒传播入口而不牺牲隐私、人物权利与合规标识。",
+    "modules": [
+      "services/share",
+      "services/export",
+      "packages/provenance",
+      "apps/consumer-web/gallery"
+    ],
+    "interfaces": [
+      "share API",
+      "export API",
+      "revocation endpoint",
+      "metadata verifier"
+    ],
+    "requirements": [
+      "支持单图、宫格、短视频、字幕视频和打印级文件，并按套餐控制分辨率、水印、格式与有效期。",
+      "公开/链接/私密分享必须由用户显式选择，默认私密；每个分享具有可撤销 token、访问策略和过期时间。",
+      "在图片/视频可见区域与文件元数据写入 AI 生成/合成标识、服务提供者标识和追溯 ID，并提供校验器。",
+      "分享页不得暴露原图、账户、精确生日、内部任务 ID 或其他家庭成员私密资料。",
+      "记录打开、保存、转化、举报和撤销事件，支持平台爬虫卡片但可对未成年人/敏感场景关闭索引。"
+    ],
+    "constraints": [
+      "不得提供移除强制 AI 标识的付费功能。",
+      "撤销后 CDN、短链和嵌入页必须在目标 SLO 内失效。",
+      "下载文件的隐式标识需跨常见转码流程尽可能保留并可检测。"
+    ],
+    "negative_cases": [
+      "分享 token 猜测",
+      "被举报内容仍可访问",
+      "转码后元数据丢失"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-consumer-time-machine/references/B10-export-share-labels.md",
+    "requirement_ids": [
+      "B10-R01",
+      "B10-R02",
+      "B10-R03",
+      "B10-R04",
+      "B10-R05"
+    ],
+    "topological_index": 30
+  },
+  {
+    "id": "B11",
+    "slug": "account-family-library",
+    "title": "账户、家庭作品库与资产归档",
+    "phase": "P2-consumer",
+    "depends_on": [
+      "B03",
+      "B10"
+    ],
+    "skill": "building-consumer-time-machine",
+    "objective": "让用户长期保存、组织、授权和重用家庭作品，而不把所有成员混为一个账户。",
+    "business_outcome": "为年度更新、纪念礼品、家庭协作和订阅留存建立数据基础。",
+    "modules": [
+      "services/library",
+      "apps/consumer-web/library",
+      "services/household",
+      "packages/storage-quota"
+    ],
+    "interfaces": [
+      "library API",
+      "album API",
+      "household invitation",
+      "quota API"
+    ],
+    "requirements": [
+      "实现作品、项目、人物别名、相册、收藏、订单和版本的统一库，原图与生成物分层展示。",
+      "家庭空间采用邀请与角色授权，不因同姓、同设备或上传者声明自动合并人物身份。",
+      "用户可查看每个资产的用途、共享对象、保留期、同意状态、下载与删除入口。",
+      "支持免费/付费容量、归档、恢复和重复资产去重；配额不足不得悄悄删除用户内容。",
+      "家庭成员退出、账户关闭或监护权变化时执行可解释的所有权、访问与删除规则。"
+    ],
+    "constraints": [
+      "一个成员不能代表其他成年成员同意营销或公开分享。",
+      "资产去重哈希不得跨租户用于身份推断。",
+      "共享空间中的删除冲突必须保留审计并提供申诉。"
+    ],
+    "negative_cases": [
+      "邀请发错邮箱",
+      "家庭管理员账户被删除",
+      "配额到期但存在已支付打印订单"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-consumer-time-machine/references/B11-account-family-library.md",
+    "requirement_ids": [
+      "B11-R01",
+      "B11-R02",
+      "B11-R03",
+      "B11-R04",
+      "B11-R05"
+    ],
+    "topological_index": 32
+  },
+  {
+    "id": "B12",
+    "slug": "provider-abstraction-routing",
+    "title": "图像/视频/LLM/审核供应商抽象与路由",
+    "phase": "P1-foundation",
+    "depends_on": [
+      "B01",
+      "B02"
+    ],
+    "skill": "bootstrapping-life-time-machine-platform",
+    "objective": "把外部模型能力封装为可替换、可评测、可熔断、可合规路由的供应商层。",
+    "business_outcome": "降低单一模型锁定、区域不可用、成本波动和质量退化风险。",
+    "modules": [
+      "services/provider-gateway",
+      "packages/provider-contracts",
+      "services/model-registry",
+      "services/provider-evals"
+    ],
+    "interfaces": [
+      "generate image/video/text",
+      "moderate",
+      "delete asset",
+      "health/capability API"
+    ],
+    "requirements": [
+      "定义统一请求、结果、错误、计费、取消、删除、追溯和内容安全契约，供应商特有字段隔离在适配器内。",
+      "模型注册表记录地区、数据用途、保留策略、备案/登记信息、能力、限制、价格、SLO 和允许场景。",
+      "路由器根据模板、质量等级、地区、同意、未成年人、成本预算、健康状态和实验分组作确定性选择。",
+      "实现超时、指数退避、熔断、并发限制、供应商幂等、故障切换和禁止跨供应商重复发布。",
+      "建立金丝雀评测与回归门槛；供应商模型版本变化必须触发质量、安全、成本和合同复核。"
+    ],
+    "constraints": [
+      "不得把用户照片用于供应商训练，除非有独立、明确、可撤回授权且产品确有此功能。",
+      "供应商故障切换不能改变数据出境/地区约束。",
+      "错误响应与日志必须脱敏。"
+    ],
+    "negative_cases": [
+      "主供应商超时后迟到成功",
+      "价格配置单位错误",
+      "供应商删除接口不可用"
+    ],
+    "criticality": "high",
+    "reference": "skills/bootstrapping-life-time-machine-platform/references/B12-provider-abstraction-routing.md",
+    "requirement_ids": [
+      "B12-R01",
+      "B12-R02",
+      "B12-R03",
+      "B12-R04",
+      "B12-R05"
+    ],
+    "topological_index": 6
+  },
+  {
+    "id": "B13",
+    "slug": "durable-workflow-orchestration",
+    "title": "持久化工作流、队列与补偿事务",
+    "phase": "P1-foundation",
+    "depends_on": [
+      "B01",
+      "B02",
+      "B12"
+    ],
+    "skill": "bootstrapping-life-time-machine-platform",
+    "objective": "为生成、删除、支付后置、打印履约、结算和通知提供可重放的长任务基础。",
+    "business_outcome": "保证跨服务、跨供应商和跨天流程在崩溃后继续，并避免重复副作用。",
+    "modules": [
+      "services/workflow",
+      "services/queue",
+      "packages/idempotency",
+      "services/scheduler"
+    ],
+    "interfaces": [
+      "workflow commands",
+      "activity contracts",
+      "dead-letter/replay API",
+      "scheduler"
+    ],
+    "requirements": [
+      "采用 Temporal 或适配现有耐久工作流引擎，区分 workflow 决策与有副作用 activity。",
+      "每个 activity 定义超时、心跳、重试、幂等键、补偿和不可重试错误；外部副作用必须先持久化意图。",
+      "实现 outbox relay、inbox dedupe、死信隔离、人工重放和按租户/伙伴/供应商限流。",
+      "为支付、额度、订单、生成、删除、打印和结算建立 saga，不用分布式事务伪装一致性。",
+      "提供工作流可视化、关联 trace、历史裁剪/版本化和测试时虚拟时间，升级不得破坏在途实例。"
+    ],
+    "constraints": [
+      "重放代码必须确定性；随机数、时间、网络调用放入 activity。",
+      "死信重放前必须检查同意、订单和资产当前状态。",
+      "补偿操作也必须幂等并有证据。"
+    ],
+    "negative_cases": [
+      "worker 崩溃在外部调用后",
+      "事件重复乱序",
+      "工作流代码版本升级"
+    ],
+    "criticality": "high",
+    "reference": "skills/bootstrapping-life-time-machine-platform/references/B13-durable-workflow-orchestration.md",
+    "requirement_ids": [
+      "B13-R01",
+      "B13-R02",
+      "B13-R03",
+      "B13-R04",
+      "B13-R05"
+    ],
+    "topological_index": 9
+  },
+  {
+    "id": "B14",
+    "slug": "age-timeline-generation",
+    "title": "0–100 岁示意性年龄时间轴生成",
+    "phase": "P3-media",
+    "depends_on": [
+      "B07",
+      "B12",
+      "B13"
+    ],
+    "skill": "building-age-media-pipeline",
+    "objective": "从一张或多张经授权照片生成跨年龄节点、跨版式的一致性时间轴。",
+    "business_outcome": "提供产品最核心的传播与付费价值，同时明确它是艺术化模拟而非预测。",
+    "modules": [
+      "services/media-worker/age-timeline",
+      "services/prompt-policy",
+      "packages/timeline-plan",
+      "services/result-assembler"
+    ],
+    "interfaces": [
+      "timeline plan schema",
+      "provider image API",
+      "generation artifact manifest"
+    ],
+    "requirements": [
+      "以当前年龄和输入照片为身份锚点，生成儿童、青年、中年、老年等节点；不合理回溯场景需在 UI 明示为创作。",
+      "将身份特征、年龄目标、姿态、背景、服饰、光线和负面约束拆成版本化生成计划，避免自由文本不可重放。",
+      "支持单节点重做、节点插入、质量等级和模板变体，但同一项目必须保持可比较的构图策略。",
+      "每个输出绑定源资产、同意、模型、种子/可重放参数、提示策略、成本、质量结果和追溯 ID。",
+      "对未通过安全/质量门槛的节点不发布；允许部分交付但必须标示缺失节点并给出重试或退款路径。"
+    ],
+    "constraints": [
+      "所有页面和导出使用“AI 示意性年龄变换/艺术化模拟”，不得声称真实预测。",
+      "不根据面部推断寿命、疾病、职业、财富或人格。",
+      "当前年龄仅用于时间轴规划，不作为法定年龄验证。"
+    ],
+    "negative_cases": [
+      "婴儿照片回推成人",
+      "某节点生成成另一性别/种族",
+      "模型返回现实公众人物相似脸"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-age-media-pipeline/references/B14-age-timeline-generation.md",
+    "requirement_ids": [
+      "B14-R01",
+      "B14-R02",
+      "B14-R03",
+      "B14-R04",
+      "B14-R05"
+    ],
+    "topological_index": 19
+  },
+  {
+    "id": "B15",
+    "slug": "identity-consistency-quality",
+    "title": "身份一致性、年龄合理性与质量门控",
+    "phase": "P3-media",
+    "depends_on": [
+      "B14"
+    ],
+    "skill": "building-age-media-pipeline",
+    "objective": "建立自动评测、人工抽检与修复循环，保证各年龄节点像同一个人且图像可用。",
+    "business_outcome": "用可量化质量降低退款、投诉、人物错认和品牌风险。",
+    "modules": [
+      "services/quality-engine",
+      "services/identity-consistency",
+      "apps/admin/quality-review",
+      "evals/golden-set"
+    ],
+    "interfaces": [
+      "quality report schema",
+      "publish gate API",
+      "review queue"
+    ],
+    "requirements": [
+      "计算身份相似、目标年龄区间、五官漂移、姿态/背景一致、伪影、手牙眼异常、清晰度和审美可用性等维度。",
+      "阈值按单人/多人、年龄跨度、供应商、模板和渠道分层校准，禁止用单一黑盒总分决定所有场景。",
+      "建立授权金标集与合成测试集，覆盖性别、肤色、年龄、发型、眼镜、面部毛发、遮挡和低质输入。",
+      "低分结果进入自动重试、替代供应商、局部修复或人工复核；每条路径设成本和次数上限。",
+      "发布门记录每个维度、模型版本和 override 理由；质量回归超过阈值自动停止相关模型/模板流量。"
+    ],
+    "constraints": [
+      "身份相似特征仅用于本项目质量验证，不得用于跨用户识别。",
+      "人工审核页面最小化展示并防下载。",
+      "金标集必须有单独授权、保留期和退出机制。"
+    ],
+    "negative_cases": [
+      "过度美化导致身份漂移",
+      "儿童到老年年龄分类器偏差",
+      "人工审核员误点通过"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-age-media-pipeline/references/B15-identity-consistency-quality.md",
+    "requirement_ids": [
+      "B15-R01",
+      "B15-R02",
+      "B15-R03",
+      "B15-R04",
+      "B15-R05"
+    ],
+    "topological_index": 22
+  },
+  {
+    "id": "B16",
+    "slug": "video-audio-caption-pipeline",
+    "title": "年龄变化视频、音频与字幕流水线",
+    "phase": "P3-media",
+    "depends_on": [
+      "B14",
+      "B15"
+    ],
+    "skill": "building-age-media-pipeline",
+    "objective": "把静态年龄节点合成为流畅、可分享、可访问的短视频和纪念内容。",
+    "business_outcome": "提高传播率和客单价，并支持礼品、影楼与家庭故事场景。",
+    "modules": [
+      "services/media-worker/video",
+      "services/media-worker/audio",
+      "packages/timeline-renderer",
+      "services/transcode"
+    ],
+    "interfaces": [
+      "render job API",
+      "audio/caption manifest",
+      "transcode profiles"
+    ],
+    "requirements": [
+      "实现关键帧排序、过渡插值、镜头运动、时长、封面、片尾、品牌和 AI 标识的可配置渲染图。",
+      "采用身份/闪烁/光流/镜头突变检测，失败时降级为安全淡化转场而非发布抖动深伪视频。",
+      "支持经授权的旁白、音乐、字幕和多语言；默认不克隆真人声音，语音克隆需独立同意与声纹保护。",
+      "输出移动分享、高清下载、影楼屏幕和打印二维码等配置，并保留母版与派生物关联。",
+      "转码、字幕、音频混合和封装均可重试且幂等；音视频版权、许可证和地域限制进入资产清单。"
+    ],
+    "constraints": [
+      "不得生成让人物看似真实说出未说过的敏感陈述。",
+      "未成年人不得使用成人化旁白或不适当音乐模板。",
+      "导出必须保留可见/隐式 AI 标识和追溯信息。"
+    ],
+    "negative_cases": [
+      "视频帧身份闪变",
+      "有版权音乐过期",
+      "音频成功但视频合成失败"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-age-media-pipeline/references/B16-video-audio-caption-pipeline.md",
+    "requirement_ids": [
+      "B16-R01",
+      "B16-R02",
+      "B16-R03",
+      "B16-R04",
+      "B16-R05"
+    ],
+    "topological_index": 24
+  },
+  {
+    "id": "B17",
+    "slug": "safety-provenance-labeling",
+    "title": "内容安全、来源证明与生成合成标识",
+    "phase": "P3-media",
+    "depends_on": [
+      "B04",
+      "B05",
+      "B14",
+      "B16"
+    ],
+    "skill": "building-age-media-pipeline",
+    "objective": "在输入、生成、发布、传播和举报全链路执行人物权利、内容安全和来源证明。",
+    "business_outcome": "让产品可传播但不成为非自愿深伪、诈骗或误导性内容工具。",
+    "modules": [
+      "services/safety-policy",
+      "services/provenance",
+      "services/moderation",
+      "packages/content-label"
+    ],
+    "interfaces": [
+      "preflight moderation",
+      "post-generation moderation",
+      "C2PA/metadata adapter",
+      "report API"
+    ],
+    "requirements": [
+      "建立输入与输出双重审核，覆盖非自愿亲密内容、性化未成年人、暴力、仇恨、诈骗、公人物冒充和权利争议。",
+      "对公众人物、陌生人、明显截图/媒体素材和高风险上传触发增强授权验证或拒绝，不提供规避入口。",
+      "为每件作品生成不可猜测追溯 ID、签名 manifest、显式 AI 标签和文件元数据隐式标识，并能验证完整性。",
+      "举报后支持临时下架、证据保全、通知、申诉、复核、恢复或永久删除，所有决定有政策版本和审计。",
+      "建立模型/模板/渠道级风险评分与熔断；禁止以付费等级绕过安全、同意或标识。"
+    ],
+    "constraints": [
+      "安全分数只用于内容流程，不用于用户信用或保险决策。",
+      "不得提供去水印、去元数据或伪造来源证明工具。",
+      "对已故者/纪念场景要求授权关系与明确“AI 重构”提示。"
+    ],
+    "negative_cases": [
+      "上传名人照片",
+      "要求生成诈骗式视频",
+      "用户恶意举报竞争对手"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-age-media-pipeline/references/B17-safety-provenance-labeling.md",
+    "requirement_ids": [
+      "B17-R01",
+      "B17-R02",
+      "B17-R03",
+      "B17-R04",
+      "B17-R05"
+    ],
+    "topological_index": 26
+  },
+  {
+    "id": "B18",
+    "slug": "cost-latency-cache",
+    "title": "成本、延迟、配额与安全缓存",
+    "phase": "P3-media",
+    "depends_on": [
+      "B12",
+      "B13",
+      "B14",
+      "B15",
+      "B16"
+    ],
+    "skill": "building-age-media-pipeline",
+    "objective": "在保证质量和隐私的前提下控制每次生成成本、等待时间与供应商容量。",
+    "business_outcome": "形成可盈利的 SKU、可承诺的伙伴 SLA 和突发流量韧性。",
+    "modules": [
+      "services/cost-engine",
+      "services/quota",
+      "services/cache",
+      "apps/admin/cost-console"
+    ],
+    "interfaces": [
+      "cost estimate API",
+      "quota reservation",
+      "provider budget policy",
+      "usage ledger"
+    ],
+    "requirements": [
+      "生成前根据节点数、分辨率、视频时长、供应商、重试预算和渠道分成计算可解释成本预估并预留额度。",
+      "建立租户/用户/活动/供应商/模型多级配额、并发、速率与日预算，超限提供排队或降级而非失控调用。",
+      "缓存只复用同一授权主体和完全相同策略下的安全中间产物；禁止跨用户人脸结果缓存命中。",
+      "收集每步骤实际 token/图片/视频/存储/带宽/人工审核成本，与订单收入和退款关联。",
+      "按 P50/P95/P99 延迟和成本回归自动调路由，任何降级不得突破质量、安全、地域或同意约束。"
+    ],
+    "constraints": [
+      "免费预览必须有硬预算和反滥用。",
+      "成本预估与最终结算单位必须一致。",
+      "缓存键不得包含明文敏感信息。"
+    ],
+    "negative_cases": [
+      "供应商计价突然变化",
+      "缓存误跨租户",
+      "配额预留后任务取消"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-age-media-pipeline/references/B18-cost-latency-cache.md",
+    "requirement_ids": [
+      "B18-R01",
+      "B18-R02",
+      "B18-R03",
+      "B18-R04",
+      "B18-R05"
+    ],
+    "topological_index": 27
+  },
+  {
+    "id": "B19",
+    "slug": "family-graph-consent",
+    "title": "家庭关系图、成员邀请与逐人同意",
+    "phase": "P4-family",
+    "depends_on": [
+      "B04",
+      "B11"
+    ],
+    "skill": "building-family-future-self",
+    "objective": "用显式邀请和同意建立家庭成员、关系、项目参与和授权范围。",
+    "business_outcome": "支持多人作品和长期家庭记忆，同时避免上传者替他人作主。",
+    "modules": [
+      "services/family-graph",
+      "apps/consumer-web/family",
+      "services/invitations",
+      "packages/relationship-policy"
+    ],
+    "interfaces": [
+      "family graph API",
+      "participant invitation",
+      "consent status matrix"
+    ],
+    "requirements": [
+      "关系图只保存产品所需的用户声明关系，不把人脸相似度或姓氏当作亲属证明。",
+      "每位成年可识别参与者可接受、拒绝、限制用途、撤回和查看相关作品；未注册者使用安全邀请流程。",
+      "项目在生成、公开分享、营销、打印和伙伴交付阶段分别检查逐人授权矩阵。",
+      "支持监护人、共同监护、家庭管理员、摄影师代理和临时协作者，但每个角色权限与期限独立。",
+      "关系争议、离婚、监护变化或成员退出时冻结高风险操作并提供最小化证据的处理流程。"
+    ],
+    "constraints": [
+      "家庭管理员不是其他成年人的无限代理。",
+      "拒绝参与不得影响其使用其他服务。",
+      "关系标签不得被用于广告画像或保险定价。"
+    ],
+    "negative_cases": [
+      "成员长期不响应邀请",
+      "两名监护人意见冲突",
+      "关系被恶意伪造"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-family-future-self/references/B19-family-graph-consent.md",
+    "requirement_ids": [
+      "B19-R01",
+      "B19-R02",
+      "B19-R03",
+      "B19-R04",
+      "B19-R05"
+    ],
+    "topological_index": 35
+  },
+  {
+    "id": "B20",
+    "slug": "multi-person-family-scenes",
+    "title": "多人家庭场景与共同变老作品",
+    "phase": "P4-family",
+    "depends_on": [
+      "B15",
+      "B19"
+    ],
+    "skill": "building-family-future-self",
+    "objective": "生成情侣、亲子、三代同堂和家庭时间走廊等多人一致性作品。",
+    "business_outcome": "把单人滤镜升级为高情感价值、高客单价的家庭产品。",
+    "modules": [
+      "services/media-worker/multi-person",
+      "services/scene-layout",
+      "apps/consumer-web/family-composer",
+      "evals/family-golden-set"
+    ],
+    "interfaces": [
+      "participant slot schema",
+      "scene generation API",
+      "multi-person quality report"
+    ],
+    "requirements": [
+      "将每位参与者的身份锚、年龄轨迹、授权和输出槽位独立建模，禁止错误交换或融合面孔。",
+      "支持共同变老、孩子成长、父母年轻化、三代时间轴和跨时空合影等明确标注的艺术场景。",
+      "多人质量门增加人物计数、身份槽匹配、手部交互、身高比例、遮挡和关系姿态检测。",
+      "允许单人节点局部重做而不改变其他成员；所有派生版本继承逐人授权和撤回状态。",
+      "渠道模板可锁定构图与品牌，但不得把用户照片用于公开样片，除非另有展示授权。"
+    ],
+    "constraints": [
+      "不得生成不当亲密关系或改变用户声明的关系含义。",
+      "儿童成长图不得性化、成人化或暗示确定职业/婚姻。",
+      "任何成员撤回后相关公开分享和新生产必须停止。"
+    ],
+    "negative_cases": [
+      "两张相似脸被交换",
+      "三代场景漏掉一人",
+      "一个成员撤回后打印已进入生产"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-family-future-self/references/B20-multi-person-family-scenes.md",
+    "requirement_ids": [
+      "B20-R01",
+      "B20-R02",
+      "B20-R03",
+      "B20-R04",
+      "B20-R05"
+    ],
+    "topological_index": 40
+  },
+  {
+    "id": "B21",
+    "slug": "child-safeguards",
+    "title": "儿童与青少年专属安全机制",
+    "phase": "P4-family",
+    "depends_on": [
+      "B04",
+      "B17",
+      "B19"
+    ],
+    "skill": "building-family-future-self",
+    "objective": "为未成年人照片、成长模拟、分享、营销和数据保留建立更严格默认值。",
+    "business_outcome": "使亲子产品可用但不扩大儿童人脸暴露、性化或商业利用风险。",
+    "modules": [
+      "services/child-safety",
+      "packages/age-assurance",
+      "apps/guardian-center",
+      "services/child-retention"
+    ],
+    "interfaces": [
+      "guardian consent API",
+      "minor policy decision",
+      "restricted share API"
+    ],
+    "requirements": [
+      "区分上传者年龄、照片中人物年龄与法定监护状态；年龄不确定时按更严格策略处理。",
+      "未成年人项目默认私密、短保留、禁搜索引擎、禁公开模板广场、禁精准广告和禁未来自我开放式对话。",
+      "禁止性化、成人化、模拟裸体、恋爱/婚姻暗示、博彩酒烟、危险挑战和不适当职业制服场景。",
+      "监护中心可查看谁上传、谁访问、生成了什么、保留多久，并能一键撤回分享和发起删除。",
+      "建立儿童安全红队、审核升级、员工访问限制和年度/高频合规审计证据。"
+    ],
+    "constraints": [
+      "不得仅凭模型估龄替代监护授权。",
+      "父母同意不自动允许公开传播或商业样片。",
+      "儿童数据不得用于训练通用人脸模型。"
+    ],
+    "negative_cases": [
+      "成人谎报照片人物为成人",
+      "公开分享通过旧链接访问",
+      "不当提示词绕过模板"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-family-future-self/references/B21-child-safeguards.md",
+    "requirement_ids": [
+      "B21-R01",
+      "B21-R02",
+      "B21-R03",
+      "B21-R04",
+      "B21-R05"
+    ],
+    "topological_index": 41
+  },
+  {
+    "id": "B22",
+    "slug": "future-self-narrative",
+    "title": "未来自我故事、信件与目标可视化",
+    "phase": "P4-family",
+    "depends_on": [
+      "B11",
+      "B17"
+    ],
+    "skill": "building-family-future-self",
+    "objective": "把未来形象与用户自述目标结合，生成明确为虚构反思工具的故事、信件和时间胶囊。",
+    "business_outcome": "从一次性图像拓展到年度回访、礼品与行为反思，而不制造确定性承诺。",
+    "modules": [
+      "services/future-self",
+      "services/narrative-policy",
+      "apps/consumer-web/time-capsule",
+      "packages/story-schema"
+    ],
+    "interfaces": [
+      "future-self profile API",
+      "narrative generation",
+      "time-capsule schedule"
+    ],
+    "requirements": [
+      "用户主动选择家庭、健康、事业、学习、信仰/价值、退休等主题，并可跳过任何敏感问题。",
+      "生成内容必须区分用户事实、用户愿望、系统假设和虚构叙事，不把模型推断写成事实。",
+      "提供未来给现在的信、现在给未来的信、目标里程碑、年度问答和可打印时间胶囊模板。",
+      "禁止医学、投资、保险、寿命、婚姻或职业结果保证；高风险主题链接到合格专业资源。",
+      "保存与删除叙事记忆由用户控制，默认不从照片推断性格、健康或社会经济状态。"
+    ],
+    "constraints": [
+      "“未来的你”不得声称真实存在、预知未来或拥有权威。",
+      "叙事不能利用恐惧逼迫购买保险/健康产品。",
+      "敏感目标不得默认分享给家庭或伙伴。"
+    ],
+    "negative_cases": [
+      "用户输入自伤意念",
+      "要求预测死亡日期",
+      "伙伴要求插入强制营销话术"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-family-future-self/references/B22-future-self-narrative.md",
+    "requirement_ids": [
+      "B22-R01",
+      "B22-R02",
+      "B22-R03",
+      "B22-R04",
+      "B22-R05"
+    ],
+    "topological_index": 36
+  },
+  {
+    "id": "B23",
+    "slug": "future-self-dialogue-safeguards",
+    "title": "未来自我对话与拟人化交互安全",
+    "phase": "P4-family",
+    "depends_on": [
+      "B17",
+      "B22"
+    ],
+    "skill": "building-family-future-self",
+    "objective": "提供可关闭、边界清晰、非依赖性的未来自我对话，并对危机与未成年人严格治理。",
+    "business_outcome": "增加长期价值而不诱导用户把 AI 当作真实亲属、治疗师、神谕或唯一情感关系。",
+    "modules": [
+      "services/future-dialogue",
+      "services/dialogue-safety",
+      "apps/consumer-web/dialogue",
+      "services/crisis-routing"
+    ],
+    "interfaces": [
+      "conversation API",
+      "memory controls",
+      "safety classifier",
+      "session limits"
+    ],
+    "requirements": [
+      "每次会话持续披露 AI 身份和虚构角色；不得声称有意识、真实记忆、超自然能力或替代真人关系。",
+      "长期记忆默认关闭，用户可逐项查看、编辑、导出、关闭和删除；敏感记忆设更短保留期。",
+      "实现会话时长/频率提醒、依赖与排他性语言拦截、夜间保护、情绪升级和一键切换普通助手模式。",
+      "检测自伤、他伤、虐待、诈骗、严重精神危机等信号时停止角色扮演，给出本地化紧急资源和人工升级。",
+      "未成年人默认不可使用开放式未来自我对话；任何试点需监护、年龄适配、严格模板和独立评审。"
+    ],
+    "constraints": [
+      "不得说“只有我理解你”“不要告诉家人/医生”等排他性话语。",
+      "不得以未来形象向用户施加购买、政治、宗教或财务压力。",
+      "危机处理不作诊断，也不保证紧急服务可用。"
+    ],
+    "negative_cases": [
+      "用户形成强依赖表达",
+      "要求模仿已故亲属继续对话",
+      "危机分类器供应商不可用"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-family-future-self/references/B23-future-self-dialogue-safeguards.md",
+    "requirement_ids": [
+      "B23-R01",
+      "B23-R02",
+      "B23-R03",
+      "B23-R04",
+      "B23-R05"
+    ],
+    "topological_index": 43
+  },
+  {
+    "id": "B24",
+    "slug": "annual-archive-rituals",
+    "title": "年度更新、家庭仪式与长期档案",
+    "phase": "P4-family",
+    "depends_on": [
+      "B11",
+      "B20",
+      "B22",
+      "B23"
+    ],
+    "skill": "building-family-future-self",
+    "objective": "把生日、纪念日、毕业、结婚、退休和年度回顾变成用户主动控制的复访机制。",
+    "business_outcome": "建立可持续留存、复购、礼品和家庭档案价值，而不是靠成瘾式推送。",
+    "modules": [
+      "services/rituals",
+      "services/annual-refresh",
+      "apps/consumer-web/archive",
+      "services/scheduler"
+    ],
+    "interfaces": [
+      "ritual subscription API",
+      "annual refresh job",
+      "archive export"
+    ],
+    "requirements": [
+      "用户选择日期、主题、成员和提醒渠道；默认不推断生日、婚姻或死亡纪念日。",
+      "年度更新可比较新旧照片、现实变化与先前艺术时间轴，但不得把差异解释为医学诊断。",
+      "支持家庭年鉴、成长册、纪念视频、退休信和实体礼品重新订购，版本与授权完整继承。",
+      "提醒提供暂停、频率、安静时段、成员级屏蔽和一键退订，不使用羞耻、恐惧或“错过未来”文案。",
+      "长期档案提供开放格式导出、继承/联系人设置和账户关闭计划，避免平台锁定家庭记忆。"
+    ],
+    "constraints": [
+      "已故/失联成员提醒需可立即关闭并有敏感模式。",
+      "未成年人到达法定年龄后重新确认其数据和作品权限。",
+      "订阅到期不得删除已付费永久作品。"
+    ],
+    "negative_cases": [
+      "纪念日提醒造成伤害",
+      "年度任务引用已撤回照片",
+      "重复生成导致多次扣费"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-family-future-self/references/B24-annual-archive-rituals.md",
+    "requirement_ids": [
+      "B24-R01",
+      "B24-R02",
+      "B24-R03",
+      "B24-R04",
+      "B24-R05"
+    ],
+    "topological_index": 46
+  },
+  {
+    "id": "B25",
+    "slug": "catalog-pricing-packaging",
+    "title": "商品目录、套餐、定价与权益",
+    "phase": "P5-commerce",
+    "depends_on": [
+      "B02",
+      "B03"
+    ],
+    "skill": "building-commerce-fulfillment",
+    "objective": "把照片、视频、家庭场景、订阅、额度、实物礼品和伙伴 SKU 建模为可审计商品。",
+    "business_outcome": "支持不同渠道、地区、币种、税务和服务等级下稳定销售。",
+    "modules": [
+      "services/catalog",
+      "services/pricing",
+      "apps/admin/catalog",
+      "packages/entitlements"
+    ],
+    "interfaces": [
+      "catalog API",
+      "price quote API",
+      "entitlement schema",
+      "promotion rules"
+    ],
+    "requirements": [
+      "定义一次性作品包、高清升级、视频、家庭包、订阅、额度、礼品码、打印品和伙伴批量包。",
+      "价格报价绑定 SKU 版本、地区、币种、税费、渠道、伙伴协议、促销、有效期和成本预估。",
+      "权益明确节点数、人数、分辨率、重做次数、保留期、导出、打印和客服等级，生成时按快照执行。",
+      "促销支持优惠码、推荐、伙伴合同价和捆绑，但必须防叠加漏洞、负价和跨租户泄露。",
+      "后台价格变更需审批、预览影响和审计；已支付订单不受后续静默变价影响。"
+    ],
+    "constraints": [
+      "不得按面部、健康、种族、性别或脆弱状态差异定价。",
+      "显示价格与结账价格不一致时 fail closed 并重新确认。",
+      "免费权益也必须有预算和滥用限制。"
+    ],
+    "negative_cases": [
+      "优惠叠加变负价",
+      "币种小数位错误",
+      "商品下架但购物车仍存在"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-commerce-fulfillment/references/B25-catalog-pricing-packaging.md",
+    "requirement_ids": [
+      "B25-R01",
+      "B25-R02",
+      "B25-R03",
+      "B25-R04",
+      "B25-R05"
+    ],
+    "topological_index": 8
+  },
+  {
+    "id": "B26",
+    "slug": "checkout-payment-refund",
+    "title": "结账、支付、退款与财务一致性",
+    "phase": "P5-commerce",
+    "depends_on": [
+      "B13",
+      "B25"
+    ],
+    "skill": "building-commerce-fulfillment",
+    "objective": "建立支付前确认、支付结果、订单创建、退款和对账的一致流程。",
+    "business_outcome": "确保钱、权益、生成任务和财务账本可重放、可审计、不重复。",
+    "modules": [
+      "services/checkout",
+      "services/payment",
+      "services/ledger",
+      "apps/consumer-web/checkout"
+    ],
+    "interfaces": [
+      "checkout session API",
+      "payment provider webhooks",
+      "refund API",
+      "ledger entries"
+    ],
+    "requirements": [
+      "结账展示商品、人物授权、交付范围、等待时间、AI 模拟声明、退款规则和最终含税金额。",
+      "支付适配器使用供应商 token 化能力，系统不存完整卡号；所有 webhook 验签、去重、乱序处理。",
+      "采用双重记账或可审计财务分录记录应收、现金、税、渠道分成、退款、拒付和额度负债。",
+      "支付成功但订单/任务失败时由 saga 自动补建、退款或转人工；支付状态不由浏览器回跳决定。",
+      "部分退款、全额退款、取消、拒付和争议必须同步权益、生成可用性、伙伴结算和用户通知。"
+    ],
+    "constraints": [
+      "客服不得手工改数据库制造退款。",
+      "同一支付事件重复投递不能重复发放权益。",
+      "敏感支付日志按最小化和 PCI 边界处理。"
+    ],
+    "negative_cases": [
+      "支付回调乱序",
+      "用户关闭支付页面",
+      "退款后作品已下载"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-commerce-fulfillment/references/B26-checkout-payment-refund.md",
+    "requirement_ids": [
+      "B26-R01",
+      "B26-R02",
+      "B26-R03",
+      "B26-R04",
+      "B26-R05"
+    ],
+    "topological_index": 13
+  },
+  {
+    "id": "B27",
+    "slug": "subscription-credit-gift",
+    "title": "订阅、额度、礼品码与权益生命周期",
+    "phase": "P5-commerce",
+    "depends_on": [
+      "B25",
+      "B26"
+    ],
+    "skill": "building-commerce-fulfillment",
+    "objective": "支持长期订阅、生成额度、家庭共享和赠礼，同时避免隐藏续费与账务失真。",
+    "business_outcome": "形成留存和节日礼品收入，并为伙伴批量权益提供统一底层。",
+    "modules": [
+      "services/subscription",
+      "services/credits",
+      "services/gifts",
+      "apps/consumer-web/billing"
+    ],
+    "interfaces": [
+      "subscription API",
+      "credit ledger",
+      "gift redemption",
+      "billing portal"
+    ],
+    "requirements": [
+      "订阅定义周期、试用、自动续费、宽限、暂停、升级、降级、取消和权益生效时间。",
+      "额度使用不可变流水账，支持预留、消费、释放、过期、赠送和退款，余额由分录计算而非直接改数。",
+      "礼品码支持面额/SKU、有效期、地区、使用次数、接收人和防暴力枚举；领取前展示完整条款。",
+      "家庭共享额度需账户持有人显式授权并可设成员限额，不能让成员查看他人支付资料。",
+      "续费提醒、价格变化、失败支付和取消路径清晰；不得用难以退出的暗黑模式。"
+    ],
+    "constraints": [
+      "订阅取消不应删除已购买永久作品。",
+      "过期额度规则须购买前明确，适用法律要求时不得不合理没收。",
+      "礼品不能解锁被同意/安全政策禁止的功能。"
+    ],
+    "negative_cases": [
+      "重复兑换礼品码",
+      "升级降级同时发生",
+      "支付失败但额度已发放"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-commerce-fulfillment/references/B27-subscription-credit-gift.md",
+    "requirement_ids": [
+      "B27-R01",
+      "B27-R02",
+      "B27-R03",
+      "B27-R04",
+      "B27-R05"
+    ],
+    "topological_index": 17
+  },
+  {
+    "id": "B28",
+    "slug": "orders-digital-delivery",
+    "title": "订单、数字作品交付与许可证",
+    "phase": "P5-commerce",
+    "depends_on": [
+      "B09",
+      "B10",
+      "B26",
+      "B27"
+    ],
+    "skill": "building-commerce-fulfillment",
+    "objective": "把购买权益转化为可追踪订单、生成项目和安全数字交付。",
+    "business_outcome": "让用户、客服、伙伴和财务看到一致的订单事实。",
+    "modules": [
+      "services/order",
+      "services/delivery",
+      "apps/consumer-web/orders",
+      "packages/license-policy"
+    ],
+    "interfaces": [
+      "order API",
+      "delivery manifest",
+      "download entitlement",
+      "invoice receipt"
+    ],
+    "requirements": [
+      "订单项保存商品/价格/权益/模板/参与者/交付承诺快照，并与生成任务、支付和分享关联。",
+      "数字交付使用短时签名下载、下载次数/期限策略和校验哈希；失败下载不重复扣权益。",
+      "订单支持 awaiting-consent/paid/processing/partial/fulfilled/cancelled/refunded/disputed 状态与合法迁移。",
+      "生成部分失败时按订单项交付、重做、额度或退款，不把技术失败伪装成完成。",
+      "用户可获得收据/发票信息、许可范围、AI 标识说明、删除/保留信息和客服入口。"
+    ],
+    "constraints": [
+      "交付链接不得转让账户权限或暴露内部存储。",
+      "订单状态只能从已验证支付/工作流事件迁移。",
+      "退款后是否继续访问已下载作品按明示许可和法律要求处理。"
+    ],
+    "negative_cases": [
+      "订单完成事件重复",
+      "下载链接被转发",
+      "部分节点失败但视频已生成"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-commerce-fulfillment/references/B28-orders-digital-delivery.md",
+    "requirement_ids": [
+      "B28-R01",
+      "B28-R02",
+      "B28-R03",
+      "B28-R04",
+      "B28-R05"
+    ],
+    "topological_index": 33
+  },
+  {
+    "id": "B29",
+    "slug": "physical-product-fulfillment",
+    "title": "照片书、相框、卡片与实物履约",
+    "phase": "P5-commerce",
+    "depends_on": [
+      "B28"
+    ],
+    "skill": "building-commerce-fulfillment",
+    "objective": "把数字作品可靠转换为可制造、可配送、可补印的实体纪念礼品。",
+    "business_outcome": "增加高客单价与节日收入，并支持影楼/礼品渠道。",
+    "modules": [
+      "services/print-preflight",
+      "services/fulfillment",
+      "services/shipping",
+      "apps/consumer-web/product-customizer"
+    ],
+    "interfaces": [
+      "print-ready manifest",
+      "vendor order API",
+      "shipment webhooks",
+      "reprint API"
+    ],
+    "requirements": [
+      "为照片书、相框、明信片、台历和礼盒定义尺寸、出血、色彩、分辨率、字体、二维码和包装规格。",
+      "下单前执行印刷预检和用户软打样确认，锁定最终文件哈希、地址、数量、供应商与 SLA。",
+      "供应商适配器处理下单、取消、生产、发货、轨迹、退回、损坏和补印，所有 webhook 验签幂等。",
+      "打印供应商只获得履约所需文件和地址，设短保留期、删除回执和禁止二次使用条款。",
+      "质量问题支持证据上传、补印/退款决策和供应商责任归因，更新成本与伙伴结算。"
+    ],
+    "constraints": [
+      "地址和媒体文件分开授权、分开传输。",
+      "进入不可取消生产阶段前必须明确告知。",
+      "二维码不得包含永久公开的人脸作品链接。"
+    ],
+    "negative_cases": [
+      "低分辨率误送印刷",
+      "供应商重复生产",
+      "物流丢件后原文件已过期"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-commerce-fulfillment/references/B29-physical-product-fulfillment.md",
+    "requirement_ids": [
+      "B29-R01",
+      "B29-R02",
+      "B29-R03",
+      "B29-R04",
+      "B29-R05"
+    ],
+    "topological_index": 37
+  },
+  {
+    "id": "B30",
+    "slug": "support-refund-dispute",
+    "title": "客服、退款、争议与补救工作台",
+    "phase": "P5-commerce",
+    "depends_on": [
+      "B26",
+      "B28",
+      "B29"
+    ],
+    "skill": "building-commerce-fulfillment",
+    "objective": "给客服提供最小权限、证据驱动的订单、生成、分享和履约补救能力。",
+    "business_outcome": "降低投诉与人工成本，同时防止客服越权访问家庭人脸数据。",
+    "modules": [
+      "apps/admin/support",
+      "services/case-management",
+      "services/refund-policy",
+      "packages/redaction"
+    ],
+    "interfaces": [
+      "support case API",
+      "customer timeline",
+      "compensation decision",
+      "audit trail"
+    ],
+    "requirements": [
+      "统一展示脱敏客户时间线：同意、订单、任务、质量、支付、交付、分享、举报和沟通。",
+      "按问题类型提供重试、重做、额度、退款、补印、下架、删除和升级流程，自动计算可选补救。",
+      "敏感媒体默认模糊，按理由临时解锁并水印；员工访问、导出和代客操作全部审计。",
+      "争议处理保留必要证据但隔离一般访问，处理完成后按保留政策删除。",
+      "建立 SLA、升级、客户通知、根因分类和重复问题反馈到质量、产品、供应商和风控。"
+    ],
+    "constraints": [
+      "客服不能绕过 B04/B17 强行发布或重新生成。",
+      "高额退款、结算调整和 legal hold 需双人复核。",
+      "不得要求用户通过不安全渠道发送身份证或原图。"
+    ],
+    "negative_cases": [
+      "员工窥探名人客户",
+      "退款与补印同时触发",
+      "争议期间用户申请删除"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-commerce-fulfillment/references/B30-support-refund-dispute.md",
+    "requirement_ids": [
+      "B30-R01",
+      "B30-R02",
+      "B30-R03",
+      "B30-R04",
+      "B30-R05"
+    ],
+    "topological_index": 44
+  },
+  {
+    "id": "B31",
+    "slug": "partner-multi-tenancy",
+    "title": "伙伴组织、多租户控制面与数据隔离",
+    "phase": "P6-partner",
+    "depends_on": [
+      "B02",
+      "B03",
+      "B04"
+    ],
+    "skill": "building-partner-platform",
+    "objective": "为影楼、礼品平台、保险养老机构及其门店/员工建立独立租户。",
+    "business_outcome": "让一套平台安全服务多个商业渠道并支持白标、计量和审计。",
+    "modules": [
+      "services/partner",
+      "services/tenant-config",
+      "apps/partner-portal",
+      "db/partner-rls"
+    ],
+    "interfaces": [
+      "partner API",
+      "organization hierarchy",
+      "tenant policy",
+      "partner audit API"
+    ],
+    "requirements": [
+      "支持伙伴、品牌、门店、团队、员工、服务账户和终端设备层级，权限与数据域逐级限制。",
+      "所有伙伴资源强制 tenant_id，应用层、数据库 RLS、对象键、缓存键、队列和分析均执行隔离。",
+      "租户策略可配置地区、允许产品、数据保留、品牌、模型、预算、分享、导出和人工审核。",
+      "平台运营跨租户访问需工单、理由、时限和审计；伙伴之间不可搜索客户或素材。",
+      "提供租户关闭、数据导出、密钥撤销、在途订单处理和按合同删除的退出流程。"
+    ],
+    "constraints": [
+      "白标不能隐藏法定 AI/隐私/供应商披露。",
+      "伙伴管理员不能访问平台或其他租户结算。",
+      "分析数据聚合也必须防小样本重识别。"
+    ],
+    "negative_cases": [
+      "伪造 tenant header",
+      "缓存键遗漏 tenant_id",
+      "门店被转移到另一伙伴"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-partner-platform/references/B31-partner-multi-tenancy.md",
+    "requirement_ids": [
+      "B31-R01",
+      "B31-R02",
+      "B31-R03",
+      "B31-R04",
+      "B31-R05"
+    ],
+    "topological_index": 12
+  },
+  {
+    "id": "B32",
+    "slug": "partner-onboarding-contract-brand",
+    "title": "伙伴入驻、合同、配置与品牌化",
+    "phase": "P6-partner",
+    "depends_on": [
+      "B31",
+      "B04",
+      "B05"
+    ],
+    "skill": "building-partner-platform",
+    "objective": "将销售签约转化为可验证的技术、隐私、财务和品牌配置。",
+    "business_outcome": "缩短伙伴上线周期并避免手工配置遗漏关键合规约束。",
+    "modules": [
+      "services/partner-onboarding",
+      "apps/partner-portal/onboarding",
+      "services/config-approval",
+      "templates/partner-launch"
+    ],
+    "interfaces": [
+      "onboarding checklist",
+      "contract metadata API",
+      "brand assets API",
+      "launch gate"
+    ],
+    "requirements": [
+      "收集法定主体、联系人、结算、数据角色、处理目的、地区、子处理者、SLA 和允许场景。",
+      "把合同关键条款映射为机器策略：产品、模型、保留期、数据出境、品牌、费用、退款和终止。",
+      "品牌上传执行文件安全、版权声明、可访问性和尺寸检查；强制平台信任/AI 标识不可被覆盖。",
+      "沙箱、试点、生产采用独立密钥、配额和数据；上线需完成安全、隐私、财务和业务负责人审批。",
+      "生成伙伴 launch pack、数据处理清单、支持路径、测试账户和回滚计划，并保留版本历史。"
+    ],
+    "constraints": [
+      "销售口头承诺不能直接成为生产配置。",
+      "伙伴不得把消费者同意捆绑为保险/养老主服务条件。",
+      "生产密钥只显示一次且可轮换。"
+    ],
+    "negative_cases": [
+      "合同与配置冲突",
+      "品牌资产含恶意脚本",
+      "伙伴未完成数据处理协议"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-partner-platform/references/B32-partner-onboarding-contract-brand.md",
+    "requirement_ids": [
+      "B32-R01",
+      "B32-R02",
+      "B32-R03",
+      "B32-R04",
+      "B32-R05"
+    ],
+    "topological_index": 16
+  },
+  {
+    "id": "B33",
+    "slug": "partner-api-sdk-webhook-sso",
+    "title": "伙伴 API、SDK、Webhook 与 SSO",
+    "phase": "P6-partner",
+    "depends_on": [
+      "B13",
+      "B31",
+      "B32"
+    ],
+    "skill": "building-partner-platform",
+    "objective": "为伙伴嵌入上传、生成、订单、交付和状态回调提供稳定开发平台。",
+    "business_outcome": "降低集成成本并让渠道交易可自动化而不暴露内部系统。",
+    "modules": [
+      "services/partner-api",
+      "sdk/typescript",
+      "sdk/java",
+      "sdk/python",
+      "services/webhook",
+      "services/sso"
+    ],
+    "interfaces": [
+      "OAuth2 client credentials",
+      "REST API",
+      "signed webhooks",
+      "OIDC/SAML SSO"
+    ],
+    "requirements": [
+      "发布版本化 API 与 TypeScript/Java/Python SDK，覆盖客户会话、同意、上传、生成、订单、交付和删除。",
+      "所有写请求支持幂等键、请求签名/令牌、租户范围、速率限制、可追踪错误和 sandbox。",
+      "Webhook 使用签名、时间窗、防重放、事件 ID、重试退避、死信和伙伴可自助重放。",
+      "伙伴员工 SSO 映射受控角色与组织，不信任未映射组；服务账户和人类会话分离。",
+      "提供开发者门户、OpenAPI、示例、Postman/HTTP 文件、变更日志、弃用窗口和契约测试套件。"
+    ],
+    "constraints": [
+      "API 不接受客户端声明已取得同意而无可验证 consent reference。",
+      "Webhook 负载只包含必要标识，不内嵌原图。",
+      "弃用不能破坏在合同支持期内的伙伴。"
+    ],
+    "negative_cases": [
+      "Webhook endpoint 长期 500",
+      "签名时钟偏差",
+      "伙伴重复创建订单"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-partner-platform/references/B33-partner-api-sdk-webhook-sso.md",
+    "requirement_ids": [
+      "B33-R01",
+      "B33-R02",
+      "B33-R03",
+      "B33-R04",
+      "B33-R05"
+    ],
+    "topological_index": 20
+  },
+  {
+    "id": "B34",
+    "slug": "metering-settlement-revenue-share",
+    "title": "用量计量、伙伴结算与收入分成",
+    "phase": "P6-partner",
+    "depends_on": [
+      "B25",
+      "B26",
+      "B31",
+      "B33"
+    ],
+    "skill": "building-partner-platform",
+    "objective": "把每次预览、生成、视频、存储、打印、退款和渠道收入转换为可对账结算。",
+    "business_outcome": "形成可规模化 B2B2C 商业闭环并控制毛利。",
+    "modules": [
+      "services/metering",
+      "services/settlement",
+      "services/reconciliation",
+      "apps/partner-portal/finance"
+    ],
+    "interfaces": [
+      "usage ledger",
+      "settlement statement API",
+      "invoice export",
+      "adjustment workflow"
+    ],
+    "requirements": [
+      "记录不可变用量事件：伙伴、门店、客户匿名标识、SKU、模型、单位、数量、成本、收入和关联订单。",
+      "合同费率支持 SaaS、按量、包量、最低承诺、阶梯价、渠道佣金和实物分成，并按版本生效。",
+      "周期结算对账支付、订单、退款、拒付、打印、用量和税费，差异进入可解释异常队列。",
+      "伙伴可查看明细到合同允许粒度、下载账单、提交争议；平台调整需理由、附件和双人审批。",
+      "结算完成后生成锁定声明和会计导出；迟到事件进入下一期或重开流程，不能静默改历史。"
+    ],
+    "constraints": [
+      "计量事件不因重放重复计费。",
+      "不向伙伴暴露其他伙伴价格或消费者敏感数据。",
+      "保险养老渠道的商业分成不得改变面向用户的教育内容。"
+    ],
+    "negative_cases": [
+      "费率版本跨月切换",
+      "退款晚于结算",
+      "计量事件与订单货币不一致"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-partner-platform/references/B34-metering-settlement-revenue-share.md",
+    "requirement_ids": [
+      "B34-R01",
+      "B34-R02",
+      "B34-R03",
+      "B34-R04",
+      "B34-R05"
+    ],
+    "topological_index": 23
+  },
+  {
+    "id": "B35",
+    "slug": "studio-portal-kiosk",
+    "title": "影楼工作台、门店流程与自助终端",
+    "phase": "P7-channels",
+    "depends_on": [
+      "B08",
+      "B28",
+      "B31",
+      "B32",
+      "B33"
+    ],
+    "skill": "building-channel-solutions",
+    "objective": "为摄影师、门店销售和顾客提供预约后选片、授权、生成、审片、加购与交付流程。",
+    "business_outcome": "让影楼把 AI 人生时光机变成标准增值套餐并保持顾客直接控制授权。",
+    "modules": [
+      "apps/partner-portal/studio",
+      "apps/kiosk",
+      "services/studio-workflow",
+      "services/device-management"
+    ],
+    "interfaces": [
+      "studio session API",
+      "kiosk pairing",
+      "customer approval link",
+      "batch order API"
+    ],
+    "requirements": [
+      "支持门店预约/订单导入、顾客会话、逐人授权、摄影师受限上传、模板推荐和批量生成。",
+      "顾客通过自己的安全链接审片、拒绝、要求重做、同意公开样片或下单，摄影师不能代替成年顾客确认。",
+      "自助终端采用设备注册、短时配对、会话自动清除、屏幕隐私、离线限制和远程撤销。",
+      "影楼可配置品牌、套餐、门店价格、销售提成和交付方式，但强制 AI 标识、隐私告知和同意不可关闭。",
+      "提供门店漏斗、失败率、等待时间、客单价、退款和设备健康，个人人脸结果不进入员工绩效画像。"
+    ],
+    "constraints": [
+      "公共终端不得缓存前一位顾客照片。",
+      "样片展示必须有独立、可撤回、限定渠道的授权。",
+      "门店员工不得下载原图到个人设备。"
+    ],
+    "negative_cases": [
+      "终端断网",
+      "顾客拒绝某家庭成员作品",
+      "门店批量上传错顾客"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-channel-solutions/references/B35-studio-portal-kiosk.md",
+    "requirement_ids": [
+      "B35-R01",
+      "B35-R02",
+      "B35-R03",
+      "B35-R04",
+      "B35-R05"
+    ],
+    "topological_index": 38
+  },
+  {
+    "id": "B36",
+    "slug": "gift-memorial-retail-channel",
+    "title": "纪念礼品、电商与零售渠道方案",
+    "phase": "P7-channels",
+    "depends_on": [
+      "B24",
+      "B28",
+      "B29",
+      "B31",
+      "B32"
+    ],
+    "skill": "building-channel-solutions",
+    "objective": "为生日、婚礼、毕业、退休、家庭纪念和慎重的追思场景提供可购买礼品流程。",
+    "business_outcome": "通过实体产品与节日场景提高客单价，同时避免利用悲伤和未经授权的数字复活。",
+    "modules": [
+      "services/gift-channel",
+      "apps/gift-builder",
+      "services/recipient-consent",
+      "packages/memorial-policy"
+    ],
+    "interfaces": [
+      "gift order API",
+      "recipient claim link",
+      "occasion templates",
+      "memorial review"
+    ],
+    "requirements": [
+      "支持送礼者先购买未绑定礼品，收礼人领取后自行上传/授权，避免送礼者擅自提交他人照片。",
+      "提供生日、婚礼、毕业、父母纪念、退休和家庭年鉴模板，并允许隐藏敏感日期。",
+      "涉及已故者时要求上传者声明关系/权利、明确 AI 重构、禁交互式冒充，并提供人工复核与撤回。",
+      "礼品履约包含数字预览、收礼人确认、地址收集、打印生产、匿名包装和售后。",
+      "零售伙伴只看到订单履约所需数据；营销不得用丧亲恐惧、寿命暗示或“复活亲人”承诺。"
+    ],
+    "constraints": [
+      "不得默认把收礼人邮箱加入营销。",
+      "已故者图像不得用于广告样片或开放模板训练。",
+      "惊喜礼品不能绕过可识别参与者同意。"
+    ],
+    "negative_cases": [
+      "收礼人拒绝领取",
+      "送礼者上传前任照片",
+      "追思模板生成开口说话视频"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-channel-solutions/references/B36-gift-memorial-retail-channel.md",
+    "requirement_ids": [
+      "B36-R01",
+      "B36-R02",
+      "B36-R03",
+      "B36-R04",
+      "B36-R05"
+    ],
+    "topological_index": 54
+  },
+  {
+    "id": "B37",
+    "slug": "insurance-retirement-education",
+    "title": "保险与养老平台的未来自我教育场景",
+    "phase": "P7-channels",
+    "depends_on": [
+      "B22",
+      "B23",
+      "B31",
+      "B32"
+    ],
+    "skill": "building-channel-solutions",
+    "objective": "把未来形象用于退休准备、长期规划和健康行为反思的教育体验。",
+    "business_outcome": "为保险/养老伙伴提供高价值互动内容，同时与承保、定价、投顾和强制营销严格隔离。",
+    "modules": [
+      "services/retirement-education",
+      "apps/partner-portal/education",
+      "packages/regulated-boundary",
+      "services/content-review"
+    ],
+    "interfaces": [
+      "education session API",
+      "scenario library",
+      "lead consent boundary",
+      "compliance review"
+    ],
+    "requirements": [
+      "仅提供通用教育和用户自选情景，如退休愿景、给未来自己的信、储蓄习惯反思与家庭对话。",
+      "人脸、年龄结果、情绪、对话、健康目标和使用行为不得输入承保、费率、理赔、信用、雇佣或资格决策。",
+      "任何产品推荐、财务计算或保险说明由伙伴合规系统独立提供，清楚区分教育内容与受监管建议。",
+      "用户可匿名/不登录体验，拒绝上传照片不影响购买保险、养老金或其他核心服务。",
+      "上线前完成联合内容、法务、隐私、模型、无障碍与投诉流程评审，保留每版审批证据。"
+    ],
+    "constraints": [
+      "不得说不购买产品会导致未来悲惨或家庭负担。",
+      "不得从脸推断健康、寿命、吸烟、财富或风险等级。",
+      "未来自我 AI 不得作为持牌顾问或销售代理。"
+    ],
+    "negative_cases": [
+      "伙伴请求传回情绪分数",
+      "教育页混入个性化收益承诺",
+      "销售强制用户上传照片"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-channel-solutions/references/B37-insurance-retirement-education.md",
+    "requirement_ids": [
+      "B37-R01",
+      "B37-R02",
+      "B37-R03",
+      "B37-R04",
+      "B37-R05"
+    ],
+    "topological_index": 47
+  },
+  {
+    "id": "B38",
+    "slug": "consented-crm-lead-handoff",
+    "title": "明确同意的 CRM 线索交接与销售边界",
+    "phase": "P7-channels",
+    "depends_on": [
+      "B31",
+      "B32",
+      "B33",
+      "B37"
+    ],
+    "skill": "building-channel-solutions",
+    "objective": "在用户主动请求联系时，把最小必要线索安全交给伙伴 CRM。",
+    "business_outcome": "为 B2B2C 渠道创造可计量转化，但不把情感互动秘密变成销售画像。",
+    "modules": [
+      "services/lead-consent",
+      "services/crm-handoff",
+      "apps/partner-portal/leads",
+      "packages/marketing-policy"
+    ],
+    "interfaces": [
+      "lead request API",
+      "CRM connector",
+      "consent receipt",
+      "suppression API"
+    ],
+    "requirements": [
+      "线索交接必须由独立、明确、未预选的 CTA 触发，说明接收方、目的、字段、渠道和有效期。",
+      "默认只传姓名/联系方式/所选主题/来源会话 ID；不传原图、面部特征、对话全文、危机信号或家庭隐私。",
+      "CRM connector 支持幂等、字段映射、加密、失败补偿、撤回/退订同步和交接回执。",
+      "伙伴只能在授权期限和渠道内联系，平台维护全局 suppression 与投诉阻断。",
+      "归因衡量曝光、主动请求、有效联系和成交，但不通过敏感画像优化销售压力。"
+    ],
+    "constraints": [
+      "服务使用同意与营销联系同意必须分开。",
+      "撤回后后续名单、自动化旅程和再营销受众均需删除/抑制。",
+      "危机或脆弱性信号绝不触发销售线索。"
+    ],
+    "negative_cases": [
+      "CRM 重复创建联系人",
+      "伙伴未执行退订",
+      "用户只同意邮件却收到电话"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-channel-solutions/references/B38-consented-crm-lead-handoff.md",
+    "requirement_ids": [
+      "B38-R01",
+      "B38-R02",
+      "B38-R03",
+      "B38-R04",
+      "B38-R05"
+    ],
+    "topological_index": 56
+  },
+  {
+    "id": "B39",
+    "slug": "referral-affiliate-ugc",
+    "title": "推荐、联盟、UGC 分享与反作弊",
+    "phase": "P8-growth",
+    "depends_on": [
+      "B10",
+      "B27",
+      "B31",
+      "B33"
+    ],
+    "skill": "building-growth-data-loop",
+    "objective": "用授权作品分享、推荐码和渠道联盟形成低成本获客。",
+    "business_outcome": "把传播流量转化为新用户和订单，同时防刷量、隐私泄露与误导。",
+    "modules": [
+      "services/referral",
+      "services/affiliate",
+      "services/ugc",
+      "services/abuse-detection"
+    ],
+    "interfaces": [
+      "referral API",
+      "affiliate attribution",
+      "reward ledger",
+      "UGC moderation"
+    ],
+    "requirements": [
+      "推荐链接使用可撤销分享或隐私安全落地页，接收者不能看到推荐人的未授权作品/身份。",
+      "奖励规则支持双方额度、现金佣金或伙伴分成，使用不可变奖励账本、归因窗口和退货冲回。",
+      "联盟伙伴有专属链接、素材、披露要求、品牌规则和作弊审计，禁止未经批准的健康/寿命宣传。",
+      "用户选择公开作品时另行授权展示范围、期限和商业用途；默认不进入公共发现页。",
+      "检测自荐、设备农场、支付循环、礼品码枚举、虚假点击和被盗作品，处置支持申诉。"
+    ],
+    "constraints": [
+      "安全/AI 标识不能被联盟素材裁掉。",
+      "不得用儿童或已故者作品做推广，除非独立高标准授权。",
+      "反作弊特征不得跨目的形成敏感身份画像。"
+    ],
+    "negative_cases": [
+      "退款后奖励未冲回",
+      "公开作品授权过期",
+      "联盟虚假承诺真实预测"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-growth-data-loop/references/B39-referral-affiliate-ugc.md",
+    "requirement_ids": [
+      "B39-R01",
+      "B39-R02",
+      "B39-R03",
+      "B39-R04",
+      "B39-R05"
+    ],
+    "topological_index": 34
+  },
+  {
+    "id": "B40",
+    "slug": "lifecycle-annual-reminders",
+    "title": "生命周期消息、年度回访与流失挽回",
+    "phase": "P8-growth",
+    "depends_on": [
+      "B24",
+      "B27"
+    ],
+    "skill": "building-growth-data-loop",
+    "objective": "在用户选择的节奏下发送任务完成、纪念日、年度更新、订阅和家庭协作消息。",
+    "business_outcome": "推动复购与留存，同时避免成瘾、羞耻和悲伤触发式营销。",
+    "modules": [
+      "services/lifecycle",
+      "services/notification-preferences",
+      "services/campaigns",
+      "apps/admin/campaign-builder"
+    ],
+    "interfaces": [
+      "preference center",
+      "campaign eligibility",
+      "message send API",
+      "suppression events"
+    ],
+    "requirements": [
+      "建立交易、服务、安全、家庭邀请和营销消息分类，每类渠道、频率、静默时段和退订独立。",
+      "活动受同意、成员状态、纪念敏感模式、未成年人、订阅、退订和投诉规则实时筛选。",
+      "年度提醒从用户明确日期/选择产生，不从照片、邮件或家庭事件暗中推断。",
+      "模板发布需预览变量、缺失回退、链接有效期、品牌/伙伴、语言、AI 披露和无障碍。",
+      "衡量送达、打开、行动、退订、投诉、复购和负面反馈，以净价值而非消息量优化。"
+    ],
+    "constraints": [
+      "服务通知不得夹带隐藏营销。",
+      "危机、争议、删除处理中暂停非必要营销。",
+      "伙伴不能覆盖平台全局退订。"
+    ],
+    "negative_cases": [
+      "时区导致夜间发送",
+      "成员去世后仍收到成长提醒",
+      "变量泄露另一家庭姓名"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-growth-data-loop/references/B40-lifecycle-annual-reminders.md",
+    "requirement_ids": [
+      "B40-R01",
+      "B40-R02",
+      "B40-R03",
+      "B40-R04",
+      "B40-R05"
+    ],
+    "topological_index": 55
+  },
+  {
+    "id": "B41",
+    "slug": "analytics-unit-economics",
+    "title": "分析语义层、漏斗与单位经济",
+    "phase": "P8-growth",
+    "depends_on": [
+      "B02",
+      "B26",
+      "B34",
+      "B39",
+      "B40"
+    ],
+    "skill": "building-growth-data-loop",
+    "objective": "建立从流量、上传、生成、质量、付费、分享、复购到伙伴结算的可信指标。",
+    "business_outcome": "让产品和商业决策基于可对账数据，而非混乱埋点或虚假增长。",
+    "modules": [
+      "services/analytics",
+      "warehouse/semantic-layer",
+      "apps/admin/analytics",
+      "packages/event-quality"
+    ],
+    "interfaces": [
+      "analytics events",
+      "metric definitions",
+      "finance reconciliation",
+      "privacy-safe exports"
+    ],
+    "requirements": [
+      "定义唯一语义：访客、上传者、授权完成、任务成功、付费用户、分享、推荐、留存、订单、GMV、净收入和毛利。",
+      "事件含 event_id、schema_version、occurred_at、received_at、tenant、channel、consent-safe actor pseudonym 和来源。",
+      "漏斗按渠道/模板/供应商/伙伴/地区分解，财务指标与支付/结算账本每日对账。",
+      "计算每次生成成本、退款、人工审核、物流、佣金、CAC、LTV、贡献毛利和伙伴毛利，标示数据覆盖与延迟。",
+      "质量监控检测缺失、重复、乱序、机器人流量和定义漂移；关键 KPI 变更必须有版本、owner 和回算计划。"
+    ],
+    "constraints": [
+      "分析层不得摄取原图、面部嵌入、对话全文或不必要敏感字段。",
+      "小样本伙伴/家庭分组需抑制以防重识别。",
+      "尚未结算或同步中的数据必须标注 as_of 和覆盖范围。"
+    ],
+    "negative_cases": [
+      "事件重复导致收入翻倍",
+      "匿名用户升级后双计",
+      "伙伴时区跨月"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-growth-data-loop/references/B41-analytics-unit-economics.md",
+    "requirement_ids": [
+      "B41-R01",
+      "B41-R02",
+      "B41-R03",
+      "B41-R04",
+      "B41-R05"
+    ],
+    "topological_index": 64
+  },
+  {
+    "id": "B42",
+    "slug": "personalization-experimentation",
+    "title": "个性化、推荐与受控实验",
+    "phase": "P8-growth",
+    "depends_on": [
+      "B18",
+      "B41"
+    ],
+    "skill": "building-growth-data-loop",
+    "objective": "用明确偏好和行为反馈改善模板、计划、供应商与购买路径。",
+    "business_outcome": "提高成功率和相关性，同时避免从人脸或脆弱状态推断敏感属性。",
+    "modules": [
+      "services/personalization",
+      "services/experimentation",
+      "packages/decision-log",
+      "apps/admin/experiments"
+    ],
+    "interfaces": [
+      "decision API",
+      "experiment assignment",
+      "feature store policy",
+      "experiment analysis"
+    ],
+    "requirements": [
+      "个性化输入限于用户显式偏好、历史选择、设备/渠道和非敏感产品行为；人脸仅用于当前作品质量。",
+      "实验分配稳定、互斥可配置、服务端记录 exposure，样本量、主指标、护栏与停止规则预注册。",
+      "安全、同意、儿童保护、AI 标识、价格透明和危机策略不得作为实验变量。",
+      "推荐同时优化生成成功、用户满意、长期留存、毛利和投诉等护栏，不只优化点击。",
+      "提供用户重置个性化、关闭推荐和查看主要影响因素；模型/规则发布具版本与回滚。"
+    ],
+    "constraints": [
+      "不得用悲伤、焦虑、危机或健康推断提高转化。",
+      "实验失败不能导致重复支付或数据丢失。",
+      "伙伴自定义推荐不得突破平台政策。"
+    ],
+    "negative_cases": [
+      "曝光事件晚到",
+      "用户跨设备进入不同组",
+      "推荐模型出现供应商偏置"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-growth-data-loop/references/B42-personalization-experimentation.md",
+    "requirement_ids": [
+      "B42-R01",
+      "B42-R02",
+      "B42-R03",
+      "B42-R04",
+      "B42-R05"
+    ],
+    "topological_index": 69
+  },
+  {
+    "id": "B43",
+    "slug": "admin-moderation-fraud",
+    "title": "运营后台、审核、风控与内部治理",
+    "phase": "P8-growth",
+    "depends_on": [
+      "B17",
+      "B30",
+      "B39"
+    ],
+    "skill": "building-growth-data-loop",
+    "objective": "为模板、内容、退款、伙伴、欺诈、举报和系统配置提供最小权限工作台。",
+    "business_outcome": "让规模化运营可审计、可分责、可回滚而非依赖数据库手工操作。",
+    "modules": [
+      "apps/admin-console",
+      "services/moderation-queue",
+      "services/fraud",
+      "services/config-governance"
+    ],
+    "interfaces": [
+      "admin API",
+      "case queue",
+      "policy decision",
+      "configuration change request"
+    ],
+    "requirements": [
+      "后台按岗位拆分客服、内容审核、伙伴运营、财务、隐私、安全和只读审计角色。",
+      "所有敏感查看、搜索、导出、override、退款、封禁、解封和配置变更记录原因、工单与前后值。",
+      "审核队列按儿童、非自愿深伪、公众人物、诈骗、纪念、质量和伙伴风险分级，并提供一致政策指引。",
+      "风控结合账户、设备、支付、推荐、礼品、API 和供应商异常，实施渐进处置与申诉。",
+      "关键配置采用草稿、验证、双人审批、金丝雀和一键回滚，禁止直接生产数据库改值。"
+    ],
+    "constraints": [
+      "员工不得搜索无业务理由的用户。",
+      "自动风控不能永久封禁而无申诉路径。",
+      "审核样本下载与本地复制默认禁止。"
+    ],
+    "negative_cases": [
+      "内部人员滥用搜索",
+      "误封高价值伙伴",
+      "配置回滚未恢复缓存"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-growth-data-loop/references/B43-admin-moderation-fraud.md",
+    "requirement_ids": [
+      "B43-R01",
+      "B43-R02",
+      "B43-R03",
+      "B43-R04",
+      "B43-R05"
+    ],
+    "topological_index": 49
+  },
+  {
+    "id": "B44",
+    "slug": "privacy-security-compliance",
+    "title": "隐私工程、安全基线与合规控制",
+    "phase": "P9-trust-ops",
+    "depends_on": [
+      "B04",
+      "B05",
+      "B17",
+      "B21",
+      "B23",
+      "B31"
+    ],
+    "skill": "securing-operating-life-time-machine",
+    "objective": "把人脸、未成年人、家庭、支付、伙伴和生成式 AI 风险转为可测试控制。",
+    "business_outcome": "建立进入中国及其他目标市场所需的隐私、安全和治理证据，并为法律复核留接口。",
+    "modules": [
+      "services/policy-engine",
+      "security/threat-models",
+      "privacy/ropa",
+      "security/scanners",
+      "compliance/control-matrix"
+    ],
+    "interfaces": [
+      "policy decision API",
+      "data map",
+      "PIA/DPIA templates",
+      "control evidence"
+    ],
+    "requirements": [
+      "建立数据分类、处理活动记录、目的/法律基础、敏感信息单独同意、数据最小化、保留和数据主体权利控制矩阵。",
+      "对人脸处理、10 万人存储阈值备案评估、生成式 AI 备案/登记、公示、AI 双标识和深度合成义务建立 release gate。",
+      "执行威胁建模、SAST/DAST/SCA/secret/IaC/container 扫描、依赖签名、SBOM、密钥轮换和漏洞 SLA。",
+      "对数据出境、子处理者、供应商训练/保留、员工访问、未成年人和拟人化交互进行专项评估与合同控制。",
+      "建立年度/触发式个人信息合规审计、渗透测试、红队、政策版本、员工培训和法律确认清单。"
+    ],
+    "constraints": [
+      "本 Skill 是工程控制框架，不替代持牌律师的地域法律意见。",
+      "合规不确定或必要备案/登记未完成时相关功能 fail closed。",
+      "不得以哈希/去标识名义继续保留可轻易重识别的人脸特征。"
+    ],
+    "negative_cases": [
+      "供应商条款变更允许训练",
+      "人脸存储量跨阈值",
+      "隐式 AI 标识在导出链路丢失"
+    ],
+    "criticality": "high",
+    "reference": "skills/securing-operating-life-time-machine/references/B44-privacy-security-compliance.md",
+    "requirement_ids": [
+      "B44-R01",
+      "B44-R02",
+      "B44-R03",
+      "B44-R04",
+      "B44-R05"
+    ],
+    "topological_index": 48
+  },
+  {
+    "id": "B45",
+    "slug": "observability-slo-cost",
+    "title": "可观测性、SLO、容量与成本运营",
+    "phase": "P9-trust-ops",
+    "depends_on": [
+      "B09",
+      "B13",
+      "B18",
+      "B44"
+    ],
+    "skill": "securing-operating-life-time-machine",
+    "objective": "让用户旅程、工作流、供应商、支付、履约和伙伴 API 的健康与成本可见。",
+    "business_outcome": "在故障影响扩大前发现问题，并能按业务承诺和毛利做容量决策。",
+    "modules": [
+      "observability/otel",
+      "services/slo",
+      "apps/admin/operations",
+      "services/cost-alerting"
+    ],
+    "interfaces": [
+      "OpenTelemetry traces/metrics/logs",
+      "SLO definitions",
+      "alert routes",
+      "runbooks"
+    ],
+    "requirements": [
+      "统一 trace_id、workflow_id、job_id、order_id、tenant_id 和 provider_call_id，但日志不得含原图或敏感正文。",
+      "定义上传、生成、支付、下载、伙伴 API、删除、打印和对话的 SLI/SLO、错误预算和用户影响分级。",
+      "仪表盘同时展示可用性、延迟、质量失败、供应商错误、队列积压、退款、成本/生成和结算异常。",
+      "告警按可行动性、去重、抑制、升级和 on-call 归属设计；每个高优告警链接运行手册和最近变更。",
+      "容量模型覆盖活动峰值、视频 GPU/供应商配额、对象存储、数据库、队列和伙伴批量订单，提供降级计划。"
+    ],
+    "constraints": [
+      "不得为了可观测性记录完整提示、对话、照片或支付数据。",
+      "SLO 报表按伙伴合同边界隔离。",
+      "降级不能关闭安全审核、同意或 AI 标识。"
+    ],
+    "negative_cases": [
+      "遥测后端故障",
+      "高基数标签爆炸",
+      "供应商延迟正常但质量骤降"
+    ],
+    "criticality": "high",
+    "reference": "skills/securing-operating-life-time-machine/references/B45-observability-slo-cost.md",
+    "requirement_ids": [
+      "B45-R01",
+      "B45-R02",
+      "B45-R03",
+      "B45-R04",
+      "B45-R05"
+    ],
+    "topological_index": 57
+  },
+  {
+    "id": "B46",
+    "slug": "backup-dr-incident-deletion",
+    "title": "备份、灾备、事件响应与删除证明",
+    "phase": "P9-trust-ops",
+    "depends_on": [
+      "B05",
+      "B13",
+      "B44",
+      "B45"
+    ],
+    "skill": "securing-operating-life-time-machine",
+    "objective": "确保关键商业数据可恢复、媒体暴露可控制、事故可处置且删除在备份中有生命周期。",
+    "business_outcome": "减少数据丢失、隐私事件、勒索和长时间停服带来的业务风险。",
+    "modules": [
+      "infra/backup",
+      "infra/dr",
+      "security/incident-response",
+      "services/deletion-verifier"
+    ],
+    "interfaces": [
+      "backup catalog",
+      "restore test",
+      "incident workflow",
+      "deletion verification report"
+    ],
+    "requirements": [
+      "为主库、对象清单、配置、密钥元数据、工作流和账本定义 RPO/RTO、加密、隔离、保留和恢复责任。",
+      "至少定期执行干净环境恢复演练，验证数据库、对象、事件、账本与权限一致，而非只看备份成功。",
+      "建立隐私、安全、支付、供应商、内容滥用和大规模质量事故的分级、遏制、通知、取证和复盘流程。",
+      "删除请求进入 tombstone，备份恢复时自动重放删除清单；到期备份销毁与供应商回执可验证。",
+      "灾备切换、只读模式、供应商禁用、分享全局撤销和支付保护开关需演练并受双人控制。"
+    ],
+    "constraints": [
+      "备份不得成为无限期保留敏感照片的借口。",
+      "事件取证副本必须 legal hold、最小访问和到期销毁。",
+      "恢复演练不得使用生产身份向真实用户发消息或扣款。"
+    ],
+    "negative_cases": [
+      "备份加密密钥丢失",
+      "恢复后已删除用户重新出现",
+      "供应商泄露需要批量撤销分享"
+    ],
+    "criticality": "high",
+    "reference": "skills/securing-operating-life-time-machine/references/B46-backup-dr-incident-deletion.md",
+    "requirement_ids": [
+      "B46-R01",
+      "B46-R02",
+      "B46-R03",
+      "B46-R04",
+      "B46-R05"
+    ],
+    "topological_index": 66
+  },
+  {
+    "id": "B47",
+    "slug": "cicd-iac-rollback",
+    "title": "CI/CD、IaC、供应链与可回滚发布",
+    "phase": "P9-trust-ops",
+    "depends_on": [
+      "B01",
+      "B44",
+      "B45",
+      "B46"
+    ],
+    "skill": "securing-operating-life-time-machine",
+    "objective": "建立从代码、契约、迁移、模型策略到生产发布的一致、可审计流水线。",
+    "business_outcome": "让多团队和 AI Agent 产生的变更在通过证据门后安全上线并可快速回滚。",
+    "modules": [
+      ".github/workflows",
+      "infra/iac",
+      "scripts/release",
+      "security/supply-chain",
+      "deploy/manifests"
+    ],
+    "interfaces": [
+      "CI checks",
+      "artifact registry",
+      "migration gate",
+      "deployment API"
+    ],
+    "requirements": [
+      "CI 执行格式化、lint、类型、单元、集成、契约、E2E、负面、迁移、扫描、SBOM 和占位/跳过检测。",
+      "构建产物、容器、策略包和前端静态资源可复现、签名、生成 provenance，并从同一制品逐环境提升。",
+      "IaC 管理网络、数据库、存储、队列、工作流、密钥、监控和权限；禁止生产控制台漂移无记录。",
+      "数据库采用 expand/migrate/contract、向后兼容和回滚/前滚策略；不可逆迁移需备份与显式审批。",
+      "发布采用 preview→staging→canary→production，按 SLO/质量/成本/业务护栏自动停止并一键回滚。"
+    ],
+    "constraints": [
+      "AI Agent 不得持有永久生产管理员密钥。",
+      "分支通过不代表可发布，必须使用 B49 证据证书。",
+      "回滚不得恢复已撤回同意或已删除内容。"
+    ],
+    "negative_cases": [
+      "迁移只向前不可回滚",
+      "依赖包被投毒",
+      "金丝雀流量过小未发现错误"
+    ],
+    "criticality": "high",
+    "reference": "skills/securing-operating-life-time-machine/references/B47-cicd-iac-rollback.md",
+    "requirement_ids": [
+      "B47-R01",
+      "B47-R02",
+      "B47-R03",
+      "B47-R04",
+      "B47-R05"
+    ],
+    "topological_index": 75
+  },
+  {
+    "id": "B48",
+    "slug": "business-loop-e2e-certification",
+    "title": "端到端商业闭环、渠道与滥用认证",
+    "phase": "P10-certification",
+    "depends_on": [
+      "B10",
+      "B24",
+      "B30",
+      "B35",
+      "B36",
+      "B37",
+      "B38",
+      "B39",
+      "B40",
+      "B47"
+    ],
+    "skill": "certifying-life-time-machine-release",
+    "objective": "以真实用户和伙伴旅程验证传播、付费、留存、履约、结算、撤回和恢复闭环。",
+    "business_outcome": "证明产品不仅能生成图片，而且能安全赚到钱、交付价值并处理失败。",
+    "modules": [
+      "e2e/business-loop",
+      "e2e/channel",
+      "e2e/abuse",
+      "e2e/recovery",
+      "fixtures/synthetic"
+    ],
+    "interfaces": [
+      "browser/API E2E",
+      "payment sandbox",
+      "provider stubs",
+      "partner sandbox"
+    ],
+    "requirements": [
+      "验证消费者闭环：落地页→授权→上传→预览→支付→生成→质量→下载/分享→推荐→年度回访。",
+      "验证家庭/礼品闭环：逐人邀请→共同作品→收礼确认→打印→物流→撤回/补印/退款。",
+      "验证影楼闭环：门店创建→顾客授权→生成审片→加购→交付→门店计量→伙伴结算。",
+      "验证养老教育闭环：匿名体验→未来自我教育→独立主动线索同意→CRM 回执，证明无承保/定价数据流。",
+      "验证失败与滥用：重复 webhook、供应商超时、支付乱序、删除、公开链接撤销、名人/儿童/诈骗请求和灾备恢复。"
+    ],
+    "constraints": [
+      "E2E 使用合成或明确授权素材，禁止从互联网抓真人测试。",
+      "任何关键旅程跳过、flaky 重跑掩盖或人工口头通过都算失败。",
+      "测试必须验证数据库、事件、对象、账本、遥测和用户界面多层证据。"
+    ],
+    "negative_cases": [
+      "支付成功但生成失败",
+      "撤回后 CDN 仍命中",
+      "伙伴结算重复计费"
+    ],
+    "criticality": "high",
+    "reference": "skills/certifying-life-time-machine-release/references/B48-business-loop-e2e-certification.md",
+    "requirement_ids": [
+      "B48-R01",
+      "B48-R02",
+      "B48-R03",
+      "B48-R04",
+      "B48-R05"
+    ],
+    "topological_index": 85
+  },
+  {
+    "id": "B49",
+    "slug": "release-evidence-certification",
+    "title": "发布证据、清洁室复现与生产认证",
+    "phase": "P10-certification",
+    "depends_on": [
+      "B41",
+      "B43",
+      "B44",
+      "B45",
+      "B46",
+      "B47",
+      "B48",
+      "B50"
+    ],
+    "skill": "certifying-life-time-machine-release",
+    "objective": "汇总需求到代码、测试、运行证据和风险接受，执行 fail-closed 最终发布门。",
+    "business_outcome": "让每次发布可独立复核、可重放、可追责，而不是依赖 Agent 的自我宣称。",
+    "modules": [
+      "evidence/release",
+      "scripts/verify-release",
+      "templates/release-certificate",
+      "docs/traceability"
+    ],
+    "interfaces": [
+      "completion reports",
+      "evidence index",
+      "release certificate",
+      "risk acceptance"
+    ],
+    "requirements": [
+      "每个 B00–B50 提交符合 schema 的 completion report，映射 requirement→file→symbol→test→evidence→commit。",
+      "验证所有必需测试、扫描、SLO、质量、财务对账、删除、恢复和渠道 E2E 证据真实存在且哈希匹配。",
+      "在干净 checkout、空缓存、固定依赖和隔离环境执行单一 release verify 命令，禁止依赖开发者本机隐式状态。",
+      "检测 TODO/FIXME/NotImplemented、空断言、跳过测试、硬编码成功、伪造日志、未跟踪生成物和未审迁移。",
+      "只有无未解决阻断项、风险有授权 owner/期限/补救且证书签名完成时，才生成 release-certificate.json。"
+    ],
+    "constraints": [
+      "Agent 的文字说明不是测试证据。",
+      "关键失败不得用 allow-failure 或重跑到绿隐藏。",
+      "证书关联不可变 commit、制品 digest、配置/模型/政策版本。"
+    ],
+    "negative_cases": [
+      "证据路径指向旧提交",
+      "测试被标记 skip",
+      "清洁室缺少私有依赖"
+    ],
+    "criticality": "high",
+    "reference": "skills/certifying-life-time-machine-release/references/B49-release-evidence-certification.md",
+    "requirement_ids": [
+      "B49-R01",
+      "B49-R02",
+      "B49-R03",
+      "B49-R04",
+      "B49-R05"
+    ],
+    "topological_index": 99
+  },
+  {
+    "id": "B50",
+    "slug": "multi-agent-worktree-pr-resume",
+    "title": "多 Agent、Worktree、PR 与断点续作编排",
+    "phase": "P1-foundation",
+    "depends_on": [
+      "B00",
+      "B01",
+      "B02",
+      "B13"
+    ],
+    "skill": "orchestrating-life-time-machine",
+    "objective": "将 B00—B127 按依赖、Profile、模块所有权和风险分配给 Claude Code/Codex，并安全合并。",
+    "business_outcome": "提高长任务吞吐，同时避免多个 Agent 覆盖同一文件、失去上下文或伪造完成。",
+    "modules": [
+      "scripts/orchestrate-batches",
+      "orchestration/state",
+      "orchestration/locks",
+      "templates/agent-handoff"
+    ],
+    "interfaces": [
+      "batch state file",
+      "worktree plan",
+      "completion report",
+      "PR metadata"
+    ],
+    "requirements": [
+      "解析 manifests/batches.json 的 DAG，只有依赖 completion report 验证通过的批次才能进入 ready。",
+      "每批次创建独立 Git worktree/branch，声明文件锁和共享契约变更；冲突模块串行或由契约 owner 协调。",
+      "为 Agent 生成上下文包：基线、Skill、Batch、相关契约、已完成证据、允许目录、禁止操作和验收命令。",
+      "支持 planned/ready/running/blocked/failed/review/merged/certified 状态、租约、心跳、超时回收和从证据恢复。",
+      "自动检查 diff、运行批次门、生成 PR/提交说明与 completion report；未验证结果不得标记 completed。"
+    ],
+    "constraints": [
+      "不得让两个 Agent 同时修改同一迁移序列或核心契约而无协调。",
+      "Agent 失败后保留 worktree、日志和未提交 diff 供恢复。",
+      "自动修复循环设次数/成本上限，超过后转人工并说明根因。"
+    ],
+    "negative_cases": [
+      "Agent 失联但锁未释放",
+      "共享 OpenAPI 冲突",
+      "PR 合并后依赖批次基线变旧"
+    ],
+    "criticality": "high",
+    "reference": "skills/orchestrating-life-time-machine/references/B50-multi-agent-worktree-pr-resume.md",
+    "requirement_ids": [
+      "B50-R01",
+      "B50-R02",
+      "B50-R03",
+      "B50-R04",
+      "B50-R05"
+    ],
+    "topological_index": 14
+  },
+  {
+    "id": "B51",
+    "slug": "product-profile-scope-governance",
+    "title": "产品配置档、范围治理与成功指标",
+    "phase": "P11-product-experience",
+    "depends_on": [
+      "B00"
+    ],
+    "skill": "designing-life-time-machine-experience",
+    "objective": "把商业模式、目标市场、地区、渠道、终端、技术栈和发布边界固化为机器可读项目配置档。",
+    "business_outcome": "避免 Agent 在长周期建设中不断漂移范围，并让不同商业版本共享同一产品工厂。",
+    "modules": [
+      "docs/product-profile",
+      "config/product-profile",
+      "tools/profile-validator"
+    ],
+    "interfaces": [
+      "project-profile schema",
+      "module catalog",
+      "KPI contract",
+      "release scope"
+    ],
+    "requirements": [
+      "实现 project-profile.yaml/json，覆盖地区、语言、品牌、渠道、终端、支付、AI 供应商、部署、合规和商业模式开关，并提供 schema 校验。",
+      "提供 lean-mvp、consumer-web、full-b2c、b2b2c-standard、china-commercial、global-enterprise 和 full-commercial 预设，自动补齐依赖闭包。",
+      "定义北极星指标、增长/收入/质量/安全/成本护栏及其数据责任人，禁止只设置下载量等虚荣指标。",
+      "建立范围变更 RFC、模块启停、版本兼容和弃用流程；任何新增模块必须更新依赖图、风险和发布门。",
+      "生成可供 Claude Code/Codex 读取的执行计划、选中批次、排除原因和最终认证范围，并可在 CI 中重放。"
+    ],
+    "constraints": [
+      "配置档是后续实现的唯一范围入口。",
+      "不得通过 profile 关闭法定告知、同意、安全或删除能力。",
+      "既有仓库优先采用 adapt 模式。"
+    ],
+    "negative_cases": [
+      "配置档引用不存在的批次",
+      "地区切换后支付/合规模块不闭合",
+      "中途修改 profile 导致已完成证据失效"
+    ],
+    "criticality": "high",
+    "reference": "skills/designing-life-time-machine-experience/references/B51-product-profile-scope-governance.md",
+    "requirement_ids": [
+      "B51-R01",
+      "B51-R02",
+      "B51-R03",
+      "B51-R04",
+      "B51-R05"
+    ],
+    "topological_index": 2
+  },
+  {
+    "id": "B52",
+    "slug": "research-personas-service-blueprint",
+    "title": "用户研究、角色画像与服务蓝图",
+    "phase": "P11-product-experience",
+    "depends_on": [
+      "B51"
+    ],
+    "skill": "designing-life-time-machine-experience",
+    "objective": "把消费者、家庭成员、影楼员工、礼品买家、保险养老教育用户、伙伴管理员和内部运营角色转成可验证旅程。",
+    "business_outcome": "让产品围绕真实任务、情绪和阻力设计，而不是围绕模型能力堆功能。",
+    "modules": [
+      "docs/research",
+      "docs/personas",
+      "docs/service-blueprints"
+    ],
+    "interfaces": [
+      "research repository",
+      "persona schema",
+      "journey map",
+      "service recovery map"
+    ],
+    "requirements": [
+      "建立代表消费者、家庭、未成年人监护人、影楼、礼品、保险养老、客服和运营的角色画像，并明确不可推断的敏感属性边界。",
+      "为首次生成、家庭邀请、购买礼品、年度更新、退款、数据删除、伙伴入驻和异常恢复绘制端到端服务蓝图。",
+      "将每个高风险或高流失节点映射到产品需求、埋点、客服补救、SLO 和负责人。",
+      "提供访谈/可用性测试脚本、招募标准、匿名化记录和洞察追踪，不把少量访谈当作统计结论。",
+      "建立洞察到需求到批次到实验的可追踪链路，并在范围变更时重新验证关键假设。"
+    ],
+    "constraints": [
+      "研究材料不得包含未经授权的真实人脸。",
+      "画像用于设计而不是自动化高影响决策。",
+      "定性和定量证据必须区分。"
+    ],
+    "negative_cases": [
+      "样本全部来自内部员工",
+      "未成年人研究缺少监护同意",
+      "旅程未覆盖失败与退款"
+    ],
+    "criticality": "medium",
+    "reference": "skills/designing-life-time-machine-experience/references/B52-research-personas-service-blueprint.md",
+    "requirement_ids": [
+      "B52-R01",
+      "B52-R02",
+      "B52-R03",
+      "B52-R04",
+      "B52-R05"
+    ],
+    "topological_index": 4
+  },
+  {
+    "id": "B53",
+    "slug": "information-architecture-content-model",
+    "title": "信息架构、导航与内容模型",
+    "phase": "P11-product-experience",
+    "depends_on": [
+      "B52",
+      "B06",
+      "B19",
+      "B31"
+    ],
+    "skill": "designing-life-time-machine-experience",
+    "objective": "统一消费者、家庭、伙伴、门店、运营和开发者表面的导航、对象命名和内容层级。",
+    "business_outcome": "减少跨终端认知成本，并保证同一业务对象在前台、后台和 API 中语义一致。",
+    "modules": [
+      "packages/information-architecture",
+      "packages/content-model",
+      "docs/navigation"
+    ],
+    "interfaces": [
+      "route map",
+      "content schema",
+      "entity glossary",
+      "permission-aware navigation"
+    ],
+    "requirements": [
+      "定义消费者、家庭、伙伴、门店、管理员、客服和开发者门户的站点地图、路由契约、面包屑与深链策略。",
+      "建立项目、人物、年龄帧、作品、订单、家庭、伙伴、门店、工单和结算等核心对象的统一命名与内容模型。",
+      "导航和搜索结果必须按身份、租户、同意状态、儿童保护和数据目的在服务端过滤。",
+      "为草稿、处理中、失败、待授权、待付款、已退款、已删除等状态提供一致的空态、错误态和恢复路径。",
+      "生成机器可读 route/content manifest，供 Web、移动端、小程序、帮助中心和 API 文档共同消费。"
+    ],
+    "constraints": [
+      "不得通过隐藏菜单替代真正的服务端授权。",
+      "对象名称不得暗示未来结果是真实预测。",
+      "路由版本需支持旧深链。"
+    ],
+    "negative_cases": [
+      "已撤销分享仍被搜索发现",
+      "跨租户导航泄漏对象数量",
+      "旧版本深链打开错误家庭"
+    ],
+    "criticality": "high",
+    "reference": "skills/designing-life-time-machine-experience/references/B53-information-architecture-content-model.md",
+    "requirement_ids": [
+      "B53-R01",
+      "B53-R02",
+      "B53-R03",
+      "B53-R04",
+      "B53-R05"
+    ],
+    "topological_index": 42
+  },
+  {
+    "id": "B54",
+    "slug": "design-system-component-library",
+    "title": "设计系统、设计令牌与组件库",
+    "phase": "P11-product-experience",
+    "depends_on": [
+      "B01",
+      "B53"
+    ],
+    "skill": "designing-life-time-machine-experience",
+    "objective": "建立跨营销站、消费者端、伙伴端、运营后台、移动端、小程序和门店终端的一致设计系统。",
+    "business_outcome": "提高多端开发速度、品牌一致性、可访问性和视觉回归能力。",
+    "modules": [
+      "packages/design-tokens",
+      "packages/web-ui",
+      "packages/mobile-ui",
+      "apps/storybook"
+    ],
+    "interfaces": [
+      "design tokens",
+      "component API",
+      "icon system",
+      "storybook/catalog"
+    ],
+    "requirements": [
+      "实现颜色、字体、间距、圆角、阴影、动效、断点和密度等设计令牌，并支持品牌主题和白标租户覆盖。",
+      "实现表单、上传、人物授权、时间轴、进度、媒体预览、价格、订单、表格、图表、对话框和通知等核心组件。",
+      "所有组件具备键盘、读屏、焦点、错误提示、触控尺寸和高对比度行为，并在 Storybook/组件目录中展示。",
+      "建立版本化、变更日志、弃用、视觉回归和跨端一致性策略，禁止业务端复制私有组件分叉。",
+      "输出设计到代码映射、组件使用规范、交互状态矩阵和可自动执行的无障碍/视觉测试。"
+    ],
+    "constraints": [
+      "安全与同意文案组件不可被白标主题隐藏。",
+      "品牌覆盖不得降低对比度或可访问性。",
+      "组件必须支持长文本和多语言。"
+    ],
+    "negative_cases": [
+      "租户主题导致文字不可见",
+      "上传组件键盘不可操作",
+      "移动端组件在大字体下截断"
+    ],
+    "criticality": "high",
+    "reference": "skills/designing-life-time-machine-experience/references/B54-design-system-component-library.md",
+    "requirement_ids": [
+      "B54-R01",
+      "B54-R02",
+      "B54-R03",
+      "B54-R04",
+      "B54-R05"
+    ],
+    "topological_index": 45
+  },
+  {
+    "id": "B55",
+    "slug": "accessibility-responsive-localization",
+    "title": "无障碍、响应式、本地化与时区货币",
+    "phase": "P11-product-experience",
+    "depends_on": [
+      "B54"
+    ],
+    "skill": "designing-life-time-machine-experience",
+    "objective": "把无障碍、多语言、时区、货币、数字和文化适配做成平台能力。",
+    "business_outcome": "支持上海/中国大陆起步并可扩展全球市场，而不通过复制代码建立地区分叉。",
+    "modules": [
+      "packages/i18n",
+      "packages/accessibility",
+      "packages/locale-runtime"
+    ],
+    "interfaces": [
+      "translation catalog",
+      "locale negotiation",
+      "currency/time formatting",
+      "accessibility test harness"
+    ],
+    "requirements": [
+      "实现 zh-CN、zh-TW、en 的翻译目录、复数/性别中立文案、日期时间、货币、地址和姓名格式，并支持后续语言包。",
+      "为 Web、移动端、小程序、邮件、短信、推送、PDF/打印品建立统一 locale 解析、回退和版本机制。",
+      "关键用户旅程达到适用 WCAG AA 级目标，覆盖键盘、读屏、缩放、色弱、字幕、减少动效和认知负担。",
+      "所有时间点以明确时区存储和展示；订阅、提醒、订单截止、退款和伙伴结算不得因夏令时或跨区重复执行。",
+      "在 CI 中运行静态无障碍、浏览器审计、伪本地化、长文本、RTL 预留和多设备响应式回归。"
+    ],
+    "constraints": [
+      "法律和安全文案不得因翻译缺失静默回退为空。",
+      "货币金额使用整数最小单位或精确十进制。",
+      "本地化内容必须经过版本审阅。"
+    ],
+    "negative_cases": [
+      "夏令时造成年度提醒发送两次",
+      "英文地址无法配送",
+      "读屏未朗读生成进度"
+    ],
+    "criticality": "high",
+    "reference": "skills/designing-life-time-machine-experience/references/B55-accessibility-responsive-localization.md",
+    "requirement_ids": [
+      "B55-R01",
+      "B55-R02",
+      "B55-R03",
+      "B55-R04",
+      "B55-R05"
+    ],
+    "topological_index": 50
+  },
+  {
+    "id": "B56",
+    "slug": "ux-governance-usability-visual-qa",
+    "title": "体验治理、可用性、文案与视觉质量门",
+    "phase": "P11-product-experience",
+    "depends_on": [
+      "B41",
+      "B54",
+      "B55"
+    ],
+    "skill": "designing-life-time-machine-experience",
+    "objective": "建立从设计评审到上线后体验指标的持续治理机制。",
+    "business_outcome": "避免多 Agent、多渠道和白标版本逐渐出现体验碎片与误导性文案。",
+    "modules": [
+      "docs/ux-governance",
+      "tests/visual",
+      "tests/usability",
+      "packages/copy-registry"
+    ],
+    "interfaces": [
+      "UX review gate",
+      "copy registry",
+      "visual baselines",
+      "task success metrics"
+    ],
+    "requirements": [
+      "建立关键旅程的任务成功率、完成时间、错误率、放弃率、可理解度和满意度基线，并与业务漏斗区分。",
+      "将“AI 示意性模拟”、同意、儿童、付费、退款、删除和未来自我安全文案纳入受控文案注册表与双人审阅。",
+      "为主要页面和终端建立视觉基线、跨浏览器/设备截图、差异阈值和人工批准流程。",
+      "每个重大功能在发布前完成可用性测试或受控替代验证，记录未解决问题、严重度和接受风险。",
+      "运营后台可查看体验健康指标和异常告警，但不得收集原始人脸或敏感对话作为默认分析素材。"
+    ],
+    "constraints": [
+      "增长实验不得弱化必要告知。",
+      "视觉测试不得把真实用户媒体固化为基线。",
+      "体验问题不得仅以培训用户规避。"
+    ],
+    "negative_cases": [
+      "实验版本隐藏退款边界",
+      "白标版本删除 AI 标识",
+      "视觉差异被自动批准"
+    ],
+    "criticality": "high",
+    "reference": "skills/designing-life-time-machine-experience/references/B56-ux-governance-usability-visual-qa.md",
+    "requirement_ids": [
+      "B56-R01",
+      "B56-R02",
+      "B56-R03",
+      "B56-R04",
+      "B56-R05"
+    ],
+    "topological_index": 70
+  },
+  {
+    "id": "B57",
+    "slug": "marketing-site-seo-landing-builder",
+    "title": "营销官网、SEO、性能与落地页构建器",
+    "phase": "P12-marketing-content",
+    "depends_on": [
+      "B06",
+      "B41",
+      "B54"
+    ],
+    "skill": "building-marketing-content-platform",
+    "objective": "建设可由运营配置、可搜索、可快速实验的品牌官网和渠道落地页。",
+    "business_outcome": "形成消费者获客和 B2B 线索入口，同时保持性能、可信度和合规。",
+    "modules": [
+      "apps/marketing-web",
+      "packages/landing-builder",
+      "packages/seo"
+    ],
+    "interfaces": [
+      "CMS page contract",
+      "SEO metadata",
+      "structured data",
+      "lead/guest session"
+    ],
+    "requirements": [
+      "实现首页、产品、家庭、未来自我、礼品、影楼、伙伴、保险养老教育、定价和联系销售等可组合页面。",
+      "支持 SSR/静态生成、站点地图、robots、canonical、结构化数据、OG、国际化路径和 404/重定向治理。",
+      "落地页构建器只能使用批准组件和受控字段，无法注入脚本、绕过同意、隐藏 AI 标识或伪造评价。",
+      "建立 Core Web Vitals、可用性、SEO、链接完整性、表单送达和来源归因监控。",
+      "支持按品牌、伙伴、活动、地区和实验发布/预览/回滚，并保留内容版本和审批审计。"
+    ],
+    "constraints": [
+      "公开页面不得暴露私有作品。",
+      "营销宣称不得把模拟描述为预测。",
+      "第三方脚本受 CSP 和同意控制。"
+    ],
+    "negative_cases": [
+      "活动下线后旧 URL 失效无跳转",
+      "搜索引擎索引私密分享",
+      "CMS 内容注入恶意脚本"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-marketing-content-platform/references/B57-marketing-site-seo-landing-builder.md",
+    "requirement_ids": [
+      "B57-R01",
+      "B57-R02",
+      "B57-R03",
+      "B57-R04",
+      "B57-R05"
+    ],
+    "topological_index": 71
+  },
+  {
+    "id": "B58",
+    "slug": "headless-cms-editorial-workflow",
+    "title": "Headless CMS、博客与编辑工作流",
+    "phase": "P12-marketing-content",
+    "depends_on": [
+      "B53",
+      "B54",
+      "B57"
+    ],
+    "skill": "building-marketing-content-platform",
+    "objective": "建立营销、帮助、品牌、伙伴和安全内容的一体化内容平台。",
+    "business_outcome": "让非研发团队安全发布内容，同时具备审阅、版本、翻译和回滚。",
+    "modules": [
+      "services/content",
+      "apps/editorial-console",
+      "packages/content-sdk"
+    ],
+    "interfaces": [
+      "content API",
+      "workflow state machine",
+      "preview tokens",
+      "translation jobs"
+    ],
+    "requirements": [
+      "支持文章、FAQ、案例、模板、渠道页面、政策、公告、媒体素材和帮助文档等类型化内容模型。",
+      "实现草稿、审阅、法务/安全批准、排期、发布、归档、紧急撤回和回滚状态机。",
+      "预览链接短期有效、绑定编辑者和内容版本；未发布内容不得被公共 API、搜索或站点地图发现。",
+      "实现多语言翻译任务、差异审阅、源内容变更提醒和地区化覆盖，缺少强制政策翻译时 fail closed。",
+      "内容 API 具备缓存失效、版本 ETag、审计、权限、媒体引用完整性和删除保护。"
+    ],
+    "constraints": [
+      "政策和条款内容需独立审批。",
+      "编辑者不可直接发布高风险合规文案。",
+      "富文本需严格清洗。"
+    ],
+    "negative_cases": [
+      "预览 token 被搜索引擎抓取",
+      "翻译落后于源政策版本",
+      "删除仍被页面引用的媒体"
+    ],
+    "criticality": "medium",
+    "reference": "skills/building-marketing-content-platform/references/B58-headless-cms-editorial-workflow.md",
+    "requirement_ids": [
+      "B58-R01",
+      "B58-R02",
+      "B58-R03",
+      "B58-R04",
+      "B58-R05"
+    ],
+    "topological_index": 78
+  },
+  {
+    "id": "B59",
+    "slug": "consent-cmp-cookie-attribution",
+    "title": "同意管理、Cookie、像素与隐私归因",
+    "phase": "P12-marketing-content",
+    "depends_on": [
+      "B04",
+      "B41",
+      "B57"
+    ],
+    "skill": "building-marketing-content-platform",
+    "objective": "对营销站和产品表面的 Cookie、设备标识、广告像素和归因进行按地区治理。",
+    "business_outcome": "在可衡量获客效果的同时，避免在同意前建立敏感画像或泄露人脸相关行为。",
+    "modules": [
+      "packages/consent-manager",
+      "services/attribution",
+      "apps/privacy-center"
+    ],
+    "interfaces": [
+      "CMP API",
+      "consent string",
+      "tag manager policy",
+      "attribution event"
+    ],
+    "requirements": [
+      "实现必要、偏好、分析、广告等用途分类和地区化同意界面，记录版本、来源、时间、设备和撤回。",
+      "第三方标签仅在相应同意后加载，并通过 CSP、代理、域名白名单和自动扫描限制数据外传。",
+      "归因数据不得包含原始照片、人脸特征、未来自我对话、儿童身份或可逆敏感标识。",
+      "支持撤回后停止采集、清除可清除标识、传播到下游平台并保留审计证明。",
+      "建立服务端归因、去重、窗口、跨域/深链和广告拦截降级策略，并明确数据置信度。"
+    ],
+    "constraints": [
+      "必要功能不得强迫接受广告追踪。",
+      "拒绝同意仍可完成核心购买。",
+      "CMP 文案与政策版本一致。"
+    ],
+    "negative_cases": [
+      "标签在同意前发出请求",
+      "撤回后广告平台仍收事件",
+      "服务端归因重复记转化"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-marketing-content-platform/references/B59-consent-cmp-cookie-attribution.md",
+    "requirement_ids": [
+      "B59-R01",
+      "B59-R02",
+      "B59-R03",
+      "B59-R04",
+      "B59-R05"
+    ],
+    "topological_index": 79
+  },
+  {
+    "id": "B60",
+    "slug": "campaign-deeplink-utm-qr",
+    "title": "活动、深链、UTM、二维码与渠道归因",
+    "phase": "P12-marketing-content",
+    "depends_on": [
+      "B39",
+      "B57",
+      "B59"
+    ],
+    "skill": "building-marketing-content-platform",
+    "objective": "统一管理广告、社交、影楼、礼品、保险养老和线下二维码入口。",
+    "business_outcome": "让每个渠道可配置、可衡量、可停用，并安全地把用户带到正确终端和上下文。",
+    "modules": [
+      "services/campaign",
+      "packages/deep-links",
+      "apps/campaign-console"
+    ],
+    "interfaces": [
+      "campaign API",
+      "deep-link resolver",
+      "QR token",
+      "attribution handoff"
+    ],
+    "requirements": [
+      "实现活动、创意、受众、渠道、预算标签、UTM、短链、二维码、有效期和目标页面的版本化配置。",
+      "深链解析支持 Web、iOS、Android、小程序和伙伴白标回退，并防止开放重定向和 token 猜测。",
+      "二维码可绑定门店、员工、伙伴、商品或活动，但不得在 URL 中携带人脸、健康、儿童或支付敏感数据。",
+      "活动暂停、合同终止、同意撤回或安全事件时，可即时关闭入口并保留友好恢复页。",
+      "实现点击、到达、上传、生成、购买、分享和伙伴线索的跨端去重归因及异常监控。"
+    ],
+    "constraints": [
+      "短链不得绕过内容安全。",
+      "归因优先级和窗口可审计。",
+      "伙伴只能查看其授权活动数据。"
+    ],
+    "negative_cases": [
+      "二维码被替换到钓鱼域名",
+      "同一次购买被多渠道认领",
+      "已终止伙伴链接仍可创建项目"
+    ],
+    "criticality": "medium",
+    "reference": "skills/building-marketing-content-platform/references/B60-campaign-deeplink-utm-qr.md",
+    "requirement_ids": [
+      "B60-R01",
+      "B60-R02",
+      "B60-R03",
+      "B60-R04",
+      "B60-R05"
+    ],
+    "topological_index": 93
+  },
+  {
+    "id": "B61",
+    "slug": "social-sharing-og-ugc-media-kit",
+    "title": "社交分享、OG、UGC 模板与媒体素材",
+    "phase": "P12-marketing-content",
+    "depends_on": [
+      "B10",
+      "B39",
+      "B57"
+    ],
+    "skill": "building-marketing-content-platform",
+    "objective": "把作品分享转成可控的增长入口，并为媒体、伙伴和创作者提供合规素材。",
+    "business_outcome": "提高传播率，同时避免未经同意公开家庭、儿童和生成媒体。",
+    "modules": [
+      "services/share-card",
+      "packages/og-renderer",
+      "apps/media-kit"
+    ],
+    "interfaces": [
+      "share manifest",
+      "OG renderer",
+      "UGC template",
+      "revocation endpoint"
+    ],
+    "requirements": [
+      "实现带 AI 标识、品牌、年龄范围、可选文案和撤销能力的分享卡、短视频封面、OG 图和二维码。",
+      "分享前逐人检查授权、儿童限制、作品可见性、地区政策和平台尺寸；不满足时阻止导出或自动降级。",
+      "UGC 模板与挑战活动具备审核、音乐/字体/素材许可证、地域和到期管理。",
+      "分享访问使用不可枚举短期 token、限速、防爬和撤销传播，预览不得泄漏原始高分辨率媒体。",
+      "提供官方媒体包、品牌指南、演示素材和可验证示例数据，禁止使用真实客户素材作为默认样例。"
+    ],
+    "constraints": [
+      "付费不能移除法定 AI 标识。",
+      "儿童作品默认不可公开索引。",
+      "外部平台缓存限制必须向用户说明。"
+    ],
+    "negative_cases": [
+      "分享撤销后 CDN 仍返回原图",
+      "OG 抓取器绕过登录",
+      "模板音乐无商业授权"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-marketing-content-platform/references/B61-social-sharing-og-ugc-media-kit.md",
+    "requirement_ids": [
+      "B61-R01",
+      "B61-R02",
+      "B61-R03",
+      "B61-R04",
+      "B61-R05"
+    ],
+    "topological_index": 80
+  },
+  {
+    "id": "B62",
+    "slug": "brand-trust-status-press-sales-assets",
+    "title": "品牌中心、信任中心、状态页与销售资料",
+    "phase": "P12-marketing-content",
+    "depends_on": [
+      "B32",
+      "B44",
+      "B45",
+      "B57",
+      "B58"
+    ],
+    "skill": "building-marketing-content-platform",
+    "objective": "建设面向消费者、媒体、采购、伙伴和安全审查的可信信息表面。",
+    "business_outcome": "缩短购买和合作决策，同时让服务状态、安全与数据实践可验证。",
+    "modules": [
+      "apps/trust-center",
+      "apps/status-page",
+      "apps/brand-center",
+      "docs/sales-enablement"
+    ],
+    "interfaces": [
+      "status API",
+      "security document catalog",
+      "brand asset API",
+      "sales content approval"
+    ],
+    "requirements": [
+      "发布品牌资产、产品截图、演示数据、媒体资料、事实清单和使用规范，并具备版本及授权范围。",
+      "信任中心展示数据流、保留/删除、子处理者、AI 标识、安全控制、儿童边界和高影响决策禁用声明。",
+      "状态页公开组件、事件、维护和历史可用性，支持订阅且不暴露内部拓扑或敏感客户。",
+      "销售资料、RFP 答案、DPA/安全包和伙伴方案由内容、法务、安全、财务按类型审批，并与当前实现同步。",
+      "建立过期检查和事实验证；当认证、供应商或政策变化时自动标记受影响页面和资料。"
+    ],
+    "constraints": [
+      "不得展示未获得的认证。",
+      "状态页事件必须与实际事件记录一致。",
+      "媒体素材不得含真实未授权人脸。"
+    ],
+    "negative_cases": [
+      "销售文档宣称不存在的功能",
+      "状态页隐瞒重大故障",
+      "旧 DPA 仍可下载"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-marketing-content-platform/references/B62-brand-trust-status-press-sales-assets.md",
+    "requirement_ids": [
+      "B62-R01",
+      "B62-R02",
+      "B62-R03",
+      "B62-R04",
+      "B62-R05"
+    ],
+    "topological_index": 91
+  },
+  {
+    "id": "B63",
+    "slug": "mobile-architecture-auth-offline",
+    "title": "移动端架构、认证、导航与离线基础",
+    "phase": "P13-mobile-mini",
+    "depends_on": [
+      "B01",
+      "B03",
+      "B54"
+    ],
+    "skill": "building-mobile-and-mini-programs",
+    "objective": "建立 iOS/Android 客户端的可维护架构、身份会话、导航、缓存和离线策略。",
+    "business_outcome": "提供接近原生的高频体验，并复用 Web/服务端领域契约而不是形成第二套产品。",
+    "modules": [
+      "apps/mobile",
+      "packages/mobile-core",
+      "packages/mobile-api-client"
+    ],
+    "interfaces": [
+      "mobile session API",
+      "navigation manifest",
+      "offline cache",
+      "remote config"
+    ],
+    "requirements": [
+      "按选定 stack profile 建立 Flutter 或 React Native/Expo 工程，包含环境、导航、状态、网络、日志和模块边界。",
+      "实现邮箱/手机号/第三方登录、会话刷新、设备登出、账户合并和多租户白标入口，令牌存入安全存储。",
+      "离线仅缓存最小必要元数据和授权媒体缩略图，具备过期、加密、撤回与远程清除。",
+      "导航、深链和功能开关由版本化 manifest 控制，未知版本或无权限资源必须 fail closed。",
+      "建立崩溃、启动性能、网络失败、升级迁移和设备兼容测试，不在日志中记录原图或敏感对话。"
+    ],
+    "constraints": [
+      "不得在越狱/Root 设备上放宽同意与支付校验。",
+      "离线数据必须遵循删除请求。",
+      "服务端是权限和价格真源。"
+    ],
+    "negative_cases": [
+      "刷新令牌并发导致多次会话",
+      "撤回后离线缩略图仍可查看",
+      "旧版本深链绕过授权"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-mobile-and-mini-programs/references/B63-mobile-architecture-auth-offline.md",
+    "requirement_ids": [
+      "B63-R01",
+      "B63-R02",
+      "B63-R03",
+      "B63-R04",
+      "B63-R05"
+    ],
+    "topological_index": 51
+  },
+  {
+    "id": "B64",
+    "slug": "mobile-capture-quality-resumable-upload",
+    "title": "移动端拍摄、质量预检与断点上传",
+    "phase": "P13-mobile-mini",
+    "depends_on": [
+      "B05",
+      "B07",
+      "B63"
+    ],
+    "skill": "building-mobile-and-mini-programs",
+    "objective": "把相机、相册、裁剪、人物质量检查和大文件上传做成稳定移动流程。",
+    "business_outcome": "降低生成失败率和流量成本，同时在采集前完成清晰授权。",
+    "modules": [
+      "apps/mobile/features/capture",
+      "packages/mobile-upload",
+      "services/upload-session"
+    ],
+    "interfaces": [
+      "camera/photo picker",
+      "quality preflight",
+      "multipart upload",
+      "background task"
+    ],
+    "requirements": [
+      "支持相机、相册、HEIC/JPEG/PNG、方向校正、裁剪和多人物选择，并在上传前显示用途、保留和人物授权。",
+      "在设备端执行可解释的模糊、遮挡、角度、光照、分辨率和人数预检，服务端必须再次验证。",
+      "实现分片、校验和、断点续传、后台上传、网络切换、取消和过期上传会话，重复提交不产生重复资产。",
+      "EXIF、定位和非必要元数据在上传前移除或按明确用途处理，原图不得写入公共相册缓存。",
+      "提供低流量模式、失败恢复、上传进度、可访问性和端到端设备测试，并统计失败原因而非上传图像。"
+    ],
+    "constraints": [
+      "设备端检查不能替代服务端策略。",
+      "未经监护同意不得处理儿童项目。",
+      "临时文件按最短生命周期删除。"
+    ],
+    "negative_cases": [
+      "App 被杀后分片重复",
+      "HEIC 方向错误",
+      "蜂窝网络切换导致上传错用户"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-mobile-and-mini-programs/references/B64-mobile-capture-quality-resumable-upload.md",
+    "requirement_ids": [
+      "B64-R01",
+      "B64-R02",
+      "B64-R03",
+      "B64-R04",
+      "B64-R05"
+    ],
+    "topological_index": 60
+  },
+  {
+    "id": "B65",
+    "slug": "mobile-editor-generation-library-export",
+    "title": "移动端编辑、生成进度、作品库与导出",
+    "phase": "P13-mobile-mini",
+    "depends_on": [
+      "B08",
+      "B09",
+      "B10",
+      "B11",
+      "B64"
+    ],
+    "skill": "building-mobile-and-mini-programs",
+    "objective": "实现移动端从年龄轴编辑到生成、恢复、预览、家庭库和分享导出的完整路径。",
+    "business_outcome": "让消费者无需依赖桌面端完成主要购买与传播任务。",
+    "modules": [
+      "apps/mobile/features/editor",
+      "apps/mobile/features/library",
+      "packages/mobile-media-player"
+    ],
+    "interfaces": [
+      "timeline contract",
+      "generation status stream",
+      "library API",
+      "share/export manifest"
+    ],
+    "requirements": [
+      "复用服务端年龄轴、模板、场景和权限契约，支持草稿自动保存、冲突合并和跨设备继续。",
+      "生成进度具备实时/轮询降级、取消、重试、错误解释、预计阶段和恢复，不伪造百分比。",
+      "作品库支持家庭/个人筛选、授权状态、订单关联、离线缩略图、删除与分享撤回。",
+      "导出支持照片、宫格、视频和打印预览，并保留 AI 标识、来源信息、版权/许可和水印策略。",
+      "覆盖后台恢复、低内存、网络抖动、屏幕旋转、大字体、读屏和多媒体播放中断测试。"
+    ],
+    "constraints": [
+      "客户端不得自行判定生成通过质量门。",
+      "私密媒体不得写入系统共享缓存。",
+      "导出许可由服务端签发。"
+    ],
+    "negative_cases": [
+      "生成任务完成通知早于资产可用",
+      "家庭成员撤权后仍在库中",
+      "视频导出缺少 AI 标识"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-mobile-and-mini-programs/references/B65-mobile-editor-generation-library-export.md",
+    "requirement_ids": [
+      "B65-R01",
+      "B65-R02",
+      "B65-R03",
+      "B65-R04",
+      "B65-R05"
+    ],
+    "topological_index": 67
+  },
+  {
+    "id": "B66",
+    "slug": "mobile-iap-subscription-restore",
+    "title": "移动端内购、订阅与权益恢复",
+    "phase": "P13-mobile-mini",
+    "depends_on": [
+      "B25",
+      "B26",
+      "B27",
+      "B63"
+    ],
+    "skill": "building-mobile-and-mini-programs",
+    "objective": "实现 App Store/Google Play 内购与服务端商品、订阅和权益的一致闭环。",
+    "business_outcome": "支持移动端变现，同时避免客户端收据伪造和跨平台重复权益。",
+    "modules": [
+      "apps/mobile/features/paywall",
+      "services/iap-verification",
+      "packages/entitlements"
+    ],
+    "interfaces": [
+      "store product mapping",
+      "receipt verification",
+      "server notifications",
+      "restore purchases"
+    ],
+    "requirements": [
+      "建立内部商品与各商店 product ID、价格展示、地区可售性、试用和促销资格的版本映射。",
+      "所有收据、交易和商店服务器通知在服务端验签、去重和状态机处理，客户端结果不得直接授予权益。",
+      "支持购买恢复、换机、家庭共享边界、退款、撤销、宽限期、账单重试和跨平台账户合并。",
+      "网页、IAP、礼品码和伙伴权益进入统一 entitlement ledger，明确优先级、重复和过期规则。",
+      "建立商店沙箱、异常通知重放、价格不一致、退款后生成取消和财务对账测试。"
+    ],
+    "constraints": [
+      "遵守各应用商店适用支付规则。",
+      "价格和税费以服务端/商店返回为准。",
+      "退款后不得保留未消费权益。"
+    ],
+    "negative_cases": [
+      "商店通知乱序",
+      "同一收据绑定两个账户",
+      "恢复购买覆盖更高等级权益"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-mobile-and-mini-programs/references/B66-mobile-iap-subscription-restore.md",
+    "requirement_ids": [
+      "B66-R01",
+      "B66-R02",
+      "B66-R03",
+      "B66-R04",
+      "B66-R05"
+    ],
+    "topological_index": 61
+  },
+  {
+    "id": "B67",
+    "slug": "mobile-push-deeplink-widgets-sharing",
+    "title": "移动推送、深链、组件与分享扩展",
+    "phase": "P13-mobile-mini",
+    "depends_on": [
+      "B40",
+      "B63",
+      "B65"
+    ],
+    "skill": "building-mobile-and-mini-programs",
+    "objective": "提供生成完成、订单、家庭邀请和年度仪式的安全移动触达与系统级入口。",
+    "business_outcome": "提高任务完成和回访，同时尊重偏好、隐私和频率控制。",
+    "modules": [
+      "apps/mobile/push",
+      "apps/mobile/widgets",
+      "apps/mobile/share-extension",
+      "services/deep-link"
+    ],
+    "interfaces": [
+      "device token registry",
+      "push payload",
+      "universal/app links",
+      "widget snapshot"
+    ],
+    "requirements": [
+      "注册、轮换和删除设备 token，并按账户、设备、租户、地区和通知偏好选择发送目标。",
+      "推送 payload 不含人脸、敏感对话、完整订单或儿童信息，仅携带不可枚举的导航引用。",
+      "通用链接/App Links、动态链接和通知点击必须重新在服务端授权，支持已登出和旧版本降级。",
+      "桌面/锁屏组件只展示用户明确允许的最小信息，账户退出、撤权或删除后立即清除快照。",
+      "分享扩展只接受受支持媒体并进入同意/安全预检，不允许绕过主 App 直接生成或公开。"
+    ],
+    "constraints": [
+      "敏感内容默认不显示在锁屏。",
+      "推送权限拒绝不影响核心功能。",
+      "深链不得信任客户端角色。"
+    ],
+    "negative_cases": [
+      "设备 token 被另一账户继承",
+      "锁屏显示儿童姓名",
+      "恶意分享扩展输入导致崩溃"
+    ],
+    "criticality": "medium",
+    "reference": "skills/building-mobile-and-mini-programs/references/B67-mobile-push-deeplink-widgets-sharing.md",
+    "requirement_ids": [
+      "B67-R01",
+      "B67-R02",
+      "B67-R03",
+      "B67-R04",
+      "B67-R05"
+    ],
+    "topological_index": 76
+  },
+  {
+    "id": "B68",
+    "slug": "mobile-security-performance-accessibility",
+    "title": "移动端隐私、安全、性能与无障碍加固",
+    "phase": "P13-mobile-mini",
+    "depends_on": [
+      "B21",
+      "B44",
+      "B55",
+      "B63",
+      "B64",
+      "B65",
+      "B66",
+      "B67"
+    ],
+    "skill": "building-mobile-and-mini-programs",
+    "objective": "对移动端数据、网络、设备环境、性能和无障碍进行发布前系统加固。",
+    "business_outcome": "降低人脸媒体泄漏、账户劫持、商店差评和设备兼容风险。",
+    "modules": [
+      "apps/mobile/security",
+      "apps/mobile/performance",
+      "tests/mobile-security"
+    ],
+    "interfaces": [
+      "certificate pinning policy",
+      "secure storage",
+      "privacy manifest",
+      "device test matrix"
+    ],
+    "requirements": [
+      "实现安全存储、敏感缓存加密、最小权限、剪贴板/截图策略、调试关闭和完整性信号的风险分级处理。",
+      "对 TLS、证书、API 域名、文件类型、重定向和 WebView 进行限制；pinning 需具备安全轮换和故障恢复。",
+      "编制 iOS/Android 隐私清单、权限用途、数据安全表和第三方 SDK 数据流，并与实际网络抓包核对。",
+      "建立启动、内存、卡顿、电量、上传、媒体播放、崩溃和弱网性能预算及真实设备回归。",
+      "对读屏、动态字体、键盘/开关控制、字幕、颜色对比和减少动效进行自动与人工测试。"
+    ],
+    "constraints": [
+      "完整性信号不得作为无申诉的账户封禁唯一依据。",
+      "不得收集非必要通讯录或定位。",
+      "安全措施不能阻止数据删除。"
+    ],
+    "negative_cases": [
+      "证书轮换导致全量离线",
+      "截图策略破坏无障碍",
+      "第三方 SDK 未披露设备数据"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-mobile-and-mini-programs/references/B68-mobile-security-performance-accessibility.md",
+    "requirement_ids": [
+      "B68-R01",
+      "B68-R02",
+      "B68-R03",
+      "B68-R04",
+      "B68-R05"
+    ],
+    "topological_index": 88
+  },
+  {
+    "id": "B69",
+    "slug": "mobile-store-packaging-review-release",
+    "title": "应用商店打包、审核与发布流水线",
+    "phase": "P13-mobile-mini",
+    "depends_on": [
+      "B47",
+      "B56",
+      "B68"
+    ],
+    "skill": "building-mobile-and-mini-programs",
+    "objective": "建立 iOS/Android 签名、构建、元数据、审核、灰度和回滚流程。",
+    "business_outcome": "让移动应用能够重复发布，而不是依赖个人机器和手工步骤。",
+    "modules": [
+      "infra/mobile-release",
+      "docs/app-store",
+      "pipelines/mobile"
+    ],
+    "interfaces": [
+      "signing assets",
+      "store metadata",
+      "release train",
+      "crash/rollout gates"
+    ],
+    "requirements": [
+      "实现开发、测试、预发布和生产 flavor，签名密钥使用受控密钥库，CI 不输出证书或私钥。",
+      "管理商店名称、描述、截图、预览、隐私 URL、支持 URL、年龄分级、内购和本地化元数据版本。",
+      "发布前自动运行单元、集成、设备、视觉、无障碍、安全、隐私、IAP 和冷启动检查。",
+      "支持 TestFlight/内部测试、分阶段发布、崩溃/ANR/评分护栏、暂停和可审计回滚。",
+      "建立审核问题、紧急修复、强制升级/最低版本和旧 API 兼容流程，并保留每次提交证据。"
+    ],
+    "constraints": [
+      "生产签名需最小权限和双人控制。",
+      "商店素材不得暗示真实未来预测。",
+      "紧急修复仍需关键安全门。"
+    ],
+    "negative_cases": [
+      "错误 bundle ID 覆盖测试应用",
+      "分阶段发布崩溃率超阈值未暂停",
+      "审核账号访问真实客户数据"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-mobile-and-mini-programs/references/B69-mobile-store-packaging-review-release.md",
+    "requirement_ids": [
+      "B69-R01",
+      "B69-R02",
+      "B69-R03",
+      "B69-R04",
+      "B69-R05"
+    ],
+    "topological_index": 101
+  },
+  {
+    "id": "B70",
+    "slug": "wechat-mini-program-core-journey",
+    "title": "微信小程序登录、上传、编辑与生成",
+    "phase": "P13-mobile-mini",
+    "depends_on": [
+      "B03",
+      "B04",
+      "B07",
+      "B08",
+      "B09",
+      "B54"
+    ],
+    "skill": "building-mobile-and-mini-programs",
+    "objective": "建设适配微信生态的轻量消费者和渠道入口。",
+    "business_outcome": "降低中国市场获客与分享摩擦，同时复用统一服务端业务和安全契约。",
+    "modules": [
+      "apps/wechat-mini-program",
+      "services/wechat-session",
+      "packages/mini-api-client"
+    ],
+    "interfaces": [
+      "WeChat login",
+      "upload session",
+      "timeline API",
+      "generation status"
+    ],
+    "requirements": [
+      "实现微信登录/手机号授权的可选绑定、账户合并、会话刷新和退出，不把 openid 当作跨主体身份。",
+      "实现选择图片、压缩预检、授权告知、分片上传、年龄轴编辑、任务状态、预览和作品库。",
+      "小程序前端只保存最小临时数据，私密媒体使用短期签名 URL 并在页面隐藏/退出时清理。",
+      "网络、包体、分包、缓存和基础库版本按微信约束优化，并提供 Web/H5 降级。",
+      "建立开发者工具、真机、弱网、旧基础库、隐私授权拒绝和异常恢复自动/人工测试。"
+    ],
+    "constraints": [
+      "服务端重新校验同意、权限、价格和质量。",
+      "不得默认获取手机号。",
+      "小程序日志不含原图 URL。"
+    ],
+    "negative_cases": [
+      "openid 错绑已有账户",
+      "分包缺失导致生成页白屏",
+      "分享进入后读取前一用户缓存"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-mobile-and-mini-programs/references/B70-wechat-mini-program-core-journey.md",
+    "requirement_ids": [
+      "B70-R01",
+      "B70-R02",
+      "B70-R03",
+      "B70-R04",
+      "B70-R05"
+    ],
+    "topological_index": 52
+  },
+  {
+    "id": "B71",
+    "slug": "wechat-payment-share-service-messaging",
+    "title": "微信支付、分享、客服与服务通知",
+    "phase": "P13-mobile-mini",
+    "depends_on": [
+      "B10",
+      "B25",
+      "B26",
+      "B27",
+      "B39",
+      "B70"
+    ],
+    "skill": "building-mobile-and-mini-programs",
+    "objective": "闭合小程序内购买、礼品传播、伙伴渠道、客服和合规触达。",
+    "business_outcome": "把微信入口从一次性体验变成可付费、可恢复和可服务的商业渠道。",
+    "modules": [
+      "services/wechat-pay",
+      "apps/wechat-mini-program/commerce",
+      "services/wechat-messaging"
+    ],
+    "interfaces": [
+      "JSAPI payment",
+      "payment callback",
+      "share card",
+      "customer service handoff",
+      "subscription message"
+    ],
+    "requirements": [
+      "实现统一订单到微信支付下单、签名、回调验签、查单、退款和对账，回调乱序/重复不重复授予权益。",
+      "商品、优惠、礼品码和价格由服务端校验；前端不得篡改金额、伙伴归因或分成。",
+      "分享卡和群/好友入口携带可撤销短链与 AI 标识，儿童和多人作品按逐人授权限制。",
+      "接入微信客服/企业客服或受控人工入口，工单与用户授权上下文最小化传递并可审计。",
+      "服务通知仅在用户明确授权的模板和次数范围发送，支持退订、频控、失败补偿和其他渠道回退。"
+    ],
+    "constraints": [
+      "不得诱导分享换取安全能力。",
+      "支付回调是服务端真源。",
+      "客服不可下载无授权原图。"
+    ],
+    "negative_cases": [
+      "回调重复导致双倍额度",
+      "退款后礼品仍可兑换",
+      "模板消息超授权次数"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-mobile-and-mini-programs/references/B71-wechat-payment-share-service-messaging.md",
+    "requirement_ids": [
+      "B71-R01",
+      "B71-R02",
+      "B71-R03",
+      "B71-R04",
+      "B71-R05"
+    ],
+    "topological_index": 62
+  },
+  {
+    "id": "B72",
+    "slug": "wechat-compliance-review-release",
+    "title": "小程序隐私、合规、审核与发布",
+    "phase": "P13-mobile-mini",
+    "depends_on": [
+      "B44",
+      "B47",
+      "B55",
+      "B70",
+      "B71"
+    ],
+    "skill": "building-mobile-and-mini-programs",
+    "objective": "建立小程序主体、类目、隐私保护、备案/登记评估、体验版和正式发布流程。",
+    "business_outcome": "降低中国市场审核失败和上线后因权限、内容或支付问题被停服的风险。",
+    "modules": [
+      "docs/wechat-release",
+      "pipelines/mini-program",
+      "apps/wechat-mini-program/privacy"
+    ],
+    "interfaces": [
+      "privacy interface",
+      "release metadata",
+      "review account",
+      "version rollout"
+    ],
+    "requirements": [
+      "维护小程序主体、类目、服务内容、隐私保护指引、权限清单、客服和交易信息的版本化发布材料。",
+      "对生成式 AI 应用登记/备案适用性、内容标识、人脸信息、未成年人和跨境数据路径形成法务复核记录。",
+      "构建、上传、体验版、审核、灰度和回退流程可在 CI/受控终端重复执行，密钥不进入仓库。",
+      "审核账号仅访问合成测试数据和专用租户；审核结束后自动撤权和清理。",
+      "发布门覆盖隐私弹窗、授权拒绝、支付、分享、删除、客服、AI 标识、弱网和旧版本兼容。"
+    ],
+    "constraints": [
+      "法律适用性结论需专业复核。",
+      "审核材料与真实功能一致。",
+      "灰度不能绕过内容安全。"
+    ],
+    "negative_cases": [
+      "审核账号进入生产客户租户",
+      "隐私指引漏列照片用途",
+      "回退版本不兼容新订单"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-mobile-and-mini-programs/references/B72-wechat-compliance-review-release.md",
+    "requirement_ids": [
+      "B72-R01",
+      "B72-R02",
+      "B72-R03",
+      "B72-R04",
+      "B72-R05"
+    ],
+    "topological_index": 86
+  },
+  {
+    "id": "B73",
+    "slug": "notification-preferences-consent-quiet-hours",
+    "title": "通知偏好、同意、安静时段与频控",
+    "phase": "P14-notifications",
+    "depends_on": [
+      "B03",
+      "B04",
+      "B40"
+    ],
+    "skill": "building-notification-lifecycle-platform",
+    "objective": "建立跨邮件、短信、推送、微信和站内信的统一通知偏好与合法基础。",
+    "business_outcome": "在提高任务完成率的同时，避免骚扰、越权和儿童敏感触达。",
+    "modules": [
+      "services/notification-preferences",
+      "apps/notification-center",
+      "packages/contact-policy"
+    ],
+    "interfaces": [
+      "preference API",
+      "purpose consent",
+      "quiet-hours policy",
+      "contact eligibility"
+    ],
+    "requirements": [
+      "按交易、生成、家庭、安全、营销、年度仪式和伙伴服务等用途管理渠道偏好、地区规则和版本。",
+      "实现全局退订、用途退订、渠道退订、安静时段、频率上限和紧急安全通知例外。",
+      "每次发送前实时计算账户、联系人、租户、同意、未成年人、地区、时间和最近频次，而非依赖旧快照。",
+      "手机号/邮箱变更、账户合并、家庭邀请撤销和数据删除时同步更新或隔离联系点。",
+      "偏好中心支持匿名退订 token、身份验证后的完整控制、导出和审计，不泄漏联系人是否存在。"
+    ],
+    "constraints": [
+      "核心安全通知不得夹带营销。",
+      "未成年人营销默认关闭。",
+      "伙伴不得覆盖用户全局退订。"
+    ],
+    "negative_cases": [
+      "时区错误在夜间发送",
+      "匿名退订枚举邮箱",
+      "账户合并恢复已退订营销"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-notification-lifecycle-platform/references/B73-notification-preferences-consent-quiet-hours.md",
+    "requirement_ids": [
+      "B73-R01",
+      "B73-R02",
+      "B73-R03",
+      "B73-R04",
+      "B73-R05"
+    ],
+    "topological_index": 65
+  },
+  {
+    "id": "B74",
+    "slug": "multi-channel-notification-provider-routing",
+    "title": "邮件、短信、推送、微信与站内信供应商路由",
+    "phase": "P14-notifications",
+    "depends_on": [
+      "B12",
+      "B13",
+      "B73"
+    ],
+    "skill": "building-notification-lifecycle-platform",
+    "objective": "建设多渠道通知抽象、路由、幂等、回调和故障切换。",
+    "business_outcome": "让业务不绑定单一供应商并可按地区、成本、送达率和合规选择渠道。",
+    "modules": [
+      "services/notification-router",
+      "adapters/email",
+      "adapters/sms",
+      "adapters/push",
+      "adapters/wechat"
+    ],
+    "interfaces": [
+      "send command",
+      "provider callback",
+      "delivery event",
+      "routing policy"
+    ],
+    "requirements": [
+      "定义渠道无关消息命令、联系人引用、模板版本、用途、优先级、时限、幂等键和追踪 ID。",
+      "实现至少邮件、短信、移动推送、微信服务通知和站内信适配器及模拟/沙箱适配器。",
+      "供应商回调验签、去重并映射 accepted/delivered/failed/bounced/complained/expired 状态。",
+      "路由按地区、偏好、合规、模板支持、成本、送达率和故障状态选择，回退不得跨越用户未同意渠道。",
+      "秘密、发送额度、域名/号码、证书和供应商配置进入受控配置中心，具备轮换和审计。"
+    ],
+    "constraints": [
+      "不允许记录完整消息中的敏感媒体 URL。",
+      "发送命令必须可重放且不重复发送。",
+      "供应商未知状态 fail closed。"
+    ],
+    "negative_cases": [
+      "主供应商超时后双发",
+      "回调伪造送达",
+      "回退到未授权短信"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-notification-lifecycle-platform/references/B74-multi-channel-notification-provider-routing.md",
+    "requirement_ids": [
+      "B74-R01",
+      "B74-R02",
+      "B74-R03",
+      "B74-R04",
+      "B74-R05"
+    ],
+    "topological_index": 74
+  },
+  {
+    "id": "B75",
+    "slug": "notification-template-localization-rendering",
+    "title": "通知模板、变量安全、本地化与渲染",
+    "phase": "P14-notifications",
+    "depends_on": [
+      "B55",
+      "B74"
+    ],
+    "skill": "building-notification-lifecycle-platform",
+    "objective": "建立跨渠道、品牌、语言和用途的安全模板系统。",
+    "business_outcome": "使交易和生命周期消息可由运营管理，同时避免变量注入、错发和文案漂移。",
+    "modules": [
+      "services/template-renderer",
+      "apps/template-console",
+      "packages/message-schemas"
+    ],
+    "interfaces": [
+      "template API",
+      "typed variables",
+      "render preview",
+      "approval workflow"
+    ],
+    "requirements": [
+      "为生成完成、付款、退款、订单、物流、家庭邀请、安全、年度更新和伙伴事件建立类型化模板。",
+      "模板变量通过 schema 校验、编码和敏感级别控制；禁止任意代码、远程脚本和未批准 URL。",
+      "支持品牌、租户、语言、地区、渠道和版本继承，缺少强制交易模板时不得静默使用营销模板。",
+      "提供真实尺寸预览、测试发送、差异审阅、双人批准、排期、回滚和过期检查。",
+      "所有链接使用受控域名和短期 token，取消订阅、AI 标识和法定文案不可被白标覆盖。"
+    ],
+    "constraints": [
+      "生产测试发送只允许受控收件人。",
+      "儿童相关通知使用最小信息。",
+      "模板历史不可被覆盖删除。"
+    ],
+    "negative_cases": [
+      "变量注入 HTML",
+      "错误租户品牌发送",
+      "过期邀请链接仍有效"
+    ],
+    "criticality": "medium",
+    "reference": "skills/building-notification-lifecycle-platform/references/B75-notification-template-localization-rendering.md",
+    "requirement_ids": [
+      "B75-R01",
+      "B75-R02",
+      "B75-R03",
+      "B75-R04",
+      "B75-R05"
+    ],
+    "topological_index": 83
+  },
+  {
+    "id": "B76",
+    "slug": "lifecycle-journey-orchestration",
+    "title": "生命周期旅程、调度与状态编排",
+    "phase": "P14-notifications",
+    "depends_on": [
+      "B24",
+      "B27",
+      "B40",
+      "B74",
+      "B75"
+    ],
+    "skill": "building-notification-lifecycle-platform",
+    "objective": "把首次生成、放弃、购买、家庭协作、年度更新和续费转成可暂停、可解释的旅程。",
+    "business_outcome": "提高激活、留存和复购，同时让用户状态变化立即停止不适当触达。",
+    "modules": [
+      "services/journey-orchestrator",
+      "apps/journey-console",
+      "packages/audience-evaluator"
+    ],
+    "interfaces": [
+      "journey definition",
+      "trigger event",
+      "wait state",
+      "exit criteria"
+    ],
+    "requirements": [
+      "实现事件触发、条件、等待、分支、频控、目标、退出、暂停、版本和回放的耐久旅程定义。",
+      "用户付款、退款、删除、退订、授权撤回、危机信号、儿童状态或客服工单后实时退出/切换相关旅程。",
+      "受众条件只能使用经批准的业务属性，不使用人脸、情绪、未来自我私密对话或敏感推断。",
+      "旅程发布需预估受众和成本、模拟样本、双人批准、灰度、停止开关和审计。",
+      "执行具备幂等、延迟任务恢复、时区、上限、死信、供应商故障和重复事件处理。"
+    ],
+    "constraints": [
+      "营销旅程不得冒充未来自我人格。",
+      "安全事件可全局暂停。",
+      "未成年人的触达需独立策略。"
+    ],
+    "negative_cases": [
+      "退款后仍催促完成订单",
+      "旅程版本切换重复发送",
+      "批量受众误选全量用户"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-notification-lifecycle-platform/references/B76-lifecycle-journey-orchestration.md",
+    "requirement_ids": [
+      "B76-R01",
+      "B76-R02",
+      "B76-R03",
+      "B76-R04",
+      "B76-R05"
+    ],
+    "topological_index": 96
+  },
+  {
+    "id": "B77",
+    "slug": "deliverability-bounce-complaint-failover",
+    "title": "送达率、退信投诉与供应商故障治理",
+    "phase": "P14-notifications",
+    "depends_on": [
+      "B45",
+      "B74",
+      "B75",
+      "B76"
+    ],
+    "skill": "building-notification-lifecycle-platform",
+    "objective": "建立域名、号码、设备 token、声誉、退信、投诉和故障切换运营。",
+    "business_outcome": "保护品牌发送能力并降低用户投诉和关键消息丢失。",
+    "modules": [
+      "services/deliverability",
+      "apps/deliverability-console",
+      "runbooks/notifications"
+    ],
+    "interfaces": [
+      "suppression list",
+      "domain health",
+      "provider health",
+      "delivery SLO"
+    ],
+    "requirements": [
+      "管理 SPF/DKIM/DMARC、发送域、短信签名/模板、推送证书和微信模板的验证与轮换状态。",
+      "硬退信、投诉、无效号码和卸载 token 进入用途/渠道抑制，避免继续重试造成骚扰。",
+      "监控接受、送达、打开/点击可用性、退信、投诉、延迟和成本，按地区/供应商/模板告警。",
+      "供应商故障切换需保留幂等与用户渠道许可，并对关键交易消息设置可控替代和人工处置。",
+      "建立声誉预热、容量计划、黑名单排查、事件响应和事后复盘，不使用购买名单。"
+    ],
+    "constraints": [
+      "打开追踪需受同意和地区限制。",
+      "投诉用户立即停止营销。",
+      "供应商指标不等同真实阅读。"
+    ],
+    "negative_cases": [
+      "软退信无限重试",
+      "备用域未配置认证",
+      "投诉回调延迟导致继续发送"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-notification-lifecycle-platform/references/B77-deliverability-bounce-complaint-failover.md",
+    "requirement_ids": [
+      "B77-R01",
+      "B77-R02",
+      "B77-R03",
+      "B77-R04",
+      "B77-R05"
+    ],
+    "topological_index": 106
+  },
+  {
+    "id": "B78",
+    "slug": "notification-analytics-experiments-frequency",
+    "title": "通知分析、实验、频率与增量效果",
+    "phase": "P14-notifications",
+    "depends_on": [
+      "B41",
+      "B42",
+      "B73",
+      "B76",
+      "B77"
+    ],
+    "skill": "building-notification-lifecycle-platform",
+    "objective": "衡量通知的真实增量价值、成本和负面影响。",
+    "business_outcome": "优化触达而不是简单提高发送量，并把退订、投诉和疲劳作为核心护栏。",
+    "modules": [
+      "analytics/notifications",
+      "services/contact-frequency",
+      "apps/message-insights"
+    ],
+    "interfaces": [
+      "message fact table",
+      "holdout assignment",
+      "frequency ledger",
+      "incrementality report"
+    ],
+    "requirements": [
+      "建立发送、送达、失败、退信、投诉、退订、打开/点击、目标完成和成本的统一事件模型。",
+      "实现账户/联系人/家庭/租户/用途的跨渠道频率账本和滚动窗口，发送前原子预留。",
+      "支持保留组、A/B/n、序贯或固定样本实验，预注册目标、护栏、停止规则和最小可检测效应。",
+      "报告区分相关转化与增量效果，展示置信区间、样本污染、渠道不可观测和幸存者偏差。",
+      "当退订、投诉、夜间发送、儿童触达或安全事件超过阈值时自动暂停相关模板/旅程。"
+    ],
+    "constraints": [
+      "不得用暗黑模式提升点击。",
+      "敏感事件不进入营销受众。",
+      "实验不改变必需安全消息内容。"
+    ],
+    "negative_cases": [
+      "频率并发预留超限",
+      "保留组收到其他渠道同一活动",
+      "只报告点击不报告退订"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-notification-lifecycle-platform/references/B78-notification-analytics-experiments-frequency.md",
+    "requirement_ids": [
+      "B78-R01",
+      "B78-R02",
+      "B78-R03",
+      "B78-R04",
+      "B78-R05"
+    ],
+    "topological_index": 113
+  },
+  {
+    "id": "B79",
+    "slug": "help-center-faq-search",
+    "title": "帮助中心、FAQ、搜索与自助排障",
+    "phase": "P15-support-success",
+    "depends_on": [
+      "B58",
+      "B75"
+    ],
+    "skill": "building-customer-support-success",
+    "objective": "建设面向消费者、家庭、伙伴和开发者的可搜索帮助体系。",
+    "business_outcome": "减少重复工单并让用户在上传、生成、支付、分享和删除问题上获得可靠自助恢复。",
+    "modules": [
+      "apps/help-center",
+      "services/help-search",
+      "packages/help-widget"
+    ],
+    "interfaces": [
+      "help content API",
+      "search index",
+      "contextual help",
+      "article feedback"
+    ],
+    "requirements": [
+      "建立账户、照片、生成、家庭授权、未来自我、支付、退款、打印、配送、隐私、安全和伙伴 API 分类。",
+      "搜索支持同义词、错别字、语言、角色和产品版本过滤，不因查询词泄漏其他租户或私有对象。",
+      "在关键错误态提供上下文帮助、状态检查、恢复步骤和升级人工入口，文章与错误码版本关联。",
+      "政策/安全/支付文章需独立审批和到期复核；产品变更自动标记受影响内容。",
+      "收集无结果搜索、文章有用性和转人工原因，内容分析不记录原始人脸或私密对话。"
+    ],
+    "constraints": [
+      "帮助内容不得替代医疗、法律或保险专业意见。",
+      "搜索日志需最小化。",
+      "旧客户端可访问对应版本文档。"
+    ],
+    "negative_cases": [
+      "文章指导绕过授权",
+      "搜索索引包含未发布政策",
+      "错误码链接到错误地区退款规则"
+    ],
+    "criticality": "medium",
+    "reference": "skills/building-customer-support-success/references/B79-help-center-faq-search.md",
+    "requirement_ids": [
+      "B79-R01",
+      "B79-R02",
+      "B79-R03",
+      "B79-R04",
+      "B79-R05"
+    ],
+    "topological_index": 97
+  },
+  {
+    "id": "B80",
+    "slug": "support-ticket-inbox-sla-routing",
+    "title": "客服工单、全渠道收件箱、SLA 与路由",
+    "phase": "P15-support-success",
+    "depends_on": [
+      "B03",
+      "B30",
+      "B43",
+      "B74"
+    ],
+    "skill": "building-customer-support-success",
+    "objective": "建立统一工单、队列、分派、SLA、宏和升级机制。",
+    "business_outcome": "让消费者和伙伴问题可跟踪、可审计、可恢复，而不是散落在个人聊天和邮箱。",
+    "modules": [
+      "services/support",
+      "apps/support-console",
+      "packages/support-routing"
+    ],
+    "interfaces": [
+      "ticket API",
+      "inbound adapters",
+      "SLA policy",
+      "assignment event"
+    ],
+    "requirements": [
+      "支持 Web 表单、站内、邮件、微信客服、伙伴门户和内部转交创建工单，并去重/线程化。",
+      "工单按租户、产品、语言、严重度、支付/隐私/儿童/安全标签和员工技能路由，超时自动升级。",
+      "实现状态、优先级、SLA、暂停原因、责任人、观察者、内部备注、宏、附件和审计历史。",
+      "附件经恶意内容扫描、类型/大小限制、短期访问和保留策略处理；默认不请求原始照片。",
+      "客服权限按最小范围、字段脱敏和理由访问；高风险操作需二次审批或转专门队列。"
+    ],
+    "constraints": [
+      "聊天渠道不得成为永久数据仓库。",
+      "SLA 不得通过自动关闭伪造达成。",
+      "伙伴工单与消费者数据隔离。"
+    ],
+    "negative_cases": [
+      "同一邮件循环创建工单",
+      "客服查看无关家庭成员",
+      "隐私工单被普通宏自动回复"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-customer-support-success/references/B80-support-ticket-inbox-sla-routing.md",
+    "requirement_ids": [
+      "B80-R01",
+      "B80-R02",
+      "B80-R03",
+      "B80-R04",
+      "B80-R05"
+    ],
+    "topological_index": 84
+  },
+  {
+    "id": "B81",
+    "slug": "in-app-support-bot-human-handoff",
+    "title": "站内帮助、客服机器人与人工接管",
+    "phase": "P15-support-success",
+    "depends_on": [
+      "B23",
+      "B75",
+      "B79",
+      "B80"
+    ],
+    "skill": "building-customer-support-success",
+    "objective": "提供可解释的自助助手和无损人工接管。",
+    "business_outcome": "提高问题解决速度，同时避免机器人扮演治疗者、未来自我或越权操作账户。",
+    "modules": [
+      "services/support-assistant",
+      "apps/support-widget",
+      "packages/handoff"
+    ],
+    "interfaces": [
+      "knowledge retrieval",
+      "support tool API",
+      "handoff summary",
+      "conversation retention"
+    ],
+    "requirements": [
+      "机器人只从批准知识库、错误状态和用户授权的账户上下文回答，并明确 AI 身份和能力边界。",
+      "可执行工具采用白名单、参数校验、服务端授权、预览确认、幂等和审计，禁止自主退款/删除高风险数据。",
+      "无法回答、用户要求、负面情绪、支付争议、儿童/隐私/安全事项时平滑转人工。",
+      "人工接管摘要最小化并区分用户陈述、系统事实和模型推断；不把完整未来自我对话默认转交。",
+      "建立答案正确率、解决率、误导、越权调用、转接质量和用户满意度评测及红队用例。"
+    ],
+    "constraints": [
+      "支持机器人不得冒充未来的用户本人。",
+      "危机信号按安全流程而非销售流程处理。",
+      "知识库版本可追踪。"
+    ],
+    "negative_cases": [
+      "机器人承诺必定退款",
+      "工具调用跨租户",
+      "人工看不到机器人已执行操作"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-customer-support-success/references/B81-in-app-support-bot-human-handoff.md",
+    "requirement_ids": [
+      "B81-R01",
+      "B81-R02",
+      "B81-R03",
+      "B81-R04",
+      "B81-R05"
+    ],
+    "topological_index": 107
+  },
+  {
+    "id": "B82",
+    "slug": "customer-360-timeline-impersonation",
+    "title": "客户 360、时间线与受控代操作",
+    "phase": "P15-support-success",
+    "depends_on": [
+      "B03",
+      "B04",
+      "B11",
+      "B30",
+      "B43"
+    ],
+    "skill": "building-customer-support-success",
+    "objective": "为客服和运营提供最小必要的客户、家庭、订单、工单和授权时间线。",
+    "business_outcome": "加快排障和服务恢复，同时防止内部人员浏览敏感媒体或无痕代操作。",
+    "modules": [
+      "services/customer-360",
+      "apps/support-console/customer",
+      "packages/impersonation-control"
+    ],
+    "interfaces": [
+      "customer summary API",
+      "timeline event",
+      "field masking",
+      "support session"
+    ],
+    "requirements": [
+      "聚合账户、家庭角色、项目状态、订单、权益、通知、工单、同意和数据权利请求的服务摘要。",
+      "原始媒体、特征、对话和支付凭据默认不展示；需要时按理由、工单、范围和时间临时授权。",
+      "代操作使用单独 support session、明显 UI 标识、禁止查看秘密、不可提升权限，并记录每次读写。",
+      "敏感字段按角色、地区、租户和工单类型脱敏，导出/复制/截图等行为受限制与审计。",
+      "时间线事件使用稳定来源和关联 ID，可区分业务事实、第三方回调、客服动作和模型结果。"
+    ],
+    "constraints": [
+      "不得按好奇心访问名人或同事账户。",
+      "代操作不能接受同意或签署授权。",
+      "删除后的内容不在聚合缓存复现。"
+    ],
+    "negative_cases": [
+      "客服会话超时后仍有效",
+      "时间线排序掩盖退款先后",
+      "脱敏字段通过导出泄漏"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-customer-support-success/references/B82-customer-360-timeline-impersonation.md",
+    "requirement_ids": [
+      "B82-R01",
+      "B82-R02",
+      "B82-R03",
+      "B82-R04",
+      "B82-R05"
+    ],
+    "topological_index": 58
+  },
+  {
+    "id": "B83",
+    "slug": "support-actions-refund-replacement-data-rights",
+    "title": "客服动作、退款补发与数据权利协同",
+    "phase": "P15-support-success",
+    "depends_on": [
+      "B28",
+      "B29",
+      "B30",
+      "B44",
+      "B80",
+      "B82"
+    ],
+    "skill": "building-customer-support-success",
+    "objective": "把退款、额度补偿、重生成、补印、地址修改和数据权利操作做成受控工作流。",
+    "business_outcome": "提高一次解决率并防止客服绕过账务、同意和审计。",
+    "modules": [
+      "services/support-actions",
+      "apps/support-console/actions",
+      "workflows/remediation"
+    ],
+    "interfaces": [
+      "action preview",
+      "approval policy",
+      "ledger/order command",
+      "data-rights handoff"
+    ],
+    "requirements": [
+      "每类客服动作定义资格、金额/次数上限、前置状态、影响预览、审批级别、幂等键和补偿。",
+      "退款、额度、补印和配送变更必须调用领域服务并更新账务/订单/供应商状态，不直接改数据库。",
+      "同意撤回、删除、访问、更正和导出请求进入专门数据权利流程，客服不能手工伪造完成。",
+      "所有动作记录理由、工单、操作者、批准者、前后状态、关联交易和用户通知。",
+      "建立恶意索赔、重复补偿、超时竞态、部分履约、跨渠道退款和回滚失败测试。"
+    ],
+    "constraints": [
+      "高额或高风险动作需双人控制。",
+      "补偿不能恢复已撤销处理权限。",
+      "客服 KPI 不得鼓励拒绝正当退款。"
+    ],
+    "negative_cases": [
+      "退款与补印同时执行",
+      "重复工单获得多次额度",
+      "删除请求被标记完成但供应商副本仍在"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-customer-support-success/references/B83-support-actions-refund-replacement-data-rights.md",
+    "requirement_ids": [
+      "B83-R01",
+      "B83-R02",
+      "B83-R03",
+      "B83-R04",
+      "B83-R05"
+    ],
+    "topological_index": 98
+  },
+  {
+    "id": "B84",
+    "slug": "partner-sales-crm-quotes-pipeline",
+    "title": "伙伴销售 CRM、线索、商机与报价",
+    "phase": "P15-support-success",
+    "depends_on": [
+      "B31",
+      "B32",
+      "B38",
+      "B62",
+      "B80"
+    ],
+    "skill": "building-customer-support-success",
+    "objective": "建设影楼、礼品、保险养老、企业福利和平台嵌入的 B2B 销售流程。",
+    "business_outcome": "把线索到试点、合同和上线转成可预测、可审计的商业管道。",
+    "modules": [
+      "services/partner-crm",
+      "apps/sales-console",
+      "packages/quote-engine"
+    ],
+    "interfaces": [
+      "lead API",
+      "opportunity stage",
+      "quote/version",
+      "sales activity"
+    ],
+    "requirements": [
+      "管理组织、联系人、来源、授权、商机、阶段、金额、概率、产品包、地区、预计上线和下一步。",
+      "报价从批准的商品、用量、最低承诺、实施费、分成、税和折扣规则生成，销售不能任意改账务字段。",
+      "线索交接保留来源和联系同意；消费者未明确同意时不得作为保险、养老或其他伙伴销售线索。",
+      "支持活动、任务、会议、文件、审批、竞争信息、试点和丢单原因，并与工单/伙伴入驻隔离权限。",
+      "实现重复组织/联系人合并、地区分配、渠道冲突、敏感行业审批和销售预测质量检查。"
+    ],
+    "constraints": [
+      "CRM 不存储原始人脸或未来自我私密内容。",
+      "折扣与合同权限分离。",
+      "高影响行业使用需合规批准。"
+    ],
+    "negative_cases": [
+      "同一伙伴被两个渠道重复认领",
+      "销售导出未同意联系人",
+      "过期报价仍可签署"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-customer-support-success/references/B84-partner-sales-crm-quotes-pipeline.md",
+    "requirement_ids": [
+      "B84-R01",
+      "B84-R02",
+      "B84-R03",
+      "B84-R04",
+      "B84-R05"
+    ],
+    "topological_index": 102
+  },
+  {
+    "id": "B85",
+    "slug": "customer-success-onboarding-health-renewal",
+    "title": "客户成功、伙伴启用、健康度与续约",
+    "phase": "P15-support-success",
+    "depends_on": [
+      "B34",
+      "B41",
+      "B76",
+      "B82",
+      "B84"
+    ],
+    "skill": "building-customer-support-success",
+    "objective": "建立伙伴从签约到价值实现、扩展和续约的客户成功体系。",
+    "business_outcome": "降低上线失败和流失，并将健康度建立在可行动事实而非敏感终端用户画像上。",
+    "modules": [
+      "services/customer-success",
+      "apps/cs-console",
+      "packages/account-health"
+    ],
+    "interfaces": [
+      "onboarding plan",
+      "account health",
+      "QBR report",
+      "renewal event"
+    ],
+    "requirements": [
+      "为不同渠道提供技术、品牌、合规、培训、沙箱、数据、支付和上线清单及负责人/截止日。",
+      "伙伴健康度使用合同进度、集成质量、使用量、成功率、工单、结算和满意度，不使用终端用户人脸或情绪推断。",
+      "支持成功计划、里程碑、风险、行动项、业务评审、续约、扩展和退出/数据清理流程。",
+      "自动识别未激活、错误率升高、工单积压、对账差异和合同用量偏差，并生成可审计任务。",
+      "伙伴终止或不续约时撤销凭据、关闭入口、结清账务、导出允许数据并执行保留/删除义务。"
+    ],
+    "constraints": [
+      "健康度不用于无通知的惩罚性定价。",
+      "伙伴只看聚合和授权数据。",
+      "终止流程优先保护消费者权利。"
+    ],
+    "negative_cases": [
+      "合同结束 API key 仍有效",
+      "健康分数因平台故障误判伙伴",
+      "退出后白标页面仍收集照片"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-customer-support-success/references/B85-customer-success-onboarding-health-renewal.md",
+    "requirement_ids": [
+      "B85-R01",
+      "B85-R02",
+      "B85-R03",
+      "B85-R04",
+      "B85-R05"
+    ],
+    "topological_index": 110
+  },
+  {
+    "id": "B86",
+    "slug": "csat-nps-voc-support-quality",
+    "title": "CSAT、NPS、VOC 与客服质量管理",
+    "phase": "P15-support-success",
+    "depends_on": [
+      "B41",
+      "B42",
+      "B80",
+      "B81",
+      "B85"
+    ],
+    "skill": "building-customer-support-success",
+    "objective": "建立消费者和伙伴反馈、客服质量、根因与产品改进闭环。",
+    "business_outcome": "把体验问题转成可验证修复，而不是只追求满意度分数。",
+    "modules": [
+      "services/feedback",
+      "apps/quality-console",
+      "analytics/voc"
+    ],
+    "interfaces": [
+      "survey API",
+      "quality rubric",
+      "root-cause taxonomy",
+      "improvement backlog"
+    ],
+    "requirements": [
+      "支持工单后 CSAT、阶段性关系调查、伙伴 NPS/健康访谈和产品内反馈，提供退订与抽样控制。",
+      "调查邀请不针对危机、儿童或敏感隐私事件进行不当追问，并避免重复骚扰。",
+      "客服质量抽检覆盖正确性、同理心、权限、隐私、解决、文档和承诺，敏感样本严格访问控制。",
+      "建立反馈主题、根因、影响、产品/流程/内容/供应商责任和修复批次映射，跟踪关闭证据。",
+      "报告样本量、响应偏差和置信区间，不以单一 NPS/CSAT 作为员工自动惩罚依据。"
+    ],
+    "constraints": [
+      "反馈文本需脱敏和受控保留。",
+      "不得公开展示未授权评价。",
+      "质量抽检不能下载客户媒体。"
+    ],
+    "negative_cases": [
+      "退款失败用户未收到调查抑制",
+      "同一工单重复计分",
+      "模型主题分类泄漏敏感内容"
+    ],
+    "criticality": "medium",
+    "reference": "skills/building-customer-support-success/references/B86-csat-nps-voc-support-quality.md",
+    "requirement_ids": [
+      "B86-R01",
+      "B86-R02",
+      "B86-R03",
+      "B86-R04",
+      "B86-R05"
+    ],
+    "topological_index": 116
+  },
+  {
+    "id": "B87",
+    "slug": "double-entry-ledger-subledger",
+    "title": "复式账本、业务分录与不可变审计",
+    "phase": "P16-finance",
+    "depends_on": [
+      "B26",
+      "B34"
+    ],
+    "skill": "building-finance-tax-operations",
+    "objective": "建立消费者支付、退款、额度、礼品、伙伴分成和供应商成本的复式账务底座。",
+    "business_outcome": "让交易、余额、收入和结算可对账、可追溯，而不是依赖可变订单字段。",
+    "modules": [
+      "services/ledger",
+      "packages/money",
+      "apps/finance-console"
+    ],
+    "interfaces": [
+      "journal entry",
+      "account chart",
+      "posting rule",
+      "balance query"
+    ],
+    "requirements": [
+      "定义按法人、租户、币种和业务事件分层的科目表、日记账、分录行、期间和来源引用。",
+      "支付、退款、额度、礼品、税、手续费、分成和供应商成本通过版本化 posting rules 生成平衡分录。",
+      "已过账分录不可修改或删除，只能使用反向/调整分录；金额使用精确十进制和币种最小单位规则。",
+      "每个外部交易和业务事件具备唯一幂等引用，重复/乱序回调不得造成重复过账。",
+      "实现试算平衡、账户余额、交易追溯、期间锁定、权限、审计和大规模账本性能测试。"
+    ],
+    "constraints": [
+      "账本服务与订单状态解耦但可追溯。",
+      "财务管理员不能改原始支付回调。",
+      "跨币种不隐式换算。"
+    ],
+    "negative_cases": [
+      "借贷不平",
+      "退款先于支付回调",
+      "期间关闭后旧事件迟到"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-finance-tax-operations/references/B87-double-entry-ledger-subledger.md",
+    "requirement_ids": [
+      "B87-R01",
+      "B87-R02",
+      "B87-R03",
+      "B87-R04",
+      "B87-R05"
+    ],
+    "topological_index": 25
+  },
+  {
+    "id": "B88",
+    "slug": "payment-settlement-bank-reconciliation",
+    "title": "支付、伙伴结算与银行对账",
+    "phase": "P16-finance",
+    "depends_on": [
+      "B26",
+      "B34",
+      "B87"
+    ],
+    "skill": "building-finance-tax-operations",
+    "objective": "自动核对支付渠道、订单、账本、伙伴结算和银行入账。",
+    "business_outcome": "尽早发现漏单、重复、手续费、汇率和结算差异，保护现金和伙伴信任。",
+    "modules": [
+      "services/reconciliation",
+      "apps/finance-console/reconciliation",
+      "adapters/payment-statements"
+    ],
+    "interfaces": [
+      "statement import",
+      "matching rule",
+      "reconciliation case",
+      "cash settlement"
+    ],
+    "requirements": [
+      "导入或拉取 Stripe/支付宝/微信/应用商店/其他支付及银行结算单，校验文件来源、完整性和重复。",
+      "按交易号、订单、金额、币种、时间、手续费和退款进行确定性匹配，模糊匹配需人工确认。",
+      "差异进入可分派 case，记录缺失、重复、金额、手续费、汇率、时点和未知项及解决分录。",
+      "伙伴用量/收入分成、平台账本和实际收付分别对账，不能以伙伴报表作为唯一真源。",
+      "提供日/周/月关闭、未对账龄、重大差异告警、再处理和证据导出。"
+    ],
+    "constraints": [
+      "对账导入文件按财务敏感数据保护。",
+      "自动核销需高置信规则。",
+      "不得静默冲销不明差异。"
+    ],
+    "negative_cases": [
+      "同一结算文件重复导入",
+      "跨币种误匹配",
+      "部分退款被匹配成全额"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-finance-tax-operations/references/B88-payment-settlement-bank-reconciliation.md",
+    "requirement_ids": [
+      "B88-R01",
+      "B88-R02",
+      "B88-R03",
+      "B88-R04",
+      "B88-R05"
+    ],
+    "topological_index": 28
+  },
+  {
+    "id": "B89",
+    "slug": "invoice-receipt-fapiao-tax-profile",
+    "title": "发票、收据、电子发票与税务配置",
+    "phase": "P16-finance",
+    "depends_on": [
+      "B25",
+      "B26",
+      "B31",
+      "B87"
+    ],
+    "skill": "building-finance-tax-operations",
+    "objective": "为消费者和伙伴提供按地区、主体和交易类型生成的收据、发票及中国发票流程。",
+    "business_outcome": "支持正式商业交易、企业采购和财税合规。",
+    "modules": [
+      "services/invoicing",
+      "apps/billing-portal",
+      "adapters/e-invoice"
+    ],
+    "interfaces": [
+      "tax profile",
+      "invoice request",
+      "invoice document",
+      "credit note"
+    ],
+    "requirements": [
+      "管理卖方主体、税号、地址、银行、税率、商品税类、买方抬头、币种、语言和发票编号序列。",
+      "消费者支付自动生成收据；企业发票/电子发票请求具备资格、抬头校验、状态、驳回、重开和红冲。",
+      "接入电子发票/开票服务采用适配器、验签、幂等和沙箱，失败不影响订单事实但需可追踪补开。",
+      "发票、贷项通知单和税额与账本分录一致，退款/折扣/税率变更使用调整文档而非覆盖原件。",
+      "文档下载短期授权、水印/验真、保留、审计和批量导出满足地区政策及企业采购需要。"
+    ],
+    "constraints": [
+      "税务规则需专业复核和可配置生效日。",
+      "不得存储不必要身份证件。",
+      "发票号码不可重复。"
+    ],
+    "negative_cases": [
+      "退款后未红冲",
+      "两个法人共享编号序列",
+      "发票服务重试重复开票"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-finance-tax-operations/references/B89-invoice-receipt-fapiao-tax-profile.md",
+    "requirement_ids": [
+      "B89-R01",
+      "B89-R02",
+      "B89-R03",
+      "B89-R04",
+      "B89-R05"
+    ],
+    "topological_index": 29
+  },
+  {
+    "id": "B90",
+    "slug": "revenue-recognition-deferred-credit",
+    "title": "收入确认、递延收入、额度与礼品负债",
+    "phase": "P16-finance",
+    "depends_on": [
+      "B27",
+      "B28",
+      "B34",
+      "B87",
+      "B89"
+    ],
+    "skill": "building-finance-tax-operations",
+    "objective": "把一次性数字产品、订阅、额度、礼品码、实物和伙伴合同映射到收入确认计划。",
+    "business_outcome": "提供可审计的 ARR/MRR、递延收入和履约义务数据。",
+    "modules": [
+      "services/revenue-recognition",
+      "analytics/revenue",
+      "apps/finance-console/revenue"
+    ],
+    "interfaces": [
+      "performance obligation",
+      "recognition schedule",
+      "credit liability",
+      "contract modification"
+    ],
+    "requirements": [
+      "定义不同商品/合同的履约义务、分摊价格、交付/消耗/期间确认触发和退款影响。",
+      "订阅、未用额度、礼品卡和预付款作为负债管理，消费、过期和退款规则可配置且有法律复核。",
+      "数字作品、实物履约、伙伴最低承诺和实施服务按实际可验证里程碑确认，不能仅以收款确认收入。",
+      "合同升级、降级、延长、折扣、退款和终止生成可追溯的 schedule 变更和调整分录。",
+      "输出 MRR/ARR、预收、递延、已确认、剩余义务和 cohort 报表，并与账本/订单/结算对账。"
+    ],
+    "constraints": [
+      "会计政策需专业财务复核。",
+      "额度过期收益不可提前确认。",
+      "报表区分管理口径与法定口径。"
+    ],
+    "negative_cases": [
+      "退款未冲减已确认收入",
+      "礼品码重复消费",
+      "合同修改覆盖历史计划"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-finance-tax-operations/references/B90-revenue-recognition-deferred-credit.md",
+    "requirement_ids": [
+      "B90-R01",
+      "B90-R02",
+      "B90-R03",
+      "B90-R04",
+      "B90-R05"
+    ],
+    "topological_index": 39
+  },
+  {
+    "id": "B91",
+    "slug": "chargeback-dispute-fraud-reserve",
+    "title": "拒付、争议、欺诈损失与准备金",
+    "phase": "P16-finance",
+    "depends_on": [
+      "B26",
+      "B30",
+      "B43",
+      "B87",
+      "B88"
+    ],
+    "skill": "building-finance-tax-operations",
+    "objective": "管理支付拒付、渠道争议、欺诈损失、证据和财务准备。",
+    "business_outcome": "降低损失并保护正常用户，避免黑箱模型自动拒绝正当退款。",
+    "modules": [
+      "services/disputes",
+      "apps/risk-console",
+      "analytics/loss-reserve"
+    ],
+    "interfaces": [
+      "dispute case",
+      "evidence packet",
+      "risk signal",
+      "reserve entry"
+    ],
+    "requirements": [
+      "接收支付渠道争议/拒付事件，建立截止日、原因、金额、订单、证据、责任人和状态机。",
+      "证据包仅包含必要交易、交付、同意和沟通事实，严禁提交无关人脸、儿童或私密对话。",
+      "风险规则和模型输出只能辅助排队/复核，账户限制和证据提交需可解释、可申诉和人工权限。",
+      "拒付、胜诉、败诉、手续费和预期损失生成账本分录及准备金/核销记录。",
+      "监控拒付率、欺诈模式、误报、商户阈值和渠道规则，自动触发策略审查而非静默放宽安全。"
+    ],
+    "constraints": [
+      "不得因敏感属性或面部特征判断欺诈。",
+      "争议证据访问最小化。",
+      "退款与拒付竞态需统一状态。"
+    ],
+    "negative_cases": [
+      "用户已退款仍提交抗辩",
+      "证据超时",
+      "同一损失重复核销"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-finance-tax-operations/references/B91-chargeback-dispute-fraud-reserve.md",
+    "requirement_ids": [
+      "B91-R01",
+      "B91-R02",
+      "B91-R03",
+      "B91-R04",
+      "B91-R05"
+    ],
+    "topological_index": 59
+  },
+  {
+    "id": "B92",
+    "slug": "partner-payout-commission-withholding",
+    "title": "伙伴付款、佣金、分成与扣缴单据",
+    "phase": "P16-finance",
+    "depends_on": [
+      "B34",
+      "B87",
+      "B88",
+      "B89"
+    ],
+    "skill": "building-finance-tax-operations",
+    "objective": "把影楼、礼品、渠道和联盟伙伴的应付、分成、调整、税和付款做成正式流程。",
+    "business_outcome": "确保伙伴获得可解释的结算并降低超付、少付和合同争议。",
+    "modules": [
+      "services/payouts",
+      "apps/partner-portal/payouts",
+      "apps/finance-console/payouts"
+    ],
+    "interfaces": [
+      "commission rule",
+      "payout statement",
+      "payment instruction",
+      "withholding document"
+    ],
+    "requirements": [
+      "按合同版本、商品、渠道、归因、退款窗口、税和阶梯规则计算伙伴应付，不依赖可变前端参数。",
+      "生成周期结算单，列出订单/用量、收入、退款、费用、税、调整、保留金和净应付。",
+      "伙伴确认、争议、批准、付款、失败、退回和重付采用状态机及双人控制。",
+      "收款账户变更需强验证、冷静期和异常告警；付款文件/接口加密、验签和幂等。",
+      "提供扣缴/税务单据、付款回执、账本/银行对账和合同终止最终结算。"
+    ],
+    "constraints": [
+      "伙伴不能修改已批准结算。",
+      "付款不得发送到未经验证账户。",
+      "消费者退款优先于伙伴分成。"
+    ],
+    "negative_cases": [
+      "账户被篡改",
+      "退款窗口后仍超付",
+      "同一结算单重复付款"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-finance-tax-operations/references/B92-partner-payout-commission-withholding.md",
+    "requirement_ids": [
+      "B92-R01",
+      "B92-R02",
+      "B92-R03",
+      "B92-R04",
+      "B92-R05"
+    ],
+    "topological_index": 31
+  },
+  {
+    "id": "B93",
+    "slug": "budget-finops-cost-allocation-profitability",
+    "title": "预算、FinOps、成本分摊与盈利分析",
+    "phase": "P16-finance",
+    "depends_on": [
+      "B18",
+      "B41",
+      "B45",
+      "B87",
+      "B90",
+      "B92"
+    ],
+    "skill": "building-finance-tax-operations",
+    "objective": "把 AI 推理、存储、带宽、消息、支付、履约、支持和基础设施成本映射到产品和渠道。",
+    "business_outcome": "建立可持续定价、预算护栏和真实单位经济。",
+    "modules": [
+      "services/cost-allocation",
+      "analytics/finops",
+      "apps/finance-console/budget"
+    ],
+    "interfaces": [
+      "cost event",
+      "allocation rule",
+      "budget policy",
+      "profitability cube"
+    ],
+    "requirements": [
+      "采集供应商、云资源、AI 调用、存储、带宽、消息、支付费、打印、物流和支持的可核对成本事件。",
+      "按项目、订单、租户、伙伴、渠道、地区、模型和商品分摊直接/共享成本，并版本化规则。",
+      "设置日/月预算、单位成本、毛利、供应商和异常增长护栏，支持警告、限流、降级和人工批准。",
+      "盈利分析同时展示收入确认、退款、分成、获客、服务和履约成本，不把现金流当作利润。",
+      "提供预算 vs 实际、预测、敏感性和成本异常根因，所有估算明确假设和置信度。"
+    ],
+    "constraints": [
+      "成本降级不得关闭安全质量门。",
+      "财务分摊与用户计费分离。",
+      "供应商账单原始数据受控。"
+    ],
+    "negative_cases": [
+      "缓存命中成本仍重复计入",
+      "共享成本全部归给小客户",
+      "预算限流取消已付款订单"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-finance-tax-operations/references/B93-budget-finops-cost-allocation-profitability.md",
+    "requirement_ids": [
+      "B93-R01",
+      "B93-R02",
+      "B93-R03",
+      "B93-R04",
+      "B93-R05"
+    ],
+    "topological_index": 72
+  },
+  {
+    "id": "B94",
+    "slug": "month-end-close-audit-accounting-integration",
+    "title": "月结、审计导出与会计系统集成",
+    "phase": "P16-finance",
+    "depends_on": [
+      "B88",
+      "B89",
+      "B90",
+      "B91",
+      "B92",
+      "B93"
+    ],
+    "skill": "building-finance-tax-operations",
+    "objective": "建立从子账到月结、审计和外部会计/ERP 的可重复流程。",
+    "business_outcome": "让商业运营具备正式财务控制，而不是依赖临时表格。",
+    "modules": [
+      "services/finance-close",
+      "adapters/accounting",
+      "docs/finance-runbooks"
+    ],
+    "interfaces": [
+      "close checklist",
+      "trial balance export",
+      "journal export",
+      "audit package"
+    ],
+    "requirements": [
+      "实现期间开放/软关闭/硬关闭、任务清单、负责人、依赖、差异阈值、签字和重开审批。",
+      "月结包括支付/银行/伙伴/供应商对账、递延、收入、税、拒付、准备金、外汇和异常项。",
+      "提供标准总账/日记账/试算平衡/发票/结算/应收应付导出及可配置 ERP/会计适配器。",
+      "每个导出批次有完整性校验、控制总额、幂等、版本、加密、传输确认和重放。",
+      "生成审计包，包含政策版本、审批、分录来源、对账证据、访问日志和变更记录，敏感数据最小化。"
+    ],
+    "constraints": [
+      "硬关闭后调整需正式分录。",
+      "会计集成失败不丢失源账。",
+      "审计访问有时限和水印。"
+    ],
+    "negative_cases": [
+      "控制总额不一致仍导入 ERP",
+      "期间重开无审批",
+      "导出重复导致会计双记账"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-finance-tax-operations/references/B94-month-end-close-audit-accounting-integration.md",
+    "requirement_ids": [
+      "B94-R01",
+      "B94-R02",
+      "B94-R03",
+      "B94-R04",
+      "B94-R05"
+    ],
+    "topological_index": 81
+  },
+  {
+    "id": "B95",
+    "slug": "print-product-configurator-preflight",
+    "title": "印刷商品配置器、版式、出血与色彩预检",
+    "phase": "P17-physical-supply",
+    "depends_on": [
+      "B08",
+      "B25",
+      "B29",
+      "B54"
+    ],
+    "skill": "building-physical-supply-network",
+    "objective": "把照片书、相框、卡片、台历和礼盒的规格、版式与印前检查产品化。",
+    "business_outcome": "降低实物订单返工和投诉，并支持消费者、影楼和礼品伙伴配置。",
+    "modules": [
+      "packages/print-configurator",
+      "services/render-preflight",
+      "apps/product-designer"
+    ],
+    "interfaces": [
+      "product specification",
+      "layout document",
+      "print-ready asset",
+      "preflight report"
+    ],
+    "requirements": [
+      "定义尺寸、页数、材质、装订、相框、卡片、包装、颜色配置、出血、安全区和供应商能力的版本化商品规格。",
+      "编辑器支持自动排版、裁剪焦点、文字溢出、低分辨率和跨页警告，并保留 AI 标识和必要版权信息。",
+      "服务端生成不可变 print-ready PDF/图像包、缩略图、字体嵌入、校验和和版式清单。",
+      "执行分辨率、色彩空间、出血、字体、透明、页数、条码、素材许可和文件完整性预检。",
+      "规格或供应商模板升级不得改变已付款订单；重生成需要明确版本、批准和差异证据。"
+    ],
+    "constraints": [
+      "印刷文件不得含未授权隐藏图层。",
+      "模板许可证可追踪。",
+      "预检失败不能静默送厂。"
+    ],
+    "negative_cases": [
+      "字体未嵌入",
+      "裁剪掉人物面部",
+      "旧订单被新模板重排"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-physical-supply-network/references/B95-print-product-configurator-preflight.md",
+    "requirement_ids": [
+      "B95-R01",
+      "B95-R02",
+      "B95-R03",
+      "B95-R04",
+      "B95-R05"
+    ],
+    "topological_index": 53
+  },
+  {
+    "id": "B96",
+    "slug": "vendor-onboarding-catalog-capacity-sla",
+    "title": "供应商入驻、目录、价格、产能与 SLA",
+    "phase": "P17-physical-supply",
+    "depends_on": [
+      "B29",
+      "B31",
+      "B32",
+      "B95"
+    ],
+    "skill": "building-physical-supply-network",
+    "objective": "建立印刷、包装、仓储和物流供应商的合同化接入与能力目录。",
+    "business_outcome": "让履约可路由、可替换、可评估，而不是写死某一家接口。",
+    "modules": [
+      "services/vendor-management",
+      "apps/vendor-portal",
+      "packages/vendor-capabilities"
+    ],
+    "interfaces": [
+      "vendor profile",
+      "capability catalog",
+      "price book",
+      "capacity calendar",
+      "SLA contract"
+    ],
+    "requirements": [
+      "管理供应商主体、工厂/仓库、联系人、合同、地区、产品能力、认证、数据处理和有效期。",
+      "价格册包含商品、工艺、阶梯、加急、包装、物流、税和生效区间，并通过审批和版本冻结。",
+      "产能日历、截单时间、假期、维护、最低批量和服务区域可查询并带更新时间/置信度。",
+      "定义接单、打样、生产、质检、发货、交付、返工、数据删除和事件通知 SLA。",
+      "供应商凭据、网络、文件交换和人员账户最小权限；合同终止时自动撤权和下游删除。"
+    ],
+    "constraints": [
+      "供应商不得获得消费者账户全景。",
+      "原始照片只在履约必要时短期提供。",
+      "能力过期时停止新路由。"
+    ],
+    "negative_cases": [
+      "价格册重叠生效",
+      "产能数据陈旧",
+      "终止供应商仍可下载印刷文件"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-physical-supply-network/references/B96-vendor-onboarding-catalog-capacity-sla.md",
+    "requirement_ids": [
+      "B96-R01",
+      "B96-R02",
+      "B96-R03",
+      "B96-R04",
+      "B96-R05"
+    ],
+    "topological_index": 63
+  },
+  {
+    "id": "B97",
+    "slug": "production-proof-customer-approval",
+    "title": "生产打样、校样与客户批准",
+    "phase": "P17-physical-supply",
+    "depends_on": [
+      "B28",
+      "B29",
+      "B95",
+      "B96"
+    ],
+    "skill": "building-physical-supply-network",
+    "objective": "在送厂前提供可追踪的软校样、必要硬校样和客户/影楼批准。",
+    "business_outcome": "减少色差、裁切、文字和人物选择争议。",
+    "modules": [
+      "services/proofing",
+      "apps/proof-approval",
+      "workflows/production-approval"
+    ],
+    "interfaces": [
+      "proof asset",
+      "approval decision",
+      "change request",
+      "production lock"
+    ],
+    "requirements": [
+      "生成与印刷文件同版本的软校样、页面缩略、色彩免责声明和关键风险标注。",
+      "按商品/渠道/金额/风险配置是否需要消费者、影楼、伙伴或内部双重批准。",
+      "批准采用短期身份验证链接、明确版本/截止日和不可抵赖审计，不允许匿名猜测订单。",
+      "修改请求创建新版本并重新预检/批准；已锁定生产文件不得被后台静默替换。",
+      "批准超时、用户无响应、供应商能力变化和订单取消具备明确自动/人工分支。"
+    ],
+    "constraints": [
+      "批准不等同放弃法定售后权利。",
+      "校样不得公开索引。",
+      "色彩限制需清楚说明。"
+    ],
+    "negative_cases": [
+      "批准后文件 hash 改变",
+      "旧校样链接批准新版本",
+      "多人礼品收件人误获编辑权"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-physical-supply-network/references/B97-production-proof-customer-approval.md",
+    "requirement_ids": [
+      "B97-R01",
+      "B97-R02",
+      "B97-R03",
+      "B97-R04",
+      "B97-R05"
+    ],
+    "topological_index": 68
+  },
+  {
+    "id": "B98",
+    "slug": "order-routing-purchase-orders-vendor-jobs",
+    "title": "订单路由、采购单与供应商生产任务",
+    "phase": "P17-physical-supply",
+    "depends_on": [
+      "B13",
+      "B29",
+      "B96",
+      "B97"
+    ],
+    "skill": "building-physical-supply-network",
+    "objective": "将已批准实物订单路由到合适供应商并创建可恢复生产任务。",
+    "business_outcome": "在成本、时效、质量、地区和隐私约束下稳定履约。",
+    "modules": [
+      "services/fulfillment-router",
+      "services/purchase-orders",
+      "workflows/vendor-job"
+    ],
+    "interfaces": [
+      "routing decision",
+      "purchase order",
+      "vendor job API",
+      "production event"
+    ],
+    "requirements": [
+      "路由综合商品能力、版本、产能、地区、截止日、成本、SLA、质量、数据位置和供应商健康度。",
+      "每次路由记录候选、规则版本、决策原因和人工覆盖，禁止使用未批准供应商。",
+      "创建版本化采购单/生产任务，包含最小客户数据、文件引用、数量、价格、截止日和幂等键。",
+      "供应商接受、拒绝、排产、生产、质检、发货和失败事件验签、去重并驱动耐久工作流。",
+      "超时、拒绝、部分接受、供应商故障和取消时支持重路由/补偿，防止两家同时生产。"
+    ],
+    "constraints": [
+      "供应商路由不能牺牲同意和数据位置要求。",
+      "采购价与消费者售价隔离。",
+      "人工覆盖需审批。"
+    ],
+    "negative_cases": [
+      "超时重路由后原供应商又接受",
+      "采购单重复",
+      "供应商返回未知状态"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-physical-supply-network/references/B98-order-routing-purchase-orders-vendor-jobs.md",
+    "requirement_ids": [
+      "B98-R01",
+      "B98-R02",
+      "B98-R03",
+      "B98-R04",
+      "B98-R05"
+    ],
+    "topological_index": 77
+  },
+  {
+    "id": "B99",
+    "slug": "address-carrier-shipping-tracking",
+    "title": "地址校验、承运商、发货与物流追踪",
+    "phase": "P17-physical-supply",
+    "depends_on": [
+      "B29",
+      "B74",
+      "B98"
+    ],
+    "skill": "building-physical-supply-network",
+    "objective": "管理收货地址、运费、面单、承运商事件和消费者通知。",
+    "business_outcome": "提高按时交付率并降低地址错误、信息泄漏和客服查询。",
+    "modules": [
+      "services/shipping",
+      "adapters/carriers",
+      "apps/order-tracking"
+    ],
+    "interfaces": [
+      "address validation",
+      "shipping quote",
+      "label purchase",
+      "tracking event"
+    ],
+    "requirements": [
+      "支持中国及全球地址格式、标准化、服务范围、邮编/手机号校验和用户确认，不无依据强改地址。",
+      "运费报价按商品、重量、尺寸、地区、时效、保险、税和合同版本计算并设有效期。",
+      "面单购买、取消、重打和交接具备幂等、权限和审计，供应商只获得履约必要地址。",
+      "承运商事件验签/轮询、归一化、去重和乱序处理，区分已发货、运输、派送、异常、签收和退回。",
+      "订单追踪和通知隐藏不必要地址/电话，支持公开短期查询、登录查询和伙伴白标。"
+    ],
+    "constraints": [
+      "地址属于敏感运营数据。",
+      "追踪页不可枚举订单。",
+      "签收不自动证明内容无损。"
+    ],
+    "negative_cases": [
+      "承运商重复事件",
+      "地址修改晚于面单",
+      "公开追踪泄漏完整手机号"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-physical-supply-network/references/B99-address-carrier-shipping-tracking.md",
+    "requirement_ids": [
+      "B99-R01",
+      "B99-R02",
+      "B99-R03",
+      "B99-R04",
+      "B99-R05"
+    ],
+    "topological_index": 89
+  },
+  {
+    "id": "B100",
+    "slug": "inventory-material-stock-preorder",
+    "title": "库存、耗材、可售量与预售",
+    "phase": "P17-physical-supply",
+    "depends_on": [
+      "B25",
+      "B96",
+      "B98"
+    ],
+    "skill": "building-physical-supply-network",
+    "objective": "管理自营或供应商库存、材料、包装和可售量。",
+    "business_outcome": "防止超卖、断料和隐性延期，并支持限量礼品和预售。",
+    "modules": [
+      "services/inventory",
+      "apps/vendor-portal/inventory",
+      "packages/availability"
+    ],
+    "interfaces": [
+      "stock item",
+      "reservation",
+      "availability promise",
+      "inventory adjustment"
+    ],
+    "requirements": [
+      "定义 SKU、材料、包装、仓库/供应商位置、批次、单位、在手、可用、预留、在途和安全库存。",
+      "结账/订单创建进行带过期的原子预留，支付、取消、路由、生产和退货驱动确认或释放。",
+      "可售承诺综合库存、产能、采购提前期和配送，不把陈旧供应商数据当作实时库存。",
+      "预售/缺货/替代商品需明确交付日期、退款和通知；不得静默更换材质或规格。",
+      "库存调整、盘点、损耗和供应商同步具备权限、原因、证据、审计和异常检测。"
+    ],
+    "constraints": [
+      "消费者媒体不进入库存系统。",
+      "库存不能出现无解释负数。",
+      "预留超时策略与支付状态一致。"
+    ],
+    "negative_cases": [
+      "支付回调晚于预留过期",
+      "供应商同步覆盖本地预留",
+      "退货重复入库"
+    ],
+    "criticality": "medium",
+    "reference": "skills/building-physical-supply-network/references/B100-inventory-material-stock-preorder.md",
+    "requirement_ids": [
+      "B100-R01",
+      "B100-R02",
+      "B100-R03",
+      "B100-R04",
+      "B100-R05"
+    ],
+    "topological_index": 90
+  },
+  {
+    "id": "B101",
+    "slug": "returns-replacements-loss-damage-claims",
+    "title": "退货、补发、破损、丢件与理赔",
+    "phase": "P17-physical-supply",
+    "depends_on": [
+      "B30",
+      "B80",
+      "B83",
+      "B99",
+      "B100"
+    ],
+    "skill": "building-physical-supply-network",
+    "objective": "建立实物售后的资格判断、证据、回收、补发、退款和承运商/供应商索赔。",
+    "business_outcome": "缩短问题解决时间并分清平台、供应商、物流和用户责任。",
+    "modules": [
+      "services/returns",
+      "workflows/replacement",
+      "apps/support-console/physical-claims"
+    ],
+    "interfaces": [
+      "return authorization",
+      "claim evidence",
+      "replacement order",
+      "carrier/vendor claim"
+    ],
+    "requirements": [
+      "按地区、商品、定制属性、问题类型、时间和合同定义退货/补发/退款资格及例外审批。",
+      "支持破损、印刷错误、漏页、色差、丢件、错件、地址问题和隐私泄漏等标准原因。",
+      "证据上传最小化、扫描、短期访问和保留；不得要求用户再次上传无关原始人脸。",
+      "补发订单引用原规格和批准文件但使用新履约链，防止重复收费、重复生产和重复库存。",
+      "自动创建供应商/承运商索赔、责任归因、账本调整和质量反馈，并跟踪回款。"
+    ],
+    "constraints": [
+      "定制商品政策需清楚且不排除法定权利。",
+      "隐私事故优先事件响应。",
+      "客服补偿有上限和审批。"
+    ],
+    "negative_cases": [
+      "同一损坏重复补发",
+      "退货标签发给错误地址",
+      "供应商索赔含客户完整媒体"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-physical-supply-network/references/B101-returns-replacements-loss-damage-claims.md",
+    "requirement_ids": [
+      "B101-R01",
+      "B101-R02",
+      "B101-R03",
+      "B101-R04",
+      "B101-R05"
+    ],
+    "topological_index": 108
+  },
+  {
+    "id": "B102",
+    "slug": "vendor-quality-sla-scorecard-settlement",
+    "title": "供应商质量、SLA、评分与结算协同",
+    "phase": "P17-physical-supply",
+    "depends_on": [
+      "B34",
+      "B41",
+      "B92",
+      "B96",
+      "B98",
+      "B99",
+      "B101"
+    ],
+    "skill": "building-physical-supply-network",
+    "objective": "持续衡量供应商产能、质量、时效、隐私和财务表现。",
+    "business_outcome": "形成路由、改进、赔付和续约闭环，而不是只比较采购价。",
+    "modules": [
+      "analytics/vendor-performance",
+      "services/vendor-scorecard",
+      "apps/vendor-portal/quality"
+    ],
+    "interfaces": [
+      "quality event",
+      "SLA calculation",
+      "scorecard",
+      "service credit"
+    ],
+    "requirements": [
+      "建立接单、生产、一次通过、按时发货、签收、破损、返工、丢件、投诉、删除和接口健康指标。",
+      "指标从订单/事件/工单/对账事实计算，明确排除项、分母和延迟，不允许供应商自报覆盖平台事实。",
+      "供应商评分用于路由建议和人工评审，重大降级/停用需可解释、通知、申诉和合同依据。",
+      "SLA 违约、质量赔付、服务抵扣和奖金进入伙伴/供应商结算及账本，并可追溯到订单。",
+      "提供月度质量评审、纠正预防措施、复测、退出和数据清理证据。"
+    ],
+    "constraints": [
+      "不得因用户敏感属性调整供应商评分。",
+      "小样本指标显示不确定性。",
+      "隐私违约不能用折扣替代修复。"
+    ],
+    "negative_cases": [
+      "分母漏掉取消订单",
+      "重复投诉重复扣款",
+      "停用供应商仍接新单"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-physical-supply-network/references/B102-vendor-quality-sla-scorecard-settlement.md",
+    "requirement_ids": [
+      "B102-R01",
+      "B102-R02",
+      "B102-R03",
+      "B102-R04",
+      "B102-R05"
+    ],
+    "topological_index": 114
+  },
+  {
+    "id": "B103",
+    "slug": "developer-portal-api-docs-sandbox",
+    "title": "开发者门户、API 文档与沙箱",
+    "phase": "P18-developer-platform",
+    "depends_on": [
+      "B33",
+      "B54",
+      "B58"
+    ],
+    "skill": "building-developer-integration-platform",
+    "objective": "为影楼、礼品、保险养老和平台伙伴提供自助集成入口。",
+    "business_outcome": "降低技术销售和支持成本，并让 API 使用边界、示例和版本清楚可见。",
+    "modules": [
+      "apps/developer-portal",
+      "services/developer-sandbox",
+      "docs/api"
+    ],
+    "interfaces": [
+      "OpenAPI docs",
+      "sandbox tenant",
+      "sample data",
+      "quickstart"
+    ],
+    "requirements": [
+      "开发者门户包含入门、认证、API、Webhook、SDK、错误码、速率、版本、示例和安全/同意要求。",
+      "文档从版本化 OpenAPI/事件/权限契约自动生成并做链接、示例和破坏性变更检查。",
+      "沙箱使用合成人物、媒体、支付、物流和回调数据，绝不复制生产客户数据。",
+      "伙伴可创建沙箱应用、选择场景、重置数据、查看请求日志和模拟成功/失败/乱序事件。",
+      "门户按伙伴和角色授权，未签署必要协议或未通过安全边界确认时不开放生产凭据。"
+    ],
+    "constraints": [
+      "文档示例不得含真实密钥。",
+      "沙箱与生产网络/数据隔离。",
+      "高影响禁用场景在文档显著说明。"
+    ],
+    "negative_cases": [
+      "示例调用过期 API",
+      "沙箱 webhook 指向生产",
+      "文档遗漏 idempotency"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-developer-integration-platform/references/B103-developer-portal-api-docs-sandbox.md",
+    "requirement_ids": [
+      "B103-R01",
+      "B103-R02",
+      "B103-R03",
+      "B103-R04",
+      "B103-R05"
+    ],
+    "topological_index": 92
+  },
+  {
+    "id": "B104",
+    "slug": "api-keys-oauth-service-accounts-scopes",
+    "title": "API 密钥、OAuth、服务账户与细粒度 Scope",
+    "phase": "P18-developer-platform",
+    "depends_on": [
+      "B03",
+      "B31",
+      "B33",
+      "B103"
+    ],
+    "skill": "building-developer-integration-platform",
+    "objective": "建立伙伴和机器到机器访问的凭据、授权和生命周期。",
+    "business_outcome": "支持安全嵌入和自动化集成，并降低长期静态密钥泄漏风险。",
+    "modules": [
+      "services/developer-identity",
+      "apps/developer-portal/credentials",
+      "packages/scopes"
+    ],
+    "interfaces": [
+      "API key",
+      "OAuth client",
+      "service account",
+      "token scope",
+      "credential rotation"
+    ],
+    "requirements": [
+      "支持环境隔离的 API key、OAuth client、服务账户和短期访问 token，并只在创建时展示秘密。",
+      "Scope 按资源、动作、租户、门店、用途和数据类别设计；默认最小权限且服务端强制。",
+      "凭据创建、轮换、吊销、过期、IP/域名约束、mTLS/签名可选和最后使用审计可管理。",
+      "生产凭据签发需合同/应用/安全配置和审批状态，伙伴终止或风险事件可即时全局撤销。",
+      "实现秘密哈希存储、泄漏扫描、异常使用、速率/预算、重放和跨租户负向测试。"
+    ],
+    "constraints": [
+      "API key 不可出现在 URL。",
+      "管理员不能读取既有明文秘密。",
+      "Scope 不得由客户端自声明。"
+    ],
+    "negative_cases": [
+      "轮换窗口双密钥失控",
+      "已吊销 token 缓存继续有效",
+      "门店凭据访问全租户"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-developer-integration-platform/references/B104-api-keys-oauth-service-accounts-scopes.md",
+    "requirement_ids": [
+      "B104-R01",
+      "B104-R02",
+      "B104-R03",
+      "B104-R04",
+      "B104-R05"
+    ],
+    "topological_index": 103
+  },
+  {
+    "id": "B105",
+    "slug": "sdk-generation-versioning-examples",
+    "title": "多语言 SDK 生成、版本与示例工程",
+    "phase": "P18-developer-platform",
+    "depends_on": [
+      "B33",
+      "B103",
+      "B104"
+    ],
+    "skill": "building-developer-integration-platform",
+    "objective": "从契约生成并维护 TypeScript、Java、Python、Swift/Kotlin 等伙伴 SDK。",
+    "business_outcome": "降低错误集成并保持 API 演进可控。",
+    "modules": [
+      "sdks/typescript",
+      "sdks/java",
+      "sdks/python",
+      "sdks/mobile",
+      "examples/integrations"
+    ],
+    "interfaces": [
+      "SDK generator",
+      "semantic version",
+      "retry/idempotency middleware",
+      "sample app"
+    ],
+    "requirements": [
+      "从冻结 OpenAPI/事件 schema 生成类型、客户端、错误、分页和模型，生成产物可重现并标注来源版本。",
+      "SDK 默认实现认证、超时、取消、重试边界、幂等键、请求 ID、用户代理和敏感日志屏蔽。",
+      "提供上传、生成、查询、分享、订单、Webhook 验签和伙伴会话等最小可运行示例。",
+      "采用语义化版本、兼容矩阵、弃用警告和发布签名，破坏性变更需新主版本和迁移指南。",
+      "在 CI 对所有 SDK 运行生成差异、编译、单元、契约和沙箱 E2E，禁止手改生成文件漂移。"
+    ],
+    "constraints": [
+      "SDK 不嵌入生产密钥。",
+      "示例默认使用沙箱。",
+      "自动重试不适用于非幂等写入。"
+    ],
+    "negative_cases": [
+      "生成器改变日期格式",
+      "旧 SDK 误解析新枚举",
+      "示例日志输出签名 URL"
+    ],
+    "criticality": "medium",
+    "reference": "skills/building-developer-integration-platform/references/B105-sdk-generation-versioning-examples.md",
+    "requirement_ids": [
+      "B105-R01",
+      "B105-R02",
+      "B105-R03",
+      "B105-R04",
+      "B105-R05"
+    ],
+    "topological_index": 111
+  },
+  {
+    "id": "B106",
+    "slug": "webhook-console-replay-dlq-signature",
+    "title": "Webhook 控制台、签名、重放与死信",
+    "phase": "P18-developer-platform",
+    "depends_on": [
+      "B13",
+      "B33",
+      "B43",
+      "B103",
+      "B104"
+    ],
+    "skill": "building-developer-integration-platform",
+    "objective": "让伙伴可靠接收生成、订单、同意、退款、物流和结算事件。",
+    "business_outcome": "降低丢事件、重复处理和集成排障成本。",
+    "modules": [
+      "services/webhook-delivery",
+      "apps/developer-portal/webhooks",
+      "packages/webhook-signing"
+    ],
+    "interfaces": [
+      "endpoint registry",
+      "signed delivery",
+      "attempt log",
+      "replay request",
+      "DLQ"
+    ],
+    "requirements": [
+      "伙伴可配置环境、URL、事件类型、秘密、版本、速率和暂停状态，并完成域名/挑战验证。",
+      "每次投递包含事件 ID、时间、版本、签名和重放保护；payload 按伙伴权限和同意最小化。",
+      "实现有界退避、超时、并发限制、状态码策略、暂停、死信和不重复创建业务事件。",
+      "控制台展示脱敏请求/响应、延迟、尝试、错误和筛选，支持授权用户重放且保留原事件 ID。",
+      "秘密轮换支持双签名窗口，端点被攻陷或伙伴终止时即时停发并审计。"
+    ],
+    "constraints": [
+      "不得向 Webhook 发送原始媒体字节。",
+      "重放必须显式标记。",
+      "响应体大小和日志受限。"
+    ],
+    "negative_cases": [
+      "伙伴 2xx 后网络断开重复处理",
+      "签名时间容差过大",
+      "重放到已删除租户"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-developer-integration-platform/references/B106-webhook-console-replay-dlq-signature.md",
+    "requirement_ids": [
+      "B106-R01",
+      "B106-R02",
+      "B106-R03",
+      "B106-R04",
+      "B106-R05"
+    ],
+    "topological_index": 112
+  },
+  {
+    "id": "B107",
+    "slug": "connector-framework-integration-marketplace",
+    "title": "连接器框架与集成市场",
+    "phase": "P18-developer-platform",
+    "depends_on": [
+      "B12",
+      "B13",
+      "B33",
+      "B103",
+      "B104",
+      "B106"
+    ],
+    "skill": "building-developer-integration-platform",
+    "objective": "建立可插拔第三方系统连接器的开发、授权、运行和审核框架。",
+    "business_outcome": "加速 CRM、营销、客服、会计、存储、打印和身份平台集成，而不让每个适配器侵入核心域。",
+    "modules": [
+      "platform/connectors",
+      "apps/integration-marketplace",
+      "services/connector-runtime"
+    ],
+    "interfaces": [
+      "connector manifest",
+      "OAuth install",
+      "sync job",
+      "mapping schema",
+      "health event"
+    ],
+    "requirements": [
+      "连接器 manifest 定义能力、权限、数据类别、事件、配置、地区、版本、速率和支持级别。",
+      "安装流程完成管理员授权、OAuth/凭据、Scope、字段映射、测试和隐私/数据流确认。",
+      "运行时隔离凭据和租户，具备幂等同步、游标、增量、退避、死信、取消和配额。",
+      "连接器市场展示发布者、数据访问、权限、定价、支持、版本和审查状态，并支持停用/卸载/删除。",
+      "建立供应链扫描、代码/配置评审、沙箱认证、兼容测试和紧急撤销。"
+    ],
+    "constraints": [
+      "连接器不得获得超过声明的字段。",
+      "卸载传播凭据撤销和下游删除。",
+      "第三方失败不污染核心事务。"
+    ],
+    "negative_cases": [
+      "OAuth scope 静默扩大",
+      "游标回退重复导出",
+      "恶意连接器外传媒体"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-developer-integration-platform/references/B107-connector-framework-integration-marketplace.md",
+    "requirement_ids": [
+      "B107-R01",
+      "B107-R02",
+      "B107-R03",
+      "B107-R04",
+      "B107-R05"
+    ],
+    "topological_index": 117
+  },
+  {
+    "id": "B108",
+    "slug": "business-system-adapters",
+    "title": "CRM、CDP、营销、客服与会计适配器",
+    "phase": "P18-developer-platform",
+    "depends_on": [
+      "B38",
+      "B60",
+      "B80",
+      "B84",
+      "B94",
+      "B107"
+    ],
+    "skill": "building-developer-integration-platform",
+    "objective": "实现最常见商业系统的标准连接器和字段映射。",
+    "business_outcome": "让 B2B2C 客户把线索、活动、工单和财务接入现有运营体系。",
+    "modules": [
+      "connectors/crm",
+      "connectors/cdp",
+      "connectors/marketing",
+      "connectors/support",
+      "connectors/accounting"
+    ],
+    "interfaces": [
+      "contact/lead mapping",
+      "event export",
+      "ticket sync",
+      "journal/invoice export"
+    ],
+    "requirements": [
+      "为至少一类 CRM、CDP/营销自动化、客服和会计系统提供参考适配器及沙箱测试。",
+      "字段映射区分消费者、伙伴联系人、同意、用途和数据分类，默认不导出人脸、儿童和私密对话。",
+      "双向同步明确每字段真源、冲突、删除、合并、游标和幂等策略。",
+      "线索/活动导出需基于明确联系同意，退订和删除向下游传播并验证。",
+      "会计/工单同步提供控制总额、关联 ID、错误队列、重放和人工修复工具。"
+    ],
+    "constraints": [
+      "不能把 CRM 作为用户同意真源。",
+      "系统映射版本可回滚。",
+      "适配器日志需脱敏。"
+    ],
+    "negative_cases": [
+      "下游合并联系人造成错人",
+      "退订未回传",
+      "会计导出部分成功无控制总额"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-developer-integration-platform/references/B108-business-system-adapters.md",
+    "requirement_ids": [
+      "B108-R01",
+      "B108-R02",
+      "B108-R03",
+      "B108-R04",
+      "B108-R05"
+    ],
+    "topological_index": 121
+  },
+  {
+    "id": "B109",
+    "slug": "partner-test-harness-certification",
+    "title": "伙伴测试工具、合成数据与集成认证",
+    "phase": "P18-developer-platform",
+    "depends_on": [
+      "B33",
+      "B43",
+      "B103",
+      "B104",
+      "B105",
+      "B106",
+      "B107"
+    ],
+    "skill": "building-developer-integration-platform",
+    "objective": "提供伙伴在生产前验证认证、上传、生成、支付、Webhook 和失败恢复的测试体系。",
+    "business_outcome": "减少生产事故并形成可签发的集成兼容证书。",
+    "modules": [
+      "tools/partner-test-harness",
+      "services/sandbox-scenarios",
+      "apps/developer-portal/certification"
+    ],
+    "interfaces": [
+      "scenario catalog",
+      "test run",
+      "conformance report",
+      "certification record"
+    ],
+    "requirements": [
+      "提供正常、重复、乱序、超时、取消、退款、撤权、删除、速率和安全负向场景。",
+      "合成测试人物、媒体、订单和物流数据带清晰标识、可重置且不与生产标识冲突。",
+      "测试运行记录请求、响应、事件、签名、重试和断言，敏感值脱敏并可下载报告。",
+      "认证按应用、环境、API/SDK 版本和能力签发，配置或版本变化时自动失效/要求复测。",
+      "失败项有严重度、修复指导和豁免审批；关键授权、租户、安全或财务失败不可豁免。"
+    ],
+    "constraints": [
+      "认证不代表法律合规替代。",
+      "测试不得访问生产凭据。",
+      "合成媒体不可被误用于营销。"
+    ],
+    "negative_cases": [
+      "旧证书用于新主版本",
+      "伙伴只跑快乐路径",
+      "测试环境回调到生产 URL"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-developer-integration-platform/references/B109-partner-test-harness-certification.md",
+    "requirement_ids": [
+      "B109-R01",
+      "B109-R02",
+      "B109-R03",
+      "B109-R04",
+      "B109-R05"
+    ],
+    "topological_index": 122
+  },
+  {
+    "id": "B110",
+    "slug": "api-lifecycle-deprecation-status-support",
+    "title": "API 生命周期、弃用、变更日志与支持 SLA",
+    "phase": "P18-developer-platform",
+    "depends_on": [
+      "B45",
+      "B62",
+      "B103",
+      "B105",
+      "B106",
+      "B109"
+    ],
+    "skill": "building-developer-integration-platform",
+    "objective": "建立 API、事件、SDK 和连接器从发布到弃用的治理。",
+    "business_outcome": "让伙伴可以规划升级，并降低平台演进造成的突然中断。",
+    "modules": [
+      "services/api-governance",
+      "apps/developer-portal/changelog",
+      "docs/deprecation"
+    ],
+    "interfaces": [
+      "compatibility report",
+      "deprecation notice",
+      "version usage",
+      "partner support SLA"
+    ],
+    "requirements": [
+      "定义兼容性规则、版本策略、弃用期、紧急安全例外和支持矩阵，自动检测契约破坏。",
+      "变更日志关联 API、事件、SDK、数据库、迁移、风险、发布日期和行动项。",
+      "按伙伴/应用统计版本使用和错误，在不暴露其他租户数据下发送升级提醒和技术支持任务。",
+      "弃用前提供新旧并行、迁移指南、沙箱、测试工具和回滚；关键伙伴需确认或升级计划。",
+      "开发者状态页和支持 SLA 覆盖 API、Webhook、沙箱、文档和 SDK，并与平台事件管理联动。"
+    ],
+    "constraints": [
+      "弃用通知遵守联系偏好但关键安全通知例外清晰。",
+      "安全漏洞可缩短期限但需替代路径。",
+      "隐藏 API 也需治理。"
+    ],
+    "negative_cases": [
+      "事件字段删除未检测",
+      "伙伴未收到主版本通知",
+      "旧 SDK 使用率被缓存低估"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-developer-integration-platform/references/B110-api-lifecycle-deprecation-status-support.md",
+    "requirement_ids": [
+      "B110-R01",
+      "B110-R02",
+      "B110-R03",
+      "B110-R04",
+      "B110-R05"
+    ],
+    "topological_index": 123
+  },
+  {
+    "id": "B111",
+    "slug": "event-taxonomy-tracking-sdk-schema-registry",
+    "title": "事件分类、埋点 SDK 与 Schema Registry",
+    "phase": "P19-data-intelligence",
+    "depends_on": [
+      "B02",
+      "B41",
+      "B54"
+    ],
+    "skill": "building-data-intelligence-platform",
+    "objective": "统一 Web、移动、小程序、后端、伙伴和运营事件的命名、字段和版本。",
+    "business_outcome": "为漏斗、质量、财务和运营提供可信数据，避免每个端自行定义口径。",
+    "modules": [
+      "packages/analytics-schema",
+      "packages/tracking-web",
+      "packages/tracking-mobile",
+      "services/event-registry"
+    ],
+    "interfaces": [
+      "event schema",
+      "tracking context",
+      "schema compatibility",
+      "data contract"
+    ],
+    "requirements": [
+      "建立用户、家庭、生成、媒体、支付、订单、伙伴、通知、支持、供应链和安全事件命名规范及所有者。",
+      "每个事件定义触发时点、生产者、必需/可选字段、数据分类、同意用途、去重键、版本和保留。",
+      "提供 Web、移动、小程序和服务端类型化 SDK，自动注入环境、版本、会话、租户和 request/trace ID。",
+      "Schema Registry 在 CI 检测破坏性变更、未知字段、敏感字段和生产者兼容，并支持灰度双写。",
+      "建立客户端/服务端重复、离线补发、时钟偏差、广告拦截和事件丢失监控，不把缺失自动补成成功。"
+    ],
+    "constraints": [
+      "禁止事件携带原始照片、人脸特征或完整私密对话。",
+      "用户 ID 采用受控伪名化。",
+      "埋点不得改变核心交易。"
+    ],
+    "negative_cases": [
+      "同一生成完成双端重复上报",
+      "客户端伪造支付成功",
+      "旧 SDK 发送未知枚举"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-data-intelligence-platform/references/B111-event-taxonomy-tracking-sdk-schema-registry.md",
+    "requirement_ids": [
+      "B111-R01",
+      "B111-R02",
+      "B111-R03",
+      "B111-R04",
+      "B111-R05"
+    ],
+    "topological_index": 73
+  },
+  {
+    "id": "B112",
+    "slug": "warehouse-ingestion-dbt-semantic-layer",
+    "title": "数据采集、仓库、转换与语义层",
+    "phase": "P19-data-intelligence",
+    "depends_on": [
+      "B41",
+      "B111"
+    ],
+    "skill": "building-data-intelligence-platform",
+    "objective": "建立从业务库、事件、账本、供应商和支持系统到分析仓库的可重放数据管道。",
+    "business_outcome": "提供统一指标口径、历史快照和数据血缘，支撑经营决策。",
+    "modules": [
+      "data/ingestion",
+      "data/warehouse",
+      "data/dbt",
+      "data/semantic-layer"
+    ],
+    "interfaces": [
+      "source connector",
+      "raw/staging/mart models",
+      "metric definition",
+      "incremental cursor"
+    ],
+    "requirements": [
+      "为事件、PostgreSQL CDC/快照、账本、支付、伙伴、通知、工单和供应链建立增量采集与水位线。",
+      "数据分 raw/staging/core/mart 层，保留来源时间、摄取时间、版本、删除标记和可追溯主键。",
+      "实现维度、事实、SCD、货币/时区标准化、晚到数据、重算和回填策略。",
+      "建立指标语义层，定义激活、生成成功、付费、留存、ARR/MRR、毛利、SLA 和安全指标的单一口径。",
+      "流水线具备 schema 漂移、行数/金额控制、断点恢复、重放、成本和数据新鲜度 SLO。"
+    ],
+    "constraints": [
+      "分析仓库不默认存储媒体字节。",
+      "删除/撤回通过受控删除或隔离传播。",
+      "生产库只读低影响采集。"
+    ],
+    "negative_cases": [
+      "CDC 游标回退重复金额",
+      "维度更新改写历史",
+      "回填触发重复通知"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-data-intelligence-platform/references/B112-warehouse-ingestion-dbt-semantic-layer.md",
+    "requirement_ids": [
+      "B112-R01",
+      "B112-R02",
+      "B112-R03",
+      "B112-R04",
+      "B112-R05"
+    ],
+    "topological_index": 82
+  },
+  {
+    "id": "B113",
+    "slug": "product-commerce-partner-ops-dashboards",
+    "title": "产品、交易、伙伴与运营仪表板",
+    "phase": "P19-data-intelligence",
+    "depends_on": [
+      "B34",
+      "B43",
+      "B45",
+      "B87",
+      "B112"
+    ],
+    "skill": "building-data-intelligence-platform",
+    "objective": "建设面向产品、增长、财务、伙伴、客服、供应链和可靠性的角色化监控。",
+    "business_outcome": "让团队从同一指标语义层发现问题和采取行动。",
+    "modules": [
+      "apps/analytics-portal",
+      "data/marts",
+      "docs/dashboard-catalog"
+    ],
+    "interfaces": [
+      "dashboard definition",
+      "metric query",
+      "row-level security",
+      "alert subscription"
+    ],
+    "requirements": [
+      "提供获客/激活/生成/分享/付费/留存、收入/退款/毛利、伙伴、客服、供应链和 SLO 核心看板。",
+      "指标显示定义、数据时间、刷新、粒度、过滤、货币、置信度和负责人，避免无上下文单值。",
+      "实施角色、租户和地区行级/列级权限；伙伴只能看其授权聚合与订单/结算明细。",
+      "支持下钻到受控业务对象和行动入口，但媒体、私密对话和敏感字段保持脱敏/不可用。",
+      "看板与数据合同、自动测试、变更审阅、使用分析和过期淘汰流程绑定。"
+    ],
+    "constraints": [
+      "不得用看板导出绕过数据权利。",
+      "财务数字与账本对账。",
+      "小样本分组防重识别。"
+    ],
+    "negative_cases": [
+      "伙伴看见其他租户",
+      "缓存展示过期结算",
+      "金额口径混合含税/未税"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-data-intelligence-platform/references/B113-product-commerce-partner-ops-dashboards.md",
+    "requirement_ids": [
+      "B113-R01",
+      "B113-R02",
+      "B113-R03",
+      "B113-R04",
+      "B113-R05"
+    ],
+    "topological_index": 94
+  },
+  {
+    "id": "B114",
+    "slug": "attribution-cohort-retention-ltv",
+    "title": "归因、队列、留存与 LTV 分析",
+    "phase": "P19-data-intelligence",
+    "depends_on": [
+      "B39",
+      "B40",
+      "B59",
+      "B60",
+      "B78",
+      "B112"
+    ],
+    "skill": "building-data-intelligence-platform",
+    "objective": "衡量渠道、活动、分享和生命周期触达对长期价值的贡献。",
+    "business_outcome": "把优化目标从首单转化扩展到留存、退款、成本和伙伴质量。",
+    "modules": [
+      "data/marts/growth",
+      "analytics/attribution",
+      "analytics/cohorts"
+    ],
+    "interfaces": [
+      "attribution model",
+      "cohort definition",
+      "retention curve",
+      "LTV model"
+    ],
+    "requirements": [
+      "实现首触、末触、多触点和实验增量等模型，明确窗口、去重、跨设备和不可观测限制。",
+      "队列可按首次生成、首购、家庭创建、渠道、伙伴、地区、套餐和月份固定归组并重算。",
+      "留存区分访问、生成、家庭互动、年度更新、订阅和收入留存，并展示退款/删除/流失。",
+      "LTV 同时纳入收入、退款、分成、AI、支付、通知、支持和履约成本，提供假设和区间。",
+      "建立异常来源、机器人、联盟作弊、身份合并和同意缺失对归因的影响标记。"
+    ],
+    "constraints": [
+      "不使用敏感属性做广告优化分群。",
+      "模型结果不是个体命运预测。",
+      "归因输出标明不确定性。"
+    ],
+    "negative_cases": [
+      "跨设备重复用户",
+      "退款用户仍计收入留存",
+      "小样本伙伴 LTV 被过度解读"
+    ],
+    "criticality": "medium",
+    "reference": "skills/building-data-intelligence-platform/references/B114-attribution-cohort-retention-ltv.md",
+    "requirement_ids": [
+      "B114-R01",
+      "B114-R02",
+      "B114-R03",
+      "B114-R04",
+      "B114-R05"
+    ],
+    "topological_index": 118
+  },
+  {
+    "id": "B115",
+    "slug": "revenue-cost-unit-economics-margins",
+    "title": "收入、AI/履约成本与单位经济",
+    "phase": "P19-data-intelligence",
+    "depends_on": [
+      "B18",
+      "B34",
+      "B87",
+      "B93",
+      "B102",
+      "B112"
+    ],
+    "skill": "building-data-intelligence-platform",
+    "objective": "建立到订单、项目、伙伴和渠道粒度的收入、成本和毛利模型。",
+    "business_outcome": "支持定价、模型路由、供应商选择和商业扩张决策。",
+    "modules": [
+      "data/marts/unit-economics",
+      "analytics/margin",
+      "services/cost-insights"
+    ],
+    "interfaces": [
+      "unit economics model",
+      "cost allocation",
+      "contribution margin",
+      "scenario input"
+    ],
+    "requirements": [
+      "按数字作品、视频、订阅、礼品、实物、伙伴 API 和渠道订单计算净收入与贡献毛利。",
+      "拆分模型调用/重试、存储/CDN、支付费、消息、打印、物流、客服、退款和分成。",
+      "展示 CAC、回收期、ARPU、毛利、退款率、生成成功成本和伙伴实施成本的口径及趋势。",
+      "支持模型/供应商/价格/转化/退款/重试/物流的情景分析，假设与事实明确分离。",
+      "利润看板与账本、供应商账单和运营事件定期对账，重大差异自动开 case。"
+    ],
+    "constraints": [
+      "不得因成本自动降低安全和同意门。",
+      "未分摊成本清晰列示。",
+      "内部估算不冒充审计财务报表。"
+    ],
+    "negative_cases": [
+      "失败重试成本遗漏",
+      "伙伴分成按毛收入而非合同口径",
+      "实物退货成本未计"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-data-intelligence-platform/references/B115-revenue-cost-unit-economics-margins.md",
+    "requirement_ids": [
+      "B115-R01",
+      "B115-R02",
+      "B115-R03",
+      "B115-R04",
+      "B115-R05"
+    ],
+    "topological_index": 120
+  },
+  {
+    "id": "B116",
+    "slug": "experimentation-statistics-guardrails",
+    "title": "实验平台、统计与安全护栏",
+    "phase": "P19-data-intelligence",
+    "depends_on": [
+      "B42",
+      "B56",
+      "B78",
+      "B111",
+      "B112"
+    ],
+    "skill": "building-data-intelligence-platform",
+    "objective": "建设跨端可审计的功能、价格、体验和消息实验平台。",
+    "business_outcome": "加快学习，同时防止实验破坏同意、儿童、安全、财务和可靠性。",
+    "modules": [
+      "services/experimentation",
+      "packages/assignment-sdk",
+      "apps/experiment-console"
+    ],
+    "interfaces": [
+      "experiment definition",
+      "assignment",
+      "exposure event",
+      "analysis plan"
+    ],
+    "requirements": [
+      "实验定义包含假设、总体、单位、分层、变体、分配、指标、护栏、样本、周期和停止规则。",
+      "分配服务确定性、一致跨端、支持互斥层/保留组，并记录实际 exposure 而非仅配置分组。",
+      "禁止实验改变必要同意、AI 标识、儿童保护、高影响禁用、支付真实性或数据删除。",
+      "分析支持固定样本/序贯策略、置信区间、多重比较、SRM、污染、缺失和异质性审查。",
+      "发布、扩量、暂停和结论需要审批与审计；失败或负面结果同样进入知识库。"
+    ],
+    "constraints": [
+      "价格实验需地区和商店规则复核。",
+      "实验 ID 不泄露敏感分组。",
+      "安全护栏实时监控。"
+    ],
+    "negative_cases": [
+      "客户端自行切变体",
+      "SRM 未告警",
+      "实验结束后旧缓存仍生效"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-data-intelligence-platform/references/B116-experimentation-statistics-guardrails.md",
+    "requirement_ids": [
+      "B116-R01",
+      "B116-R02",
+      "B116-R03",
+      "B116-R04",
+      "B116-R05"
+    ],
+    "topological_index": 119
+  },
+  {
+    "id": "B117",
+    "slug": "data-quality-lineage-catalog-pii-governance",
+    "title": "数据质量、血缘、目录与 PII 治理",
+    "phase": "P19-data-intelligence",
+    "depends_on": [
+      "B44",
+      "B46",
+      "B111",
+      "B112"
+    ],
+    "skill": "building-data-intelligence-platform",
+    "objective": "建立数据资产发现、分类、血缘、质量、所有权和访问治理。",
+    "business_outcome": "确保分析、运营和审计使用可信且合法的数据。",
+    "modules": [
+      "data/catalog",
+      "data/quality",
+      "services/data-governance"
+    ],
+    "interfaces": [
+      "asset catalog",
+      "lineage graph",
+      "quality rule",
+      "access policy",
+      "deletion propagation"
+    ],
+    "requirements": [
+      "目录覆盖数据库、对象存储、事件、仓库模型、指标、看板、导出和第三方目的地，记录负责人和数据分类。",
+      "自动生成字段/表/指标血缘，能从业务来源追到报表并识别同意、保留和删除影响。",
+      "关键数据质量规则覆盖完整、唯一、有效、及时、金额平衡、引用完整和分布漂移，失败分级处理。",
+      "敏感字段采用标签、动态脱敏、行列权限、临时授权、查询审计和导出控制。",
+      "数据删除/撤回在业务库、仓库、缓存、搜索、导出和下游连接器中可追踪验证。"
+    ],
+    "constraints": [
+      "目录本身不展示敏感样例。",
+      "质量修复不篡改源事实。",
+      "人工访问有工单和时限。"
+    ],
+    "negative_cases": [
+      "字段改名导致血缘断裂",
+      "删除只清业务库",
+      "看板缓存绕过脱敏"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-data-intelligence-platform/references/B117-data-quality-lineage-catalog-pii-governance.md",
+    "requirement_ids": [
+      "B117-R01",
+      "B117-R02",
+      "B117-R03",
+      "B117-R04",
+      "B117-R05"
+    ],
+    "topological_index": 95
+  },
+  {
+    "id": "B118",
+    "slug": "ai-model-evals-drift-human-rating",
+    "title": "AI 模型评测、漂移、基准与人工评分",
+    "phase": "P19-data-intelligence",
+    "depends_on": [
+      "B14",
+      "B15",
+      "B16",
+      "B17",
+      "B18",
+      "B43",
+      "B112",
+      "B117"
+    ],
+    "skill": "building-data-intelligence-platform",
+    "objective": "建立年龄图像、视频、叙事、对话和审核模型的版本化评测与生产监控。",
+    "business_outcome": "在切换供应商或优化成本时维持身份一致性、质量和安全。",
+    "modules": [
+      "evals/model-benchmarks",
+      "services/model-registry",
+      "apps/ai-quality-console"
+    ],
+    "interfaces": [
+      "model version",
+      "evaluation dataset",
+      "grader result",
+      "production drift",
+      "human review"
+    ],
+    "requirements": [
+      "建立经授权/合成的多年龄、肤色、性别表达、设备、多人和困难场景基准，记录许可与数据卡。",
+      "评测身份一致、年龄可感、时间连续、伪影、文本/音频质量、AI 标识、安全和公平性，指标与人工 rubric 结合。",
+      "模型/提示/参数/后处理进入注册表，任何变更先离线评测、影子/小流量和回滚准备。",
+      "生产监控质量门拒绝率、重试、人工申诉、成本、延迟和分布漂移，但不存储无授权原始媒体。",
+      "高风险失败、群体差异和安全回归触发自动停用/回退、根因、修复和重新认证。"
+    ],
+    "constraints": [
+      "评测结果不代表真实未来准确性。",
+      "人工评分者最小访问并受培训。",
+      "模型路由不得基于敏感属性歧视。"
+    ],
+    "negative_cases": [
+      "新模型平均分高但儿童失败",
+      "基准数据泄漏到训练",
+      "提示变更未登记"
+    ],
+    "criticality": "high",
+    "reference": "skills/building-data-intelligence-platform/references/B118-ai-model-evals-drift-human-rating.md",
+    "requirement_ids": [
+      "B118-R01",
+      "B118-R02",
+      "B118-R03",
+      "B118-R04",
+      "B118-R05"
+    ],
+    "topological_index": 105
+  },
+  {
+    "id": "B119",
+    "slug": "environment-config-secrets-tenant-settings",
+    "title": "环境、配置、秘密与租户设置治理",
+    "phase": "P20-enterprise-hardening",
+    "depends_on": [
+      "B03",
+      "B31",
+      "B44",
+      "B47"
+    ],
+    "skill": "hardening-enterprise-platform",
+    "objective": "统一管理本地、CI、预发、生产及多租户配置和秘密。",
+    "business_outcome": "避免环境漂移、密钥泄漏和白标配置绕过安全。",
+    "modules": [
+      "platform/config",
+      "platform/secrets",
+      "apps/admin/config"
+    ],
+    "interfaces": [
+      "configuration schema",
+      "secret reference",
+      "tenant override",
+      "change approval"
+    ],
+    "requirements": [
+      "配置分为代码默认、环境、地区、租户和动态开关，具备 schema、类型、范围、版本、生效和回滚。",
+      "秘密只通过密钥管理/工作负载身份注入，禁止进入仓库、镜像、日志、前端或完成证据。",
+      "租户覆盖仅允许批准字段；同意、安全、AI 标识、儿童和高影响禁用不可由租户关闭。",
+      "高风险配置变更需预览影响、双人批准、灰度、审计和自动回滚。",
+      "建立配置漂移、过期凭据、未使用秘密、错误环境引用和轮换演练检查。"
+    ],
+    "constraints": [
+      "生产配置读取最小权限。",
+      "本地示例只含占位变量名。",
+      "紧急变更事后复核。"
+    ],
+    "negative_cases": [
+      "测试密钥误用生产",
+      "租户覆盖隐藏 AI 标识",
+      "秘密轮换未更新工作流 worker"
+    ],
+    "criticality": "high",
+    "reference": "skills/hardening-enterprise-platform/references/B119-environment-config-secrets-tenant-settings.md",
+    "requirement_ids": [
+      "B119-R01",
+      "B119-R02",
+      "B119-R03",
+      "B119-R04",
+      "B119-R05"
+    ],
+    "topological_index": 87
+  },
+  {
+    "id": "B120",
+    "slug": "multi-region-china-global-topology-cdn",
+    "title": "多区域、中国/全球拓扑、CDN 与域名",
+    "phase": "P20-enterprise-hardening",
+    "depends_on": [
+      "B05",
+      "B44",
+      "B45",
+      "B46",
+      "B47",
+      "B119"
+    ],
+    "skill": "hardening-enterprise-platform",
+    "objective": "设计中国大陆与全球市场的区域化部署、数据位置、域名、CDN 和容灾边界。",
+    "business_outcome": "支持低延迟与合规扩展，同时避免未经设计的跨境复制。",
+    "modules": [
+      "infra/regions",
+      "infra/cdn",
+      "infra/dns",
+      "docs/data-residency"
+    ],
+    "interfaces": [
+      "region routing",
+      "data residency policy",
+      "asset replication",
+      "domain/certificate lifecycle"
+    ],
+    "requirements": [
+      "为控制面、媒体面、对象存储、数据库、队列、分析和日志定义地区部署及允许数据流。",
+      "请求按租户/用户地区、合同和数据位置路由；未知或冲突策略阻止处理而非任意跨区。",
+      "CDN 仅缓存授权衍生媒体，使用签名、短 TTL、撤销、区域密钥和缓存清除证明。",
+      "域名、DNS、证书、WAF、源站保护和伙伴白标域名实现自动化生命周期与接管防护。",
+      "跨区域复制、备份、灾备和分析导出执行数据分类、加密、目的限制和合规审批。"
+    ],
+    "constraints": [
+      "数据位置策略由专业法务/安全复核。",
+      "全球故障切换不能自动突破地区边界。",
+      "源站不可公开暴露。"
+    ],
+    "negative_cases": [
+      "CDN 撤销延迟",
+      "白标域名过期被接管",
+      "全球备份复制受限媒体"
+    ],
+    "criticality": "high",
+    "reference": "skills/hardening-enterprise-platform/references/B120-multi-region-china-global-topology-cdn.md",
+    "requirement_ids": [
+      "B120-R01",
+      "B120-R02",
+      "B120-R03",
+      "B120-R04",
+      "B120-R05"
+    ],
+    "topological_index": 100
+  },
+  {
+    "id": "B121",
+    "slug": "performance-load-capacity-autoscaling",
+    "title": "性能、压力、容量与自动扩缩容",
+    "phase": "P20-enterprise-hardening",
+    "depends_on": [
+      "B18",
+      "B45",
+      "B47",
+      "B120"
+    ],
+    "skill": "hardening-enterprise-platform",
+    "objective": "验证消费者高峰、批量生成、伙伴活动、支付和物流事件下的容量与退化行为。",
+    "business_outcome": "让营销爆发和大客户上线不造成级联故障或成本失控。",
+    "modules": [
+      "tests/performance",
+      "infra/autoscaling",
+      "docs/capacity-model"
+    ],
+    "interfaces": [
+      "load profile",
+      "capacity forecast",
+      "autoscaling policy",
+      "performance budget"
+    ],
+    "requirements": [
+      "建立 Web/API/上传/生成状态/媒体下载/支付/伙伴 API/Webhook/后台任务的代表性负载模型。",
+      "定义 p50/p95/p99、吞吐、队列年龄、错误、饱和、成本和用户体验预算及硬性发布阈值。",
+      "执行基线、峰值、突发、长稳、批量、弱依赖和多租户噪声测试，使用合成数据。",
+      "扩缩容、配额、背压、优先级、排队、降级和拒绝策略保护已付款任务、安全和交易。",
+      "容量模型关联活动预测、模型供应商额度、存储/CDN、数据库、工作流和供应链限制。"
+    ],
+    "constraints": [
+      "压力测试不得打生产第三方未授权端点。",
+      "降级不移除安全门。",
+      "测试结果与资源版本绑定。"
+    ],
+    "negative_cases": [
+      "自动扩容慢于队列增长",
+      "单伙伴耗尽全局并发",
+      "媒体下载压垮数据库"
+    ],
+    "criticality": "high",
+    "reference": "skills/hardening-enterprise-platform/references/B121-performance-load-capacity-autoscaling.md",
+    "requirement_ids": [
+      "B121-R01",
+      "B121-R02",
+      "B121-R03",
+      "B121-R04",
+      "B121-R05"
+    ],
+    "topological_index": 109
+  },
+  {
+    "id": "B122",
+    "slug": "resilience-chaos-dependency-failover",
+    "title": "韧性、混沌、依赖故障与切换",
+    "phase": "P20-enterprise-hardening",
+    "depends_on": [
+      "B13",
+      "B45",
+      "B46",
+      "B47",
+      "B74",
+      "B98",
+      "B120",
+      "B121"
+    ],
+    "skill": "hardening-enterprise-platform",
+    "objective": "验证模型、支付、存储、数据库、队列、消息、供应商和区域故障时的安全恢复。",
+    "business_outcome": "防止长任务、支付和实物履约因重试造成重复副作用或数据丢失。",
+    "modules": [
+      "tests/chaos",
+      "platform/failover",
+      "runbooks/dependencies"
+    ],
+    "interfaces": [
+      "fault scenario",
+      "recovery objective",
+      "failover policy",
+      "game-day evidence"
+    ],
+    "requirements": [
+      "建立依赖清单、故障模式、超时、重试、熔断、隔离舱、回退、数据一致性和人工接管策略。",
+      "注入模型超时/错误、对象存储不可用、数据库只读/延迟、队列重复、支付乱序、消息失败和供应商失联。",
+      "验证取消、退款、同意撤回和删除在故障中仍具优先级且不会被恢复任务复活。",
+      "区域/供应商切换必须满足数据位置、合同、幂等、质量和安全策略，并可快速回退。",
+      "定期 game day 记录观察、RTO/RPO、用户影响、人工步骤、缺陷和修复复测。"
+    ],
+    "constraints": [
+      "混沌实验有爆炸半径和停止条件。",
+      "生产实验需审批。",
+      "故障回退结果清楚标示质量差异。"
+    ],
+    "negative_cases": [
+      "支付主备双回调",
+      "删除队列恢复后重建资产",
+      "供应商切换生产两份实物"
+    ],
+    "criticality": "high",
+    "reference": "skills/hardening-enterprise-platform/references/B122-resilience-chaos-dependency-failover.md",
+    "requirement_ids": [
+      "B122-R01",
+      "B122-R02",
+      "B122-R03",
+      "B122-R04",
+      "B122-R05"
+    ],
+    "topological_index": 115
+  },
+  {
+    "id": "B123",
+    "slug": "supply-chain-security-sbom-sast-dast-pentest",
+    "title": "软件供应链、SBOM、SAST/DAST 与渗透测试",
+    "phase": "P20-enterprise-hardening",
+    "depends_on": [
+      "B44",
+      "B47",
+      "B103",
+      "B119"
+    ],
+    "skill": "hardening-enterprise-platform",
+    "objective": "对源代码、依赖、镜像、移动包、小程序、IaC、API 和伙伴门户建立安全验证。",
+    "business_outcome": "降低供应链攻击、账户越权、媒体泄漏和支付风险。",
+    "modules": [
+      "security/scanners",
+      "security/pentest",
+      "pipelines/security"
+    ],
+    "interfaces": [
+      "SBOM",
+      "SAST/SCA/secret scan",
+      "DAST/API scan",
+      "mobile scan",
+      "finding lifecycle"
+    ],
+    "requirements": [
+      "每个构建生成签名 SBOM、依赖/许可证清单、来源证明和可验证制品摘要。",
+      "CI 运行秘密、SAST、SCA、IaC、容器、API、前端、移动和小程序安全扫描，并定义严重度门。",
+      "DAST/渗透覆盖认证、租户隔离、IDOR、上传、签名 URL、Webhook、支付、SSRF、XSS、CSRF 和管理操作。",
+      "高风险系统由独立人员/供应商定期渗透和红队，测试数据、范围、责任和修复验证受控。",
+      "发现进入统一生命周期、SLA、负责人、例外批准、补偿控制、重测和公开披露评估。"
+    ],
+    "constraints": [
+      "测试不得使用真实客户媒体。",
+      "扫描豁免有到期日。",
+      "密钥泄漏立即轮换而非只删除 Git 行。"
+    ],
+    "negative_cases": [
+      "构建依赖被替换",
+      "仅扫描主分支不扫描发布制品",
+      "高危 finding 无重测关闭"
+    ],
+    "criticality": "high",
+    "reference": "skills/hardening-enterprise-platform/references/B123-supply-chain-security-sbom-sast-dast-pentest.md",
+    "requirement_ids": [
+      "B123-R01",
+      "B123-R02",
+      "B123-R03",
+      "B123-R04",
+      "B123-R05"
+    ],
+    "topological_index": 104
+  },
+  {
+    "id": "B124",
+    "slug": "compliance-evidence-filings-audit-exports",
+    "title": "合规证据、记录、备案评估与审计导出",
+    "phase": "P20-enterprise-hardening",
+    "depends_on": [
+      "B44",
+      "B46",
+      "B49",
+      "B89",
+      "B94",
+      "B110",
+      "B117",
+      "B123"
+    ],
+    "skill": "hardening-enterprise-platform",
+    "objective": "把隐私、人脸、生成合成标识、未成年人、拟人化交互、财税和企业安全控制映射到证据。",
+    "business_outcome": "支持法务评估、伙伴采购、监管响应和持续合规，而不是上线前一次性填表。",
+    "modules": [
+      "compliance/control-library",
+      "apps/compliance-console",
+      "evidence/compliance"
+    ],
+    "interfaces": [
+      "control record",
+      "evidence artifact",
+      "applicability assessment",
+      "audit export"
+    ],
+    "requirements": [
+      "建立法规/合同/标准到控制、系统、负责人、频率、测试、证据、例外和整改的控制库。",
+      "维护生成式 AI 应用登记/备案、AI 标识、人脸信息、个人信息影响评估、儿童和拟人化交互适用性记录。",
+      "自动收集配置、访问、扫描、删除、供应商、事件、培训、财务和发布证据，校验时间与制品 hash。",
+      "审计导出按请求范围、时间、租户和数据分类生成，具备双人批准、水印、加密、过期和访问记录。",
+      "控制失败、法律变化、供应商变化或产品 profile 变化自动触发影响评估、阻断或重新认证。"
+    ],
+    "constraints": [
+      "本包不替代专业法律意见。",
+      "不得伪造认证或备案状态。",
+      "证据包不包含不必要客户数据。"
+    ],
+    "negative_cases": [
+      "控制证据过期仍标通过",
+      "新地区上线未评估",
+      "审计导出跨租户"
+    ],
+    "criticality": "high",
+    "reference": "skills/hardening-enterprise-platform/references/B124-compliance-evidence-filings-audit-exports.md",
+    "requirement_ids": [
+      "B124-R01",
+      "B124-R02",
+      "B124-R03",
+      "B124-R04",
+      "B124-R05"
+    ],
+    "topological_index": 124
+  },
+  {
+    "id": "B125",
+    "slug": "commercial-operations-readiness",
+    "title": "商业运营、政策、团队与供应商上线准备",
+    "phase": "P21-commercial-launch",
+    "depends_on": [
+      "B56",
+      "B59",
+      "B60",
+      "B61",
+      "B62",
+      "B78",
+      "B86",
+      "B94",
+      "B102",
+      "B108",
+      "B110",
+      "B113",
+      "B114",
+      "B115",
+      "B116",
+      "B118",
+      "B120",
+      "B121",
+      "B122",
+      "B124"
+    ],
+    "skill": "launching-complete-commercial-product",
+    "objective": "在全面 E2E 前确认产品、法务、财务、客服、销售、伙伴、供应链和技术运营可真实承接客户。",
+    "business_outcome": "避免代码可运行但业务无法收费、服务、交付、对账或响应事故。",
+    "modules": [
+      "docs/commercial-readiness",
+      "runbooks/launch",
+      "evidence/readiness"
+    ],
+    "interfaces": [
+      "readiness checklist",
+      "RACI",
+      "policy publication",
+      "vendor/partner approval"
+    ],
+    "requirements": [
+      "确认服务条款、隐私、儿童、AI 标识、退款、订阅、礼品、打印/配送和伙伴政策已批准、发布并版本化。",
+      "完成客服队列、SLA、升级、值班、销售/伙伴交接、财务月结、供应商和事件响应培训演练。",
+      "生产支付、发票、消息、AI、存储、域名、移动商店、小程序、打印和物流供应商均通过沙箱及最小真实验证。",
+      "建立上线 RACI、联系人、决策权、停止条件、回滚、客户沟通、媒体响应和事后复盘模板。",
+      "所有 P0/P1 风险关闭或有有期补偿控制；任何关键法律、安全、财务或履约阻塞则 fail closed。"
+    ],
+    "constraints": [
+      "真实支付验证使用最小金额并退款/对账。",
+      "培训不授予超额生产权限。",
+      "政策内容与实现一致。"
+    ],
+    "negative_cases": [
+      "客服无夜间升级人",
+      "供应商合同未签即上线",
+      "退款政策与系统状态机冲突"
+    ],
+    "criticality": "high",
+    "reference": "skills/launching-complete-commercial-product/references/B125-commercial-operations-readiness.md",
+    "requirement_ids": [
+      "B125-R01",
+      "B125-R02",
+      "B125-R03",
+      "B125-R04",
+      "B125-R05"
+    ],
+    "topological_index": 125
+  },
+  {
+    "id": "B126",
+    "slug": "full-surface-commercial-e2e-certification",
+    "title": "全终端、全渠道与周边系统商业 E2E 认证",
+    "phase": "P21-commercial-launch",
+    "depends_on": [
+      "B48",
+      "B49",
+      "B69",
+      "B72",
+      "B125"
+    ],
+    "skill": "launching-complete-commercial-product",
+    "objective": "从真实入口重放消费者、家庭、移动、小程序、伙伴、支付、实物、客服、财务和删除闭环。",
+    "business_outcome": "证明整个商业系统而非单一服务能够在正常与故障路径中一致工作。",
+    "modules": [
+      "e2e/full-commercial",
+      "evidence/commercial-e2e",
+      "tools/clean-room"
+    ],
+    "interfaces": [
+      "scenario suite",
+      "cross-system assertion",
+      "financial control total",
+      "deletion proof"
+    ],
+    "requirements": [
+      "在清洁环境从官网/分享/移动/小程序/伙伴入口完成上传、授权、生成、质量、购买、分享、家庭和年度旅程。",
+      "完成数字交付、IAP/支付宝/微信或替代支付、发票、退款、拒付模拟、账本和月结控制总额。",
+      "完成照片书配置、校样、供应商路由、生产事件、物流、破损补发、供应商索赔和结算。",
+      "完成工单、机器人转人工、客服受控操作、伙伴 CRM/启用/API/Webhook/SDK 和客户成功路径。",
+      "完成授权撤回、分享撤销、账户/家庭删除、下游连接器/CDN/供应商/仓库删除证明及故障恢复。"
+    ],
+    "constraints": [
+      "测试使用合成数据和沙箱/受控供应商。",
+      "任何财务不平、租户泄漏或删除失败即不通过。",
+      "证据可独立重放。"
+    ],
+    "negative_cases": [
+      "支付成功但账本不平",
+      "移动与 Web 权益不一致",
+      "供应商副本删除无证明"
+    ],
+    "criticality": "high",
+    "reference": "skills/launching-complete-commercial-product/references/B126-full-surface-commercial-e2e-certification.md",
+    "requirement_ids": [
+      "B126-R01",
+      "B126-R02",
+      "B126-R03",
+      "B126-R04",
+      "B126-R05"
+    ],
+    "topological_index": 126
+  },
+  {
+    "id": "B127",
+    "slug": "staged-production-launch-certificate",
+    "title": "分阶段生产发布、市场上线与最终证书",
+    "phase": "P21-commercial-launch",
+    "depends_on": [
+      "B126"
+    ],
+    "skill": "launching-complete-commercial-product",
+    "objective": "以可停止、可观察、可回滚的方式上线 Web、移动、小程序、伙伴和实物渠道。",
+    "business_outcome": "签发最终商业级项目证书，并把上线后的运营责任交给明确团队。",
+    "modules": [
+      "pipelines/release-train",
+      "evidence/release",
+      "docs/go-live"
+    ],
+    "interfaces": [
+      "release manifest",
+      "rollout wave",
+      "go/no-go decision",
+      "commercial certificate"
+    ],
+    "requirements": [
+      "冻结候选制品、数据库/事件/API/SDK/移动/小程序/配置版本及 SBOM，生成签名 release manifest。",
+      "按内部、员工/试点、低比例消费者、伙伴批次、地区和全量波次发布，设置每波时长和护栏。",
+      "实时监控生成质量、支付、退款、消息、工单、账本、供应链、隐私、安全、成本和 SLO，越阈自动暂停。",
+      "回滚/前滚覆盖应用、配置、模型、工作流、数据库兼容、移动最低版本、小程序和供应商路由。",
+      "最终证书包含选定 profile、所有批次报告 hash、仓库提交、制品摘要、审批、例外、上线时间和运营交接。"
+    ],
+    "constraints": [
+      "证书只在全部强制门通过时签发。",
+      "上线后持续监控和事件响应生效。",
+      "不得把部分波次成功声明为全量成功。"
+    ],
+    "negative_cases": [
+      "灰度护栏异常未暂停",
+      "数据库回滚破坏已付款订单",
+      "证书引用不同 commit 制品"
+    ],
+    "criticality": "high",
+    "reference": "skills/launching-complete-commercial-product/references/B127-staged-production-launch-certificate.md",
+    "requirement_ids": [
+      "B127-R01",
+      "B127-R02",
+      "B127-R03",
+      "B127-R04",
+      "B127-R05"
+    ],
+    "topological_index": 127
+  }
+]
