@@ -3,11 +3,11 @@
   "package": "ai-life-time-machine-commercial-project-factory",
   "package_version": "2.0.0",
   "profile_id": "full-commercial",
-  "profile_sha256": "75b3eab62a00405e962b46610762333edfd09c3471e10a23052b8d5e3960640b",
+  "profile_sha256": "af518f1e75e9ca46661fb61f89afa50933666640fe2bae1f83fc5c1141102070",
   "repo_root": "/Users/stephen/Documents/Projects/python/ailifetime/ai-life-time-machine-commercial-project-factory-v2.0.0/product",
-  "base_commit": "unknown",
-  "revision": 3,
-  "updated_at": "2026-08-20T05:28:28.303562+00:00",
+  "base_commit": "ce3b9780137d8296c483ed693e35b706d397fbc0",
+  "revision": 1,
+  "updated_at": "2026-08-20T05:29:37.819947+00:00",
   "batches": {
     "B00": {
       "included": true,
