@@ -107,11 +107,23 @@ function executeAdminAction(input: JsonObject, invocation: CapabilityInvocation)
 }
 
 const definitions: readonly DomainCapabilityDefinition[] = [
-  defineCapability("B39", SKILL, "recordReferral", recordReferral, { consent: participantConsent() }),
-  defineCapability("B40", SKILL, "scheduleLifecycleMessage", scheduleLifecycleMessage, { consent: participantConsent() }),
-  defineCapability("B41", SKILL, "ingestAnalyticsEvent", ingestAnalyticsEvent),
-  defineCapability("B42", SKILL, "assignExperiment", assignExperiment),
-  defineCapability("B43", SKILL, "executeAdminAction", executeAdminAction, { permission: "admin.action.execute" }),
+  defineCapability("B39", SKILL, "recordReferral", recordReferral, {
+    consent: participantConsent(), mode: "resource", collection: "growth.referrals", recordIdField: "referralId",
+  }),
+  defineCapability("B40", SKILL, "scheduleLifecycleMessage", scheduleLifecycleMessage, {
+    consent: participantConsent(), mode: "external-command", collection: "notifications.lifecycle-commands", recordIdField: "messageId",
+  }),
+  defineCapability("B41", SKILL, "ingestAnalyticsEvent", ingestAnalyticsEvent, {
+    permission: "event:receive", mode: "inbox-event",
+  }),
+  defineCapability("B42", SKILL, "assignExperiment", assignExperiment, {
+    mode: "resource",
+    collection: "experiments.assignments",
+    recordId: (data) => `${String(data.experimentId)}:${String(data.subjectKey)}`,
+  }),
+  defineCapability("B43", SKILL, "executeAdminAction", executeAdminAction, {
+    permission: "admin.action.execute", mode: "resource", collection: "admin.actions", recordIdField: "actionId",
+  }),
 ];
 
 export function registerBuildingGrowthDataLoopCapabilities(registry: CapabilityRegistry): void {

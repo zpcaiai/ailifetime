@@ -37,9 +37,24 @@ const timelineInput = {
 };
 const timelineKey = `smoke-timeline-${runId}`;
 const timeline = await command("B14", timelineInput, timelineKey);
-assert(timeline.data?.state === "persisted" && timeline.data?.replayed === false, "timeline was not persisted");
+assert(
+  timeline.data?.state === "requested" &&
+    timeline.data?.commandState === "requested" &&
+    timeline.data?.externalCommandId === timeline.data?.recordId &&
+    timeline.data?.replayed === false,
+  "timeline command was not durably staged",
+);
 const replay = await command("B14", timelineInput, timelineKey);
 assert(replay.data?.recordId === timeline.data?.recordId && replay.data?.replayed === true, "timeline replay was not idempotent");
+const stagedCommand = await query("record.get", {
+  collection: "generation.timeline-commands",
+  id: timeline.data.recordId,
+});
+assert(
+  stagedCommand.data?.data?.commandState === "requested" &&
+    stagedCommand.data?.data?.externalCommandId === timeline.data?.externalCommandId,
+  "timeline command record was not queryable",
+);
 
 const injection = await fetch(`${baseUrl}/v1/queries`, {
   method: "POST",
@@ -53,7 +68,7 @@ const injection = await fetch(`${baseUrl}/v1/queries`, {
 });
 assert(injection.status === 403, "client-asserted tenant context was not rejected");
 
-process.stdout.write(`PASS smoke health=ready capabilities=128 consent=active timeline=${timeline.data.recordId} replay=true identity_injection=rejected\n`);
+process.stdout.write(`PASS smoke health=ready capabilities=128 consent=active timeline=${timeline.data.recordId} command=requested replay=true identity_injection=rejected\n`);
 
 async function command(batchId, input, idempotencyKey) {
   return request(`/v1/capabilities/${batchId}`, {
@@ -64,6 +79,17 @@ async function command(batchId, input, idempotencyKey) {
       "idempotency-key": idempotencyKey,
     },
     body: JSON.stringify(input),
+  });
+}
+
+async function query(operation, input) {
+  return request("/v1/queries", {
+    method: "POST",
+    headers: {
+      ...authHeaders(),
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ query: operation, input }),
   });
 }
 

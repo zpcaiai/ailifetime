@@ -2,6 +2,9 @@
   "name": "@ltm/capabilities",
   "version": "1.0.0",
   "private": true,
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -18,6 +21,7 @@
     "test": "pnpm run build && node --test dist/*.test.js"
   },
   "dependencies": {
-    "@ltm/core": "workspace:*"
+    "@ltm/core": "workspace:*",
+    "@ltm/providers": "workspace:*"
   }
 }

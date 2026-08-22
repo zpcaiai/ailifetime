@@ -1,4 +1,5 @@
 import { DomainError } from "@ltm/core";
+import { capabilityEvidenceScope } from "@ltm/providers";
 import type { CapabilityInvocation, CapabilityRegistry, JsonObject, JsonValue } from "../registry.js";
 import { requiredBoolean, requiredNumber, requiredString, stringList } from "../validation.js";
 import {
@@ -6,6 +7,7 @@ import {
   assertKnownState,
   defineCapability,
   registerDefinitions,
+  rejectClientAssertions,
   requireInteger,
   requireTrue,
   type DomainCapabilityDefinition,
@@ -25,6 +27,16 @@ function currency(input: JsonObject): string {
 
 function amount(input: JsonObject, field = "amountMinor", minimum = 1): number {
   return requireInteger(requiredNumber(input, field, minimum), field, minimum);
+}
+
+function sha256(input: JsonObject, field: string): string {
+  const value = requiredString(input, field);
+  if (!/^[a-f0-9]{64}$/.test(value)) throw new DomainError("VALIDATION_FAILED", `${field} must be a lowercase SHA-256 digest`);
+  return value;
+}
+
+function providerEnvironment(input: JsonObject): "sandbox" | "production" {
+  return assertKnownState(requiredString(input, "providerEnvironment"), ["sandbox", "production"] as const, "providerEnvironment");
 }
 
 function objectList(input: JsonObject, field: string, minimum = 1): JsonObject[] {
@@ -116,28 +128,36 @@ function reconciliation(input: JsonObject, invocation: CapabilityInvocation): Js
 }
 
 function invoice(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
+  rejectClientAssertions(input, [
+    "providerDeduplicated",
+    "refundRequiresCreditNote",
+    "taxRequestArtifactSha256",
+    "providerRequestId",
+    "externalEvidenceIds",
+  ]);
   assertFinanceStepUp(invocation);
   const invoiceId = requiredString(input, "invoiceId");
   const legalEntityId = requiredString(input, "legalEntityId");
+  const providerId = requiredString(input, "providerId");
+  const providerEnvironmentValue = providerEnvironment(input);
   const invoiceType = assertKnownState(requiredString(input, "invoiceType"), ["receipt", "invoice", "fapiao", "credit_note"] as const, "invoiceType");
   const taxProfileVersion = requiredString(input, "taxProfileVersion");
   const sequenceScope = requiredString(input, "sequenceScope");
   const amountMinor = amount(input);
   const invoiceCurrency = currency(input);
-  const providerDeduplicated = requireTrue(requiredBoolean(input, "providerDeduplicated"), "providerDeduplicated");
-  const refundRequiresCreditNote = requireTrue(requiredBoolean(input, "refundRequiresCreditNote"), "refundRequiresCreditNote");
-  const externalEvidenceIds = stringList(input, "externalEvidenceIds", { min: 1, unique: true });
+  const creditNotePolicyVersion = requiredString(input, "creditNotePolicyVersion");
   return {
     invoiceId,
     legalEntityId,
+    providerId,
+    providerEnvironment: providerEnvironmentValue,
     invoiceType,
     taxProfileVersion,
     sequenceScope,
     amountMinor,
     currency: invoiceCurrency,
-    providerDeduplicated,
-    refundRequiresCreditNote,
-    externalEvidenceIds,
+    creditNotePolicyVersion,
+    commandState: "requested",
   };
 }
 
@@ -175,58 +195,92 @@ function revenueSchedule(input: JsonObject, invocation: CapabilityInvocation): J
 }
 
 function dispute(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
+  rejectClientAssertions(input, ["alreadyRefunded"]);
   assertFinanceStepUp(invocation);
   const disputeId = requiredString(input, "disputeId");
   const providerCaseId = requiredString(input, "providerCaseId");
+  const providerId = requiredString(input, "providerId");
+  const providerEnvironmentValue = providerEnvironment(input);
+  const disputeArtifactSha256 = sha256(input, "disputeArtifactSha256");
   const action = assertKnownState(requiredString(input, "action"), ["accept", "defend", "write_off"] as const, "action");
   const amountMinor = amount(input);
   const disputeCurrency = currency(input);
   const responseDueAt = assertISODate(requiredString(input, "responseDueAt"), "responseDueAt");
-  const alreadyRefunded = requiredBoolean(input, "alreadyRefunded");
   const evidenceIds = stringList(input, "evidenceIds", { min: 1, unique: true });
   const reserveEntryId = requiredString(input, "reserveEntryId");
   const externalEvidenceIds = stringList(input, "externalEvidenceIds", { min: 1, unique: true });
-  if (action === "defend" && (alreadyRefunded || Date.parse(responseDueAt) <= Date.now())) {
-    throw new DomainError("VALIDATION_FAILED", "refunded or expired disputes cannot be defended");
+  if (action === "defend" && Date.parse(responseDueAt) <= Date.now()) {
+    throw new DomainError("VALIDATION_FAILED", "expired disputes cannot be defended");
   }
+  const evidenceScope = capabilityEvidenceScope({
+    tenantId: invocation.actor.tenantId,
+    batchId: "B91",
+    operation: "recordDisputeDecision",
+    kind: "payment-dispute",
+    provider: `payment:${providerId}`,
+    artifactSha256: disputeArtifactSha256,
+    environment: providerEnvironmentValue,
+    subjectId: disputeId,
+  });
   return {
     disputeId,
     providerCaseId,
+    providerId,
+    providerEnvironment: providerEnvironmentValue,
+    disputeArtifactSha256,
     action,
     amountMinor,
     currency: disputeCurrency,
     responseDueAt,
-    alreadyRefunded,
     evidenceIds,
     reserveEntryId,
     externalEvidenceIds,
+    evidenceScope,
   };
 }
 
 function payout(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
+  rejectClientAssertions(input, ["refundWindowClosed"]);
   assertFinanceStepUp(invocation);
   const payoutId = requiredString(input, "payoutId");
   const partnerId = requiredString(input, "partnerId");
+  const providerId = requiredString(input, "providerId");
+  const providerEnvironmentValue = providerEnvironment(input);
+  const payoutArtifactSha256 = sha256(input, "payoutArtifactSha256");
   const statementId = requiredString(input, "statementId");
   const accountReference = requiredString(input, "accountReference");
   const amountMinor = amount(input);
   const payoutCurrency = currency(input);
-  const refundWindowClosed = requireTrue(requiredBoolean(input, "refundWindowClosed"), "refundWindowClosed");
+  const refundReconciliationId = requiredString(input, "refundReconciliationId");
   const approvalIds = stringList(input, "approvalIds", { min: 2, unique: true });
   const withholdingDocumentId = requiredString(input, "withholdingDocumentId");
   const externalEvidenceIds = stringList(input, "externalEvidenceIds", { min: 1, unique: true });
   if (/\d{8,}/.test(accountReference)) throw new DomainError("VALIDATION_FAILED", "accountReference must be tokenized, not raw bank details");
+  const evidenceScope = capabilityEvidenceScope({
+    tenantId: invocation.actor.tenantId,
+    batchId: "B92",
+    operation: "approvePartnerPayout",
+    kind: "partner-payout",
+    provider: `payment:${providerId}`,
+    artifactSha256: payoutArtifactSha256,
+    environment: providerEnvironmentValue,
+    subjectId: payoutId,
+  });
   return {
     payoutId,
     partnerId,
+    providerId,
+    providerEnvironment: providerEnvironmentValue,
+    payoutArtifactSha256,
     statementId,
     accountReference,
     amountMinor,
     currency: payoutCurrency,
-    refundWindowClosed,
+    refundReconciliationId,
     approvalIds,
     withholdingDocumentId,
     externalEvidenceIds,
+    evidenceScope,
   };
 }
 
@@ -264,6 +318,9 @@ function closePeriod(input: JsonObject, invocation: CapabilityInvocation): JsonO
   const closeId = requiredString(input, "closeId");
   const period = requiredString(input, "period");
   const legalEntityId = requiredString(input, "legalEntityId");
+  const erpProviderId = requiredString(input, "erpProviderId");
+  const providerEnvironmentValue = providerEnvironment(input);
+  const closeArtifactSha256 = sha256(input, "closeArtifactSha256");
   const trialBalanceMinor = amount(input, "trialBalanceMinor", 0);
   const exportControlTotalMinor = amount(input, "exportControlTotalMinor", 0);
   const checklist = stringList(input, "checklist", { min: 4, unique: true });
@@ -271,16 +328,30 @@ function closePeriod(input: JsonObject, invocation: CapabilityInvocation): JsonO
   const exportIdempotencyReference = requiredString(input, "exportIdempotencyReference");
   const externalEvidenceIds = stringList(input, "externalEvidenceIds", { min: 1, unique: true });
   if (trialBalanceMinor !== exportControlTotalMinor) throw new DomainError("LEDGER_UNBALANCED", "ERP export control total differs from trial balance");
+  const evidenceScope = capabilityEvidenceScope({
+    tenantId: invocation.actor.tenantId,
+    batchId: "B94",
+    operation: "approveMonthEndClose",
+    kind: "financial-close-export",
+    provider: `erp:${erpProviderId}`,
+    artifactSha256: closeArtifactSha256,
+    environment: providerEnvironmentValue,
+    subjectId: closeId,
+  });
   return {
     closeId,
     period,
     legalEntityId,
+    erpProviderId,
+    providerEnvironment: providerEnvironmentValue,
+    closeArtifactSha256,
     trialBalanceMinor,
     exportControlTotalMinor,
     checklist,
     approvalIds,
     exportIdempotencyReference,
     externalEvidenceIds,
+    evidenceScope,
     state: "ready_to_close",
   };
 }
@@ -290,24 +361,32 @@ const definitions: readonly DomainCapabilityDefinition[] = [
     permission: "ledger:post",
     mode: "ledger-post",
   }),
-  defineCapability("B88", SKILL, "recordReconciliation", reconciliation, { permission: "finance.reconcile" }),
+  defineCapability("B88", SKILL, "recordReconciliation", reconciliation, { permission: "finance.reconcile", mode: "resource" }),
   defineCapability("B89", SKILL, "requestTaxDocument", invoice, {
     permission: "finance.invoice.request",
-    requiresExternalEvidence: true,
+    mode: "external-command",
+    collection: "finance.tax-document-commands",
+    recordIdField: "invoiceId",
   }),
-  defineCapability("B90", SKILL, "createRevenueSchedule", revenueSchedule, { permission: "finance.revenue-schedule.manage" }),
+  defineCapability("B90", SKILL, "createRevenueSchedule", revenueSchedule, { permission: "finance.revenue-schedule.manage", mode: "resource" }),
   defineCapability("B91", SKILL, "recordDisputeDecision", dispute, {
     permission: "finance.dispute.manage",
     requiresExternalEvidence: true,
+    externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    mode: "attestation",
   }),
   defineCapability("B92", SKILL, "approvePartnerPayout", payout, {
     permission: "finance.payout.approve",
     requiresExternalEvidence: true,
+    externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    mode: "attestation",
   }),
-  defineCapability("B93", SKILL, "recordCostAllocation", costAllocation, { permission: "finance.cost.allocate" }),
+  defineCapability("B93", SKILL, "recordCostAllocation", costAllocation, { permission: "finance.cost.allocate", mode: "resource" }),
   defineCapability("B94", SKILL, "approveMonthEndClose", closePeriod, {
     permission: "finance.close.approve",
     requiresExternalEvidence: true,
+    externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    mode: "attestation",
   }),
 ];
 

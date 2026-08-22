@@ -1,11 +1,13 @@
 import { DomainError } from "@ltm/core";
-import type { CapabilityRegistry, JsonObject } from "../registry.js";
+import { capabilityEvidenceScope } from "@ltm/providers";
+import type { CapabilityInvocation, CapabilityRegistry, JsonObject } from "../registry.js";
 import { optionalString, requiredBoolean, requiredNumber, requiredString, stringList } from "../validation.js";
 import {
   assertISODate,
   assertKnownState,
   defineCapability,
   participantConsent,
+  rejectClientAssertions,
   registerDefinitions,
   requireInteger,
   requireTrue,
@@ -13,6 +15,16 @@ import {
 } from "./_shared.js";
 
 const SKILL = "building-marketing-content-platform";
+
+function sha256(input: JsonObject, field: string): string {
+  const value = requiredString(input, field);
+  if (!/^[a-f0-9]{64}$/.test(value)) throw new DomainError("VALIDATION_FAILED", `${field} must be a lowercase SHA-256 digest`);
+  return value;
+}
+
+function providerEnvironment(input: JsonObject): "sandbox" | "production" {
+  return assertKnownState(requiredString(input, "providerEnvironment"), ["sandbox", "production"] as const, "providerEnvironment");
+}
 
 function safeHttpsUrl(value: string, field: string): string {
   let url: URL;
@@ -54,8 +66,12 @@ function landingPage(input: JsonObject): JsonObject {
   };
 }
 
-function editorialWorkflow(input: JsonObject): JsonObject {
+function editorialWorkflow(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
+  rejectClientAssertions(input, ["mediaReferencesValid"]);
   const contentId = requiredString(input, "contentId");
+  const approvalProviderId = requiredString(input, "approvalProviderId");
+  const environment = providerEnvironment(input);
+  const contentArtifactSha256 = sha256(input, "contentArtifactSha256");
   const contentType = assertKnownState(
     requiredString(input, "contentType"),
     ["article", "faq", "case_study", "policy", "announcement", "media", "help"] as const,
@@ -75,7 +91,7 @@ function editorialWorkflow(input: JsonObject): JsonObject {
   const requiredLocales = stringList(input, "requiredLocales", { min: 1, unique: true });
   const completedLocales = stringList(input, "completedLocales", { min: 1, unique: true });
   const approvals = stringList(input, "approvals", { min: 1, unique: true });
-  const mediaReferencesValid = requireTrue(requiredBoolean(input, "mediaReferencesValid"), "mediaReferencesValid");
+  const mediaValidationReportId = requiredString(input, "mediaValidationReportId");
   const externalEvidenceIds = stringList(input, "externalEvidenceIds", { min: 1, unique: true });
   const transitions: Readonly<Record<string, readonly string[]>> = {
     draft: ["review"],
@@ -92,8 +108,21 @@ function editorialWorkflow(input: JsonObject): JsonObject {
   if (contentType === "policy" && !approvals.includes("legal")) {
     throw new DomainError("VALIDATION_FAILED", "policy content requires legal approval evidence");
   }
+  const evidenceScope = capabilityEvidenceScope({
+    tenantId: invocation.actor.tenantId,
+    batchId: "B58",
+    operation: "transitionEditorialContent",
+    kind: "editorial-approval",
+    provider: `publication-review:${approvalProviderId}`,
+    artifactSha256: contentArtifactSha256,
+    environment,
+    subjectId: contentId,
+  });
   return {
     contentId,
+    approvalProviderId,
+    providerEnvironment: environment,
+    contentArtifactSha256,
     contentType,
     fromState,
     toState,
@@ -101,8 +130,9 @@ function editorialWorkflow(input: JsonObject): JsonObject {
     requiredLocales,
     completedLocales,
     approvals,
-    mediaReferencesValid,
+    mediaValidationReportId,
     externalEvidenceIds,
+    evidenceScope,
   };
 }
 
@@ -181,8 +211,12 @@ function shareAsset(input: JsonObject): JsonObject {
   };
 }
 
-function trustDocument(input: JsonObject): JsonObject {
+function trustDocument(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
+  rejectClientAssertions(input, ["factualClaimsVerified"]);
   const documentId = requiredString(input, "documentId");
+  const assuranceProviderId = requiredString(input, "assuranceProviderId");
+  const environment = providerEnvironment(input);
+  const documentArtifactSha256 = sha256(input, "documentArtifactSha256");
   const documentType = assertKnownState(
     requiredString(input, "documentType"),
     ["brand_asset", "trust_center", "status_page", "dpa", "security_package", "rfp", "sales_material"] as const,
@@ -192,29 +226,65 @@ function trustDocument(input: JsonObject): JsonObject {
   const expiresAt = assertISODate(requiredString(input, "expiresAt"), "expiresAt");
   const approvals = stringList(input, "approvals", { min: 1, unique: true });
   const externalEvidenceIds = stringList(input, "externalEvidenceIds", { min: 1, unique: true });
-  const factualClaimsVerified = requireTrue(requiredBoolean(input, "factualClaimsVerified"), "factualClaimsVerified");
+  const claimVerificationReportId = requiredString(input, "claimVerificationReportId");
   if (Date.parse(expiresAt) <= Date.now()) throw new DomainError("VALIDATION_FAILED", "trust document evidence is expired");
   if (["dpa", "security_package", "rfp"].includes(documentType) && (!approvals.includes("legal") || !approvals.includes("security"))) {
     throw new DomainError("VALIDATION_FAILED", "regulated trust documents require legal and security approval");
   }
-  return { documentId, documentType, implementationVersion, expiresAt, approvals, externalEvidenceIds, factualClaimsVerified };
+  const evidenceScope = capabilityEvidenceScope({
+    tenantId: invocation.actor.tenantId,
+    batchId: "B62",
+    operation: "publishTrustDocument",
+    kind: "trust-document-attestation",
+    provider: `trust-assurance:${assuranceProviderId}`,
+    artifactSha256: documentArtifactSha256,
+    environment,
+    subjectId: documentId,
+  });
+  return {
+    documentId,
+    assuranceProviderId,
+    providerEnvironment: environment,
+    documentArtifactSha256,
+    documentType,
+    implementationVersion,
+    expiresAt,
+    approvals,
+    externalEvidenceIds,
+    claimVerificationReportId,
+    evidenceScope,
+  };
 }
 
 const definitions: readonly DomainCapabilityDefinition[] = [
-  defineCapability("B57", SKILL, "publishLandingPage", landingPage, { permission: "marketing.page.publish" }),
+  defineCapability("B57", SKILL, "publishLandingPage", landingPage, {
+    permission: "marketing.page.publish",
+    mode: "resource",
+  }),
   defineCapability("B58", SKILL, "transitionEditorialContent", editorialWorkflow, {
     permission: "content.workflow.manage",
     requiresExternalEvidence: true,
+    externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    mode: "resource",
   }),
-  defineCapability("B59", SKILL, "publishConsentPolicy", consentPolicy, { permission: "privacy.consent-policy.manage" }),
-  defineCapability("B60", SKILL, "configureCampaign", campaign, { permission: "marketing.campaign.manage" }),
+  defineCapability("B59", SKILL, "publishConsentPolicy", consentPolicy, {
+    permission: "privacy.consent-policy.manage",
+    mode: "resource",
+  }),
+  defineCapability("B60", SKILL, "configureCampaign", campaign, {
+    permission: "marketing.campaign.manage",
+    mode: "resource",
+  }),
   defineCapability("B61", SKILL, "createGovernedShareAsset", shareAsset, {
     permission: "share.asset.create",
     consent: participantConsent(),
+    mode: "resource",
   }),
   defineCapability("B62", SKILL, "publishTrustDocument", trustDocument, {
     permission: "trust.document.publish",
     requiresExternalEvidence: true,
+    externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    mode: "attestation",
   }),
 ];
 

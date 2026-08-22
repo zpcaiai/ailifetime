@@ -1,3 +1,17 @@
-from .client import ApiError, ClientSession, LifeTimeMachineClient
+from .client import (
+    ApiError,
+    ClientSession,
+    DispatchEnvelope,
+    DispatchMeta,
+    LifeTimeMachineClient,
+    TransportError,
+)
 
-__all__ = ["ApiError", "ClientSession", "LifeTimeMachineClient"]
+__all__ = [
+    "ApiError",
+    "ClientSession",
+    "DispatchEnvelope",
+    "DispatchMeta",
+    "LifeTimeMachineClient",
+    "TransportError",
+]

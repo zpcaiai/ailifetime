@@ -1,6 +1,7 @@
 .git
 .agents
 .ai-life-time-machine
+skills
 .data
 **/build
 **/dist

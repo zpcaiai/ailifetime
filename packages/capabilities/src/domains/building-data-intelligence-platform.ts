@@ -1,4 +1,5 @@
 import { DomainError } from "@ltm/core";
+import { capabilityEvidenceScope } from "@ltm/providers";
 import type { CapabilityInvocation, CapabilityRegistry, JsonObject } from "../registry.js";
 import { objectValue, requiredBoolean, requiredNumber, requiredString, stringList } from "../validation.js";
 import {
@@ -6,12 +7,27 @@ import {
   assertKnownState,
   defineCapability,
   registerDefinitions,
+  rejectClientAssertions,
   requireInteger,
   requireTrue,
   type DomainCapabilityDefinition,
 } from "./_shared.js";
 
 const SKILL = "building-data-intelligence-platform";
+
+function sha256(input: JsonObject, field: string): string {
+  const value = requiredString(input, field);
+  if (!/^[a-f0-9]{64}$/.test(value)) throw new DomainError("VALIDATION_FAILED", `${field} must be a lowercase SHA-256 digest`);
+  return value;
+}
+
+function providerEnvironment(input: JsonObject): "test" | "sandbox" | "staging" | "production" {
+  return assertKnownState(
+    requiredString(input, "providerEnvironment"),
+    ["test", "sandbox", "staging", "production"] as const,
+    "providerEnvironment",
+  );
+}
 
 function eventSchema(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
   assertActorTenant(input, invocation);
@@ -205,7 +221,8 @@ function dataGovernance(input: JsonObject, invocation: CapabilityInvocation): Js
   };
 }
 
-function modelEvaluation(input: JsonObject): JsonObject {
+function modelEvaluation(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
+  rejectClientAssertions(input, ["criticalFailures", "rollbackReady", "rawMediaRetained", "evaluationPassed"]);
   const evaluationId = requiredString(input, "evaluationId");
   const modelVersion = requiredString(input, "modelVersion");
   const promptVersion = requiredString(input, "promptVersion");
@@ -213,13 +230,24 @@ function modelEvaluation(input: JsonObject): JsonObject {
   const datasetAuthorization = assertKnownState(requiredString(input, "datasetAuthorization"), ["synthetic", "licensed", "consented"] as const, "datasetAuthorization");
   const cohorts = stringList(input, "cohorts", { min: 4, unique: true });
   const metrics = stringList(input, "metrics", { min: 6, unique: true });
-  const criticalFailures = requireInteger(requiredNumber(input, "criticalFailures", 0), "criticalFailures", 0);
-  const rollbackReady = requireTrue(requiredBoolean(input, "rollbackReady"), "rollbackReady");
-  const rawMediaRetained = requiredBoolean(input, "rawMediaRetained");
+  const evaluationProviderId = requiredString(input, "evaluationProviderId");
+  const environment = providerEnvironment(input);
+  const evaluationReportSha256 = sha256(input, "evaluationReportSha256");
+  const reportSchemaVersion = requiredString(input, "reportSchemaVersion");
+  const externalEvidenceIds = stringList(input, "externalEvidenceIds", { min: 1, unique: true });
   if (!cohorts.includes("minor") || !metrics.includes("safety") || !metrics.includes("fairness")) {
     throw new DomainError("VALIDATION_FAILED", "model evaluation must cover minors, safety, and fairness");
   }
-  if (criticalFailures !== 0 || rawMediaRetained) throw new DomainError("VALIDATION_FAILED", "critical model failures or unapproved raw-media retention block release");
+  const evidenceScope = capabilityEvidenceScope({
+    tenantId: invocation.actor.tenantId,
+    batchId: "B118",
+    operation: "recordModelEvaluation",
+    kind: "model-evaluation-report",
+    provider: `model-evaluator:${evaluationProviderId}`,
+    artifactSha256: evaluationReportSha256,
+    environment,
+    subjectId: evaluationId,
+  });
   return {
     evaluationId,
     modelVersion,
@@ -228,21 +256,51 @@ function modelEvaluation(input: JsonObject): JsonObject {
     datasetAuthorization,
     cohorts,
     metrics,
-    criticalFailures,
-    rollbackReady,
-    rawMediaRetained,
+    evaluationProviderId,
+    providerEnvironment: environment,
+    evaluationReportSha256,
+    reportSchemaVersion,
+    externalEvidenceIds,
+    evidenceScope,
+    decisionState: environment === "production" ? "verified" : "simulation_only",
   };
 }
 
 const definitions: readonly DomainCapabilityDefinition[] = [
-  defineCapability("B111", SKILL, "publishEventSchema", eventSchema, { permission: "analytics.schema.publish" }),
-  defineCapability("B112", SKILL, "registerWarehousePipeline", warehousePipeline, { permission: "data.pipeline.manage" }),
-  defineCapability("B113", SKILL, "publishGovernedDashboard", dashboard, { permission: "analytics.dashboard.publish" }),
-  defineCapability("B114", SKILL, "publishAttributionModel", attributionModel, { permission: "analytics.attribution.publish" }),
-  defineCapability("B115", SKILL, "publishUnitEconomicsModel", unitEconomics, { permission: "analytics.unit-economics.publish" }),
-  defineCapability("B116", SKILL, "registerGuardedExperiment", experiment, { permission: "experiment.manage" }),
-  defineCapability("B117", SKILL, "registerGovernedDataAsset", dataGovernance, { permission: "data.catalog.manage" }),
-  defineCapability("B118", SKILL, "recordModelEvaluation", modelEvaluation, { permission: "model.evaluation.record" }),
+  defineCapability("B111", SKILL, "publishEventSchema", eventSchema, {
+    permission: "analytics.schema.publish",
+    mode: "resource",
+  }),
+  defineCapability("B112", SKILL, "registerWarehousePipeline", warehousePipeline, {
+    permission: "data.pipeline.manage",
+    mode: "resource",
+  }),
+  defineCapability("B113", SKILL, "publishGovernedDashboard", dashboard, {
+    permission: "analytics.dashboard.publish",
+    mode: "resource",
+  }),
+  defineCapability("B114", SKILL, "publishAttributionModel", attributionModel, {
+    permission: "analytics.attribution.publish",
+    mode: "resource",
+  }),
+  defineCapability("B115", SKILL, "publishUnitEconomicsModel", unitEconomics, {
+    permission: "analytics.unit-economics.publish",
+    mode: "resource",
+  }),
+  defineCapability("B116", SKILL, "registerGuardedExperiment", experiment, {
+    permission: "experiment.manage",
+    mode: "resource",
+  }),
+  defineCapability("B117", SKILL, "registerGovernedDataAsset", dataGovernance, {
+    permission: "data.catalog.manage",
+    mode: "resource",
+  }),
+  defineCapability("B118", SKILL, "recordModelEvaluation", modelEvaluation, {
+    permission: "model.evaluation.record",
+    requiresExternalEvidence: true,
+    externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    mode: "attestation",
+  }),
 ];
 
 export function registerBuildingDataIntelligencePlatformCapabilities(registry: CapabilityRegistry): void {

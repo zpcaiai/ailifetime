@@ -2,6 +2,9 @@
   "name": "@ltm/workers",
   "version": "1.0.0",
   "private": true,
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,9 +12,11 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm run build && node --test dist/*.test.js"
+    "test": "pnpm run build && node --test dist/*.test.js",
+    "start": "node --enable-source-maps dist/main.js"
   },
   "dependencies": {
-    "@ltm/core": "workspace:*"
+    "@ltm/core": "workspace:*",
+    "@ltm/providers": "workspace:*"
   }
 }

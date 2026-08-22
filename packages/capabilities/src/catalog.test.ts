@@ -32,3 +32,28 @@ test("production launch capabilities retain explicit external evidence gates", (
     assert.equal(definitions.find((item) => item.batchId === batchId)?.requiresExternalEvidence, true, `${batchId} must remain externally gated`);
   }
 });
+
+test("all capability execution modes and external gates remain explicit", () => {
+  const definitions = createCapabilityRegistry().list();
+  const modeCounts = Object.fromEntries(
+    [...new Set(definitions.map((item) => item.mode))].map((mode) => [
+      mode,
+      definitions.filter((item) => item.mode === mode).length,
+    ]),
+  );
+  assert.deepEqual(modeCounts, {
+    resource: 68,
+    "consent-write": 1,
+    "external-command": 18,
+    "state-transition": 4,
+    "partner-settlement-ledger": 1,
+    attestation: 34,
+    "inbox-event": 1,
+    "ledger-post": 1,
+  });
+  assert.deepEqual(definitions.filter((item) => item.requiresExternalEvidence).map((item) => item.batchId), [
+    "B37", "B44", "B46", "B47", "B48", "B49", "B56", "B58", "B62", "B66", "B68", "B69", "B71",
+    "B72", "B77", "B91", "B92", "B94", "B96", "B97", "B99", "B100", "B102", "B107",
+    "B108", "B109", "B118", "B119", "B120", "B121", "B122", "B123", "B124", "B125", "B126", "B127",
+  ]);
+});

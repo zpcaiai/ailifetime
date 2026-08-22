@@ -1,0 +1,5 @@
+{
+  "version": "ltm.dependency-license-policy.v1",
+  "allowedLicenses": ["0BSD", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "MIT"],
+  "changeControl": "Security and legal approval is required before adding a license identifier. Package-level waivers are time-limited findings, not broad allowlist edits."
+}

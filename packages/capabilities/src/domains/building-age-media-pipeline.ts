@@ -146,11 +146,21 @@ function reserveGenerationBudget(input: JsonObject): JsonObject {
 }
 
 const definitions: readonly DomainCapabilityDefinition[] = [
-  defineCapability("B14", SKILL, "createTimeline", createTimeline, { consent: participantConsent() }),
-  defineCapability("B15", SKILL, "evaluateQuality", qualityGate, { consent: participantConsent() }),
-  defineCapability("B16", SKILL, "renderVideo", renderVideo, { consent: participantConsent() }),
-  defineCapability("B17", SKILL, "certifySafetyAndProvenance", certifySafety, { consent: participantConsent() }),
-  defineCapability("B18", SKILL, "reserveGenerationBudget", reserveGenerationBudget, { consent: participantConsent() }),
+  defineCapability("B14", SKILL, "createTimeline", createTimeline, {
+    consent: participantConsent(), mode: "external-command", collection: "generation.timeline-commands", recordIdField: "jobId",
+  }),
+  defineCapability("B15", SKILL, "evaluateQuality", qualityGate, {
+    consent: participantConsent(), mode: "resource", collection: "media.quality-decisions", recordIdField: "workId",
+  }),
+  defineCapability("B16", SKILL, "renderVideo", renderVideo, {
+    consent: participantConsent(), mode: "external-command", collection: "media.video-render-commands", recordIdField: "renderId",
+  }),
+  defineCapability("B17", SKILL, "certifySafetyAndProvenance", certifySafety, {
+    consent: participantConsent(), mode: "resource", collection: "media.safety-certificates", recordIdField: "workId",
+  }),
+  defineCapability("B18", SKILL, "reserveGenerationBudget", reserveGenerationBudget, {
+    consent: participantConsent(), mode: "resource", collection: "generation.budget-reservations", recordIdField: "reservationId",
+  }),
 ];
 
 export function registerBuildingAgeMediaPipelineCapabilities(registry: CapabilityRegistry): void {

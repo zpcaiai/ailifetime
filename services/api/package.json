@@ -2,6 +2,10 @@
   "name": "@ltm/api",
   "version": "1.0.0",
   "private": true,
+  "files": [
+    "dist",
+    "openapi.yaml"
+  ],
   "type": "module",
   "engines": {
     "node": ">=26"
@@ -23,7 +27,8 @@
   },
   "dependencies": {
     "@ltm/capabilities": "workspace:*",
-    "@ltm/core": "workspace:*"
+    "@ltm/core": "workspace:*",
+    "jose": "6.2.9"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",

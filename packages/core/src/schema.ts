@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 4;
 
 export const SCHEMA_SQL = `
 PRAGMA foreign_keys = ON;
@@ -172,4 +172,241 @@ CREATE TRIGGER IF NOT EXISTS audit_entries_no_update
 BEFORE UPDATE ON audit_entries BEGIN SELECT RAISE(ABORT, 'audit entries are append-only'); END;
 CREATE TRIGGER IF NOT EXISTS audit_entries_no_delete
 BEFORE DELETE ON audit_entries BEGIN SELECT RAISE(ABORT, 'audit entries are append-only'); END;
+
+CREATE TABLE IF NOT EXISTS external_evidence (
+  tenant_id TEXT NOT NULL,
+  id TEXT NOT NULL,
+  envelope_version TEXT NOT NULL CHECK (envelope_version = 'ltm.external-evidence.v1'),
+  issuer TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  environment TEXT NOT NULL CHECK (environment IN ('test', 'sandbox', 'staging', 'production')),
+  scope TEXT NOT NULL,
+  artifact_sha256 TEXT NOT NULL CHECK (length(artifact_sha256) = 64),
+  canonical_claims_sha256 TEXT CHECK (canonical_claims_sha256 IS NULL OR length(canonical_claims_sha256) = 64),
+  business_event_sha256 TEXT CHECK (business_event_sha256 IS NULL OR length(business_event_sha256) = 64),
+  issued_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  nonce TEXT NOT NULL,
+  replay_policy TEXT NOT NULL CHECK (replay_policy IN ('reusable', 'single_use')),
+  algorithm TEXT NOT NULL CHECK (algorithm = 'Ed25519'),
+  key_id TEXT NOT NULL,
+  signature TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('verified', 'revoked')),
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
+  verified_at TEXT NOT NULL,
+  revoked_at TEXT,
+  revocation_reason TEXT,
+  PRIMARY KEY (tenant_id, id),
+  UNIQUE (tenant_id, issuer, provider, nonce),
+  CHECK (
+    (status = 'verified' AND revoked_at IS NULL AND revocation_reason IS NULL)
+    OR (status = 'revoked' AND revoked_at IS NOT NULL AND length(revocation_reason) > 0)
+  )
+) STRICT;
+CREATE INDEX IF NOT EXISTS external_evidence_scope_lookup
+  ON external_evidence(tenant_id, scope, status, expires_at);
+
+DROP TRIGGER IF EXISTS external_evidence_payload_immutable;
+CREATE TRIGGER external_evidence_payload_immutable
+BEFORE UPDATE ON external_evidence
+WHEN NEW.tenant_id IS NOT OLD.tenant_id
+  OR NEW.id IS NOT OLD.id
+  OR NEW.envelope_version IS NOT OLD.envelope_version
+  OR NEW.issuer IS NOT OLD.issuer
+  OR NEW.provider IS NOT OLD.provider
+  OR NEW.environment IS NOT OLD.environment
+  OR NEW.scope IS NOT OLD.scope
+  OR NEW.artifact_sha256 IS NOT OLD.artifact_sha256
+  OR NEW.canonical_claims_sha256 IS NOT OLD.canonical_claims_sha256
+  OR NEW.business_event_sha256 IS NOT OLD.business_event_sha256
+  OR NEW.issued_at IS NOT OLD.issued_at
+  OR NEW.expires_at IS NOT OLD.expires_at
+  OR NEW.nonce IS NOT OLD.nonce
+  OR NEW.replay_policy IS NOT OLD.replay_policy
+  OR NEW.algorithm IS NOT OLD.algorithm
+  OR NEW.key_id IS NOT OLD.key_id
+  OR NEW.signature IS NOT OLD.signature
+  OR NEW.verified_at IS NOT OLD.verified_at
+BEGIN SELECT RAISE(ABORT, 'verified evidence payload is immutable'); END;
+DROP TRIGGER IF EXISTS external_evidence_revoke_only;
+CREATE TRIGGER external_evidence_revoke_only
+BEFORE UPDATE ON external_evidence
+WHEN OLD.status <> 'verified'
+  OR NEW.status <> 'revoked'
+  OR NEW.version <> OLD.version + 1
+  OR NEW.revoked_at IS NULL
+  OR NEW.revocation_reason IS NULL
+  OR length(NEW.revocation_reason) = 0
+BEGIN SELECT RAISE(ABORT, 'external evidence may only transition once from verified to revoked'); END;
+CREATE TRIGGER IF NOT EXISTS external_evidence_no_delete
+BEFORE DELETE ON external_evidence BEGIN SELECT RAISE(ABORT, 'external evidence is append-only'); END;
+
+CREATE TABLE IF NOT EXISTS evidence_consumptions (
+  tenant_id TEXT NOT NULL,
+  evidence_id TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  consumption_key_hash TEXT NOT NULL CHECK (length(consumption_key_hash) = 64),
+  consumed_at TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, evidence_id),
+  FOREIGN KEY (tenant_id, evidence_id) REFERENCES external_evidence(tenant_id, id)
+) STRICT;
+CREATE TRIGGER IF NOT EXISTS evidence_consumptions_no_update
+BEFORE UPDATE ON evidence_consumptions BEGIN SELECT RAISE(ABORT, 'evidence consumption is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS evidence_consumptions_no_delete
+BEFORE DELETE ON evidence_consumptions BEGIN SELECT RAISE(ABORT, 'evidence consumption is immutable'); END;
+
+CREATE TABLE IF NOT EXISTS external_commands (
+  tenant_id TEXT NOT NULL,
+  command_id TEXT NOT NULL,
+  batch_id TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  aggregate_collection TEXT NOT NULL,
+  aggregate_id TEXT NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('requested','dispatched','acknowledged','succeeded','failed','cancelled','compensated')),
+  provider_operation_id TEXT,
+  evidence_id TEXT,
+  decision_state TEXT NOT NULL DEFAULT 'active' CHECK (decision_state IN ('active','frozen')),
+  reconciliation_state TEXT NOT NULL DEFAULT 'clear' CHECK (reconciliation_state IN ('clear','reconciliation_required')),
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
+  requested_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  terminal_at TEXT,
+  details_json TEXT NOT NULL CHECK (json_valid(details_json)),
+  CHECK (
+    (decision_state = 'active' AND reconciliation_state = 'clear')
+    OR (decision_state = 'frozen' AND reconciliation_state = 'reconciliation_required')
+  ),
+  CHECK (
+    (state IN ('succeeded','failed','cancelled','compensated') AND terminal_at IS NOT NULL)
+    OR (state IN ('requested','dispatched','acknowledged') AND terminal_at IS NULL)
+  ),
+  PRIMARY KEY (tenant_id, command_id),
+  FOREIGN KEY (tenant_id, aggregate_collection, aggregate_id) REFERENCES records(tenant_id, collection, id),
+  FOREIGN KEY (tenant_id, evidence_id) REFERENCES external_evidence(tenant_id, id)
+) STRICT;
+CREATE INDEX IF NOT EXISTS external_commands_aggregate_lookup
+  ON external_commands(tenant_id, aggregate_collection, aggregate_id);
+
+CREATE TRIGGER IF NOT EXISTS external_commands_identity_immutable
+BEFORE UPDATE ON external_commands
+WHEN NEW.tenant_id IS NOT OLD.tenant_id
+  OR NEW.command_id IS NOT OLD.command_id
+  OR NEW.batch_id IS NOT OLD.batch_id
+  OR NEW.operation IS NOT OLD.operation
+  OR NEW.aggregate_collection IS NOT OLD.aggregate_collection
+  OR NEW.aggregate_id IS NOT OLD.aggregate_id
+  OR NEW.requested_at IS NOT OLD.requested_at
+  OR (OLD.provider_operation_id IS NOT NULL AND NEW.provider_operation_id IS NOT OLD.provider_operation_id)
+  OR (OLD.evidence_id IS NOT NULL AND NEW.evidence_id IS NOT OLD.evidence_id)
+  OR NEW.version <> OLD.version + 1
+  OR NOT (
+    (NEW.decision_state = 'active' AND NEW.reconciliation_state = 'clear')
+    OR (NEW.decision_state = 'frozen' AND NEW.reconciliation_state = 'reconciliation_required')
+  )
+BEGIN SELECT RAISE(ABORT, 'external command identity is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS external_commands_transition_guard
+BEFORE UPDATE OF state ON external_commands
+WHEN NOT (
+  (OLD.state = 'requested' AND NEW.state IN ('dispatched','cancelled'))
+  OR (OLD.state = 'dispatched' AND NEW.state IN ('acknowledged','failed','cancelled'))
+  OR (OLD.state = 'acknowledged' AND NEW.state IN ('succeeded','failed','cancelled'))
+  OR (OLD.state = 'succeeded' AND NEW.state = 'compensated')
+)
+BEGIN SELECT RAISE(ABORT, 'illegal external command transition'); END;
+
+CREATE TABLE IF NOT EXISTS external_command_transitions (
+  tenant_id TEXT NOT NULL,
+  transition_id TEXT NOT NULL,
+  command_id TEXT NOT NULL,
+  from_state TEXT,
+  to_state TEXT NOT NULL,
+  provider_operation_id TEXT,
+  evidence_id TEXT,
+  details_json TEXT NOT NULL CHECK (json_valid(details_json)),
+  occurred_at TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, transition_id),
+  FOREIGN KEY (tenant_id, command_id) REFERENCES external_commands(tenant_id, command_id),
+  FOREIGN KEY (tenant_id, evidence_id) REFERENCES external_evidence(tenant_id, id)
+) STRICT;
+CREATE TRIGGER IF NOT EXISTS external_command_transitions_no_update
+BEFORE UPDATE ON external_command_transitions BEGIN SELECT RAISE(ABORT, 'external command transitions are immutable'); END;
+CREATE TRIGGER IF NOT EXISTS external_command_transitions_no_delete
+BEFORE DELETE ON external_command_transitions BEGIN SELECT RAISE(ABORT, 'external command transitions are immutable'); END;
+
+CREATE TABLE IF NOT EXISTS evidence_decisions (
+  tenant_id TEXT NOT NULL,
+  evidence_id TEXT NOT NULL,
+  decision_type TEXT NOT NULL,
+  decision_id TEXT NOT NULL,
+  aggregate_collection TEXT NOT NULL,
+  aggregate_id TEXT NOT NULL,
+  decision_state TEXT NOT NULL DEFAULT 'active' CHECK (decision_state IN ('active','frozen')),
+  reconciliation_state TEXT NOT NULL DEFAULT 'clear' CHECK (reconciliation_state IN ('clear','reconciliation_required')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  CHECK (
+    (decision_state = 'active' AND reconciliation_state = 'clear')
+    OR (decision_state = 'frozen' AND reconciliation_state = 'reconciliation_required')
+  ),
+  PRIMARY KEY (tenant_id, evidence_id, decision_type, decision_id),
+  FOREIGN KEY (tenant_id, evidence_id) REFERENCES external_evidence(tenant_id, id),
+  FOREIGN KEY (tenant_id, aggregate_collection, aggregate_id) REFERENCES records(tenant_id, collection, id)
+) STRICT;
+CREATE INDEX IF NOT EXISTS evidence_decisions_aggregate_lookup
+  ON evidence_decisions(tenant_id, aggregate_collection, aggregate_id);
+CREATE TRIGGER IF NOT EXISTS evidence_decisions_freeze_only
+BEFORE UPDATE ON evidence_decisions
+WHEN OLD.decision_state <> 'active'
+  OR NEW.decision_state <> 'frozen'
+  OR NEW.reconciliation_state <> 'reconciliation_required'
+  OR NEW.tenant_id IS NOT OLD.tenant_id
+  OR NEW.evidence_id IS NOT OLD.evidence_id
+  OR NEW.decision_type IS NOT OLD.decision_type
+  OR NEW.decision_id IS NOT OLD.decision_id
+  OR NEW.aggregate_collection IS NOT OLD.aggregate_collection
+  OR NEW.aggregate_id IS NOT OLD.aggregate_id
+  OR NEW.created_at IS NOT OLD.created_at
+BEGIN SELECT RAISE(ABORT, 'evidence decisions may only freeze for reconciliation'); END;
+
+CREATE TABLE IF NOT EXISTS external_business_events (
+  tenant_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  inbox_event_id TEXT NOT NULL,
+  event_fingerprint TEXT NOT NULL CHECK (length(event_fingerprint) = 64),
+  batch_id TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  subject_type TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  provider_occurred_at TEXT NOT NULL,
+  provider_sequence INTEGER,
+  correlation_id TEXT NOT NULL,
+  artifact_sha256 TEXT NOT NULL CHECK (length(artifact_sha256) = 64),
+  evidence_id TEXT NOT NULL,
+  evidence_scope TEXT NOT NULL,
+  canonical_claims_json TEXT NOT NULL CHECK (json_valid(canonical_claims_json)),
+  canonical_claims_sha256 TEXT NOT NULL CHECK (length(canonical_claims_sha256) = 64),
+  business_event_sha256 TEXT NOT NULL CHECK (length(business_event_sha256) = 64),
+  reducer_name TEXT NOT NULL,
+  aggregate_collection TEXT NOT NULL,
+  aggregate_id TEXT NOT NULL,
+  prior_state TEXT,
+  next_state TEXT NOT NULL,
+  result_json TEXT NOT NULL CHECK (json_valid(result_json)),
+  applied_at TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, provider, event_id),
+  FOREIGN KEY (tenant_id, inbox_event_id) REFERENCES inbox_events(tenant_id, id),
+  FOREIGN KEY (tenant_id, evidence_id) REFERENCES external_evidence(tenant_id, id),
+  FOREIGN KEY (tenant_id, aggregate_collection, aggregate_id) REFERENCES records(tenant_id, collection, id)
+) STRICT;
+CREATE INDEX IF NOT EXISTS external_business_events_aggregate_order
+  ON external_business_events(tenant_id, aggregate_collection, aggregate_id, provider, provider_sequence, provider_occurred_at);
+CREATE TRIGGER IF NOT EXISTS external_business_events_no_update
+BEFORE UPDATE ON external_business_events BEGIN SELECT RAISE(ABORT, 'external business events are immutable'); END;
+CREATE TRIGGER IF NOT EXISTS external_business_events_no_delete
+BEFORE DELETE ON external_business_events BEGIN SELECT RAISE(ABORT, 'external business events are immutable'); END;
+
+UPDATE schema_metadata SET value = '${SCHEMA_VERSION}'
+WHERE key = 'schema_version' AND value IN ('1', '2', '3');
 `;

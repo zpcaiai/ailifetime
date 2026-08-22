@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
 import { createCapabilityRegistry } from "@ltm/capabilities";
-import { DomainError, LifeTimeMachineRuntime } from "@ltm/core";
+import {
+  canonicalBusinessClaimsSha256,
+  canonicalBusinessEventSha256,
+  DomainError,
+  LifeTimeMachineRuntime,
+  signExternalEvidence,
+} from "@ltm/core";
 import { StaticTokenAuthenticator, createApiServer } from "../dist/index.js";
 
 const cleanups = [];
@@ -19,10 +25,16 @@ afterEach(async () => {
 
 async function fixture(options = {}) {
   const directory = mkdtempSync(join(tmpdir(), "ltm-api-test-"));
-  const runtime = new LifeTimeMachineRuntime({ databasePath: join(directory, "api.sqlite") });
+  const runtime = new LifeTimeMachineRuntime({
+    ...(options.runtimeOptions ?? {}),
+    databasePath: join(directory, "api.sqlite"),
+  });
   const staticDirectory = join(directory, "public");
   mkdirSync(staticDirectory);
   writeFileSync(join(staticDirectory, "index.html"), "<!doctype html><title>LTM</title><main>ui-shell</main>");
+  writeFileSync(join(staticDirectory, "app.js"), "globalThis.LTM_APP = true;");
+  writeFileSync(join(staticDirectory, "app-abcdef123456.js"), "globalThis.LTM_HASHED_APP = true;");
+  writeFileSync(join(staticDirectory, "application-mainbundle.js"), "globalThis.LTM_NAMED_APP = true;");
   const authenticator = options.authenticator ?? new StaticTokenAuthenticator([
     {
       token: "test-platform-token-0001",
@@ -43,6 +55,8 @@ async function fixture(options = {}) {
       ? {}
       : { allowSandboxStepUpHeader: options.allowSandboxStepUpHeader }),
     ...(options.appEnvironment === undefined ? {} : { appEnvironment: options.appEnvironment }),
+    ...(options.metricsTokenSha256 === undefined ? {} : { metricsTokenSha256: options.metricsTokenSha256 }),
+    ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
   await new Promise((resolvePromise, reject) => {
     server.once("error", reject);
@@ -94,6 +108,12 @@ test("health, capability catalog, security headers, and static SPA are runnable"
   const fallback = await fetch(`${baseUrl}/consumer/project/1`, { headers: { accept: "text/html" } });
   assert.equal(fallback.status, 200);
   assert.match(await fallback.text(), /ui-shell/);
+  const unhashedAsset = await fetch(`${baseUrl}/app.js`);
+  assert.equal(unhashedAsset.headers.get("cache-control"), "no-cache");
+  const hashedAsset = await fetch(`${baseUrl}/app-abcdef123456.js`);
+  assert.equal(hashedAsset.headers.get("cache-control"), "public, max-age=31536000, immutable");
+  const namedAsset = await fetch(`${baseUrl}/application-mainbundle.js`);
+  assert.equal(namedAsset.headers.get("cache-control"), "no-cache");
 });
 
 test("authenticated command/query flow enforces tenant context and idempotency fingerprints", async () => {
@@ -211,7 +231,7 @@ test("capability dispatch executes real handlers and persists their output", asy
   const list = await fetch(`${baseUrl}/v1/queries`, {
     method: "POST",
     headers: authHeaders(),
-    body: JSON.stringify({ query: "record.list", input: { collection: "capability.bootstrapping-life-time-machine-platform" } }),
+    body: JSON.stringify({ query: "record.list", input: { collection: "platform.architectures" } }),
   });
   assert.equal(list.status, 200);
   assert.equal((await json(list)).data.length, 1);
@@ -225,18 +245,20 @@ test("production launch capabilities fail closed without scoped external evidenc
     body: JSON.stringify({
       input: {
         launchId: "launch-1",
-        releaseManifestDigest: "manifest-digest",
+        releaseControlProviderId: "release-control-1",
+        providerEnvironment: "production",
+        releaseManifestDigest: "a".repeat(64),
         repositoryCommit: "commit-1",
         artifactCommit: "commit-1",
-        sbomDigest: "sbom-digest",
+        sbomDigest: "b".repeat(64),
         wave: "internal",
         rolloutPercent: 1,
         waveStartedAt: "2026-08-20T00:00:00.000Z",
         releaseGates: Array.from({ length: 12 }, (_, index) => `G${index}`),
         monitoringDomains: ["quality", "payment", "refund", "support", "ledger", "supply", "privacy", "security"],
         approvalIds: ["approval-1", "approval-2"],
-        rollbackTested: true,
-        automaticPauseEnabled: true,
+        rollbackExerciseId: "rollback-exercise-1",
+        automaticPausePolicyVersion: "pause-policy-v1",
         activeGuardrailBreaches: 0,
         externalEvidenceIds: ["evidence-1", "evidence-2", "evidence-3", "evidence-4", "evidence-5"],
       },
@@ -303,4 +325,255 @@ test("configured authentication accepts a server-side bearer digest", async () =
   });
   assert.equal(response.status, 200);
   assert.deepEqual((await json(response)).data, []);
+});
+
+test("signed evidence registration/query works through JSON dispatch and remains environment bound", async () => {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const publicKeyPem = publicKey.export({ type: "spki", format: "pem" }).toString();
+  const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const scope = `B66:verifyStoreTransaction:store-provider:${"a".repeat(64)}`;
+  const { baseUrl, runtime } = await fixture({
+    runtimeOptions: {
+      evidencePolicy: "development",
+      evidenceEnvironment: "staging",
+      trustedEvidenceKeys: [{
+        issuer: "store-issuer",
+        provider: "store-provider",
+        keyId: "store-key-1",
+        algorithm: "Ed25519",
+        publicKeyPem,
+        allowedScopes: [scope],
+        allowedEnvironments: ["staging"],
+      }],
+    },
+  });
+  const evidence = signExternalEvidence({
+    version: "ltm.external-evidence.v1",
+    evidenceId: "http-evidence-1",
+    tenantId: "tenant-a",
+    issuer: "store-issuer",
+    provider: "store-provider",
+    environment: "staging",
+    scope,
+    artifactSha256: "a".repeat(64),
+    issuedAt: new Date(Date.now() - 60_000).toISOString(),
+    expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    nonce: "http-evidence-nonce-0001",
+    replayPolicy: "single_use",
+    algorithm: "Ed25519",
+    keyId: "store-key-1",
+  }, privateKeyPem);
+  const registered = await fetch(`${baseUrl}/v1/commands`, {
+    method: "POST",
+    headers: authHeaders({ "idempotency-key": "http-register-evidence-1" }),
+    body: JSON.stringify({ command: "evidence.register", input: { evidence } }),
+  });
+  assert.equal(registered.status, 200);
+  assert.equal((await json(registered)).data.value.environment, "staging");
+
+  const queried = await fetch(`${baseUrl}/v1/queries`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ query: "evidence.get", input: { evidenceId: evidence.evidenceId } }),
+  });
+  assert.equal(queried.status, 200);
+  assert.equal((await json(queried)).data.scope, scope);
+  assert.equal(
+    runtime.requireExternalEvidence(
+      {
+        actorId: "admin-1",
+        tenantId: "tenant-a",
+        roles: ["platform_admin"],
+        purpose: "product_operation",
+        requestId: "http-consume-evidence",
+        stepUp: true,
+        operationId: "server-operation-1",
+      },
+      scope,
+      [evidence.evidenceId],
+    )[0].consumedAt !== null,
+    true,
+  );
+});
+
+test("service-only external-event.apply resolves the compiled reducer and exposes command diagnostics", async () => {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const authenticator = new StaticTokenAuthenticator([
+    {
+      token: "business-event-service-token-0001",
+      actorId: "integration-gateway",
+      tenantId: "tenant-a",
+      roles: ["service_account"],
+      permissions: ["external-event:apply", "external-command:read", "record:create"],
+      allowedPurposes: ["product_operation"],
+    },
+    {
+      token: "business-operator-token-0001",
+      actorId: "business-operator",
+      tenantId: "tenant-a",
+      roles: ["platform_admin"],
+      allowedPurposes: ["product_operation"],
+      stepUp: true,
+    },
+  ]);
+  const { baseUrl, runtime } = await fixture({
+    authenticator,
+    runtimeOptions: {
+      evidencePolicy: "development",
+      evidenceEnvironment: "sandbox",
+      trustedEvidenceKeys: [{
+        issuer: "wechat-gateway",
+        provider: "wechat-pay",
+        keyId: "wechat-http-key-1",
+        algorithm: "Ed25519",
+        publicKeyPem: publicKey.export({ type: "spki", format: "pem" }).toString(),
+        allowedScopes: ["B71:*"],
+        allowedEnvironments: ["sandbox"],
+      }],
+    },
+  });
+  const claims = {
+    accountId: "account-http-1",
+    amountMinor: 880,
+    currency: "CNY",
+    outTradeNo: "order-http-1",
+    providerTransactionId: "wechat-http-transaction-1",
+  };
+  const canonicalClaimsSha256 = canonicalBusinessClaimsSha256(claims);
+  const unsignedEvent = {
+    version: "ltm.external-business-event.v1",
+    eventId: "wechat-http-event-1",
+    tenantId: "tenant-a",
+    batchId: "B71",
+    operation: "recordWechatCommercialAction",
+    provider: "wechat-pay",
+    subjectType: "payment",
+    subjectId: "payment-http-1",
+    eventType: "payment.captured",
+    providerOccurredAt: new Date(Date.now() - 1_000).toISOString(),
+    sequence: 1,
+    correlationId: "order-http-1",
+    artifactSha256: "d".repeat(64),
+    evidenceId: "wechat-http-evidence-1",
+    evidenceScope: "B71:payment:payment-http-1",
+    canonicalClaims: claims,
+    canonicalClaimsSha256,
+  };
+  const event = {
+    ...unsignedEvent,
+    businessEventSha256: canonicalBusinessEventSha256(unsignedEvent),
+  };
+  const evidence = signExternalEvidence({
+    version: "ltm.external-evidence.v1",
+    evidenceId: event.evidenceId,
+    tenantId: event.tenantId,
+    issuer: "wechat-gateway",
+    provider: event.provider,
+    environment: "sandbox",
+    scope: event.evidenceScope,
+    artifactSha256: event.artifactSha256,
+    canonicalClaimsSha256,
+    businessEventSha256: event.businessEventSha256,
+    issuedAt: new Date(Date.now() - 5_000).toISOString(),
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    nonce: "wechat-http-nonce-000001",
+    replayPolicy: "single_use",
+    algorithm: "Ed25519",
+    keyId: "wechat-http-key-1",
+  }, privateKeyPem);
+  const serviceHeaders = {
+    authorization: "Bearer business-event-service-token-0001",
+    "content-type": "application/json",
+    "x-purpose": "product_operation",
+  };
+  const operatorDenied = await fetch(`${baseUrl}/v1/commands`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer business-operator-token-0001",
+      "content-type": "application/json",
+      "x-purpose": "product_operation",
+      "idempotency-key": "http-external-event-operator-denied-1",
+    },
+    body: JSON.stringify({ command: "external-event.apply", input: { event, evidence } }),
+  });
+  assert.equal(operatorDenied.status, 403);
+  assert.equal((await json(operatorDenied)).error.code, "AUTH_FORBIDDEN");
+  const injected = await fetch(`${baseUrl}/v1/commands`, {
+    method: "POST",
+    headers: { ...serviceHeaders, "idempotency-key": "http-external-event-injected-1" },
+    body: JSON.stringify({
+      command: "external-event.apply",
+      input: { event, evidence, reducer: { name: "caller-controlled" } },
+    }),
+  });
+  assert.equal(injected.status, 403);
+  assert.equal((await json(injected)).error.code, "AUTH_FORBIDDEN");
+
+  const applied = await fetch(`${baseUrl}/v1/commands`, {
+    method: "POST",
+    headers: { ...serviceHeaders, "idempotency-key": "http-external-event-apply-1" },
+    body: JSON.stringify({ command: "external-event.apply", input: { event, evidence } }),
+  });
+  assert.equal(applied.status, 200);
+  const appliedBody = await json(applied);
+  assert.equal(appliedBody.data.value.aggregate.data.state, "captured");
+  assert.equal(appliedBody.data.value.ledgerTransaction.lines.length, 2);
+
+  const commandContext = {
+    actorId: "business-operator",
+    tenantId: "tenant-a",
+    roles: ["platform_admin"],
+    purpose: "product_operation",
+    requestId: "create-diagnostic-command",
+    stepUp: true,
+  };
+  runtime.createExternalCommand(commandContext, {
+    record: {
+      id: "diagnostic-command-record-1",
+      collection: "operations.external-commands",
+      data: { state: "requested" },
+    },
+    commandId: "diagnostic-command-1",
+    batchId: "B74",
+    operation: "scheduleMultiChannelNotification",
+    idempotencyKey: "create-diagnostic-command-1",
+  });
+  const queried = await fetch(`${baseUrl}/v1/queries`, {
+    method: "POST",
+    headers: serviceHeaders,
+    body: JSON.stringify({ query: "external-command.get", input: { commandId: "diagnostic-command-1" } }),
+  });
+  assert.equal(queried.status, 200);
+  const command = (await json(queried)).data;
+  assert.equal(command.state, "requested");
+  assert.equal(command.reconciliationState, "clear");
+});
+
+test("metrics can be digest protected and unexpected errors never leak secret text to logs", async () => {
+  const metricsSecret = "metrics-secret-value-0001";
+  const metricsTokenSha256 = createHash("sha256").update(metricsSecret).digest("hex");
+  const logs = [];
+  const { baseUrl } = await fixture({ metricsTokenSha256, logger: (entry) => logs.push(entry) });
+  const denied = await fetch(`${baseUrl}/metrics`);
+  assert.equal(denied.status, 401);
+  const metrics = await fetch(`${baseUrl}/metrics`, {
+    headers: { authorization: `Bearer ${metricsSecret}` },
+  });
+  assert.equal(metrics.status, 200);
+  assert.match(await metrics.text(), /ltm_api_requests_total/);
+  assert.doesNotMatch(JSON.stringify(logs), new RegExp(metricsSecret));
+
+  const secretInError = "must-not-leak-auth-secret";
+  const failing = await fixture({
+    authenticator: { authenticate() { throw new Error(secretInError); } },
+    logger: (entry) => logs.push(entry),
+  });
+  const response = await fetch(`${failing.baseUrl}/v1/queries`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ query: "record.list", input: { collection: "projects" } }),
+  });
+  assert.equal(response.status, 500);
+  assert.doesNotMatch(JSON.stringify(logs), new RegExp(secretInError));
 });

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-life-time-machine.example/contracts/dast-authorization.v1.schema.json",
+  "title": "Non-loopback DAST authorization",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "targetOrigin", "ticketId", "approvedBy", "expiresAt"],
+  "properties": {
+    "version": { "const": "ltm.dast-authorization.v1" },
+    "targetOrigin": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "ticketId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "approvedBy": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "expiresAt": { "type": "string", "format": "date-time" }
+  }
+}

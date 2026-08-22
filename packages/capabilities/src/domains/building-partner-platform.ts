@@ -69,7 +69,7 @@ function closePartnerSettlement(input: JsonObject): JsonObject {
   const period = requiredString(input, "period");
   const meterState = assertKnownState(requiredString(input, "meterState"), ["reconciled", "disputed", "unknown"] as const, "meterState");
   const paymentState = assertKnownState(requiredString(input, "paymentState"), ["settled", "pending", "failed", "unknown"] as const, "paymentState");
-  const grossMinor = requireInteger(requiredNumber(input, "grossMinor", 0), "grossMinor", 0);
+  const grossMinor = requireInteger(requiredNumber(input, "grossMinor", 1), "grossMinor", 1);
   const platformMinor = requireInteger(requiredNumber(input, "platformMinor", 0), "platformMinor", 0);
   const partnerMinor = requireInteger(requiredNumber(input, "partnerMinor", 0), "partnerMinor", 0);
   const refundMinor = requireInteger(requiredNumber(input, "refundMinor", 0), "refundMinor", 0);
@@ -80,10 +80,18 @@ function closePartnerSettlement(input: JsonObject): JsonObject {
 }
 
 const definitions: readonly DomainCapabilityDefinition[] = [
-  defineCapability("B31", SKILL, "configurePartnerTenant", configurePartnerTenant, { permission: "partner.tenant.manage" }),
-  defineCapability("B32", SKILL, "onboardPartner", onboardPartner, { permission: "partner.onboarding.approve" }),
-  defineCapability("B33", SKILL, "acceptPartnerApiRequest", acceptPartnerApiRequest, { consent: participantConsent() }),
-  defineCapability("B34", SKILL, "closePartnerSettlement", closePartnerSettlement, { permission: "partner.settlement.close" }),
+  defineCapability("B31", SKILL, "configurePartnerTenant", configurePartnerTenant, {
+    permission: "partner.tenant.manage", mode: "resource", collection: "partners.tenants", recordIdField: "partnerId",
+  }),
+  defineCapability("B32", SKILL, "onboardPartner", onboardPartner, {
+    permission: "partner.onboarding.approve", mode: "resource", collection: "partners.onboarding", recordIdField: "partnerId",
+  }),
+  defineCapability("B33", SKILL, "acceptPartnerApiRequest", acceptPartnerApiRequest, {
+    consent: participantConsent(), mode: "resource", collection: "partners.api-requests", recordIdField: "requestId",
+  }),
+  defineCapability("B34", SKILL, "closePartnerSettlement", closePartnerSettlement, {
+    permission: "ledger:post", sensitive: true, mode: "partner-settlement-ledger",
+  }),
 ];
 
 export function registerBuildingPartnerPlatformCapabilities(registry: CapabilityRegistry): void {

@@ -1,0 +1,31 @@
+# Production outbox worker
+
+`@ltm/workers` is an independently deployable outbox process. It claims leased events, routes them to one of `media`, `notification`, `fulfillment`, `integration` or `data`, signs the exact request body, reuses the outbox event ID as provider idempotency key, and retries with bounded backoff. Missing routes or batch adapters fail closed.
+
+External commands have one side-effecting outbox event: `external_command.requested`. The worker persists `dispatched` before calling a provider and records `acknowledged` only after validating the provider's signed response. Aggregate create/update and later lifecycle events cannot trigger another delivery. A response loss is retried with the same provider idempotency key. `succeeded`, `failed`, `cancelled` and `compensated` are accepted only from the signed callback/business-event transaction; an outbound HTTP acceptance never becomes commercial success.
+
+The service actor is always `service_account` with only `outbox:read`, `outbox:publish`, `record:read`, `external-command:read`, `external-command:transition` and `audit:append`. It never runs as `platform_admin`.
+
+## Production configuration
+
+Set `APP_ENV=production`, `LTM_DEPLOYMENT_PROFILE=distributed`, a least-privilege `DATABASE_URL` ending in `sslmode=verify-full`, `LTM_WORKER_TENANT_ID` and `LTM_WORKER_ID`. The worker and API then share the PostgreSQL outbox; `LTM_DATABASE_PATH` is rejected in this profile. SQLite remains a single-node development option and production requires the explicit `LTM_ALLOW_SINGLE_NODE_SQLITE=true` risk acceptance. `LTM_OUTBOX_ROUTE_ADAPTERS_JSON` must map all five route names. `LTM_EXTERNAL_COMMAND_ADAPTERS_JSON` must map these 18 batches:
+
+`B05,B10,B13,B14,B16,B23,B26,B29,B36,B38,B40,B65,B67,B74,B83,B89,B98,B101`
+
+Each entry has this shape:
+
+```json
+{
+  "endpoint": "https://provider.example.com/ltm/commands",
+  "signingSecretReference": "secret-manager:ltm/production/provider-hmac",
+  "responseVerificationKeyReference": "secret-manager:ltm/production/provider-response-key",
+  "responseSignatureScheme": "hmac-sha256",
+  "timeoutMs": 10000
+}
+```
+
+Only credential-free HTTPS endpoints and `secret-manager:` references are accepted. Every provider receipt must carry an exact-body HMAC-SHA256, Ed25519 or ES256 signature, a bounded timestamp and the original idempotency key. AWS credentials come from the workload identity or instance role; raw keys are never accepted in configuration. Production refuses partial route or batch maps at startup.
+
+Production also requires `LTM_METRICS_TOKEN_SHA256`; only the bearer-token hash is stored. The worker exposes `/health/live`, `/health/ready` and protected Prometheus `/metrics` on `LTM_WORKER_HEALTH_HOST`/`LTM_WORKER_HEALTH_PORT` (defaults `0.0.0.0:8090`).
+
+After building, start with `pnpm --filter @ltm/workers start`. SIGINT and SIGTERM stop new polling, close the health listener and close the database after the current leased batch.

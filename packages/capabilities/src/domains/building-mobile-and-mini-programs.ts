@@ -1,4 +1,5 @@
 import { DomainError } from "@ltm/core";
+import { capabilityEvidenceScope } from "@ltm/providers";
 import type { CapabilityInvocation, CapabilityRegistry, JsonObject } from "../registry.js";
 import { objectValue, requiredBoolean, requiredNumber, requiredString, stringList } from "../validation.js";
 import {
@@ -6,6 +7,7 @@ import {
   assertKnownState,
   defineCapability,
   participantConsent,
+  rejectClientAssertions,
   registerDefinitions,
   requireInteger,
   requireTrue,
@@ -15,7 +17,7 @@ import {
 const SKILL = "building-mobile-and-mini-programs";
 
 function digest(value: string, field: string): string {
-  if (!/^[a-f0-9]{32,128}$/i.test(value)) throw new DomainError("VALIDATION_FAILED", `${field} must be a digest`);
+  if (!/^[a-f0-9]{64}$/.test(value)) throw new DomainError("VALIDATION_FAILED", `${field} must be a lowercase SHA-256 digest`);
   return value;
 }
 
@@ -79,27 +81,41 @@ function mobileGeneration(input: JsonObject): JsonObject {
   return { projectId, participantIds, purpose, action, authorizationState, progressSource, conflictStrategy, aiLabelPresent };
 }
 
-function storeTransaction(input: JsonObject): JsonObject {
+function storeTransaction(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
+  rejectClientAssertions(input, ["serverSignatureVerified", "entitlementFromServer"]);
   const transactionId = requiredString(input, "transactionId");
   const provider = assertKnownState(requiredString(input, "provider"), ["app_store", "google_play"] as const, "provider");
+  const providerEnvironment = assertKnownState(
+    requiredString(input, "providerEnvironment"),
+    ["sandbox", "production"] as const,
+    "providerEnvironment",
+  );
   const productId = requiredString(input, "productId");
   const accountId = requiredString(input, "accountId");
-  const receiptHash = digest(requiredString(input, "receiptHash"), "receiptHash");
+  const receiptArtifactSha256 = digest(requiredString(input, "receiptArtifactSha256"), "receiptArtifactSha256");
   const { amountMinor, currency } = money(input);
-  const serverSignatureVerified = requireTrue(requiredBoolean(input, "serverSignatureVerified"), "serverSignatureVerified");
-  const entitlementFromServer = requireTrue(requiredBoolean(input, "entitlementFromServer"), "entitlementFromServer");
   const externalEvidenceIds = stringList(input, "externalEvidenceIds", { min: 1, unique: true });
+  const evidenceScope = capabilityEvidenceScope({
+    tenantId: invocation.actor.tenantId,
+    batchId: "B66",
+    operation: "verifyStoreTransaction",
+    kind: "store-transaction",
+    provider: provider === "app_store" ? "apple-app-store" : "google-play",
+    artifactSha256: receiptArtifactSha256,
+    environment: providerEnvironment,
+    subjectId: transactionId,
+  });
   return {
     transactionId,
     provider,
+    providerEnvironment,
     productId,
     accountId,
-    receiptHash,
+    receiptArtifactSha256,
     amountMinor,
     currency,
-    serverSignatureVerified,
-    entitlementFromServer,
     externalEvidenceIds,
+    evidenceScope,
   };
 }
 
@@ -133,32 +149,61 @@ function mobileNotification(input: JsonObject): JsonObject {
   };
 }
 
-function mobileAssurance(input: JsonObject): JsonObject {
+function mobileAssurance(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
+  rejectClientAssertions(input, ["networkCaptureReconciled", "productionDebugDisabled"]);
   const buildId = requiredString(input, "buildId");
+  const assuranceProviderId = requiredString(input, "assuranceProviderId");
+  const providerEnvironment = assertKnownState(
+    requiredString(input, "providerEnvironment"),
+    ["sandbox", "production"] as const,
+    "providerEnvironment",
+  );
+  const assuranceArtifactSha256 = digest(requiredString(input, "assuranceArtifactSha256"), "assuranceArtifactSha256");
   const privacyManifestHash = digest(requiredString(input, "privacyManifestHash"), "privacyManifestHash");
   const testDevices = stringList(input, "testDevices", { min: 2, unique: true });
   const testSuites = stringList(input, "testSuites", { min: 4, unique: true });
   const prohibitedSdkFlows = stringList(input, "prohibitedSdkFlows", { unique: true });
-  const networkCaptureReconciled = requireTrue(requiredBoolean(input, "networkCaptureReconciled"), "networkCaptureReconciled");
-  const productionDebugDisabled = requireTrue(requiredBoolean(input, "productionDebugDisabled"), "productionDebugDisabled");
+  const networkCaptureReportId = requiredString(input, "networkCaptureReportId");
+  const debugConfigurationReportId = requiredString(input, "debugConfigurationReportId");
+  const externalEvidenceIds = stringList(input, "externalEvidenceIds", { min: 2, unique: true });
   for (const suite of ["security", "privacy", "performance", "accessibility"]) {
     if (!testSuites.includes(suite)) throw new DomainError("VALIDATION_FAILED", `testSuites must include ${suite}`);
   }
   if (prohibitedSdkFlows.length > 0) throw new DomainError("VALIDATION_FAILED", "unapproved SDK data flows block release");
+  const evidenceScope = capabilityEvidenceScope({
+    tenantId: invocation.actor.tenantId,
+    batchId: "B68",
+    operation: "approveMobileAssurance",
+    kind: "mobile-assurance",
+    provider: `mobile-assurance:${assuranceProviderId}`,
+    artifactSha256: assuranceArtifactSha256,
+    environment: providerEnvironment,
+    subjectId: buildId,
+  });
   return {
     buildId,
+    assuranceProviderId,
+    providerEnvironment,
+    assuranceArtifactSha256,
     privacyManifestHash,
     testDevices,
     testSuites,
     prohibitedSdkFlows,
-    networkCaptureReconciled,
-    productionDebugDisabled,
+    networkCaptureReportId,
+    debugConfigurationReportId,
+    externalEvidenceIds,
+    evidenceScope,
   };
 }
 
-function mobileRelease(input: JsonObject): JsonObject {
+function mobileRelease(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
   const releaseId = requiredString(input, "releaseId");
   const platform = assertKnownState(requiredString(input, "platform"), ["ios", "android"] as const, "platform");
+  const providerEnvironment = assertKnownState(
+    requiredString(input, "providerEnvironment"),
+    ["sandbox", "production"] as const,
+    "providerEnvironment",
+  );
   const artifactDigest = digest(requiredString(input, "artifactDigest"), "artifactDigest");
   const signingKeyReference = requiredString(input, "signingKeyReference");
   const rolloutPercent = requiredNumber(input, "rolloutPercent", 0);
@@ -172,7 +217,28 @@ function mobileRelease(input: JsonObject): JsonObject {
   for (const gate of ["unit", "device", "security", "privacy", "iap", "cold_start"]) {
     if (!gates.includes(gate)) throw new DomainError("VALIDATION_FAILED", `passedGates must include ${gate}`);
   }
-  return { releaseId, platform, artifactDigest, signingKeyReference, rolloutPercent, criticalFindings, passedGates: gates, externalEvidenceIds };
+  const evidenceScope = capabilityEvidenceScope({
+    tenantId: invocation.actor.tenantId,
+    batchId: "B69",
+    operation: "approveMobileStoreRelease",
+    kind: "store-release",
+    provider: platform === "ios" ? "apple-app-store" : "google-play",
+    artifactSha256: artifactDigest,
+    environment: providerEnvironment,
+    subjectId: releaseId,
+  });
+  return {
+    releaseId,
+    platform,
+    providerEnvironment,
+    artifactDigest,
+    signingKeyReference,
+    rolloutPercent,
+    criticalFindings,
+    passedGates: gates,
+    externalEvidenceIds,
+    evidenceScope,
+  };
 }
 
 function miniProgramJourney(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
@@ -188,93 +254,147 @@ function miniProgramJourney(input: JsonObject, invocation: CapabilityInvocation)
   return { sessionId, participantIds, purpose, identityBinding, cacheNamespace, mediaUrlTtlSeconds, cacheClearedOnHide, serverAuthorization };
 }
 
-function wechatCommercialAction(input: JsonObject): JsonObject {
+function wechatCommercialAction(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
+  rejectClientAssertions(input, ["serverSignatureVerified", "shareReauthorization"]);
   const paymentId = requiredString(input, "paymentId");
   const providerEventId = requiredString(input, "providerEventId");
+  const providerEnvironment = assertKnownState(
+    requiredString(input, "providerEnvironment"),
+    ["sandbox", "production"] as const,
+    "providerEnvironment",
+  );
+  const callbackArtifactSha256 = digest(requiredString(input, "callbackArtifactSha256"), "callbackArtifactSha256");
   const participantIds = stringList(input, "participantIds", { min: 1, unique: true });
   const purpose = requiredString(input, "purpose");
   const { amountMinor, currency } = money(input);
-  const serverSignatureVerified = requireTrue(requiredBoolean(input, "serverSignatureVerified"), "serverSignatureVerified");
   const messageAuthorizationCount = requireInteger(
     requiredNumber(input, "messageAuthorizationCount", 0),
     "messageAuthorizationCount",
     0,
     100,
   );
-  const shareReauthorization = requireTrue(requiredBoolean(input, "shareReauthorization"), "shareReauthorization");
   const externalEvidenceIds = stringList(input, "externalEvidenceIds", { min: 1, unique: true });
   if (currency !== "CNY") throw new DomainError("VALIDATION_FAILED", "WeChat payment records must use CNY");
+  const evidenceScope = capabilityEvidenceScope({
+    tenantId: invocation.actor.tenantId,
+    batchId: "B71",
+    operation: "recordWechatCommercialAction",
+    kind: "wechat-payment-callback",
+    provider: "wechat-pay",
+    artifactSha256: callbackArtifactSha256,
+    environment: providerEnvironment,
+    subjectId: paymentId,
+  });
   return {
     paymentId,
     providerEventId,
+    providerEnvironment,
+    callbackArtifactSha256,
     participantIds,
     purpose,
     amountMinor,
     currency,
-    serverSignatureVerified,
     messageAuthorizationCount,
-    shareReauthorization,
     externalEvidenceIds,
+    evidenceScope,
   };
 }
 
-function miniProgramRelease(input: JsonObject): JsonObject {
+function miniProgramRelease(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
   const releaseId = requiredString(input, "releaseId");
   const subjectId = requiredString(input, "subjectId");
   const privacyDeclarationHash = digest(requiredString(input, "privacyDeclarationHash"), "privacyDeclarationHash");
+  const releaseArtifactSha256 = digest(requiredString(input, "releaseArtifactSha256"), "releaseArtifactSha256");
+  const providerEnvironment = assertKnownState(
+    requiredString(input, "providerEnvironment"),
+    ["sandbox", "production"] as const,
+    "providerEnvironment",
+  );
   const reviewTenantId = requiredString(input, "reviewTenantId");
   const isolatedReviewTenant = requireTrue(requiredBoolean(input, "isolatedReviewTenant"), "isolatedReviewTenant");
   const rollbackCompatible = requireTrue(requiredBoolean(input, "rollbackCompatible"), "rollbackCompatible");
   const unresolvedReviewIssues = requireInteger(requiredNumber(input, "unresolvedReviewIssues", 0), "unresolvedReviewIssues", 0);
   const externalEvidenceIds = stringList(input, "externalEvidenceIds", { min: 2, unique: true });
   if (unresolvedReviewIssues !== 0) throw new DomainError("VALIDATION_FAILED", "mini-program review issues must be closed");
+  const evidenceScope = capabilityEvidenceScope({
+    tenantId: invocation.actor.tenantId,
+    batchId: "B72",
+    operation: "approveMiniProgramRelease",
+    kind: "mini-program-release",
+    provider: "wechat-mini-program",
+    artifactSha256: releaseArtifactSha256,
+    environment: providerEnvironment,
+    subjectId: releaseId,
+  });
   return {
     releaseId,
     subjectId,
     privacyDeclarationHash,
+    releaseArtifactSha256,
+    providerEnvironment,
     reviewTenantId,
     isolatedReviewTenant,
     rollbackCompatible,
     unresolvedReviewIssues,
     externalEvidenceIds,
+    evidenceScope,
   };
 }
 
 const definitions: readonly DomainCapabilityDefinition[] = [
-  defineCapability("B63", SKILL, "publishMobileManifest", mobileManifest, { permission: "mobile.manifest.publish" }),
+  defineCapability("B63", SKILL, "publishMobileManifest", mobileManifest, { permission: "mobile.manifest.publish", mode: "resource" }),
   defineCapability("B64", SKILL, "createResumableUpload", uploadSession, {
     permission: "media.upload.create",
     consent: participantConsent(),
+    mode: "resource",
   }),
   defineCapability("B65", SKILL, "runMobileGenerationAction", mobileGeneration, {
     permission: "generation.mobile.execute",
     consent: participantConsent(),
+    mode: "external-command",
   }),
   defineCapability("B66", SKILL, "verifyStoreTransaction", storeTransaction, {
     permission: "entitlement.store.verify",
     requiresExternalEvidence: true,
+    externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    mode: "attestation",
+    trustedExternalEventOnly: true,
   }),
   defineCapability("B67", SKILL, "registerMobileNotification", mobileNotification, {
     permission: "notification.mobile.schedule",
     consent: participantConsent(),
+    mode: "external-command",
   }),
-  defineCapability("B68", SKILL, "approveMobileAssurance", mobileAssurance, { permission: "mobile.assurance.approve" }),
+  defineCapability("B68", SKILL, "approveMobileAssurance", mobileAssurance, {
+    permission: "mobile.assurance.approve",
+    requiresExternalEvidence: true,
+    externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    mode: "attestation",
+  }),
   defineCapability("B69", SKILL, "approveMobileStoreRelease", mobileRelease, {
     permission: "release.mobile.approve",
     requiresExternalEvidence: true,
+    externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    mode: "attestation",
   }),
   defineCapability("B70", SKILL, "startMiniProgramJourney", miniProgramJourney, {
     permission: "mini-program.journey.execute",
     consent: participantConsent(),
+    mode: "resource",
   }),
   defineCapability("B71", SKILL, "recordWechatCommercialAction", wechatCommercialAction, {
     permission: "payment.wechat.record",
     consent: participantConsent(),
     requiresExternalEvidence: true,
+    externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    mode: "attestation",
+    trustedExternalEventOnly: true,
   }),
   defineCapability("B72", SKILL, "approveMiniProgramRelease", miniProgramRelease, {
     permission: "release.mini-program.approve",
     requiresExternalEvidence: true,
+    externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    mode: "attestation",
   }),
 ];
 

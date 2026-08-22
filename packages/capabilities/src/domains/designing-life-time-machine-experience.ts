@@ -1,10 +1,12 @@
 import { DomainError } from "@ltm/core";
+import { capabilityEvidenceScope } from "@ltm/providers";
 import type { CapabilityInvocation, CapabilityRegistry, JsonObject } from "../registry.js";
 import { objectValue, requiredBoolean, requiredNumber, requiredString, stringList } from "../validation.js";
 import {
   assertActorTenant,
   assertKnownState,
   defineCapability,
+  rejectClientAssertions,
   registerDefinitions,
   requireInteger,
   requireTrue,
@@ -12,6 +14,20 @@ import {
 } from "./_shared.js";
 
 const SKILL = "designing-life-time-machine-experience";
+
+function sha256(input: JsonObject, field: string): string {
+  const value = requiredString(input, field);
+  if (!/^[a-f0-9]{64}$/.test(value)) throw new DomainError("VALIDATION_FAILED", `${field} must be a lowercase SHA-256 digest`);
+  return value;
+}
+
+function providerEnvironment(input: JsonObject): "test" | "sandbox" | "staging" | "production" {
+  return assertKnownState(
+    requiredString(input, "providerEnvironment"),
+    ["test", "sandbox", "staging", "production"] as const,
+    "providerEnvironment",
+  );
+}
 
 function projectProfile(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
   assertActorTenant(input, invocation);
@@ -128,40 +144,78 @@ function localizationPolicy(input: JsonObject): JsonObject {
   return { policyId, locales, timezoneStorage, wcagTarget, channels, testSuites };
 }
 
-function experienceGate(input: JsonObject): JsonObject {
+function experienceGate(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
+  rejectClientAssertions(input, [
+    "taskSuccessRate",
+    "unresolvedCriticalIssues",
+    "controlledCopyApproved",
+    "aiDisclosurePresent",
+    "humanVisualApproval",
+    "gateState",
+  ]);
   const releaseCandidate = requiredString(input, "releaseCandidate");
   const baselineId = requiredString(input, "baselineId");
-  const taskSuccessRate = requiredNumber(input, "taskSuccessRate", 0);
-  const unresolvedCriticalIssues = requireInteger(
-    requiredNumber(input, "unresolvedCriticalIssues", 0),
-    "unresolvedCriticalIssues",
-    0,
-  );
-  const controlledCopyApproved = requireTrue(requiredBoolean(input, "controlledCopyApproved"), "controlledCopyApproved");
-  const aiDisclosurePresent = requireTrue(requiredBoolean(input, "aiDisclosurePresent"), "aiDisclosurePresent");
-  const humanVisualApproval = requireTrue(requiredBoolean(input, "humanVisualApproval"), "humanVisualApproval");
-  if (taskSuccessRate > 1 || unresolvedCriticalIssues !== 0) {
-    throw new DomainError("VALIDATION_FAILED", "experience release gate requires a 0..1 success rate and no critical issues");
+  const assessmentProviderId = requiredString(input, "assessmentProviderId");
+  const environment = providerEnvironment(input);
+  const evaluationReportSha256 = sha256(input, "evaluationReportSha256");
+  const reportPolicyVersion = requiredString(input, "reportPolicyVersion");
+  const externalEvidenceIds = stringList(input, "externalEvidenceIds", { min: 1, unique: true });
+  if (!invocation.actor.roles.includes("auditor") || invocation.actor.stepUp !== true) {
+    throw new DomainError("AUTH_FORBIDDEN", "experience gate approval requires a step-up authenticated auditor");
   }
+  if (assessmentProviderId === invocation.actor.actorId) {
+    throw new DomainError("AUTH_FORBIDDEN", "experience report issuer and approving auditor must be independent");
+  }
+  const evidenceScope = capabilityEvidenceScope({
+    tenantId: invocation.actor.tenantId,
+    batchId: "B56",
+    operation: "approveExperienceGate",
+    kind: "experience-gate-report",
+    provider: `experience-assurance:${assessmentProviderId}`,
+    artifactSha256: evaluationReportSha256,
+    environment,
+    subjectId: releaseCandidate,
+  });
   return {
     releaseCandidate,
     baselineId,
-    taskSuccessRate,
-    unresolvedCriticalIssues,
-    controlledCopyApproved,
-    aiDisclosurePresent,
-    humanVisualApproval,
-    gateState: "approved",
+    assessmentProviderId,
+    providerEnvironment: environment,
+    evaluationReportSha256,
+    reportPolicyVersion,
+    externalEvidenceIds,
+    evidenceScope,
+    decisionState: environment === "production" ? "approved" : "simulation_only",
   };
 }
 
 const definitions: readonly DomainCapabilityDefinition[] = [
-  defineCapability("B51", SKILL, "configureProjectProfile", projectProfile, { permission: "product.profile.manage" }),
-  defineCapability("B52", SKILL, "recordResearchBlueprint", researchBlueprint, { permission: "research.manage" }),
-  defineCapability("B53", SKILL, "publishInformationArchitecture", informationArchitecture, { permission: "experience.architecture.publish" }),
-  defineCapability("B54", SKILL, "publishDesignSystem", designSystem, { permission: "design-system.publish" }),
-  defineCapability("B55", SKILL, "publishLocalizationPolicy", localizationPolicy, { permission: "localization.policy.publish" }),
-  defineCapability("B56", SKILL, "approveExperienceGate", experienceGate, { permission: "release.experience.approve" }),
+  defineCapability("B51", SKILL, "configureProjectProfile", projectProfile, {
+    permission: "product.profile.manage",
+    mode: "resource",
+  }),
+  defineCapability("B52", SKILL, "recordResearchBlueprint", researchBlueprint, {
+    permission: "research.manage",
+    mode: "resource",
+  }),
+  defineCapability("B53", SKILL, "publishInformationArchitecture", informationArchitecture, {
+    permission: "experience.architecture.publish",
+    mode: "resource",
+  }),
+  defineCapability("B54", SKILL, "publishDesignSystem", designSystem, {
+    permission: "design-system.publish",
+    mode: "resource",
+  }),
+  defineCapability("B55", SKILL, "publishLocalizationPolicy", localizationPolicy, {
+    permission: "localization.policy.publish",
+    mode: "resource",
+  }),
+  defineCapability("B56", SKILL, "approveExperienceGate", experienceGate, {
+    permission: "release.experience.approve",
+    requiresExternalEvidence: true,
+    externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    mode: "attestation",
+  }),
 ];
 
 export function registerDesigningLifeTimeMachineExperienceCapabilities(registry: CapabilityRegistry): void {

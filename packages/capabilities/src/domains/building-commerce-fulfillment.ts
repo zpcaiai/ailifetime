@@ -118,12 +118,31 @@ function resolveCommerceCase(input: JsonObject, invocation: CapabilityInvocation
 }
 
 const definitions: readonly DomainCapabilityDefinition[] = [
-  defineCapability("B25", SKILL, "publishPrice", publishPrice, { permission: "commerce.catalog.manage" }),
-  defineCapability("B26", SKILL, "authorizeCheckout", authorizeCheckout, { permission: "commerce.checkout.authorize" }),
-  defineCapability("B27", SKILL, "issueEntitlement", issueEntitlement, { permission: "commerce.entitlement.issue" }),
-  defineCapability("B28", SKILL, "transitionOrder", transitionOrder, { permission: "commerce.order.transition" }),
-  defineCapability("B29", SKILL, "submitPhysicalFulfillment", submitPhysicalFulfillment, { permission: "commerce.fulfillment.submit" }),
-  defineCapability("B30", SKILL, "resolveCommerceCase", resolveCommerceCase, { permission: "commerce.support.resolve" }),
+  defineCapability("B25", SKILL, "publishPrice", publishPrice, {
+    permission: "commerce.catalog.manage",
+    mode: "resource",
+    collection: "commerce.price-releases",
+    recordId: (data) => `${String(data.sku)}:${String(data.quoteVersion)}`,
+  }),
+  defineCapability("B26", SKILL, "authorizeCheckout", authorizeCheckout, {
+    permission: "commerce.checkout.authorize", mode: "external-command", collection: "commerce.checkout-commands", recordIdField: "checkoutId",
+  }),
+  defineCapability("B27", SKILL, "issueEntitlement", issueEntitlement, {
+    permission: "commerce.entitlement.issue", mode: "resource", collection: "commerce.entitlements", recordIdField: "entitlementId",
+  }),
+  defineCapability("B28", SKILL, "transitionOrder", transitionOrder, {
+    permission: "commerce.order.transition",
+    mode: "state-transition",
+    collection: "commerce.orders",
+    recordIdField: "orderId",
+    transition: { fromField: "fromState", toField: "toState", stateField: "state", initialFromStates: ["created"] },
+  }),
+  defineCapability("B29", SKILL, "submitPhysicalFulfillment", submitPhysicalFulfillment, {
+    permission: "commerce.fulfillment.submit", mode: "external-command", collection: "fulfillment.submit-commands", recordIdField: "purchaseOrderId",
+  }),
+  defineCapability("B30", SKILL, "resolveCommerceCase", resolveCommerceCase, {
+    permission: "commerce.support.resolve", mode: "resource", collection: "support.commerce-case-actions",
+  }),
 ];
 
 export function registerBuildingCommerceFulfillmentCapabilities(registry: CapabilityRegistry): void {

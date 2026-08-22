@@ -17,22 +17,259 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10.12.4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 26
           cache: pnpm
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.13"
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: "21"
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+      - name: Scan repository for committed secrets
+        run: node tools/secret-scan.mjs
+      - name: Audit production dependencies against official npm registry
+        run: pnpm audit --prod --audit-level high --registry=https://registry.npmjs.org
+      - name: Exercise backup/restore and emit scoped release evidence
+        run: node tools/release-gate.mjs --profile=ci --run-audit=true --run-backup=true --output=.artifacts/release-gate-ci.json
       - run: docker compose config --quiet
       - run: pnpm factory:validate
+      - name: Upload release gate evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-gate-evidence
+          path: .artifacts/release-gate-ci.json
+          if-no-files-found: warn
+
+  postgres-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17.5-alpine
+        env:
+          POSTGRES_DB: ltm_integration
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ltm_integration"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.12.4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply PostgreSQL runtime migrations in order
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d ltm_integration -f infra/postgres/migrations/001_core.sql
+          psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d ltm_integration -f infra/postgres/migrations/002_external_evidence.sql
+          psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d ltm_integration -f infra/postgres/migrations/003_runtime_compatibility.sql
+          psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d ltm_integration -f infra/postgres/migrations/004_external_business_events.sql
+      - name: Provision a non-privileged FORCE-RLS runtime role
+        env:
+          PGPASSWORD: postgres
+        run: >-
+          psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d ltm_integration -c
+          "CREATE ROLE ltm_runtime LOGIN PASSWORD 'postgres' NOSUPERUSER NOBYPASSRLS NOINHERIT;
+          GRANT CONNECT ON DATABASE ltm_integration TO ltm_runtime;
+          GRANT USAGE ON SCHEMA ltm TO ltm_runtime;
+          GRANT SELECT ON ltm.schema_metadata TO ltm_runtime;
+          GRANT SELECT,INSERT,UPDATE,DELETE ON ltm.records,ltm.consents,ltm.idempotency,ltm.inbox,ltm.outbox,ltm.audit_log,ltm.ledger_transactions,ltm.ledger_lines,ltm.external_evidence,ltm.evidence_consumptions,ltm.external_commands,ltm.external_command_transitions,ltm.evidence_decisions,ltm.external_business_events TO ltm_runtime;
+          GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA ltm TO ltm_runtime;"
+      - name: Verify PostgreSQL core and HTTP integration
+        env:
+          PGPASSWORD: postgres
+          LTM_TEST_POSTGRES_URL: postgresql://ltm_runtime@127.0.0.1:5432/ltm_integration?sslmode=disable
+          LTM_TEST_POSTGRES_ADMIN_URL: postgresql://postgres@127.0.0.1:5432/ltm_integration?sslmode=disable
+        run: |
+          pnpm run build
+          pnpm --filter @ltm/core test
+          pnpm --filter @ltm/api test
+          pnpm run test:release-certification
+
+  b123-security-assurance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.12.4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 26
+          cache: pnpm
+      - name: Initialize CodeQL SAST
+        uses: github/codeql-action/init@b56ba49b26e50535fa1e7f7db0f4f7b4bf65d80d # v3.28.10
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - name: Run B123 anti-cheating and lifecycle tests
+        run: pnpm run test:security
+      - name: Capture repository secret-scan evidence
+        run: |
+          mkdir -p .artifacts/security
+          node tools/secret-scan.mjs | tee .artifacts/security/secret-scan.json
+      - name: Capture production SCA evidence without hiding audit exit state
+        run: |
+          set +e
+          pnpm audit --prod --json --registry=https://registry.npmjs.org > .artifacts/security/pnpm-audit.json
+          security_audit_exit=$?
+          set -e
+          test -s .artifacts/security/pnpm-audit.json
+          printf '%s\n' "${security_audit_exit}" > .artifacts/security/pnpm-audit.exit-code
+      - name: Analyze CodeQL and retain SARIF for the unified severity gate
+        uses: github/codeql-action/analyze@b56ba49b26e50535fa1e7f7db0f4f7b4bf65d80d # v3.28.10
+        with:
+          output: .artifacts/security/codeql
+          upload: false
+      - name: Normalize CodeQL evidence path
+        run: |
+          security_codeql_sarif="$(find .artifacts/security/codeql -type f -name '*.sarif' -print -quit)"
+          test -n "${security_codeql_sarif}"
+          cp "${security_codeql_sarif}" .artifacts/security/codeql.sarif
+      - name: Scan IaC and container definitions with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          format: json
+          output: .artifacts/security/trivy-config.json
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+          hide-progress: true
+      - name: Build the exact API, worker, and callback-gateway OCI artifacts
+        run: |
+          docker build --file services/api/Dockerfile --tag "ltm-api:${GITHUB_SHA}" .
+          docker build --file services/workers/Dockerfile --tag "ltm-workers:${GITHUB_SHA}" .
+          docker build --file services/integration-gateway/Dockerfile --tag "ltm-integration-gateway:${GITHUB_SHA}" .
+          node tools/security-image-manifest.mjs capture \
+            --image="api=ltm-api:${GITHUB_SHA}" \
+            --image="workers=ltm-workers:${GITHUB_SHA}" \
+            --image="integration-gateway=ltm-integration-gateway:${GITHUB_SHA}" \
+            --environment=ci \
+            --out=.artifacts/security/oci-artifact-manifest.json
+      - name: Scan API OCI artifact with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ltm-api:${{ github.sha }}
+          format: json
+          output: .artifacts/security/trivy-api-image.json
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+          hide-progress: true
+      - name: Scan worker OCI artifact with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ltm-workers:${{ github.sha }}
+          format: json
+          output: .artifacts/security/trivy-workers-image.json
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+          hide-progress: true
+      - name: Scan integration-gateway OCI artifact with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ltm-integration-gateway:${{ github.sha }}
+          format: json
+          output: .artifacts/security/trivy-integration-gateway-image.json
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+          hide-progress: true
+      - name: Execute live auth, tenant, upload, webhook, payment, SSRF, XSS, CSRF, and admin DAST
+        env:
+          APP_ENV: test
+          LTM_AUTH_MODE: configured-tokens
+          LTM_DEPLOYMENT_PROFILE: single-node
+          LTM_DATABASE_PATH: .data/dast-security.sqlite
+          LTM_STATIC_DIR: apps/web/public
+          LTM_API_TOKENS_JSON: >-
+            [{"token":"dast-primary-token-synthetic","actorId":"dast-admin","tenantId":"tenant-dast-a","roles":["platform_admin"],"allowedPurposes":["security_test"]},{"token":"dast-secondary-token-synthetic","actorId":"dast-consumer","tenantId":"tenant-dast-b","roles":["consumer"],"allowedPurposes":["security_test"]}]
+          LTM_DAST_PRIMARY_TOKEN: dast-primary-token-synthetic
+          LTM_DAST_SECONDARY_TOKEN: dast-secondary-token-synthetic
+          HOST: 127.0.0.1
+          PORT: 18080
+        run: |
+          mkdir -p .data
+          node services/api/dist/main.js > .artifacts/security/dast-api.log 2>&1 &
+          security_api_pid=$!
+          trap 'kill "${security_api_pid}" 2>/dev/null || true' EXIT
+          for security_attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18080/health/live >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:18080/health/live >/dev/null
+          node tools/security-dast.mjs --base-url=http://127.0.0.1:18080/ --profile=ci --output=.artifacts/security/dast.json
+          kill "${security_api_pid}"
+          wait "${security_api_pid}" || true
+          trap - EXIT
+      - name: Enforce the unified high/critical gate with complete scanner evidence
+        run: >-
+          node tools/security-scan.mjs
+          --audit-json=.artifacts/security/pnpm-audit.json
+          --secret-report=.artifacts/security/secret-scan.json
+          --codeql-sarif=.artifacts/security/codeql.sarif
+          --trivy-config=.artifacts/security/trivy-config.json
+          --trivy-image=.artifacts/security/trivy-api-image.json
+          --trivy-image=.artifacts/security/trivy-workers-image.json
+          --trivy-image=.artifacts/security/trivy-integration-gateway-image.json
+          --expected-image=ltm-api:${{ github.sha }}
+          --expected-image=ltm-workers:${{ github.sha }}
+          --expected-image=ltm-integration-gateway:${{ github.sha }}
+          --dast-report=.artifacts/security/dast.json
+          --expected-image-count=3
+          --output=.artifacts/security/unified-gate.json
+          --sarif=.artifacts/security/native-guardrails.sarif
+      - name: Generate and verify signed reproducible CycloneDX/SPDX/provenance evidence
+        run: |
+          security_signing_key="${RUNNER_TEMP}/ltm-ci-supply-chain-ed25519.pem"
+          openssl genpkey -algorithm ED25519 -out "${security_signing_key}"
+          chmod 600 "${security_signing_key}"
+          security_source_epoch="$(git show -s --format=%ct HEAD)"
+          node tools/security-sbom.mjs generate --private-key="${security_signing_key}" --environment=ci --trust-tier=ci --source-date-epoch="${security_source_epoch}" --artifact=.artifacts/security/oci-artifact-manifest.json --out=.artifacts/security/supply-chain
+          node tools/security-sbom.mjs verify --bundle=.artifacts/security/supply-chain/bundle.json
+      - name: Exercise the independent pentest evidence gate without fabricating a report
+        run: node tools/security-pentest-evidence.mjs --allow-blocked=true > .artifacts/security/independent-pentest-gate.json
+      - name: Exercise B119/B121/B122 production evidence mapping without client self-attestation
+        run: node tools/security-upstream-evidence.mjs --allow-blocked=true > .artifacts/security/upstream-production-controls-gate.json
+      - name: Attach GitHub OIDC build provenance to the signed bundle on main
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: .artifacts/security/supply-chain/bundle.json
+      - name: Upload B123 security evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: b123-security-evidence
+          path: .artifacts/security
+          if-no-files-found: error

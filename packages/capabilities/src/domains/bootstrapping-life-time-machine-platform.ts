@@ -128,13 +128,25 @@ function durableWorkflow(input: JsonObject): JsonObject {
 }
 
 const definitions: readonly DomainCapabilityDefinition[] = [
-  defineCapability("B01", SKILL, "configureArchitecture", architecture),
-  defineCapability("B02", SKILL, "publishContracts", contracts),
-  defineCapability("B03", SKILL, "publishIdentityPolicy", identityPolicy),
+  defineCapability("B01", SKILL, "configureArchitecture", architecture, {
+    mode: "resource", collection: "platform.architectures", recordIdField: "repositoryId",
+  }),
+  defineCapability("B02", SKILL, "publishContracts", contracts, {
+    mode: "resource", collection: "platform.contract-releases", recordIdField: "contractVersion",
+  }),
+  defineCapability("B03", SKILL, "publishIdentityPolicy", identityPolicy, {
+    mode: "resource", collection: "identity.policies", recordIdField: "policyVersion",
+  }),
   defineCapability("B04", SKILL, "recordConsent", consentRecord, { mode: "consent-write" }),
-  defineCapability("B05", SKILL, "scheduleMediaLifecycle", mediaLifecycle, { permission: "media.lifecycle.manage" }),
-  defineCapability("B12", SKILL, "registerProviderRoute", providerRoute, { permission: "provider.route.manage" }),
-  defineCapability("B13", SKILL, "startDurableWorkflow", durableWorkflow, { permission: "workflow.start" }),
+  defineCapability("B05", SKILL, "scheduleMediaLifecycle", mediaLifecycle, {
+    permission: "media.lifecycle.manage", mode: "external-command", collection: "media.lifecycle-commands", recordIdField: "assetId",
+  }),
+  defineCapability("B12", SKILL, "registerProviderRoute", providerRoute, {
+    permission: "provider.route.manage", mode: "resource", collection: "providers.routes", recordIdField: "providerId",
+  }),
+  defineCapability("B13", SKILL, "startDurableWorkflow", durableWorkflow, {
+    permission: "workflow.start", mode: "external-command", collection: "workflows.start-commands", recordIdField: "workflowId",
+  }),
 ];
 
 export function registerBootstrappingLifeTimeMachinePlatformCapabilities(registry: CapabilityRegistry): void {

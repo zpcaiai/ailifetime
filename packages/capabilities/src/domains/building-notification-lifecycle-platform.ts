@@ -1,17 +1,29 @@
 import { DomainError } from "@ltm/core";
-import type { CapabilityRegistry, JsonObject } from "../registry.js";
+import { capabilityEvidenceScope } from "@ltm/providers";
+import type { CapabilityInvocation, CapabilityRegistry, JsonObject } from "../registry.js";
 import { objectValue, requiredBoolean, requiredNumber, requiredString, stringList } from "../validation.js";
 import {
   assertKnownState,
   defineCapability,
   participantConsent,
   registerDefinitions,
+  rejectClientAssertions,
   requireInteger,
   requireTrue,
   type DomainCapabilityDefinition,
 } from "./_shared.js";
 
 const SKILL = "building-notification-lifecycle-platform";
+
+function sha256(input: JsonObject, field: string): string {
+  const value = requiredString(input, field);
+  if (!/^[a-f0-9]{64}$/.test(value)) throw new DomainError("VALIDATION_FAILED", `${field} must be a lowercase SHA-256 digest`);
+  return value;
+}
+
+function providerEnvironment(input: JsonObject): "sandbox" | "production" {
+  return assertKnownState(requiredString(input, "providerEnvironment"), ["sandbox", "production"] as const, "providerEnvironment");
+}
 
 function preference(input: JsonObject): JsonObject {
   const preferenceId = requiredString(input, "preferenceId");
@@ -48,32 +60,42 @@ function preference(input: JsonObject): JsonObject {
 }
 
 function sendCommand(input: JsonObject): JsonObject {
+  rejectClientAssertions(input, [
+    "eligible",
+    "callbackSignaturesRequired",
+    "notificationArtifactSha256",
+    "externalEvidenceIds",
+    "providerRequestId",
+  ]);
   const notificationId = requiredString(input, "notificationId");
+  const providerId = requiredString(input, "providerId");
+  const environment = providerEnvironment(input);
   const participantIds = stringList(input, "participantIds", { min: 1, unique: true });
   const purpose = requiredString(input, "purpose");
   const channel = assertKnownState(requiredString(input, "channel"), ["email", "sms", "push", "wechat", "in_app"] as const, "channel");
   const recipientRef = requiredString(input, "recipientRef");
   const templateVersion = requiredString(input, "templateVersion");
   const providerRoute = stringList(input, "providerRoute", { min: 1, unique: true });
-  const eligible = requireTrue(requiredBoolean(input, "eligible"), "eligible");
-  const callbackSignaturesRequired = requireTrue(requiredBoolean(input, "callbackSignaturesRequired"), "callbackSignaturesRequired");
+  const eligibilityDecisionId = requiredString(input, "eligibilityDecisionId");
+  const callbackVerificationPolicyVersion = requiredString(input, "callbackVerificationPolicyVersion");
   const boundedRetries = requireInteger(requiredNumber(input, "boundedRetries", 0), "boundedRetries", 0, 5);
-  const externalEvidenceIds = stringList(input, "externalEvidenceIds", { min: 1, unique: true });
   if (recipientRef.includes("@") || /^\+?\d{7,}$/.test(recipientRef)) {
     throw new DomainError("VALIDATION_FAILED", "recipientRef must be an opaque contact reference");
   }
   return {
     notificationId,
+    providerId,
+    providerEnvironment: environment,
     participantIds,
     purpose,
     channel,
     recipientRef,
     templateVersion,
     providerRoute,
-    eligible,
-    callbackSignaturesRequired,
+    eligibilityDecisionId,
+    callbackVerificationPolicyVersion,
     boundedRetries,
-    externalEvidenceIds,
+    commandState: "requested",
   };
 }
 
@@ -123,27 +145,43 @@ function journey(input: JsonObject): JsonObject {
   };
 }
 
-function deliverability(input: JsonObject): JsonObject {
+function deliverability(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
+  rejectClientAssertions(input, ["complaintsStopImmediately"]);
   const providerId = requiredString(input, "providerId");
+  const environment = providerEnvironment(input);
+  const deliverabilityArtifactSha256 = sha256(input, "deliverabilityArtifactSha256");
   const sendingIdentity = requiredString(input, "sendingIdentity");
   const health = assertKnownState(requiredString(input, "health"), ["healthy", "degraded", "disabled"] as const, "health");
   const authentication = stringList(input, "authentication", { min: 2, unique: true });
   const suppressionSources = stringList(input, "suppressionSources", { min: 2, unique: true });
   const softBounceRetryLimit = requireInteger(requiredNumber(input, "softBounceRetryLimit", 0), "softBounceRetryLimit", 0, 5);
-  const complaintsStopImmediately = requireTrue(requiredBoolean(input, "complaintsStopImmediately"), "complaintsStopImmediately");
+  const complaintSuppressionPolicyVersion = requiredString(input, "complaintSuppressionPolicyVersion");
   const externalEvidenceIds = stringList(input, "externalEvidenceIds", { min: 1, unique: true });
   if (!authentication.includes("dkim") || !authentication.includes("spf")) {
     throw new DomainError("VALIDATION_FAILED", "sending identity requires DKIM and SPF evidence");
   }
+  const evidenceScope = capabilityEvidenceScope({
+    tenantId: invocation.actor.tenantId,
+    batchId: "B77",
+    operation: "recordDeliverabilityControl",
+    kind: "deliverability-control",
+    provider: `notification:${providerId}`,
+    artifactSha256: deliverabilityArtifactSha256,
+    environment,
+    subjectId: providerId,
+  });
   return {
     providerId,
+    providerEnvironment: environment,
+    deliverabilityArtifactSha256,
     sendingIdentity,
     health,
     authentication,
     suppressionSources,
     softBounceRetryLimit,
-    complaintsStopImmediately,
+    complaintSuppressionPolicyVersion,
     externalEvidenceIds,
+    evidenceScope,
   };
 }
 
@@ -173,23 +211,35 @@ function notificationExperiment(input: JsonObject): JsonObject {
 }
 
 const definitions: readonly DomainCapabilityDefinition[] = [
-  defineCapability("B73", SKILL, "updateNotificationPreference", preference, { permission: "notification.preference.manage" }),
+  defineCapability("B73", SKILL, "updateNotificationPreference", preference, {
+    permission: "notification.preference.manage",
+    mode: "resource",
+  }),
   defineCapability("B74", SKILL, "scheduleMultiChannelNotification", sendCommand, {
     permission: "notification.send",
     consent: participantConsent(),
-    requiresExternalEvidence: true,
+    mode: "external-command",
+    collection: "notification.delivery-commands",
+    recordIdField: "notificationId",
   }),
-  defineCapability("B75", SKILL, "publishNotificationTemplate", template, { permission: "notification.template.publish" }),
+  defineCapability("B75", SKILL, "publishNotificationTemplate", template, {
+    permission: "notification.template.publish",
+    mode: "resource",
+  }),
   defineCapability("B76", SKILL, "publishLifecycleJourney", journey, {
     permission: "notification.journey.publish",
     consent: participantConsent(),
+    mode: "resource",
   }),
   defineCapability("B77", SKILL, "recordDeliverabilityControl", deliverability, {
     permission: "notification.deliverability.manage",
     requiresExternalEvidence: true,
+    externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    mode: "attestation",
   }),
   defineCapability("B78", SKILL, "registerNotificationExperiment", notificationExperiment, {
     permission: "experiment.notification.manage",
+    mode: "resource",
   }),
 ];
 

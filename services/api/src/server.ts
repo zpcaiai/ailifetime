@@ -1,10 +1,16 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { CapabilityRegistry } from "@ltm/capabilities";
-import { DomainError, isDomainError, type ActorContext, type LifeTimeMachineRuntime } from "@ltm/core";
+import { externalBusinessEventReducerRegistry, type CapabilityRegistry } from "@ltm/capabilities";
+import {
+  DomainError,
+  isDomainError,
+  type ActorContext,
+  type ExternalBusinessEventReducerRegistry,
+  type LifeTimeMachineRuntimePort,
+} from "@ltm/core";
 import type { RequestAuthenticator } from "./auth.js";
 import {
   COMMANDS,
@@ -25,16 +31,20 @@ export interface ApiLogEntry {
   readonly path?: string;
   readonly status?: number;
   readonly error?: string;
+  readonly durationMs?: number;
 }
 
 export interface ApiServerOptions {
-  readonly runtime: LifeTimeMachineRuntime;
+  readonly runtime: LifeTimeMachineRuntimePort;
   readonly authenticator: RequestAuthenticator;
   readonly capabilityRegistry: CapabilityRegistry;
+  readonly externalBusinessEventReducerRegistry?: ExternalBusinessEventReducerRegistry;
   readonly bodyLimitBytes?: number;
   readonly staticDirectory?: string | null;
   readonly allowSandboxStepUpHeader?: boolean;
   readonly appEnvironment?: string;
+  /** SHA-256 of a bearer token protecting /metrics. Required in production. */
+  readonly metricsTokenSha256?: string;
   readonly logger?: (entry: ApiLogEntry) => void;
 }
 
@@ -50,7 +60,16 @@ const FORBIDDEN_CONTEXT_HEADERS = [
   "x-roles",
   "x-permissions",
   "x-guardian-verified",
+  "x-operation-id",
 ] as const;
+
+interface ApiMetrics {
+  readonly startedAtMs: number;
+  requestsTotal: number;
+  activeRequests: number;
+  durationTotalMs: number;
+  readonly responsesByStatus: Map<number, number>;
+}
 
 const MIME_TYPES: Readonly<Record<string, string>> = {
   ".css": "text/css; charset=utf-8",
@@ -78,11 +97,24 @@ export function createApiServer(options: ApiServerOptions): Server {
   if (options.allowSandboxStepUpHeader === true && options.appEnvironment?.toLowerCase() === "production") {
     throw new DomainError("DEPENDENCY_UNAVAILABLE", "Sandbox step-up headers are forbidden in production");
   }
+  if (options.metricsTokenSha256 !== undefined && !/^[a-f0-9]{64}$/.test(options.metricsTokenSha256)) {
+    throw new DomainError("CONFIGURATION_INVALID", "metricsTokenSha256 must be a lowercase SHA-256 digest");
+  }
+  if (options.appEnvironment?.toLowerCase() === "production" && options.metricsTokenSha256 === undefined) {
+    throw new DomainError("CONFIGURATION_INVALID", "Production API requires a protected metrics bearer token digest");
+  }
   const staticDirectory = options.staticDirectory === undefined ? DEFAULT_STATIC_DIRECTORY : options.staticDirectory;
   const logger = options.logger ?? (() => undefined);
+  const metrics: ApiMetrics = {
+    startedAtMs: Date.now(),
+    requestsTotal: 0,
+    activeRequests: 0,
+    durationTotalMs: 0,
+    responsesByStatus: new Map(),
+  };
 
   const server = createServer((request, response) => {
-    void handleRequest(options, request, response, bodyLimit, staticDirectory, logger);
+    void handleRequest(options, request, response, bodyLimit, staticDirectory, logger, metrics);
   });
   server.requestTimeout = 15_000;
   server.headersTimeout = 10_000;
@@ -104,12 +136,36 @@ async function handleRequest(
   bodyLimit: number,
   staticDirectory: string | null,
   logger: (entry: ApiLogEntry) => void,
+  metrics: ApiMetrics,
 ): Promise<void> {
   const requestId = requestIdFor(request);
   response.setHeader("x-request-id", requestId);
   applySecurityHeaders(response);
   const method = request.method ?? "GET";
   let path = "/";
+  const startedAt = performance.now();
+  metrics.requestsTotal += 1;
+  metrics.activeRequests += 1;
+  let finalized = false;
+  const finalize = (): void => {
+    if (finalized) return;
+    finalized = true;
+    const durationMs = Math.max(0, performance.now() - startedAt);
+    metrics.activeRequests = Math.max(0, metrics.activeRequests - 1);
+    metrics.durationTotalMs += durationMs;
+    metrics.responsesByStatus.set(response.statusCode, (metrics.responsesByStatus.get(response.statusCode) ?? 0) + 1);
+    logger({
+      level: response.statusCode >= 500 ? "error" : "info",
+      event: "request.completed",
+      requestId,
+      method,
+      path,
+      status: response.statusCode,
+      durationMs: Math.round(durationMs * 1_000) / 1_000,
+    });
+  };
+  response.once("finish", finalize);
+  response.once("close", finalize);
   try {
     if ((request.url?.length ?? 0) > 2_048) {
       throw new DomainError("VALIDATION_FAILED", "Request target is too long", { httpStatus: 414 });
@@ -122,8 +178,13 @@ async function handleRequest(
       return;
     }
     if (method === "GET" && path === "/health/ready") {
-      const readiness = options.runtime.readiness();
+      const readiness = await options.runtime.readiness();
       sendJson(response, readiness.ready ? 200 : 503, { ...readiness, requestId });
+      return;
+    }
+    if (method === "GET" && path === "/metrics") {
+      authorizeMetrics(request, options.metricsTokenSha256);
+      sendText(response, 200, renderMetrics(metrics), "text/plain; version=0.0.4; charset=utf-8");
       return;
     }
 
@@ -160,26 +221,36 @@ async function handleRequest(
     }
 
     if (method === "POST" && path === "/v1/commands") {
-      const context = await authenticate(options, request, requestId);
+      const authenticated = await authenticate(options, request, requestId);
       const envelope = parseDispatchEnvelope(await readJsonBody(request, bodyLimit), "command");
       const key = requireIdempotencyKey(request);
-      const data = dispatchCommand(options.runtime, context, envelope.operation, envelope.input, key);
+      const context = operationContext(authenticated, `command:${envelope.operation}`, key);
+      const data = await dispatchCommand(
+        options.runtime,
+        options.externalBusinessEventReducerRegistry ?? externalBusinessEventReducerRegistry,
+        context,
+        envelope.operation,
+        envelope.input,
+        key,
+      );
       sendJson(response, 200, { data, meta: { requestId, command: envelope.operation } });
       return;
     }
     if (method === "POST" && path === "/v1/queries") {
       const context = await authenticate(options, request, requestId);
       const envelope = parseDispatchEnvelope(await readJsonBody(request, bodyLimit), "query");
-      const data = dispatchQuery(options.runtime, context, envelope.operation, envelope.input);
+      const data = await dispatchQuery(options.runtime, context, envelope.operation, envelope.input);
       sendJson(response, 200, { data, meta: { requestId, query: envelope.operation } });
       return;
     }
     if (method === "POST" && (path === "/v1/capabilities" || capabilityMatch?.[1] !== undefined)) {
-      const context = await authenticate(options, request, requestId);
+      const authenticated = await authenticate(options, request, requestId);
       const key = requireIdempotencyKey(request);
       const body = object(await readJsonBody(request, bodyLimit), "request body");
       const batchId = capabilityMatch?.[1] ?? body.batchId;
       const input = body.input ?? (capabilityMatch?.[1] === undefined ? undefined : body);
+      const operationName = typeof batchId === "string" ? batchId : "invalid";
+      const context = operationContext(authenticated, `capability:${operationName}`, key);
       const data = await dispatchCapability(options.runtime, options.capabilityRegistry, context, batchId, input, key);
       sendJson(response, 200, { data, meta: { requestId, batchId } });
       return;
@@ -235,6 +306,49 @@ function requireIdempotencyKey(request: IncomingMessage): string {
   return value;
 }
 
+function operationContext(context: ActorContext, operation: string, idempotencyKeyValue: string): ActorContext {
+  const operationId = createHash("sha256")
+    .update(`${context.tenantId}\n${context.actorId}\n${operation}\n${idempotencyKeyValue}`, "utf8")
+    .digest("hex");
+  return { ...context, operationId };
+}
+
+function authorizeMetrics(request: IncomingMessage, tokenSha256: string | undefined): void {
+  if (tokenSha256 === undefined) return;
+  const match = /^Bearer ([^\s]+)$/i.exec(headerValue(request, "authorization") ?? "");
+  if (match?.[1] === undefined) {
+    throw new DomainError("AUTH_UNAUTHENTICATED", "A metrics bearer token is required");
+  }
+  const presented = Buffer.from(createHash("sha256").update(match[1], "utf8").digest("hex"), "ascii");
+  const expected = Buffer.from(tokenSha256, "ascii");
+  if (presented.byteLength !== expected.byteLength || !timingSafeEqual(presented, expected)) {
+    throw new DomainError("AUTH_UNAUTHENTICATED", "Metrics bearer token is invalid");
+  }
+}
+
+function renderMetrics(metrics: ApiMetrics): string {
+  const lines = [
+    "# HELP ltm_api_uptime_seconds Process uptime for this API server.",
+    "# TYPE ltm_api_uptime_seconds gauge",
+    `ltm_api_uptime_seconds ${Math.max(0, (Date.now() - metrics.startedAtMs) / 1_000).toFixed(3)}`,
+    "# HELP ltm_api_requests_total HTTP requests received.",
+    "# TYPE ltm_api_requests_total counter",
+    `ltm_api_requests_total ${metrics.requestsTotal}`,
+    "# HELP ltm_api_active_requests Requests currently being handled.",
+    "# TYPE ltm_api_active_requests gauge",
+    `ltm_api_active_requests ${metrics.activeRequests}`,
+    "# HELP ltm_api_request_duration_milliseconds_total Aggregate request duration.",
+    "# TYPE ltm_api_request_duration_milliseconds_total counter",
+    `ltm_api_request_duration_milliseconds_total ${metrics.durationTotalMs.toFixed(3)}`,
+    "# HELP ltm_api_responses_total HTTP responses by status code.",
+    "# TYPE ltm_api_responses_total counter",
+  ];
+  for (const [status, count] of [...metrics.responsesByStatus].sort(([left], [right]) => left - right)) {
+    lines.push(`ltm_api_responses_total{status="${status}"} ${count}`);
+  }
+  return `${lines.join("\n")}\n`;
+}
+
 async function readJsonBody(request: IncomingMessage, limit: number): Promise<unknown> {
   const contentType = headerValue(request, "content-type")?.split(";", 1)[0]?.trim().toLowerCase();
   if (contentType !== "application/json") {
@@ -282,11 +396,12 @@ function headerValue(request: IncomingMessage, name: string): string | undefined
 }
 
 function applySecurityHeaders(response: ServerResponse): void {
-  response.setHeader("content-security-policy", "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
+  response.setHeader("content-security-policy", "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
   response.setHeader("cross-origin-opener-policy", "same-origin");
   response.setHeader("cross-origin-resource-policy", "same-origin");
   response.setHeader("permissions-policy", "camera=(), microphone=(), geolocation=(), payment=()");
   response.setHeader("referrer-policy", "no-referrer");
+  response.setHeader("strict-transport-security", "max-age=31536000; includeSubDomains");
   response.setHeader("x-content-type-options", "nosniff");
   response.setHeader("x-frame-options", "DENY");
 }
@@ -296,6 +411,15 @@ function sendJson(response: ServerResponse, status: number, value: unknown): voi
   response.statusCode = status;
   response.setHeader("cache-control", "no-store");
   response.setHeader("content-type", "application/json; charset=utf-8");
+  response.setHeader("content-length", body.byteLength);
+  response.end(body);
+}
+
+function sendText(response: ServerResponse, status: number, value: string, contentType: string): void {
+  const body = Buffer.from(value, "utf8");
+  response.statusCode = status;
+  response.setHeader("cache-control", "no-store");
+  response.setHeader("content-type", contentType);
   response.setHeader("content-length", body.byteLength);
   response.end(body);
 }
@@ -333,7 +457,7 @@ function writeError(
     method,
     path,
     status: 500,
-    error: error instanceof Error ? error.message : "Unknown error",
+    error: error instanceof Error ? error.name : "UnknownError",
   });
   sendJson(response, 500, {
     error: { code: "INTERNAL_ERROR", message: "Internal server error", retryable: false, details: {} },
@@ -379,8 +503,13 @@ function serveStatic(
   response.setHeader("content-length", body.byteLength);
   response.setHeader(
     "cache-control",
-    realCandidate.endsWith("index.html") ? "no-cache" : "public, max-age=3600, immutable",
+    isContentHashedAsset(realCandidate) ? "public, max-age=31536000, immutable" : "no-cache",
   );
   response.end(request.method === "HEAD" ? undefined : body);
   return true;
+}
+
+function isContentHashedAsset(path: string): boolean {
+  const filename = path.split(sep).at(-1) ?? "";
+  return /-[a-f0-9]{8,64}\.[A-Za-z0-9]+$/i.test(filename) || /\.[a-f0-9]{8,64}\.[A-Za-z0-9]+$/i.test(filename);
 }

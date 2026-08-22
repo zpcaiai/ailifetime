@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-life-time-machine.example/contracts/upstream-control-evidence-bundle.v1.schema.json",
+  "title": "B119/B121/B122 production evidence bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "tenantId", "environment", "controls"],
+  "properties": {
+    "version": { "const": "ltm.upstream-control-evidence-bundle.v1" },
+    "tenantId": { "$ref": "#/$defs/identifier" },
+    "environment": { "const": "production" },
+    "controls": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/control" }
+    }
+  },
+  "$defs": {
+    "identifier": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["batchId", "artifactPath", "evidence"],
+      "properties": {
+        "batchId": { "enum": ["B119", "B121", "B122"] },
+        "artifactPath": { "type": "string", "minLength": 1 },
+        "evidence": { "$ref": "#/$defs/evidence" }
+      }
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenantId", "batchId", "operation", "kind", "provider", "artifactSha256", "environment", "subjectId"],
+      "properties": {
+        "tenantId": { "$ref": "#/$defs/identifier" },
+        "batchId": { "enum": ["B119", "B121", "B122"] },
+        "operation": { "enum": ["approveConfigurationChange", "approveCapacityGate", "recordResilienceExercise"] },
+        "kind": { "enum": ["configuration-change-report", "capacity-test-report", "resilience-exercise-report"] },
+        "provider": { "$ref": "#/$defs/identifier" },
+        "artifactSha256": { "$ref": "#/$defs/digest" },
+        "environment": { "const": "production" },
+        "subjectId": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "evidenceId", "tenantId", "binding", "scope", "issuer", "provider", "artifactSha256", "issuedAt", "expiresAt", "nonce", "replayPolicy", "algorithm", "keyId", "signature"],
+      "properties": {
+        "version": { "const": "ltm.external-evidence.v1" },
+        "evidenceId": { "$ref": "#/$defs/identifier" },
+        "tenantId": { "$ref": "#/$defs/identifier" },
+        "binding": { "$ref": "#/$defs/binding" },
+        "scope": { "type": "string", "pattern": "^ltm-evidence:v1:[a-f0-9]{64}$" },
+        "issuer": { "$ref": "#/$defs/identifier" },
+        "provider": { "$ref": "#/$defs/identifier" },
+        "artifactSha256": { "$ref": "#/$defs/digest" },
+        "canonicalClaimsSha256": { "$ref": "#/$defs/digest" },
+        "businessEventSha256": { "$ref": "#/$defs/digest" },
+        "issuedAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "nonce": { "$ref": "#/$defs/identifier" },
+        "replayPolicy": { "enum": ["reusable", "single_use"] },
+        "algorithm": { "const": "Ed25519" },
+        "keyId": { "$ref": "#/$defs/identifier" },
+        "signature": { "type": "string", "pattern": "^[A-Za-z0-9_-]{80,100}$" }
+      }
+    }
+  }
+}

@@ -76,8 +76,18 @@ function transitionBatchOrchestration(input: JsonObject): JsonObject {
 }
 
 const definitions: readonly DomainCapabilityDefinition[] = [
-  defineCapability("B00", SKILL, "recordRepositoryBaseline", recordRepositoryBaseline),
-  defineCapability("B50", SKILL, "transitionBatchOrchestration", transitionBatchOrchestration, { permission: "orchestration.batch.transition" }),
+  defineCapability("B00", SKILL, "recordRepositoryBaseline", recordRepositoryBaseline, {
+    mode: "resource",
+    collection: "orchestration.baselines",
+    recordIdField: "repositoryId",
+  }),
+  defineCapability("B50", SKILL, "transitionBatchOrchestration", transitionBatchOrchestration, {
+    permission: "orchestration.batch.transition",
+    mode: "state-transition",
+    collection: "orchestration.batches",
+    recordIdField: "batchId",
+    transition: { fromField: "fromState", toField: "toState", stateField: "state", initialFromStates: ["planned"] },
+  }),
 ];
 
 export function registerOrchestratingLifeTimeMachineCapabilities(registry: CapabilityRegistry): void {

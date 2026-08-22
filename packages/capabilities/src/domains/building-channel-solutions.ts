@@ -1,4 +1,5 @@
 import { DomainError } from "@ltm/core";
+import { capabilityEvidenceScope } from "@ltm/providers";
 import type { CapabilityInvocation, CapabilityRegistry, JsonObject } from "../registry.js";
 import { requiredBoolean, requiredString, stringList } from "../validation.js";
 import {
@@ -41,7 +42,7 @@ function processGiftOrMemorial(input: JsonObject): JsonObject {
   return { channelOrderId, participantIds, subjectStatus, recipientClaimed, authorizationEvidenceId, interactionMode, paymentState, purpose: "gift_or_memorial" };
 }
 
-function configureEducationExperience(input: JsonObject): JsonObject {
+function configureEducationExperience(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
   const experienceId = requiredString(input, "experienceId");
   const scenario = assertKnownState(requiredString(input, "scenario"), ["retirement_vision", "future_letter", "savings_reflection", "family_dialogue"] as const, "scenario");
   const regulatedUse = assertKnownState(
@@ -53,10 +54,52 @@ function configureEducationExperience(input: JsonObject): JsonObject {
   const photoOptional = requiredBoolean(input, "photoOptional");
   const productRecommendationSeparated = requiredBoolean(input, "productRecommendationSeparated");
   const approvalEvidenceIds = stringList(input, "approvalEvidenceIds", { min: 1, unique: true });
+  const assuranceProviderId = evidenceProviderId(requiredString(input, "assuranceProviderId"));
+  const providerEnvironment = assertKnownState(
+    requiredString(input, "providerEnvironment"),
+    ["test", "sandbox", "staging", "production"] as const,
+    "providerEnvironment",
+  );
+  const assuranceArtifactSha256 = digest(requiredString(input, "assuranceArtifactSha256"), "assuranceArtifactSha256");
   if (regulatedUse !== "education_only" || facialDataTransferred || !photoOptional || !productRecommendationSeparated) {
     throw new DomainError("AUTH_FORBIDDEN", "education channel is isolated from regulated decisioning and must work without a photo");
   }
-  return { experienceId, scenario, regulatedUse, facialDataTransferred, photoOptional, productRecommendationSeparated, approvalEvidenceIds };
+  const evidenceScope = capabilityEvidenceScope({
+    tenantId: invocation.actor.tenantId,
+    batchId: "B37",
+    operation: "configureEducationExperience",
+    kind: "education-assurance",
+    provider: `education-assurance:${assuranceProviderId}`,
+    artifactSha256: assuranceArtifactSha256,
+    environment: providerEnvironment,
+    subjectId: experienceId,
+  });
+  return {
+    experienceId,
+    scenario,
+    regulatedUse,
+    facialDataTransferred,
+    photoOptional,
+    productRecommendationSeparated,
+    approvalEvidenceIds,
+    externalEvidenceIds: approvalEvidenceIds,
+    assuranceProviderId,
+    providerEnvironment,
+    assuranceArtifactSha256,
+    evidenceScope,
+  };
+}
+
+function digest(value: string, field: string): string {
+  if (!/^[a-f0-9]{64}$/.test(value)) throw new DomainError("VALIDATION_FAILED", `${field} must be a lowercase SHA-256 digest`);
+  return value;
+}
+
+function evidenceProviderId(value: string): string {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/.test(value)) {
+    throw new DomainError("VALIDATION_FAILED", "assuranceProviderId is invalid");
+  }
+  return value;
 }
 
 const CRM_FIELDS = new Set(["name", "contact", "selectedTopic", "sourceSessionId"]);
@@ -78,8 +121,13 @@ function handoffLead(input: JsonObject): JsonObject {
 }
 
 const definitions: readonly DomainCapabilityDefinition[] = [
-  defineCapability("B35", SKILL, "operateStudioSession", operateStudioSession, { consent: participantConsent() }),
+  defineCapability("B35", SKILL, "operateStudioSession", operateStudioSession, {
+    consent: participantConsent(), mode: "resource", collection: "channels.studio-session-actions",
+  }),
   defineCapability("B36", SKILL, "processGiftOrMemorial", processGiftOrMemorial, {
+    mode: "external-command",
+    collection: "channels.gift-memorial-commands",
+    recordIdField: "channelOrderId",
     consent(data, invocation) {
       return data.subjectStatus === "deceased"
         ? []
@@ -88,8 +136,15 @@ const definitions: readonly DomainCapabilityDefinition[] = [
   }),
   defineCapability("B37", SKILL, "configureEducationExperience", configureEducationExperience, {
     permission: "channel.education.approve",
+    mode: "attestation",
+    collection: "channels.education-attestations",
+    recordIdField: "experienceId",
+    requiresExternalEvidence: true,
+    externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
   }),
-  defineCapability("B38", SKILL, "handoffLead", handoffLead, { consent: participantConsent() }),
+  defineCapability("B38", SKILL, "handoffLead", handoffLead, {
+    consent: participantConsent(), mode: "external-command", collection: "channels.crm-handoff-commands", recordIdField: "handoffId",
+  }),
 ];
 
 export function registerBuildingChannelSolutionsCapabilities(registry: CapabilityRegistry): void {

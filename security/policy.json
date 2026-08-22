@@ -1,0 +1,40 @@
+{
+  "version": "ltm.security-policy.v1",
+  "severityGate": ["critical", "high"],
+  "requiredCiEvidence": [
+    "repository-secret-scan",
+    "codeql-sarif",
+    "pnpm-audit-json",
+    "trivy-config-json",
+    "trivy-api-image-json",
+    "trivy-workers-image-json",
+    "trivy-integration-gateway-image-json",
+    "ltm-dast-report"
+  ],
+  "findingSlaDays": { "critical": 1, "high": 7, "medium": 30, "low": 90 },
+  "maximumExceptionDays": { "critical": 7, "high": 30, "medium": 90, "low": 180 },
+  "dastCategories": ["auth", "tenant_idor", "upload_signed_url", "webhook_payment", "ssrf", "xss", "csrf", "admin"],
+  "productionOciRoles": ["api", "workers", "integration-gateway", "postgres", "redis", "object-storage"],
+  "requiredProductionUpstreamEvidence": {
+    "B119": {
+      "operation": "approveConfigurationChange",
+      "kind": "configuration-change-report",
+      "providerPrefix": "change-control:"
+    },
+    "B121": {
+      "operation": "approveCapacityGate",
+      "kind": "capacity-test-report",
+      "providerPrefix": "load-test:"
+    },
+    "B122": {
+      "operation": "recordResilienceExercise",
+      "kind": "resilience-exercise-report",
+      "providerPrefix": "resilience-auditor:"
+    }
+  },
+  "productionHeaders": {
+    "hstsMinimumSeconds": 31536000,
+    "hstsIncludeSubDomains": true,
+    "cspForbidden": ["'unsafe-inline'", "'unsafe-eval'"]
+  }
+}

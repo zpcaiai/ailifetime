@@ -1,4 +1,4 @@
-import type { ActorContext, LifeTimeMachineRuntime } from "@ltm/core";
+import type { ActorContext, LifeTimeMachineRuntimePort } from "@ltm/core";
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -10,13 +10,24 @@ export interface CapabilityInvocation {
   input: JsonObject;
 }
 
+export type CapabilityMode =
+  | "resource"
+  | "state-transition"
+  | "consent-write"
+  | "ledger-post"
+  | "partner-settlement-ledger"
+  | "inbox-event"
+  | "external-command"
+  | "attestation";
+
 export interface CapabilityDefinition {
   batchId: `B${string}`;
   skill: string;
   operation: string;
+  mode: CapabilityMode;
   requirements: readonly [`${string}-R01`, `${string}-R02`, `${string}-R03`, `${string}-R04`, `${string}-R05`];
   requiresExternalEvidence?: boolean;
-  execute(runtime: LifeTimeMachineRuntime, invocation: CapabilityInvocation): JsonValue | Promise<JsonValue>;
+  execute(runtime: LifeTimeMachineRuntimePort, invocation: CapabilityInvocation): Promise<JsonValue>;
 }
 
 export class CapabilityRegistry {
@@ -40,7 +51,7 @@ export class CapabilityRegistry {
     return [...this.#definitions.values()].sort((left, right) => Number(left.batchId.slice(1)) - Number(right.batchId.slice(1)));
   }
 
-  async execute(runtime: LifeTimeMachineRuntime, batchId: string, invocation: CapabilityInvocation): Promise<JsonValue> {
+  async execute(runtime: LifeTimeMachineRuntimePort, batchId: string, invocation: CapabilityInvocation): Promise<JsonValue> {
     const definition = this.#definitions.get(batchId);
     if (!definition) {
       throw new Error(`Unknown capability: ${batchId}`);

@@ -2,11 +2,16 @@ import type { CapabilityRegistry, JsonValue as CapabilityJsonValue } from "@ltm/
 import { DomainError } from "@ltm/core";
 import type {
   ActorContext,
+  EvidenceEnvironment,
+  ExternalBusinessEventReducerRegistry,
+  ExternalCommandState,
   GrantorCapacity,
   JsonObject,
   LedgerDirection,
-  LifeTimeMachineRuntime,
+  LifeTimeMachineRuntimePort,
   OutboxStatus,
+  SignedExternalEvidence,
+  VerifiedBusinessEvent,
 } from "@ltm/core";
 
 type InputObject = Record<string, unknown>;
@@ -19,6 +24,10 @@ export const COMMANDS = [
   "consent.withdraw",
   "ledger.post",
   "inbox.receive",
+  "evidence.register",
+  "evidence.revoke",
+  "external-command.transition",
+  "external-event.apply",
 ] as const;
 
 export const QUERIES = [
@@ -33,6 +42,9 @@ export const QUERIES = [
   "outbox.list",
   "audit.list",
   "audit.verify",
+  "evidence.get",
+  "evidence.list",
+  "external-command.get",
 ] as const;
 
 export interface DispatchEnvelope {
@@ -44,12 +56,14 @@ export interface CapabilityCatalogEntry {
   readonly batchId: string;
   readonly skill: string;
   readonly operation: string;
+  readonly mode: string;
   readonly requirements: readonly string[];
   readonly requiresExternalEvidence: boolean;
 }
 
 export function parseDispatchEnvelope(body: unknown, operationField: "command" | "query"): DispatchEnvelope {
   const value = object(body, "request body");
+  assertOnlyKeys(value, [operationField, "input"], "request body");
   return {
     operation: string(value[operationField], operationField, 160),
     input: object(value.input ?? {}, "input"),
@@ -61,13 +75,14 @@ export function capabilityCatalog(registry: CapabilityRegistry): readonly Capabi
     batchId: definition.batchId,
     skill: definition.skill,
     operation: definition.operation,
+    mode: definition.mode,
     requirements: definition.requirements,
     requiresExternalEvidence: definition.requiresExternalEvidence ?? false,
   }));
 }
 
 export async function dispatchCapability(
-  runtime: LifeTimeMachineRuntime,
+  runtime: LifeTimeMachineRuntimePort,
   registry: CapabilityRegistry,
   context: ActorContext,
   batchIdValue: unknown,
@@ -83,13 +98,14 @@ export async function dispatchCapability(
   return registry.execute(runtime, batchId, { actor: context, idempotencyKey, input });
 }
 
-export function dispatchCommand(
-  runtime: LifeTimeMachineRuntime,
+export async function dispatchCommand(
+  runtime: LifeTimeMachineRuntimePort,
+  externalBusinessEventReducers: ExternalBusinessEventReducerRegistry,
   context: ActorContext,
   command: string,
   input: InputObject,
   idempotencyKey: string,
-): unknown {
+): Promise<unknown> {
   switch (command) {
     case "record.create":
       return runtime.createRecord(context, {
@@ -197,17 +213,81 @@ export function dispatchCommand(
         eventType: string(input.eventType, "input.eventType", 128),
         payload: jsonObject(input.payload, "input.payload"),
       });
+    case "evidence.register": {
+      return runtime.registerExternalEvidence(context, {
+        evidence: signedExternalEvidence(input.evidence, "input.evidence"),
+        idempotencyKey,
+      });
+    }
+    case "evidence.revoke":
+      return runtime.revokeExternalEvidence(context, {
+        evidenceId: string(input.evidenceId, "input.evidenceId", 128),
+        expectedVersion: integer(input.expectedVersion, "input.expectedVersion", 1),
+        reason: string(input.reason, "input.reason", 500),
+        idempotencyKey,
+      });
+    case "external-command.transition":
+      assertOnlyKeys(input, [
+        "commandId",
+        "batchId",
+        "operation",
+        "aggregateCollection",
+        "aggregateId",
+        "toState",
+        "providerOperationId",
+        "evidenceId",
+        "details",
+      ], "input");
+      return runtime.transitionExternalCommand(context, {
+        commandId: string(input.commandId, "input.commandId", 128),
+        batchId: string(input.batchId, "input.batchId", 8) as `B${string}`,
+        operation: string(input.operation, "input.operation", 128),
+        aggregateCollection: string(input.aggregateCollection, "input.aggregateCollection", 80),
+        aggregateId: string(input.aggregateId, "input.aggregateId", 128),
+        toState: oneOf(
+          input.toState,
+          "input.toState",
+          ["dispatched", "acknowledged"] as const,
+        ) as ExternalCommandState,
+        ...(input.providerOperationId === undefined
+          ? {}
+          : { providerOperationId: nullableString(input.providerOperationId, "input.providerOperationId", 128) }),
+        ...(input.evidenceId === undefined
+          ? {}
+          : { evidenceId: nullableString(input.evidenceId, "input.evidenceId", 128) }),
+        ...(input.details === undefined ? {} : { details: jsonObject(input.details, "input.details") }),
+        idempotencyKey,
+      });
+    case "external-event.apply": {
+      if (Object.prototype.hasOwnProperty.call(input, "reducer")) {
+        throw new DomainError("AUTH_FORBIDDEN", "External business event reducers cannot be supplied by callers");
+      }
+      assertOnlyKeys(input, ["event", "evidence"], "input");
+      const event = verifiedBusinessEvent(input.event, "input.event");
+      const reducer = externalBusinessEventReducers.resolve(event);
+      if (reducer === undefined) {
+        throw new DomainError("EXTERNAL_ADAPTER_UNAVAILABLE", "No trusted reducer is registered for this business event", {
+          details: { batchId: event.batchId, operation: event.operation, eventType: event.eventType },
+        });
+      }
+      return runtime.applyExternalBusinessEvent(context, {
+        event,
+        evidence: signedExternalEvidence(input.evidence, "input.evidence"),
+        reducer,
+        idempotencyKey,
+      });
+    }
     default:
       throw new DomainError("RESOURCE_NOT_FOUND", "Command was not found", { details: { command } });
   }
 }
 
-export function dispatchQuery(
-  runtime: LifeTimeMachineRuntime,
+export async function dispatchQuery(
+  runtime: LifeTimeMachineRuntimePort,
   context: ActorContext,
   query: string,
   input: InputObject,
-): unknown {
+): Promise<unknown> {
   switch (query) {
     case "record.get":
       return runtime.getRecord(
@@ -264,6 +344,16 @@ export function dispatchQuery(
       return runtime.listAudit(context, input.limit === undefined ? 100 : integer(input.limit, "input.limit", 1, 500));
     case "audit.verify":
       return runtime.verifyAuditChain(context);
+    case "evidence.get":
+      return runtime.getExternalEvidence(context, string(input.evidenceId, "input.evidenceId", 128));
+    case "evidence.list":
+      return runtime.listExternalEvidence(context, {
+        ...(input.scope === undefined ? {} : { scope: string(input.scope, "input.scope", 512) }),
+        ...(input.limit === undefined ? {} : { limit: integer(input.limit, "input.limit", 1, 200) }),
+      });
+    case "external-command.get":
+      assertOnlyKeys(input, ["commandId"], "input");
+      return runtime.getExternalCommand(context, string(input.commandId, "input.commandId", 128));
     default:
       throw new DomainError("RESOURCE_NOT_FOUND", "Query was not found", { details: { query } });
   }
@@ -341,4 +431,112 @@ function oneOf<T extends string>(value: unknown, label: string, allowed: readonl
     throw new DomainError("VALIDATION_FAILED", `${label} must be one of: ${allowed.join(", ")}`);
   }
   return value as T;
+}
+
+function signedExternalEvidence(value: unknown, label: string): SignedExternalEvidence {
+  const evidence = object(value, label);
+  assertOnlyKeys(evidence, [
+    "version",
+    "evidenceId",
+    "tenantId",
+    "issuer",
+    "provider",
+    "environment",
+    "scope",
+    "artifactSha256",
+    "canonicalClaimsSha256",
+    "businessEventSha256",
+    "issuedAt",
+    "expiresAt",
+    "nonce",
+    "replayPolicy",
+    "algorithm",
+    "keyId",
+    "signature",
+  ], label);
+  return {
+    version: oneOf(evidence.version, `${label}.version`, ["ltm.external-evidence.v1"] as const),
+    evidenceId: string(evidence.evidenceId, `${label}.evidenceId`, 128),
+    tenantId: string(evidence.tenantId, `${label}.tenantId`, 128),
+    issuer: string(evidence.issuer, `${label}.issuer`, 128),
+    provider: string(evidence.provider, `${label}.provider`, 128),
+    environment: oneOf(
+      evidence.environment,
+      `${label}.environment`,
+      ["test", "sandbox", "staging", "production"] as const,
+    ) as EvidenceEnvironment,
+    scope: string(evidence.scope, `${label}.scope`, 512),
+    artifactSha256: string(evidence.artifactSha256, `${label}.artifactSha256`, 64),
+    ...(evidence.canonicalClaimsSha256 === undefined
+      ? {}
+      : { canonicalClaimsSha256: string(evidence.canonicalClaimsSha256, `${label}.canonicalClaimsSha256`, 64) }),
+    ...(evidence.businessEventSha256 === undefined
+      ? {}
+      : { businessEventSha256: string(evidence.businessEventSha256, `${label}.businessEventSha256`, 64) }),
+    issuedAt: string(evidence.issuedAt, `${label}.issuedAt`, 64),
+    expiresAt: string(evidence.expiresAt, `${label}.expiresAt`, 64),
+    nonce: string(evidence.nonce, `${label}.nonce`, 128),
+    replayPolicy: oneOf(evidence.replayPolicy, `${label}.replayPolicy`, ["reusable", "single_use"] as const),
+    algorithm: oneOf(evidence.algorithm, `${label}.algorithm`, ["Ed25519"] as const),
+    keyId: string(evidence.keyId, `${label}.keyId`, 128),
+    signature: string(evidence.signature, `${label}.signature`, 160),
+  };
+}
+
+function verifiedBusinessEvent(value: unknown, label: string): VerifiedBusinessEvent {
+  const event = object(value, label);
+  assertOnlyKeys(event, [
+    "version",
+    "eventId",
+    "tenantId",
+    "batchId",
+    "operation",
+    "provider",
+    "subjectType",
+    "subjectId",
+    "eventType",
+    "providerOccurredAt",
+    "sequence",
+    "correlationId",
+    "artifactSha256",
+    "evidenceId",
+    "evidenceScope",
+    "canonicalClaims",
+    "canonicalClaimsSha256",
+    "businessEventSha256",
+  ], label);
+  const sequence = event.sequence;
+  if (sequence !== null && !Number.isSafeInteger(sequence)) {
+    throw new DomainError("VALIDATION_FAILED", `${label}.sequence must be null or an integer`);
+  }
+  return {
+    version: oneOf(event.version, `${label}.version`, ["ltm.external-business-event.v1"] as const),
+    eventId: string(event.eventId, `${label}.eventId`, 128),
+    tenantId: string(event.tenantId, `${label}.tenantId`, 128),
+    batchId: string(event.batchId, `${label}.batchId`, 8) as `B${string}`,
+    operation: string(event.operation, `${label}.operation`, 128),
+    provider: string(event.provider, `${label}.provider`, 128),
+    subjectType: string(event.subjectType, `${label}.subjectType`, 128),
+    subjectId: string(event.subjectId, `${label}.subjectId`, 128),
+    eventType: string(event.eventType, `${label}.eventType`, 128),
+    providerOccurredAt: string(event.providerOccurredAt, `${label}.providerOccurredAt`, 64),
+    sequence: sequence as number | null,
+    correlationId: string(event.correlationId, `${label}.correlationId`, 128),
+    artifactSha256: string(event.artifactSha256, `${label}.artifactSha256`, 64),
+    evidenceId: string(event.evidenceId, `${label}.evidenceId`, 128),
+    evidenceScope: string(event.evidenceScope, `${label}.evidenceScope`, 512),
+    canonicalClaims: jsonObject(event.canonicalClaims, `${label}.canonicalClaims`),
+    canonicalClaimsSha256: string(event.canonicalClaimsSha256, `${label}.canonicalClaimsSha256`, 64),
+    businessEventSha256: string(event.businessEventSha256, `${label}.businessEventSha256`, 64),
+  };
+}
+
+function assertOnlyKeys(value: InputObject, allowed: readonly string[], label: string): void {
+  const allowedSet = new Set(allowed);
+  const unexpected = Object.keys(value).filter((key) => !allowedSet.has(key)).sort();
+  if (unexpected.length > 0) {
+    throw new DomainError("VALIDATION_FAILED", `${label} contains unsupported fields`, {
+      details: { fields: unexpected },
+    });
+  }
 }

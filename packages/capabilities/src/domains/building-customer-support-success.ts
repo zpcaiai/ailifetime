@@ -186,14 +186,38 @@ function feedback(input: JsonObject): JsonObject {
 }
 
 const definitions: readonly DomainCapabilityDefinition[] = [
-  defineCapability("B79", SKILL, "publishHelpArticle", helpArticle, { permission: "support.content.publish" }),
-  defineCapability("B80", SKILL, "createSupportTicket", supportTicket, { permission: "support.ticket.create" }),
-  defineCapability("B81", SKILL, "recordSupportAssistantSession", supportAssistant, { permission: "support.assistant.use" }),
-  defineCapability("B82", SKILL, "startControlledSupportSession", supportSession, { permission: "support.session.start" }),
-  defineCapability("B83", SKILL, "requestControlledSupportAction", supportAction, { permission: "support.remedy.request" }),
-  defineCapability("B84", SKILL, "recordPartnerOpportunity", salesOpportunity, { permission: "sales.opportunity.manage" }),
-  defineCapability("B85", SKILL, "updatePartnerSuccessPlan", successPlan, { permission: "customer-success.plan.manage" }),
-  defineCapability("B86", SKILL, "recordGovernedFeedback", feedback, { permission: "support.feedback.manage" }),
+  defineCapability("B79", SKILL, "publishHelpArticle", helpArticle, {
+    permission: "support.content.publish",
+    mode: "resource",
+  }),
+  defineCapability("B80", SKILL, "createSupportTicket", supportTicket, {
+    permission: "support.ticket.create",
+    mode: "resource",
+  }),
+  defineCapability("B81", SKILL, "recordSupportAssistantSession", supportAssistant, {
+    permission: "support.assistant.use",
+    mode: "resource",
+  }),
+  defineCapability("B82", SKILL, "startControlledSupportSession", supportSession, {
+    permission: "support.session.start",
+    mode: "resource",
+  }),
+  defineCapability("B83", SKILL, "requestControlledSupportAction", supportAction, {
+    permission: "support.remedy.request",
+    mode: "external-command",
+  }),
+  defineCapability("B84", SKILL, "recordPartnerOpportunity", salesOpportunity, {
+    permission: "sales.opportunity.manage",
+    mode: "resource",
+  }),
+  defineCapability("B85", SKILL, "updatePartnerSuccessPlan", successPlan, {
+    permission: "customer-success.plan.manage",
+    mode: "resource",
+  }),
+  defineCapability("B86", SKILL, "recordGovernedFeedback", feedback, {
+    permission: "support.feedback.manage",
+    mode: "resource",
+  }),
 ];
 
 export function registerBuildingCustomerSupportSuccessCapabilities(registry: CapabilityRegistry): void {

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-life-time-machine.example/contracts/supply-chain-attestation.v1.schema.json",
+  "title": "Life Time Machine supply-chain attestation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "claims", "signature", "algorithm", "keyId", "trustTier", "publicKeyPem"],
+  "properties": {
+    "version": { "const": "ltm.supply-chain-attestation.v1" },
+    "claims": {
+      "type": "object",
+      "required": ["version", "environment", "sourceDateEpoch", "sourceRevision", "lockfileSha256", "artifactManifestSha256", "documents"],
+      "properties": {
+        "version": { "const": "ltm.supply-chain-claims.v1" },
+        "environment": { "enum": ["ci", "staging", "production"] },
+        "sourceDateEpoch": { "type": "integer", "minimum": 0 },
+        "sourceRevision": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "lockfileSha256": { "$ref": "#/$defs/sha256" },
+        "artifactManifestSha256": { "$ref": "#/$defs/sha256" },
+        "documents": { "type": "object", "minProperties": 5 }
+      }
+    },
+    "signature": { "type": "string", "minLength": 80, "maxLength": 128 },
+    "algorithm": { "const": "Ed25519" },
+    "keyId": { "type": "string", "pattern": "^ed25519:[a-f0-9]{64}$" },
+    "trustTier": { "enum": ["ci", "staging", "production"] },
+    "publicKeyPem": { "type": "string", "pattern": "^-----BEGIN PUBLIC KEY-----" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}

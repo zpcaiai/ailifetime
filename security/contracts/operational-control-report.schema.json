@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-life-time-machine.example/contracts/operational-control-report.v1.schema.json",
+  "title": "Signed operational control report",
+  "oneOf": [
+    { "$ref": "#/$defs/configurationChange" },
+    { "$ref": "#/$defs/capacityTest" },
+    { "$ref": "#/$defs/resilienceExercise" }
+  ],
+  "$defs": {
+    "strings": { "type": "array", "maxItems": 256, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 256 } },
+    "nonemptyStrings": { "allOf": [{ "$ref": "#/$defs/strings" }, { "minItems": 1 }] },
+    "configurationChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "changeId", "targetEnvironment", "schemaVersion", "changedFields", "driftFindingsCount", "disabledNonWaivableControls", "rollbackVerified", "violations", "passed"],
+      "properties": {
+        "version": { "const": "ltm.configuration-change-report.v1" },
+        "changeId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "targetEnvironment": { "const": "production" },
+        "schemaVersion": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "changedFields": { "$ref": "#/$defs/nonemptyStrings" },
+        "driftFindingsCount": { "const": 0 },
+        "disabledNonWaivableControls": { "type": "array", "maxItems": 0 },
+        "rollbackVerified": { "const": true },
+        "violations": { "type": "array", "maxItems": 0 },
+        "passed": { "const": true }
+      }
+    },
+    "capacityTest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "testRunId", "scenarios", "observedP95Ms", "maxP95Ms", "observedErrorRate", "maxErrorRate", "syntheticDataOnly", "paidTasksProtected", "tenantFairnessVerified", "violations", "passed"],
+      "properties": {
+        "version": { "const": "ltm.capacity-test-report.v1" },
+        "testRunId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "scenarios": { "$ref": "#/$defs/nonemptyStrings" },
+        "observedP95Ms": { "type": "number", "minimum": 0 },
+        "maxP95Ms": { "type": "number", "minimum": 1 },
+        "observedErrorRate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "maxErrorRate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "syntheticDataOnly": { "const": true },
+        "paidTasksProtected": { "const": true },
+        "tenantFairnessVerified": { "const": true },
+        "violations": { "type": "array", "maxItems": 0 },
+        "passed": { "const": true }
+      }
+    },
+    "resilienceExercise": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "exerciseId", "targetRtoSeconds", "observedRtoSeconds", "targetRpoSeconds", "observedRpoSeconds", "failoverRegion", "cancellationPriorityVerified", "deletionResurrectionPrevented", "duplicateSideEffectsPrevented", "violations", "passed"],
+      "properties": {
+        "version": { "const": "ltm.resilience-exercise-report.v1" },
+        "exerciseId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "targetRtoSeconds": { "type": "number", "minimum": 0 },
+        "observedRtoSeconds": { "type": "number", "minimum": 0 },
+        "targetRpoSeconds": { "type": "number", "minimum": 0 },
+        "observedRpoSeconds": { "type": "number", "minimum": 0 },
+        "failoverRegion": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "cancellationPriorityVerified": { "const": true },
+        "deletionResurrectionPrevented": { "const": true },
+        "duplicateSideEffectsPrevented": { "const": true },
+        "violations": { "type": "array", "maxItems": 0 },
+        "passed": { "const": true }
+      }
+    }
+  }
+}

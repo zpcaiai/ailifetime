@@ -1,14 +1,17 @@
 .env
 .env.*
 !.env.example
+.DS_Store
 node_modules/
 .next/
 dist/
 build/
 apps/web/public/assets/app.js
+apps/web/public/assets/surface*.js
 .gradle/
 .venv/
 .data/
+.artifacts/
 __pycache__/
 *.pyc
 coverage/

@@ -109,12 +109,24 @@ function scheduleAnnualRitual(input: JsonObject): JsonObject {
 }
 
 const definitions: readonly DomainCapabilityDefinition[] = [
-  defineCapability("B19", SKILL, "updateFamilyGraph", updateFamilyGraph, { consent: participantConsent() }),
-  defineCapability("B20", SKILL, "composeFamilyScene", composeFamilyScene, { consent: participantConsent() }),
-  defineCapability("B21", SKILL, "applyChildSafeguard", applyChildSafeguard, { consent: participantConsent() }),
-  defineCapability("B22", SKILL, "createFutureNarrative", createFutureNarrative, { consent: participantConsent() }),
-  defineCapability("B23", SKILL, "converseWithFutureSelf", converseWithFutureSelf, { consent: participantConsent() }),
-  defineCapability("B24", SKILL, "scheduleAnnualRitual", scheduleAnnualRitual, { consent: participantConsent() }),
+  defineCapability("B19", SKILL, "updateFamilyGraph", updateFamilyGraph, {
+    consent: participantConsent(), mode: "resource", collection: "family.graph-operations",
+  }),
+  defineCapability("B20", SKILL, "composeFamilyScene", composeFamilyScene, {
+    consent: participantConsent(), mode: "resource", collection: "family.scenes", recordIdField: "sceneId",
+  }),
+  defineCapability("B21", SKILL, "applyChildSafeguard", applyChildSafeguard, {
+    consent: participantConsent(), mode: "resource", collection: "safety.child-controls", recordIdField: "safeguardId",
+  }),
+  defineCapability("B22", SKILL, "createFutureNarrative", createFutureNarrative, {
+    consent: participantConsent(), mode: "resource", collection: "future-self.narratives", recordIdField: "narrativeId",
+  }),
+  defineCapability("B23", SKILL, "converseWithFutureSelf", converseWithFutureSelf, {
+    consent: participantConsent(), mode: "external-command", collection: "future-self.dialogue-commands", recordIdField: "conversationId",
+  }),
+  defineCapability("B24", SKILL, "scheduleAnnualRitual", scheduleAnnualRitual, {
+    consent: participantConsent(), mode: "resource", collection: "family.annual-rituals", recordIdField: "ritualId",
+  }),
 ];
 
 export function registerBuildingFamilyFutureSelfCapabilities(registry: CapabilityRegistry): void {

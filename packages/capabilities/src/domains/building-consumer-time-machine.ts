@@ -139,12 +139,28 @@ function mutateFamilyLibrary(input: JsonObject, invocation: CapabilityInvocation
 }
 
 const definitions: readonly DomainCapabilityDefinition[] = [
-  defineCapability("B06", SKILL, "createGuestJourney", createGuestJourney),
-  defineCapability("B07", SKILL, "acceptPhoto", acceptPhoto, { consent: participantConsent() }),
-  defineCapability("B08", SKILL, "saveComposition", saveComposition, { consent: participantConsent() }),
-  defineCapability("B09", SKILL, "transitionGenerationJob", transitionGenerationJob, { consent: participantConsent() }),
-  defineCapability("B10", SKILL, "publishExport", publishExport, { consent: participantConsent() }),
-  defineCapability("B11", SKILL, "mutateFamilyLibrary", mutateFamilyLibrary, { consent: participantConsent() }),
+  defineCapability("B06", SKILL, "createGuestJourney", createGuestJourney, {
+    mode: "resource", collection: "consumer.guest-sessions", recordIdField: "sessionId",
+  }),
+  defineCapability("B07", SKILL, "acceptPhoto", acceptPhoto, {
+    consent: participantConsent(), mode: "resource", collection: "media.intake-results", recordIdField: "assetId",
+  }),
+  defineCapability("B08", SKILL, "saveComposition", saveComposition, {
+    consent: participantConsent(), mode: "resource", collection: "consumer.composition-drafts", recordIdField: "draftId",
+  }),
+  defineCapability("B09", SKILL, "transitionGenerationJob", transitionGenerationJob, {
+    consent: participantConsent(),
+    mode: "state-transition",
+    collection: "generation.jobs",
+    recordIdField: "jobId",
+    transition: { fromField: "fromState", toField: "toState", stateField: "state", initialFromStates: ["queued"] },
+  }),
+  defineCapability("B10", SKILL, "publishExport", publishExport, {
+    consent: participantConsent(), mode: "external-command", collection: "sharing.export-commands",
+  }),
+  defineCapability("B11", SKILL, "mutateFamilyLibrary", mutateFamilyLibrary, {
+    consent: participantConsent(), mode: "resource", collection: "family.library-operations",
+  }),
 ];
 
 export function registerBuildingConsumerTimeMachineCapabilities(registry: CapabilityRegistry): void {

@@ -22,7 +22,7 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, readonly string[]>> = {
   privacy_officer: ["record:*", "consent:*", "audit:read", "audit:append"],
   finance_operator: ["record:read", "ledger:*", "audit:append"],
   platform_admin: ["*"],
-  auditor: ["record:read", "consent:read", "ledger:read", "audit:read", "outbox:read"],
+  auditor: ["record:read", "consent:read", "ledger:read", "audit:read", "outbox:read", "evidence:read"],
   service_account: [],
 };
 

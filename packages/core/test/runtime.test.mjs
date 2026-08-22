@@ -1,10 +1,18 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, mkdtempSync, rmSync, truncateSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
+import { generateKeyPairSync } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import { DomainError, LifeTimeMachineRuntime } from "../dist/index.js";
+import {
+  canonicalBusinessClaimsSha256,
+  canonicalBusinessEventSha256,
+  DomainError,
+  LifeTimeMachineRuntime,
+  signExternalEvidence,
+  verifyDatabaseBackup,
+} from "../dist/index.js";
 
 const temporaryDirectories = [];
 
@@ -294,8 +302,8 @@ test("inbox fingerprints, outbox leases, absent publishers, and immutable audit 
   raw.close();
 });
 
-test("external evidence is accepted only through a configured server-side verifier", () => {
-  const context = actor();
+test("external evidence is signed, tenant/scope bound, durable, and replay resistant", () => {
+  const context = actor({ operationId: "release-operation-1" });
   const absent = new LifeTimeMachineRuntime({ databasePath: databasePath() });
   expectDomainError(
     () => absent.requireExternalEvidence(context, "B127:certifyRelease", ["evidence-1"]),
@@ -303,33 +311,470 @@ test("external evidence is accepted only through a configured server-side verifi
   );
   absent.close();
 
-  const rejecting = new LifeTimeMachineRuntime({
-    databasePath: databasePath(),
-    externalEvidenceVerifier: { verify: () => [] },
-  });
   expectDomainError(
-    () => rejecting.requireExternalEvidence(context, "B127:certifyRelease", ["evidence-1"]),
-    "EXTERNAL_EVIDENCE_UNVERIFIED",
+    () => new LifeTimeMachineRuntime({ databasePath: databasePath(), evidencePolicy: "production" }),
+    "CONFIGURATION_INVALID",
   );
-  rejecting.close();
 
-  const verifiedCalls = [];
-  const accepting = new LifeTimeMachineRuntime({
-    databasePath: databasePath(),
-    externalEvidenceVerifier: {
-      verify: (actorContext, scope, ids) => {
-        verifiedCalls.push({ actorContext, scope, ids });
-        return ids;
-      },
-    },
-  });
-  accepting.requireExternalEvidence(
-    context,
-    "B127:certifyRelease",
-    ["evidence-2", "evidence-1", "evidence-2"],
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const publicKeyPem = publicKey.export({ type: "spki", format: "pem" }).toString();
+  const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const trustedEvidenceKeys = [{
+    issuer: "release-auditor",
+    provider: "assurance-provider",
+    keyId: "key-2026-01",
+    algorithm: "Ed25519",
+    publicKeyPem,
+    allowedScopes: ["B127:*"],
+    allowedEnvironments: ["production"],
+  }];
+  expectDomainError(
+    () => new LifeTimeMachineRuntime({
+      databasePath: databasePath(),
+      evidencePolicy: "production",
+      evidenceEnvironment: "production",
+      trustedEvidenceKeys: [{ ...trustedEvidenceKeys[0], issuer: "test:release-auditor" }],
+    }),
+    "CONFIGURATION_INVALID",
   );
-  assert.deepEqual(verifiedCalls[0].ids, ["evidence-1", "evidence-2"]);
-  assert.equal(verifiedCalls[0].actorContext.tenantId, "tenant-a");
-  assert.equal(verifiedCalls[0].scope, "B127:certifyRelease");
-  accepting.close();
+  const path = databasePath();
+  const runtime = new LifeTimeMachineRuntime({
+    databasePath: path,
+    evidencePolicy: "production",
+    evidenceEnvironment: "production",
+    trustedEvidenceKeys,
+  });
+  const unsigned = {
+    version: "ltm.external-evidence.v1",
+    evidenceId: "evidence-1",
+    tenantId: "tenant-a",
+    issuer: "release-auditor",
+    provider: "assurance-provider",
+    environment: "production",
+    scope: "B127:approveStagedProductionLaunch:assurance-provider:" + "a".repeat(64),
+    artifactSha256: "a".repeat(64),
+    issuedAt: new Date(Date.now() - 60_000).toISOString(),
+    expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    nonce: "nonce-release-00000001",
+    replayPolicy: "single_use",
+    algorithm: "Ed25519",
+    keyId: "key-2026-01",
+  };
+  const signed = signExternalEvidence(unsigned, privateKeyPem);
+  const wrongEnvironment = signExternalEvidence({
+    ...unsigned,
+    evidenceId: "evidence-test-environment",
+    environment: "test",
+    nonce: "nonce-release-test-0001",
+  }, privateKeyPem);
+  expectDomainError(
+    () => runtime.registerExternalEvidence(context, {
+      evidence: wrongEnvironment,
+      idempotencyKey: "register-test-environment-1",
+    }),
+    "EVIDENCE_TRUST_KEY_NOT_FOUND",
+  );
+  const registered = runtime.registerExternalEvidence(context, {
+    evidence: signed,
+    idempotencyKey: "register-evidence-1",
+  });
+  assert.equal(registered.value.status, "verified");
+  assert.equal(registered.value.artifactSha256, "a".repeat(64));
+  assert.equal(runtime.readiness().evidenceTrust, "ok");
+
+  const verified = runtime.requireExternalEvidence(context, unsigned.scope, ["evidence-1"]);
+  assert.equal(verified[0].consumedAt !== null, true);
+  assert.equal(runtime.requireExternalEvidence(context, unsigned.scope, ["evidence-1"])[0].evidenceId, "evidence-1");
+  expectDomainError(
+    () => runtime.requireExternalEvidence({ ...context, operationId: "release-operation-2" }, unsigned.scope, ["evidence-1"]),
+    "EVIDENCE_REPLAY_DETECTED",
+  );
+  expectDomainError(
+    () => runtime.requireExternalEvidence(context, `${unsigned.scope}:other`, ["evidence-1"]),
+    "EVIDENCE_SCOPE_MISMATCH",
+  );
+
+  const tampered = { ...signed, evidenceId: "evidence-tampered", artifactSha256: "b".repeat(64), nonce: "nonce-release-00000002" };
+  expectDomainError(
+    () => runtime.registerExternalEvidence(context, { evidence: tampered, idempotencyKey: "register-tampered-1" }),
+    "EVIDENCE_SIGNATURE_INVALID",
+  );
+
+  const nonceReplay = signExternalEvidence({ ...unsigned, evidenceId: "evidence-2" }, privateKeyPem);
+  expectDomainError(
+    () => runtime.registerExternalEvidence(context, { evidence: nonceReplay, idempotencyKey: "register-nonce-replay-1" }),
+    "EVIDENCE_REPLAY_DETECTED",
+  );
+  expectDomainError(
+    () => runtime.registerExternalEvidence(context, { evidence: signed, idempotencyKey: "register-evidence-again-1" }),
+    "EVIDENCE_REPLAY_DETECTED",
+  );
+
+  const reusable = signExternalEvidence({
+    ...unsigned,
+    evidenceId: "evidence-reusable",
+    nonce: "nonce-release-00000003",
+    replayPolicy: "reusable",
+  }, privateKeyPem);
+  runtime.registerExternalEvidence(context, { evidence: reusable, idempotencyKey: "register-reusable-1" });
+  const revoked = runtime.revokeExternalEvidence(context, {
+    evidenceId: "evidence-reusable",
+    expectedVersion: 1,
+    reason: "issuer withdrew the attestation",
+    idempotencyKey: "revoke-reusable-1",
+  });
+  assert.equal(revoked.value.status, "revoked");
+  expectDomainError(
+    () => runtime.requireExternalEvidence(context, unsigned.scope, ["evidence-reusable"]),
+    "EVIDENCE_REVOKED",
+  );
+  runtime.close();
+
+  const reopened = new LifeTimeMachineRuntime({
+    databasePath: path,
+    evidencePolicy: "production",
+    evidenceEnvironment: "production",
+    trustedEvidenceKeys,
+  });
+  assert.equal(reopened.getExternalEvidence(context, "evidence-1").consumedAt !== null, true);
+  assert.equal(reopened.listExternalEvidence(context, { scope: unsigned.scope }).length, 2);
+  reopened.close();
+
+  const raw = new DatabaseSync(path);
+  assert.throws(
+    () => raw.prepare(`
+      UPDATE external_evidence
+      SET status = 'verified', version = version + 1, revoked_at = NULL, revocation_reason = NULL
+      WHERE tenant_id = 'tenant-a' AND id = 'evidence-reusable'
+    `).run(),
+    /only transition once/,
+  );
+  assert.throws(
+    () => raw.prepare(`UPDATE external_evidence SET version = version + 1 WHERE id = 'evidence-1'`).run(),
+    /only transition once/,
+  );
+  raw.close();
+});
+
+test("external business events atomically drive commands, reject tampering and order violations, and freeze on revocation", () => {
+  const now = new Date("2026-08-20T00:00:00.000Z");
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const trustedKey = {
+    issuer: "wechat-callback-verifier",
+    provider: "wechat-pay",
+    keyId: "wechat-key-1",
+    algorithm: "Ed25519",
+    publicKeyPem: publicKey.export({ type: "spki", format: "pem" }).toString(),
+    allowedScopes: ["B71:*"],
+    allowedEnvironments: ["sandbox"],
+  };
+  const runtime = new LifeTimeMachineRuntime({
+    databasePath: databasePath(),
+    clock: { now: () => now },
+    trustedEvidenceKeys: [trustedKey],
+    evidencePolicy: "development",
+    evidenceEnvironment: "sandbox",
+  });
+  const context = actor({
+    roles: ["platform_admin", "service_account"],
+    requestId: "external-business-request-1",
+  });
+  const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const makeBundle = ({ eventId, evidenceId, sequence, scope = "B71:pay:payment-1", claims }) => {
+    const canonicalClaimsSha256 = canonicalBusinessClaimsSha256(claims);
+    const unsignedEvent = {
+      version: "ltm.external-business-event.v1",
+      eventId,
+      tenantId: context.tenantId,
+      batchId: "B71",
+      operation: "createWeChatPayment",
+      provider: trustedKey.provider,
+      subjectType: "payment",
+      subjectId: "payment-1",
+      eventType: "payment.succeeded",
+      providerOccurredAt: new Date(now.getTime() - 1_000 + sequence).toISOString(),
+      sequence,
+      correlationId: "payment-1",
+      artifactSha256: "c".repeat(64),
+      evidenceId,
+      evidenceScope: scope,
+      canonicalClaims: claims,
+      canonicalClaimsSha256,
+    };
+    const event = {
+      ...unsignedEvent,
+      businessEventSha256: canonicalBusinessEventSha256(unsignedEvent),
+    };
+    const evidence = signExternalEvidence({
+      version: "ltm.external-evidence.v1",
+      evidenceId,
+      tenantId: context.tenantId,
+      issuer: trustedKey.issuer,
+      provider: trustedKey.provider,
+      environment: "sandbox",
+      scope,
+      artifactSha256: event.artifactSha256,
+      canonicalClaimsSha256,
+      businessEventSha256: event.businessEventSha256,
+      issuedAt: new Date(now.getTime() - 5_000).toISOString(),
+      expiresAt: new Date(now.getTime() + 60_000).toISOString(),
+      nonce: `nonce-${evidenceId}-0123456789`,
+      replayPolicy: "single_use",
+      algorithm: "Ed25519",
+      keyId: trustedKey.keyId,
+    }, privateKeyPem);
+    return { event, evidence };
+  };
+  const reducer = {
+    name: "wechat-payment-test-v1",
+    locate: () => ({ collection: "commerce.wechat-payments", aggregateId: "payment-1" }),
+    reduce: (event) => ({
+      stateField: "state",
+      allowedPriorStates: ["requested", "succeeded"],
+      nextState: "succeeded",
+      patch: { providerStatus: event.canonicalClaims.status },
+      decisionType: "payment_settlement",
+      decisionId: event.eventId,
+      commandTransition: {
+        commandId: "command-payment-1",
+        toState: "succeeded",
+        providerOperationId: "wechat-operation-1",
+      },
+    }),
+  };
+
+  const created = runtime.createExternalCommand(context, {
+    record: {
+      id: "payment-1",
+      collection: "commerce.wechat-payments",
+      data: { state: "requested", amountMinor: 500 },
+    },
+    commandId: "command-payment-1",
+    batchId: "B71",
+    operation: "createWeChatPayment",
+    details: { channel: "wechat" },
+    idempotencyKey: "create-payment-command-1",
+  });
+  assert.equal(created.value.command.state, "requested");
+  assert.equal(created.value.record.data.executionState, "requested");
+  expectDomainError(() => runtime.transitionExternalCommand(context, {
+    commandId: "command-payment-1",
+    batchId: "B71",
+    operation: "createWeChatPayment",
+    aggregateCollection: "commerce.wechat-payments",
+    aggregateId: "payment-1",
+    toState: "acknowledged",
+    idempotencyKey: "illegal-ack-1",
+  }), "VERSION_CONFLICT");
+  const dispatchedInput = {
+    commandId: "command-payment-1",
+    batchId: "B71",
+    operation: "createWeChatPayment",
+    aggregateCollection: "commerce.wechat-payments",
+    aggregateId: "payment-1",
+    toState: "dispatched",
+    providerOperationId: "wechat-operation-1",
+    idempotencyKey: "dispatch-payment-1",
+  };
+  assert.equal(runtime.transitionExternalCommand(context, dispatchedInput).value.state, "dispatched");
+  assert.equal(runtime.transitionExternalCommand(context, dispatchedInput).replayed, true);
+  assert.equal(runtime.transitionExternalCommand(context, {
+    ...dispatchedInput,
+    toState: "acknowledged",
+    idempotencyKey: "ack-payment-1",
+  }).value.state, "acknowledged");
+  expectDomainError(() => runtime.transitionExternalCommand(context, {
+    ...dispatchedInput,
+    toState: "succeeded",
+    idempotencyKey: "terminal-without-evidence-1",
+  }), "AUTH_FORBIDDEN");
+
+  const bundle = makeBundle({
+    eventId: "wechat-event-10",
+    evidenceId: "wechat-evidence-10",
+    sequence: 10,
+    claims: { status: "SUCCESS", amountMinor: 500 },
+  });
+  const tampered = {
+    ...bundle.event,
+    canonicalClaims: { status: "SUCCESS", amountMinor: 1 },
+  };
+  expectDomainError(() => runtime.applyExternalBusinessEvent(context, {
+    event: tampered,
+    evidence: bundle.evidence,
+    reducer,
+    idempotencyKey: "tampered-claims-1",
+  }), "EVENT_FINGERPRINT_CONFLICT");
+  const crossScopeUnsigned = {
+    ...bundle.event,
+    evidenceScope: "B71:pay:other-payment",
+  };
+  const crossScope = {
+    ...crossScopeUnsigned,
+    businessEventSha256: canonicalBusinessEventSha256(crossScopeUnsigned),
+  };
+  expectDomainError(() => runtime.applyExternalBusinessEvent(context, {
+    event: crossScope,
+    evidence: bundle.evidence,
+    reducer,
+    idempotencyKey: "cross-scope-1",
+  }), "EVIDENCE_SCOPE_MISMATCH");
+
+  const applied = runtime.applyExternalBusinessEvent(context, {
+    ...bundle,
+    reducer,
+    idempotencyKey: "apply-wechat-event-10",
+  });
+  assert.equal(applied.replayed, false);
+  assert.equal(applied.value.command.state, "succeeded");
+  assert.equal(applied.value.aggregate.data.executionState, "succeeded");
+  assert.equal(applied.value.aggregate.data.externalReceipt.evidenceId, bundle.evidence.evidenceId);
+  assert.equal(runtime.applyExternalBusinessEvent(context, {
+    ...bundle,
+    reducer,
+    idempotencyKey: "apply-wechat-event-10-again",
+  }).replayed, true);
+
+  const stale = makeBundle({
+    eventId: "wechat-event-09",
+    evidenceId: "wechat-evidence-09",
+    sequence: 9,
+    claims: { status: "SUCCESS", amountMinor: 500 },
+  });
+  expectDomainError(() => runtime.applyExternalBusinessEvent(context, {
+    ...stale,
+    reducer,
+    idempotencyKey: "apply-wechat-event-09",
+  }), "VERSION_CONFLICT");
+  expectDomainError(() => runtime.getExternalEvidence(context, stale.evidence.evidenceId), "RESOURCE_NOT_FOUND");
+
+  runtime.revokeExternalEvidence(context, {
+    evidenceId: bundle.evidence.evidenceId,
+    expectedVersion: 1,
+    reason: "provider reversed the verified callback",
+    idempotencyKey: "revoke-wechat-event-10",
+  });
+  const frozen = runtime.getRecord(context, "commerce.wechat-payments", "payment-1");
+  assert.equal(frozen.data._externalDecisionState, "frozen");
+  assert.equal(frozen.data._externalReconciliationState, "reconciliation_required");
+  assert.equal(runtime.getExternalCommand(context, "command-payment-1").decisionState, "frozen");
+  runtime.close();
+});
+
+test("online backup is restorable and independently verifies integrity and audit chains", async () => {
+  const path = databasePath();
+  const runtime = new LifeTimeMachineRuntime({ databasePath: path });
+  const context = actor();
+  const created = runtime.createRecord(context, {
+    collection: "projects",
+    id: "backup-project",
+    data: { state: "recoverable" },
+    idempotencyKey: "backup-project-create-1",
+  });
+  const backupPath = join(path.slice(0, path.lastIndexOf("/")), "verified-backup.sqlite");
+  const verification = await runtime.createVerifiedBackup(backupPath);
+  assert.equal(verification.integrity, "ok");
+  assert.equal(verification.auditChainsValid, true);
+  assert.equal(verification.recordCount, 1);
+  assert.equal(verification.auditEntryCount > 0, true);
+  assert.match(verification.sha256, /^[a-f0-9]{64}$/);
+  await assert.rejects(
+    runtime.createVerifiedBackup(backupPath),
+    (error) => error instanceof DomainError && error.code === "BACKUP_VERIFICATION_FAILED",
+  );
+  runtime.close();
+
+  const restored = new LifeTimeMachineRuntime({ databasePath: backupPath });
+  assert.equal(restored.getRecord(context, "projects", created.value.id).data.state, "recoverable");
+  assert.equal(restored.verifyAuditChain(context).valid, true);
+  restored.close();
+
+  const corruptPath = join(path.slice(0, path.lastIndexOf("/")), "corrupt-backup.sqlite");
+  copyFileSync(backupPath, corruptPath);
+  truncateSync(corruptPath, 512);
+  await assert.rejects(
+    verifyDatabaseBackup(corruptPath),
+    (error) => error instanceof DomainError && error.code === "BACKUP_VERIFICATION_FAILED",
+  );
+
+  const unauditedPath = join(path.slice(0, path.lastIndexOf("/")), "unaudited-backup.sqlite");
+  copyFileSync(backupPath, unauditedPath);
+  const unaudited = new DatabaseSync(unauditedPath);
+  unaudited.prepare(`
+    INSERT INTO records(
+      tenant_id, collection, id, owner_actor_id, participant_ids_json, contains_minor,
+      data_json, version, created_at, updated_at, deleted_at
+    ) VALUES (?, ?, ?, NULL, '[]', 0, '{}', 1, ?, ?, NULL)
+  `).run("tenant-without-audit", "projects", "raw-record", new Date().toISOString(), new Date().toISOString());
+  unaudited.close();
+  await assert.rejects(
+    verifyDatabaseBackup(unauditedPath),
+    (error) => error instanceof DomainError && error.code === "BACKUP_VERIFICATION_FAILED",
+  );
+});
+
+test("schema v2 evidence stores migrate to an explicit sandbox environment", () => {
+  const path = databasePath();
+  const legacy = new DatabaseSync(path);
+  legacy.exec(`
+    CREATE TABLE schema_metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
+    INSERT INTO schema_metadata(key, value) VALUES ('schema_version', '2');
+    CREATE TABLE external_evidence (
+      tenant_id TEXT NOT NULL,
+      id TEXT NOT NULL,
+      envelope_version TEXT NOT NULL,
+      issuer TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      artifact_sha256 TEXT NOT NULL,
+      issued_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      nonce TEXT NOT NULL,
+      replay_policy TEXT NOT NULL,
+      algorithm TEXT NOT NULL,
+      key_id TEXT NOT NULL,
+      signature TEXT NOT NULL,
+      status TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      verified_at TEXT NOT NULL,
+      revoked_at TEXT,
+      revocation_reason TEXT,
+      PRIMARY KEY (tenant_id, id),
+      UNIQUE (tenant_id, issuer, provider, nonce)
+    ) STRICT;
+  `);
+  legacy.close();
+
+  const migrated = new LifeTimeMachineRuntime({ databasePath: path });
+  migrated.close();
+  const raw = new DatabaseSync(path);
+  const columns = raw.prepare("PRAGMA table_info(external_evidence)").all();
+  assert.equal(columns.some((column) => column.name === "environment"), true);
+  assert.equal(raw.prepare("SELECT value FROM schema_metadata WHERE key = 'schema_version'").get().value, "4");
+  for (const table of [
+    "external_commands",
+    "external_command_transitions",
+    "evidence_decisions",
+    "external_business_events",
+  ]) {
+    assert.equal(
+      raw.prepare("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?").get(table)?.present,
+      1,
+    );
+  }
+  raw.close();
+});
+
+test("unknown schema versions fail closed before migrations run", () => {
+  const path = databasePath();
+  const raw = new DatabaseSync(path);
+  raw.exec(`
+    CREATE TABLE schema_metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
+    INSERT INTO schema_metadata(key, value) VALUES ('schema_version', '999');
+  `);
+  raw.close();
+  expectDomainError(() => new LifeTimeMachineRuntime({ databasePath: path }), "DEPENDENCY_UNAVAILABLE");
+  const unchanged = new DatabaseSync(path, { readOnly: true });
+  assert.equal(unchanged.prepare("SELECT value FROM schema_metadata WHERE key = 'schema_version'").get().value, "999");
+  unchanged.close();
 });

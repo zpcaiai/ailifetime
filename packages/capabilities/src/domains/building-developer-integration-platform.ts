@@ -1,4 +1,6 @@
 import { DomainError } from "@ltm/core";
+import { isIP } from "node:net";
+import { capabilityEvidenceScope } from "@ltm/providers";
 import type { CapabilityInvocation, CapabilityRegistry, JsonObject } from "../registry.js";
 import { objectValue, requiredBoolean, requiredNumber, requiredString, stringList } from "../validation.js";
 import {
@@ -7,6 +9,7 @@ import {
   assertKnownState,
   defineCapability,
   registerDefinitions,
+  rejectClientAssertions,
   requireInteger,
   requireTrue,
   type DomainCapabilityDefinition,
@@ -21,10 +24,26 @@ function httpsUrl(value: string, field: string): string {
   } catch {
     throw new DomainError("VALIDATION_FAILED", `${field} must be an absolute URL`);
   }
-  if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password || (parsed.port !== "" && parsed.port !== "443")) {
     throw new DomainError("VALIDATION_FAILED", `${field} must be a credential-free HTTPS URL`);
   }
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (isIP(hostname) !== 0 || hostname === "localhost" || hostname.endsWith(".localhost") ||
+      hostname.endsWith(".local") || hostname.endsWith(".internal") || hostname.endsWith(".home.arpa") ||
+      hostname === "metadata.google.internal" || hostname === "instance-data" || hostname.length > 253) {
+    throw new DomainError("VALIDATION_FAILED", `${field} must use a public DNS hostname on the standard HTTPS port`);
+  }
+  const labels = hostname.split(".");
+  if (labels.length < 2 || labels.some((label) => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) {
+    throw new DomainError("VALIDATION_FAILED", `${field} hostname is invalid or not publicly routable`);
+  }
   return parsed.toString();
+}
+
+function sha256(input: JsonObject, field: string): string {
+  const value = requiredString(input, field);
+  if (!/^[a-f0-9]{64}$/.test(value)) throw new DomainError("VALIDATION_FAILED", `${field} must be a lowercase SHA-256 digest`);
+  return value;
 }
 
 function developerPortal(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
@@ -127,16 +146,25 @@ function webhook(input: JsonObject, invocation: CapabilityInvocation): JsonObjec
 }
 
 function connector(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
+  rejectClientAssertions(input, ["supplyChainScanPassed", "credentialsTenantIsolated"]);
   assertActorTenant(input, invocation);
   const connectorId = requiredString(input, "connectorId");
   const publisherId = requiredString(input, "publisherId");
+  const providerType = assertKnownState(requiredString(input, "providerType"), ["crm", "cloud"] as const, "providerType");
+  const providerId = requiredString(input, "providerId");
+  const providerEnvironment = assertKnownState(
+    requiredString(input, "providerEnvironment"),
+    ["sandbox", "production"] as const,
+    "providerEnvironment",
+  );
+  const connectorArtifactSha256 = sha256(input, "connectorArtifactSha256");
   const version = requiredString(input, "version");
   const requestedScopes = stringList(input, "requestedScopes", { min: 1, unique: true });
   const previousScopes = stringList(input, "previousScopes", { unique: true });
   const dataClasses = stringList(input, "dataClasses", { min: 1, unique: true });
   const status = assertKnownState(requiredString(input, "status"), ["review", "approved", "published", "disabled"] as const, "status");
-  const supplyChainScanPassed = requireTrue(requiredBoolean(input, "supplyChainScanPassed"), "supplyChainScanPassed");
-  const credentialsTenantIsolated = requireTrue(requiredBoolean(input, "credentialsTenantIsolated"), "credentialsTenantIsolated");
+  const scanReportId = requiredString(input, "scanReportId");
+  const credentialIsolationPolicyVersion = requiredString(input, "credentialIsolationPolicyVersion");
   const externalEvidenceIds = stringList(input, "externalEvidenceIds", { min: 1, unique: true });
   const expanded = requestedScopes.some((scope) => !previousScopes.includes(scope));
   if (expanded && typeof input.scopeExpansionApprovalId !== "string") {
@@ -145,53 +173,95 @@ function connector(input: JsonObject, invocation: CapabilityInvocation): JsonObj
   if (dataClasses.some((value) => ["raw_media", "face_features", "minor_identity", "private_dialogue"].includes(value))) {
     throw new DomainError("AUTH_FORBIDDEN", "connector requests a prohibited default data class");
   }
+  const evidenceScope = capabilityEvidenceScope({
+    tenantId: invocation.actor.tenantId,
+    batchId: "B107",
+    operation: "publishConnector",
+    kind: "connector-package",
+    provider: providerType === "crm" ? `crm:${providerId}` : `cloud:${providerId}`,
+    artifactSha256: connectorArtifactSha256,
+    environment: providerEnvironment,
+    subjectId: connectorId,
+  });
   return {
     connectorId,
     publisherId,
+    providerType,
+    providerId,
+    providerEnvironment,
+    connectorArtifactSha256,
     version,
     requestedScopes,
     previousScopes,
     dataClasses,
     status,
-    supplyChainScanPassed,
-    credentialsTenantIsolated,
+    scanReportId,
+    credentialIsolationPolicyVersion,
     externalEvidenceIds,
+    evidenceScope,
     ...(typeof input.scopeExpansionApprovalId === "string" ? { scopeExpansionApprovalId: input.scopeExpansionApprovalId } : {}),
   };
 }
 
-function businessAdapter(input: JsonObject): JsonObject {
+function businessAdapter(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
+  rejectClientAssertions(input, ["contactConsentVerified", "deletionPropagated"]);
   const adapterId = requiredString(input, "adapterId");
   const systemType = assertKnownState(requiredString(input, "systemType"), ["crm", "cdp", "marketing", "support", "accounting"] as const, "systemType");
+  const providerType = assertKnownState(requiredString(input, "providerType"), ["crm", "cloud"] as const, "providerType");
+  const providerId = requiredString(input, "providerId");
+  const providerEnvironment = assertKnownState(
+    requiredString(input, "providerEnvironment"),
+    ["sandbox", "production"] as const,
+    "providerEnvironment",
+  );
+  const adapterArtifactSha256 = sha256(input, "adapterArtifactSha256");
   const fieldMap = objectValue(input, "fieldMap");
   const sourceOfTruth = objectValue(input, "sourceOfTruth");
   const exportedDataClasses = stringList(input, "exportedDataClasses", { min: 1, unique: true });
-  const contactConsentVerified = requiredBoolean(input, "contactConsentVerified");
-  const deletionPropagated = requireTrue(requiredBoolean(input, "deletionPropagated"), "deletionPropagated");
+  const contactConsentReceiptIds = stringList(input, "contactConsentReceiptIds", { unique: true });
+  const deletionPropagationReceiptIds = stringList(input, "deletionPropagationReceiptIds", { min: 1, unique: true });
   const controlTotal = requireInteger(requiredNumber(input, "controlTotal", 0), "controlTotal", 0);
   const externalEvidenceIds = stringList(input, "externalEvidenceIds", { min: 1, unique: true });
   if (exportedDataClasses.some((value) => ["raw_media", "face_features", "minor_identity", "private_dialogue"].includes(value))) {
     throw new DomainError("AUTH_FORBIDDEN", "business adapters cannot export sensitive media/identity data by default");
   }
-  if (["crm", "cdp", "marketing"].includes(systemType) && !contactConsentVerified) {
+  if (["crm", "cdp", "marketing"].includes(systemType) && contactConsentReceiptIds.length === 0) {
     throw new DomainError("CONSENT_REQUIRED", "contact export requires explicit contact consent");
   }
+  const evidenceScope = capabilityEvidenceScope({
+    tenantId: invocation.actor.tenantId,
+    batchId: "B108",
+    operation: "registerBusinessAdapter",
+    kind: "business-adapter",
+    provider: providerType === "crm" ? `crm:${providerId}` : `cloud:${providerId}`,
+    artifactSha256: adapterArtifactSha256,
+    environment: providerEnvironment,
+    subjectId: adapterId,
+  });
   return {
     adapterId,
     systemType,
+    providerType,
+    providerId,
+    providerEnvironment,
+    adapterArtifactSha256,
     fieldMap,
     sourceOfTruth,
     exportedDataClasses,
-    contactConsentVerified,
-    deletionPropagated,
+    contactConsentReceiptIds,
+    deletionPropagationReceiptIds,
     controlTotal,
     externalEvidenceIds,
+    evidenceScope,
   };
 }
 
-function partnerCertification(input: JsonObject): JsonObject {
+function partnerCertification(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
   const certificationId = requiredString(input, "certificationId");
   const applicationId = requiredString(input, "applicationId");
+  const providerType = assertKnownState(requiredString(input, "providerType"), ["crm", "cloud"] as const, "providerType");
+  const providerId = requiredString(input, "providerId");
+  const certificationArtifactSha256 = sha256(input, "certificationArtifactSha256");
   const environment = assertKnownState(requiredString(input, "environment"), ["sandbox"] as const, "environment");
   const apiVersion = requiredString(input, "apiVersion");
   const scenarios = stringList(input, "scenarios", { min: 5, unique: true });
@@ -205,9 +275,22 @@ function partnerCertification(input: JsonObject): JsonObject {
   if (criticalFailures !== 0 || /prod(?:uction)?[.-]/i.test(new URL(callbackUrl).hostname)) {
     throw new DomainError("VALIDATION_FAILED", "critical failures or production callback block certification");
   }
+  const evidenceScope = capabilityEvidenceScope({
+    tenantId: invocation.actor.tenantId,
+    batchId: "B109",
+    operation: "certifyPartnerIntegration",
+    kind: "partner-integration",
+    provider: providerType === "crm" ? `crm:${providerId}` : `cloud:${providerId}`,
+    artifactSha256: certificationArtifactSha256,
+    environment,
+    subjectId: certificationId,
+  });
   return {
     certificationId,
     applicationId,
+    providerType,
+    providerId,
+    certificationArtifactSha256,
     environment,
     apiVersion,
     scenarios,
@@ -215,6 +298,7 @@ function partnerCertification(input: JsonObject): JsonObject {
     criticalFailures,
     syntheticDataOnly,
     externalEvidenceIds,
+    evidenceScope,
   };
 }
 
@@ -249,23 +333,29 @@ function apiLifecycle(input: JsonObject): JsonObject {
 }
 
 const definitions: readonly DomainCapabilityDefinition[] = [
-  defineCapability("B103", SKILL, "publishDeveloperPortal", developerPortal, { permission: "developer.portal.publish" }),
-  defineCapability("B104", SKILL, "registerMachineCredential", credentialPolicy, { permission: "credential.machine.manage" }),
-  defineCapability("B105", SKILL, "publishSdkRelease", sdkRelease, { permission: "sdk.release.publish" }),
-  defineCapability("B106", SKILL, "registerWebhookEndpoint", webhook, { permission: "webhook.endpoint.manage" }),
+  defineCapability("B103", SKILL, "publishDeveloperPortal", developerPortal, { permission: "developer.portal.publish", mode: "resource" }),
+  defineCapability("B104", SKILL, "registerMachineCredential", credentialPolicy, { permission: "credential.machine.manage", mode: "resource" }),
+  defineCapability("B105", SKILL, "publishSdkRelease", sdkRelease, { permission: "sdk.release.publish", mode: "resource" }),
+  defineCapability("B106", SKILL, "registerWebhookEndpoint", webhook, { permission: "webhook.endpoint.manage", mode: "resource" }),
   defineCapability("B107", SKILL, "publishConnector", connector, {
     permission: "connector.marketplace.publish",
     requiresExternalEvidence: true,
+    externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    mode: "attestation",
   }),
   defineCapability("B108", SKILL, "registerBusinessAdapter", businessAdapter, {
     permission: "connector.adapter.manage",
     requiresExternalEvidence: true,
+    externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    mode: "attestation",
   }),
   defineCapability("B109", SKILL, "certifyPartnerIntegration", partnerCertification, {
     permission: "partner.integration.certify",
     requiresExternalEvidence: true,
+    externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    mode: "attestation",
   }),
-  defineCapability("B110", SKILL, "recordApiLifecycleChange", apiLifecycle, { permission: "api.lifecycle.manage" }),
+  defineCapability("B110", SKILL, "recordApiLifecycleChange", apiLifecycle, { permission: "api.lifecycle.manage", mode: "resource" }),
 ];
 
 export function registerBuildingDeveloperIntegrationPlatformCapabilities(registry: CapabilityRegistry): void {
