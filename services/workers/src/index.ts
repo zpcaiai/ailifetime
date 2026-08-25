@@ -1,4 +1,4 @@
-import { DomainError } from "@ltm/core";
+import { DomainError, resolveExternalCommandCallbackRoute } from "@ltm/core";
 import type { ActorContext, LifeTimeMachineRuntimePort, OutboxEvent, OutboxPublisher } from "@ltm/core";
 import type { PartnerCommandInput, PartnerCommandReceipt } from "@ltm/providers";
 
@@ -119,6 +119,13 @@ export class ProductionExternalCommandPublisher implements OutboxPublisher {
     if (!/^B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])$/.test(batchId)) {
       throw new DomainError("VALIDATION_FAILED", "external command batchId is invalid");
     }
+    const callbackRoute = resolveExternalCommandCallbackRoute(batchId, operation);
+    if (callbackRoute === undefined || callbackRoute.collection !== event.aggregateType) {
+      throw new DomainError("EXTERNAL_ADAPTER_UNAVAILABLE", "External command is not in the fixed callback route contract", {
+        retryable: false,
+        details: { batchId, operation, aggregateType: event.aggregateType },
+      });
+    }
     const sender = this.senders[batchId as `B${string}`];
     if (sender === undefined) {
       throw new DomainError("EXTERNAL_ADAPTER_UNAVAILABLE", `No external command adapter is configured for ${batchId}`, {
@@ -222,7 +229,9 @@ export class ProductionRoutePublisher implements OutboxPublisher {
     // the one requested intent. Delivering any of them would duplicate the
     // provider side effect under a different outbox idempotency key.
     const snapshot = recordSnapshot(event);
-    if (snapshot?.data.operationMode === "external-command" || event.eventType.startsWith("external_command.")) return;
+    const reconciliationAlert = event.eventType === "external_command.reconciliation_required";
+    if (!reconciliationAlert &&
+        (snapshot?.data.operationMode === "external-command" || event.eventType.startsWith("external_command."))) return;
     const batchId = stringValue(snapshot?.data.batchId, "capability event batchId");
     if (!/^B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])$/.test(batchId)) {
       throw new DomainError("VALIDATION_FAILED", "capability event batchId is invalid");

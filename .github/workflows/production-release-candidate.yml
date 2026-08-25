@@ -1,0 +1,213 @@
+name: production-release-candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_image:
+        description: Immutable API registry reference ending in @sha256
+        required: true
+        type: string
+      workers_image:
+        description: Immutable worker registry reference ending in @sha256
+        required: true
+        type: string
+      gateway_image:
+        description: Immutable integration-gateway registry reference ending in @sha256
+        required: true
+        type: string
+      client_broker_image:
+        description: Immutable client-integration-broker registry reference ending in @sha256
+        required: true
+        type: string
+      migrator_image:
+        description: Immutable PostgreSQL migrator registry reference ending in @sha256
+        required: true
+        type: string
+      production_host:
+        description: Public production DNS hostname
+        required: true
+        type: string
+      oidc_issuer:
+        description: Production OIDC issuer HTTPS URL
+        required: true
+        type: string
+      oidc_jwks_url:
+        description: Production OIDC JWKS HTTPS URL
+        required: true
+        type: string
+      oidc_audience:
+        description: Production API OIDC audience
+        required: true
+        type: string
+      oidc_authorization_endpoint:
+        description: Public SPA OIDC authorization endpoint on the trusted issuer origin
+        required: true
+        type: string
+      oidc_token_endpoint:
+        description: CORS-enabled public SPA OIDC token endpoint on the trusted issuer origin
+        required: true
+        type: string
+      oidc_client_id:
+        description: Registered public SPA OIDC client identifier
+        required: true
+        type: string
+      oidc_redirect_uri:
+        description: Exact registered HTTPS callback URI ending in /auth/callback
+        required: true
+        type: string
+      oidc_scopes:
+        description: Space-separated public SPA scopes including openid and excluding offline_access
+        required: true
+        type: string
+      media_safety_scanner_url:
+        description: Approved credential-free media-safety scanner HTTPS origin on port 443
+        required: true
+        type: string
+      tenant_id:
+        description: Release tenant identifier
+        required: true
+        type: string
+      release_id:
+        description: Unique DNS-label release identifier
+        required: true
+        type: string
+      ingress_class:
+        description: Installed production ingress class
+        required: true
+        type: string
+      ingress_namespace:
+        description: Namespace containing the trusted ingress controller
+        required: true
+        type: string
+      postgres_cidr:
+        description: Canonical RFC1918 CIDR containing only the production PostgreSQL endpoint
+        required: true
+        type: string
+      postgres_port:
+        description: Production PostgreSQL TCP port
+        required: true
+        type: string
+      redis_cidr:
+        description: Canonical RFC1918 CIDR containing only the production Redis endpoint
+        required: true
+        type: string
+      redis_port:
+        description: Production Redis TLS TCP port
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-release-candidate
+  cancel-in-progress: false
+
+jobs:
+  render-after-environment-approval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production-release-approval
+      url: https://${{ inputs.production_host }}
+    env:
+      LTM_API_IMAGE: ${{ inputs.api_image }}
+      LTM_WORKERS_IMAGE: ${{ inputs.workers_image }}
+      LTM_GATEWAY_IMAGE: ${{ inputs.gateway_image }}
+      LTM_CLIENT_BROKER_IMAGE: ${{ inputs.client_broker_image }}
+      LTM_MIGRATOR_IMAGE: ${{ inputs.migrator_image }}
+      LTM_PRODUCTION_HOST: ${{ inputs.production_host }}
+      LTM_OIDC_ISSUER: ${{ inputs.oidc_issuer }}
+      LTM_OIDC_JWKS_URL: ${{ inputs.oidc_jwks_url }}
+      LTM_OIDC_AUDIENCE: ${{ inputs.oidc_audience }}
+      LTM_WEB_OIDC_AUTHORIZATION_ENDPOINT: ${{ inputs.oidc_authorization_endpoint }}
+      LTM_WEB_OIDC_TOKEN_ENDPOINT: ${{ inputs.oidc_token_endpoint }}
+      LTM_WEB_OIDC_CLIENT_ID: ${{ inputs.oidc_client_id }}
+      LTM_WEB_OIDC_REDIRECT_URI: ${{ inputs.oidc_redirect_uri }}
+      LTM_WEB_OIDC_SCOPES: ${{ inputs.oidc_scopes }}
+      LTM_MEDIA_SAFETY_SCANNER_URL: ${{ inputs.media_safety_scanner_url }}
+      LTM_TENANT_ID: ${{ inputs.tenant_id }}
+      LTM_RELEASE_ID: ${{ inputs.release_id }}
+      LTM_INGRESS_CLASS: ${{ inputs.ingress_class }}
+      LTM_INGRESS_NAMESPACE: ${{ inputs.ingress_namespace }}
+      LTM_POSTGRES_CIDR: ${{ inputs.postgres_cidr }}
+      LTM_POSTGRES_PORT: ${{ inputs.postgres_port }}
+      LTM_REDIS_CIDR: ${{ inputs.redis_cidr }}
+      LTM_REDIS_PORT: ${{ inputs.redis_port }}
+    steps:
+      - name: Require the protected main branch
+        run: test "${GITHUB_REF}" = "refs/heads/main"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.12.4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 26
+          cache: pnpm
+      - uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5.1.0
+        with:
+          version: v1.36.2
+      - run: pnpm install --frozen-lockfile
+      - name: Re-run release infrastructure contracts
+        run: pnpm run test:infra
+      - name: Render immutable production Kubernetes release candidate
+        run: |
+          mkdir -p .artifacts/production-release-candidate
+          node tools/kubernetes-production.mjs render \
+            --output=.artifacts/production-release-candidate/kubernetes \
+            --api-image="${LTM_API_IMAGE}" \
+            --workers-image="${LTM_WORKERS_IMAGE}" \
+            --gateway-image="${LTM_GATEWAY_IMAGE}" \
+            --client-broker-image="${LTM_CLIENT_BROKER_IMAGE}" \
+            --migrator-image="${LTM_MIGRATOR_IMAGE}" \
+            --host="${LTM_PRODUCTION_HOST}" \
+            --oidc-issuer="${LTM_OIDC_ISSUER}" \
+            --oidc-jwks-url="${LTM_OIDC_JWKS_URL}" \
+            --oidc-audience="${LTM_OIDC_AUDIENCE}" \
+            --oidc-authorization-endpoint="${LTM_WEB_OIDC_AUTHORIZATION_ENDPOINT}" \
+            --oidc-token-endpoint="${LTM_WEB_OIDC_TOKEN_ENDPOINT}" \
+            --oidc-client-id="${LTM_WEB_OIDC_CLIENT_ID}" \
+            --oidc-redirect-uri="${LTM_WEB_OIDC_REDIRECT_URI}" \
+            --oidc-scopes="${LTM_WEB_OIDC_SCOPES}" \
+            --media-safety-scanner-url="${LTM_MEDIA_SAFETY_SCANNER_URL}" \
+            --tenant-id="${LTM_TENANT_ID}" \
+            --release-id="${LTM_RELEASE_ID}" \
+            --ingress-class="${LTM_INGRESS_CLASS}" \
+            --ingress-namespace="${LTM_INGRESS_NAMESPACE}" \
+            --postgres-cidr="${LTM_POSTGRES_CIDR}" \
+            --postgres-port="${LTM_POSTGRES_PORT}" \
+            --redis-cidr="${LTM_REDIS_CIDR}" \
+            --redis-port="${LTM_REDIS_PORT}" \
+            > .artifacts/production-release-candidate/static-validation.json
+      - name: Verify Kustomize expansion and bind candidate checksums
+        run: |
+          kubectl version --client --output=json \
+            > .artifacts/production-release-candidate/kubectl-toolchain.json
+          node -e 'const fs=require("node:fs");const v=JSON.parse(fs.readFileSync(".artifacts/production-release-candidate/kubectl-toolchain.json","utf8"));if(v.clientVersion?.gitVersion!=="v1.36.2"||typeof v.kustomizeVersion!=="string"||v.kustomizeVersion.length===0)process.exit(1)'
+          kubectl kustomize .artifacts/production-release-candidate/kubernetes \
+            > .artifacts/production-release-candidate/rendered.yaml
+          sha256sum \
+            .artifacts/production-release-candidate/kubectl-toolchain.json \
+            .artifacts/production-release-candidate/static-validation.json \
+            .artifacts/production-release-candidate/rendered.yaml \
+            > .artifacts/production-release-candidate/SHA256SUMS
+      - name: Re-scan candidate source for committed secrets
+        run: node tools/secret-scan.mjs
+      - name: Upload release candidate without claiming deployment
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: production-release-candidate-${{ github.sha }}-${{ inputs.release_id }}
+          path: .artifacts/production-release-candidate
+          if-no-files-found: error
+          retention-days: 14
+      - name: Record certification boundary
+        run: |
+          printf '%s\n' \
+            '### Production release candidate only' \
+            '' \
+            'This workflow rendered and validated immutable manifests after GitHub environment approval.' \
+            'It did not deploy, observe production, approve B127, or fabricate external certification evidence.' \
+            >> "${GITHUB_STEP_SUMMARY}"

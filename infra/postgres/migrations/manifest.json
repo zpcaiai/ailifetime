@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "ltm.postgres-migration-manifest.v1",
+  "database": "postgresql",
+  "runtimeSchemaVersion": "5",
+  "migrations": [
+    {
+      "id": "001",
+      "path": "001_core.sql",
+      "sha256": "4f99ffeea4ed73427b89560121e5ac27ea038533be4cfad32ed5a67dfa56af7a"
+    },
+    {
+      "id": "002",
+      "path": "002_external_evidence.sql",
+      "sha256": "e999c018541c1dd54bab07fee7320fbc15d1d6322dec0c5efebe48ff03996989"
+    },
+    {
+      "id": "003",
+      "path": "003_runtime_compatibility.sql",
+      "sha256": "089cfbfbcd254df7163fb0c26de38cafa6b81b16b8a9d2ad1e9a5b3f8aded70f"
+    },
+    {
+      "id": "004",
+      "path": "004_external_business_events.sql",
+      "sha256": "1b57eb394d5d6b355fca338b82776ba1d8dd0d40ac89f1a0730b4ada5c646622"
+    },
+    {
+      "id": "005",
+      "path": "005_participant_authority_and_processing_purpose.sql",
+      "sha256": "cacd667b8057a1a66ddbc69f9bb286dad4b55bc9070ba7e56e2283d65fec80a5"
+    }
+  ]
+}

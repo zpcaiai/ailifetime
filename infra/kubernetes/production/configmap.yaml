@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ltm-production-config
+data:
+  APP_ENV: production
+  LTM_DEPLOYMENT_PROFILE: distributed
+  LTM_PROVIDER_MODE: external-verified
+  LTM_TRUST_PROXY: "true"
+  LTM_PUBLIC_BASE_URL: "https://__LTM_HOST__"
+  LTM_AUTH_MODE: oidc
+  LTM_OIDC_ISSUER: "__LTM_OIDC_ISSUER__"
+  LTM_OIDC_JWKS_URL: "__LTM_OIDC_JWKS_URL__"
+  LTM_OIDC_AUDIENCE: "__LTM_OIDC_AUDIENCE__"
+  LTM_WEB_OIDC_AUTHORIZATION_ENDPOINT: "__LTM_WEB_OIDC_AUTHORIZATION_ENDPOINT__"
+  LTM_WEB_OIDC_TOKEN_ENDPOINT: "__LTM_WEB_OIDC_TOKEN_ENDPOINT__"
+  LTM_WEB_OIDC_CLIENT_ID: "__LTM_WEB_OIDC_CLIENT_ID__"
+  LTM_WEB_OIDC_REDIRECT_URI: "__LTM_WEB_OIDC_REDIRECT_URI__"
+  LTM_WEB_OIDC_SCOPES: "__LTM_WEB_OIDC_SCOPES__"
+  LTM_OIDC_ALGORITHMS: RS256,ES256
+  LTM_OIDC_MAX_TOKEN_AGE_SECONDS: "900"
+  LTM_OIDC_CLOCK_TOLERANCE_SECONDS: "5"
+  LTM_OIDC_STEP_UP_ACR_VALUES: urn:ltm:acr:mfa
+  LTM_WECHAT_IDENTITY_BROKER_URL: "https://ltm-client-integration-broker.ltm-production.svc:8443"
+  LTM_WECHAT_IDENTITY_TOKEN_FILE: /var/run/secrets/ltm-client-brokers/wechat-identity-token
+  LTM_UPLOAD_BROKER_URL: "https://ltm-client-integration-broker.ltm-production.svc:8443"
+  LTM_UPLOAD_BROKER_TOKEN_FILE: /var/run/secrets/ltm-client-brokers/upload-broker-token
+  LTM_POSTGRES_APPLICATION_NAME: ltm-api
+  LTM_POSTGRES_WORKER_APPLICATION_NAME: ltm-worker
+  LTM_POSTGRES_CONNECTION_TIMEOUT_MS: "5000"
+  LTM_POSTGRES_STATEMENT_TIMEOUT_MS: "15000"
+  LTM_CONSENT_POLICY_CATALOG_FILE: /var/run/secrets/ltm-consent-policy/catalog.json
+  LTM_CONSENT_POLICY_JURISDICTION: CN
+  LTM_CONSENT_POLICY_LOCALE: zh-CN
+  LTM_METRICS_PATH: /metrics
+  TMPDIR: /tmp

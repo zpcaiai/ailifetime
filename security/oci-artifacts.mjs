@@ -1,6 +1,12 @@
 import { execFileSync } from "node:child_process";
 
-const REQUIRED_PRODUCTION_ROLES = ["api", "workers", "integration-gateway", "postgres", "redis", "object-storage"];
+const REQUIRED_PRODUCTION_ROLES = [
+  "api",
+  "workers",
+  "integration-gateway",
+  "client-integration-broker",
+  "migrator",
+];
 
 export function captureLocalOciArtifacts(images, options = {}) {
   if (!Array.isArray(images) || images.length === 0) throw new Error("at least one OCI image is required");

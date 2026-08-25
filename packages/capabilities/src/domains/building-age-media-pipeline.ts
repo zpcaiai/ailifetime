@@ -6,6 +6,7 @@ import {
   defineCapability,
   participantConsent,
   registerDefinitions,
+  requireAcceptedMediaIntake,
   requireInteger,
   requireNonEmptyObject,
   type DomainCapabilityDefinition,
@@ -147,7 +148,9 @@ function reserveGenerationBudget(input: JsonObject): JsonObject {
 
 const definitions: readonly DomainCapabilityDefinition[] = [
   defineCapability("B14", SKILL, "createTimeline", createTimeline, {
-    consent: participantConsent(), mode: "external-command", collection: "generation.timeline-commands", recordIdField: "jobId",
+    consent: participantConsent({ resourcePrefix: "media.asset", resourceIdField: "sourceAssetId", action: "transform" }),
+    prerequisite: (runtime, invocation, data) => requireAcceptedMediaIntake(runtime, invocation, data),
+    mode: "external-command", collection: "generation.timeline-commands", recordIdField: "jobId",
   }),
   defineCapability("B15", SKILL, "evaluateQuality", qualityGate, {
     consent: participantConsent(), mode: "resource", collection: "media.quality-decisions", recordIdField: "workId",

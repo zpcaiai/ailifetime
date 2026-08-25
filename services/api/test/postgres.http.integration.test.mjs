@@ -10,7 +10,11 @@ test("HTTP command, query, and capability traffic use PostgreSQL", {
   skip: connectionString === undefined ? "set LTM_TEST_POSTGRES_URL to a migrated disposable database" : false,
 }, async () => {
   assert.ok(connectionString);
-  const runtime = await PostgresLifeTimeMachineRuntime.connect({ connectionString, evidencePolicy: "disabled" });
+  const runtime = await PostgresLifeTimeMachineRuntime.connect({
+    connectionString,
+    evidencePolicy: "disabled",
+    allowLegacyConsentPolicy: true,
+  });
   const server = createApiServer({
     runtime,
     authenticator: new StaticTokenAuthenticator([{
@@ -48,7 +52,7 @@ test("HTTP command, query, and capability traffic use PostgreSQL", {
       headers: { ...headers, "idempotency-key": "postgres-http-create-1" },
       body: JSON.stringify({
         command: "record.create",
-        input: { collection: "projects", data: { backend: "postgresql" } },
+        input: { collection: "projects", processingPurpose: "product_operation", data: { backend: "postgresql" } },
       }),
     });
     assert.equal(created.status, 200);
@@ -111,10 +115,14 @@ test("HTTP command, query, and capability traffic use PostgreSQL", {
           rolloutPercent: 1,
           waveStartedAt: "2026-08-20T00:00:00.000Z",
           releaseGates: Array.from({ length: 12 }, (_, index) => `G${index}`),
-          monitoringDomains: ["quality", "payment", "refund", "support", "ledger", "supply", "privacy", "security"],
+          monitoringDomains: ["quality", "payment", "refund", "message", "support", "ledger", "supply", "privacy", "security", "cost", "slo"],
           approvalIds: ["approval-1", "approval-2"],
           rollbackExerciseId: "rollback-exercise-1",
           automaticPausePolicyVersion: "pause-policy-v1",
+          guardrailPolicySha256: "c".repeat(64),
+          waveObservationSetSha256: "d".repeat(64),
+          rollbackForwardDrillSha256: "e".repeat(64),
+          changeApproverEvidenceIds: ["change-risk-evidence-1", "change-operations-evidence-1"],
           activeGuardrailBreaches: 0,
           externalEvidenceIds: ["evidence-1", "evidence-2", "evidence-3", "evidence-4", "evidence-5"],
         },

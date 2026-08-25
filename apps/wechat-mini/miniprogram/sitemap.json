@@ -1,0 +1,4 @@
+{
+  "desc": "Private authenticated journeys are not indexable",
+  "rules": [{ "action": "disallow", "page": "*" }]
+}

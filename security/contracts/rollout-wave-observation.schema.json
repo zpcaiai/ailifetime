@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-life-time-machine.example/contracts/rollout-wave-observation.v1.schema.json",
+  "title": "Digest-bound B127 rollout-wave observation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "reportId", "releaseId", "tenantId", "launchId", "deploymentId",
+    "repositoryCommit", "componentSetSha256", "wave", "rolloutPercent", "monitoringWindow",
+    "guardrailPolicySha256", "automaticPausePolicy", "measurements", "measurementSetSha256", "conclusion", "producer"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "ltm.rollout-wave-observation.v1" },
+    "reportId": { "$ref": "#/$defs/identifier" },
+    "releaseId": { "$ref": "#/$defs/identifier" },
+    "tenantId": { "$ref": "#/$defs/identifier" },
+    "launchId": { "$ref": "#/$defs/identifier" },
+    "deploymentId": { "$ref": "#/$defs/identifier" },
+    "repositoryCommit": { "type": "string", "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$" },
+    "componentSetSha256": { "$ref": "#/$defs/sha256" },
+    "guardrailPolicySha256": { "$ref": "#/$defs/sha256" },
+    "wave": { "enum": ["internal", "pilot", "consumer_canary", "partner", "regional"] },
+    "rolloutPercent": { "type": "integer", "minimum": 1, "maximum": 99 },
+    "monitoringWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startedAt", "endedAt", "minimumObservationSeconds", "observedSeconds", "collectionIntervalSeconds"],
+      "properties": {
+        "startedAt": { "type": "string", "format": "date-time" },
+        "endedAt": { "type": "string", "format": "date-time" },
+        "minimumObservationSeconds": { "type": "integer", "minimum": 3600 },
+        "observedSeconds": { "type": "integer", "minimum": 3600 },
+        "collectionIntervalSeconds": { "type": "integer", "minimum": 1, "maximum": 300 }
+      }
+    },
+    "automaticPausePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policyVersion", "action", "evaluationMode", "evaluatedAt", "drill"],
+      "properties": {
+        "policyVersion": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "action": { "const": "pause_wave" },
+        "evaluationMode": { "const": "server_side" },
+        "evaluatedAt": { "type": "string", "format": "date-time" },
+        "drill": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "drillId", "injectedDomain", "signalId", "threshold", "observedValue", "pauseCommandId",
+            "commandIssuedAt", "commandAcknowledgedAt", "commandArtifact", "receiptArtifact", "conclusion"
+          ],
+          "properties": {
+            "drillId": { "$ref": "#/$defs/identifier" },
+            "injectedDomain": { "$ref": "#/$defs/monitoringDomain" },
+            "signalId": { "$ref": "#/$defs/identifier" },
+            "threshold": { "type": "number", "minimum": 0, "maximum": 1000000000000 },
+            "observedValue": { "type": "number", "minimum": 0, "maximum": 1000000000000 },
+            "pauseCommandId": { "$ref": "#/$defs/identifier" },
+            "commandIssuedAt": { "type": "string", "format": "date-time" },
+            "commandAcknowledgedAt": { "type": "string", "format": "date-time" },
+            "commandArtifact": { "$ref": "#/$defs/artifact" },
+            "receiptArtifact": { "$ref": "#/$defs/artifact" },
+            "conclusion": { "const": "paused" }
+          }
+        }
+      }
+    },
+    "measurements": {
+      "type": "array",
+      "minItems": 11,
+      "maxItems": 11,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "domain", "signalId", "unit", "comparator", "threshold", "observedValue",
+          "sampleCount", "queryArtifact", "resultArtifact", "conclusion"
+        ],
+        "properties": {
+          "domain": { "$ref": "#/$defs/monitoringDomain" },
+          "signalId": { "$ref": "#/$defs/identifier" },
+          "unit": { "enum": ["ratio", "count", "minor_currency"] },
+          "comparator": { "const": "lte" },
+          "threshold": { "type": "number", "minimum": 0, "maximum": 1000000000000 },
+          "observedValue": { "type": "number", "minimum": 0, "maximum": 1000000000000 },
+          "sampleCount": { "type": "integer", "minimum": 1 },
+          "queryArtifact": { "$ref": "#/$defs/artifact" },
+          "resultArtifact": { "$ref": "#/$defs/artifact" },
+          "conclusion": { "const": "within_threshold" }
+        }
+      }
+    },
+    "measurementSetSha256": { "$ref": "#/$defs/sha256" },
+    "conclusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "decision", "breachCount"],
+      "properties": {
+        "status": { "const": "passed" },
+        "decision": { "const": "continue" },
+        "breachCount": { "const": 0 }
+      }
+    },
+    "producer": { "$ref": "#/$defs/producer" }
+  },
+  "$defs": {
+    "identifier": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "artifact": {
+      "type": "object", "additionalProperties": false, "required": ["path", "sha256", "attestation"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "attestation": { "$ref": "#/$defs/attestationArtifact" }
+      }
+    },
+    "attestationArtifact": {
+      "type": "object", "additionalProperties": false, "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "monitoringDomain": {
+      "enum": ["quality", "payment", "refund", "message", "support", "ledger", "supply", "privacy", "security", "cost", "slo"]
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "invocationId"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "version": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "invocationId": { "$ref": "#/$defs/identifier" }
+      }
+    }
+  },
+  "$comment": "Each raw query/result and pause command/receipt reference includes a separate digest-addressed control-artifact attestation. The executable B127 validator additionally verifies its closed production Ed25519 producer contract and enforces exact domain signal/unit mappings, thresholds, raw-result digests, release bindings, time bounds, signer independence, single-use attestation identity, and measurementSetSha256."
+}

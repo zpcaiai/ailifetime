@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-life-time-machine.example/contracts/production-change-approver-evidence.v1.schema.json",
+  "title": "Independently signed production change approver evidence",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "evidenceId", "approverId", "issuer", "keyId", "authorityRole", "algorithm", "approvedAt", "claims", "signature"],
+  "properties": {
+    "schemaVersion": { "const": "ltm.production-change-approver-evidence.v1" },
+    "evidenceId": { "$ref": "#/$defs/id" }, "approverId": { "$ref": "#/$defs/id" }, "issuer": { "$ref": "#/$defs/id" }, "keyId": { "$ref": "#/$defs/id" },
+    "authorityRole": { "enum": ["production-change-risk-approver", "production-change-operations-approver"] },
+    "algorithm": { "const": "Ed25519" }, "approvedAt": { "type": "string", "format": "date-time" },
+    "claims": {
+      "type": "object", "additionalProperties": false,
+      "required": ["tenantId", "launchId", "changeId", "deploymentId", "repositoryCommit", "componentSetSha256", "guardrailPolicySha256", "waveObservationSetSha256", "rollbackForwardDrillSha256", "windowStart", "windowEnd", "executor", "decision"],
+      "properties": {
+        "tenantId": { "$ref": "#/$defs/id" }, "launchId": { "$ref": "#/$defs/id" }, "changeId": { "$ref": "#/$defs/id" }, "deploymentId": { "$ref": "#/$defs/id" },
+        "repositoryCommit": { "type": "string", "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$" }, "componentSetSha256": { "$ref": "#/$defs/sha256" }, "guardrailPolicySha256": { "$ref": "#/$defs/sha256" }, "waveObservationSetSha256": { "$ref": "#/$defs/sha256" }, "rollbackForwardDrillSha256": { "$ref": "#/$defs/sha256" },
+        "windowStart": { "type": "string", "format": "date-time" }, "windowEnd": { "type": "string", "format": "date-time" },
+        "executor": { "type": "object", "additionalProperties": false, "required": ["actorId", "issuer", "keyId"], "properties": { "actorId": { "$ref": "#/$defs/id" }, "issuer": { "$ref": "#/$defs/id" }, "keyId": { "$ref": "#/$defs/id" } } },
+        "decision": { "const": "approved" }
+      }
+    },
+    "signature": { "type": "string", "pattern": "^[A-Za-z0-9_-]{80,120}$" }
+  },
+  "$defs": { "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" }, "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" } }
+}

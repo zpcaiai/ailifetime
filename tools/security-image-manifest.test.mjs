@@ -18,7 +18,7 @@ test("captures exact local OCI content IDs without pretending they are registry 
 });
 
 test("production passes only with every required role bound to an immutable registry digest", () => {
-  const roles = ["api", "workers", "integration-gateway", "postgres", "redis", "object-storage"];
+  const roles = ["api", "workers", "integration-gateway", "client-integration-broker", "migrator"];
   const manifest = {
     version: "ltm.oci-artifact-manifest.v1", environment: "production",
     images: roles.map((role, index) => {
@@ -32,7 +32,7 @@ test("production passes only with every required role bound to an immutable regi
 });
 
 test("a locally synthesized RepoDigest cannot upgrade a mutable build tag to production", () => {
-  const roles = ["api", "workers", "integration-gateway", "postgres", "redis", "object-storage"];
+  const roles = ["api", "workers", "integration-gateway", "client-integration-broker", "migrator"];
   const manifest = {
     version: "ltm.oci-artifact-manifest.v1", environment: "production",
     images: roles.map((role, index) => ({

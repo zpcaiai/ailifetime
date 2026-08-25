@@ -9,12 +9,14 @@
     "trivy-api-image-json",
     "trivy-workers-image-json",
     "trivy-integration-gateway-image-json",
+    "trivy-client-integration-broker-image-json",
+    "trivy-migrator-image-json",
     "ltm-dast-report"
   ],
   "findingSlaDays": { "critical": 1, "high": 7, "medium": 30, "low": 90 },
   "maximumExceptionDays": { "critical": 7, "high": 30, "medium": 90, "low": 180 },
   "dastCategories": ["auth", "tenant_idor", "upload_signed_url", "webhook_payment", "ssrf", "xss", "csrf", "admin"],
-  "productionOciRoles": ["api", "workers", "integration-gateway", "postgres", "redis", "object-storage"],
+  "productionOciRoles": ["api", "workers", "integration-gateway", "client-integration-broker", "migrator"],
   "requiredProductionUpstreamEvidence": {
     "B119": {
       "operation": "approveConfigurationChange",

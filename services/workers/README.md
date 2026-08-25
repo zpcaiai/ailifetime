@@ -4,11 +4,11 @@
 
 External commands have one side-effecting outbox event: `external_command.requested`. The worker persists `dispatched` before calling a provider and records `acknowledged` only after validating the provider's signed response. Aggregate create/update and later lifecycle events cannot trigger another delivery. A response loss is retried with the same provider idempotency key. `succeeded`, `failed`, `cancelled` and `compensated` are accepted only from the signed callback/business-event transaction; an outbound HTTP acceptance never becomes commercial success.
 
-The service actor is always `service_account` with only `outbox:read`, `outbox:publish`, `record:read`, `external-command:read`, `external-command:transition` and `audit:append`. It never runs as `platform_admin`.
+The service actor is always `service_account` with only `outbox:read`, `outbox:publish`, `record:read`, audited `record:purpose:cross`, `external-command:read`, `external-command:transition` and `audit:append`. The cross-purpose grant is needed only to deliver records under their immutable stored purpose; the runtime still enforces the record's exact participant consent before returning data. It never runs as `platform_admin`.
 
 ## Production configuration
 
-Set `APP_ENV=production`, `LTM_DEPLOYMENT_PROFILE=distributed`, a least-privilege `DATABASE_URL` ending in `sslmode=verify-full`, `LTM_WORKER_TENANT_ID` and `LTM_WORKER_ID`. The worker and API then share the PostgreSQL outbox; `LTM_DATABASE_PATH` is rejected in this profile. SQLite remains a single-node development option and production requires the explicit `LTM_ALLOW_SINGLE_NODE_SQLITE=true` risk acceptance. `LTM_OUTBOX_ROUTE_ADAPTERS_JSON` must map all five route names. `LTM_EXTERNAL_COMMAND_ADAPTERS_JSON` must map these 18 batches:
+Set `APP_ENV=production`, `LTM_DEPLOYMENT_PROFILE=distributed`, a least-privilege `DATABASE_URL` ending in `sslmode=verify-full`, `LTM_WORKER_TENANT_ID` and `LTM_WORKER_ID`. The worker and API then share the PostgreSQL outbox; `LTM_DATABASE_PATH` is rejected in this profile. SQLite remains a single-node development option and production requires the explicit `LTM_ALLOW_SINGLE_NODE_SQLITE=true` risk acceptance. `LTM_OUTBOX_ROUTE_ADAPTERS_JSON` must map all five route names. `LTM_EXTERNAL_COMMAND_ADAPTERS_JSON` maps these 18 batches; the B10 adapter serves two fixed operations (`publishExport` and server-derived `revokeExport`), so these adapters cover 19 signed callback route contracts:
 
 `B05,B10,B13,B14,B16,B23,B26,B29,B36,B38,B40,B65,B67,B74,B83,B89,B98,B101`
 

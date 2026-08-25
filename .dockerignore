@@ -3,8 +3,71 @@
 .ai-life-time-machine
 skills
 .data
+.artifacts
+**/.artifacts
 **/build
 **/dist
 **/node_modules
 coverage
 evidence
+evidence/**/runtime/private
+
+# Local configuration is never part of an image build. Checked-in examples are
+# intentionally retained so image builds can still validate configuration shape.
+.env
+.env.*
+!.env.example
+!.env.*.example
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+
+# Package-manager and CLI authentication files can contain publish tokens.
+.npmrc
+**/.npmrc
+.pnpmrc
+**/.pnpmrc
+.yarnrc
+.yarnrc.*
+**/.yarnrc
+**/.yarnrc.*
+.netrc
+**/.netrc
+**/.docker/config.json
+
+# Local durable stores and their WAL/SHM sidecars may contain customer data.
+**/*.db
+**/*.db-*
+**/*.sqlite
+**/*.sqlite-*
+**/*.sqlite3
+**/*.sqlite3-*
+
+# WeChat developer overrides and ext-app bindings are workstation credentials.
+apps/wechat-mini/project.private.config.json
+apps/wechat-mini/miniprogram/ext.json
+
+# Private keys, key stores, and certificate material must be projected at runtime.
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.p8
+**/*.pk8
+**/*.pkcs8
+**/*.ppk
+**/*.jks
+**/*.jceks
+**/*.keystore
+**/*.crt
+**/*.cer
+**/*.cert
+**/*.der
+**/id_rsa
+**/id_dsa
+**/id_ecdsa
+**/id_ed25519
+apps/web/public/assets/app.js
+apps/web/public/assets/auth*.js
+apps/web/public/assets/surface*.js

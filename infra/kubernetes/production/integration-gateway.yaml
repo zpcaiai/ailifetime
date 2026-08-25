@@ -1,0 +1,147 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ltm-integration-gateway
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  minReadySeconds: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ltm-integration-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ltm-integration-gateway
+        ltm.openai.com/network-role: integration-gateway
+    spec:
+      serviceAccountName: ltm-integration-gateway
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: ltm-integration-gateway
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: ltm-integration-gateway
+      containers:
+        - name: integration-gateway
+          image: __LTM_GATEWAY_IMAGE__
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8081
+          envFrom:
+            - secretRef:
+                name: ltm-production-integration-gateway
+          env:
+            - name: APP_ENV
+              value: production
+            - name: HOST
+              value: 0.0.0.0
+            - name: PORT
+              value: "8081"
+            - name: LTM_TENANT_ID
+              value: "__LTM_TENANT_ID__"
+            - name: LTM_API_COMMAND_URL
+              value: "https://__LTM_HOST__/v1/commands"
+            - name: LTM_API_BEARER_TOKEN_FILE
+              value: /var/run/secrets/ltm-api/token
+            - name: AWS_WEB_IDENTITY_TOKEN_FILE
+              value: /var/run/secrets/ltm-workload/token
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            timeoutSeconds: 3
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 20
+            timeoutSeconds: 3
+            periodSeconds: 20
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 5
+            failureThreshold: 24
+          resources:
+            requests:
+              cpu: 250m
+              memory: 384Mi
+            limits:
+              cpu: "2"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: api-token
+              mountPath: /var/run/secrets/ltm-api
+              readOnly: true
+            - name: workload-token
+              mountPath: /var/run/secrets/ltm-workload
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi
+        - name: api-token
+          secret:
+            secretName: ltm-production-integration-gateway-api-token
+            defaultMode: 0440
+            items:
+              - key: token
+                path: token
+        - name: workload-token
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: ltm-production-secrets
+                  expirationSeconds: 3600
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ltm-integration-gateway
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ltm-integration-gateway
+  ports:
+    - name: http
+      port: 8081
+      targetPort: http

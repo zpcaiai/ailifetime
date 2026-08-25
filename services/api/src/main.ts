@@ -36,6 +36,10 @@ async function run(): Promise<void> {
     bodyLimitBytes: configuration.bodyLimitBytes,
     allowSandboxStepUpHeader: configuration.allowSandboxStepUpHeader,
     appEnvironment: configuration.appEnvironment,
+    clientIntegrations: configuration.clientIntegrations,
+    ...(configuration.browserOidcConfiguration === undefined
+      ? {}
+      : { browserOidcConfiguration: configuration.browserOidcConfiguration }),
     ...(configuration.staticDirectory === undefined ? {} : { staticDirectory: configuration.staticDirectory }),
     ...(configuration.metricsTokenSha256 === undefined
       ? {}

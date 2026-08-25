@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-life-time-machine.example/contracts/release-approval-artifact.v1.schema.json",
+  "title": "Digest-bound production release approval artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "approvalType", "approvalId", "authorityRole", "authority", "issuer",
+    "tenantId", "launchId", "environment", "repositoryCommit", "sbomSha256", "decision",
+    "approvedAt", "expiresAt", "subject"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "ltm.release-approval-artifact.v1" },
+    "approvalType": {
+      "enum": [
+        "independentPenetrationTest", "legalRegulatoryReview", "manualAccessibilityReview",
+        "appleAppStoreDecision", "googlePlayDecision", "wechatMiniProgramDecision",
+        "disasterRecoveryDrill", "productionChangeApproval"
+      ]
+    },
+    "approvalId": { "$ref": "#/$defs/identifier" },
+    "authorityRole": { "$ref": "#/$defs/identifier" },
+    "authority": { "type": "string", "minLength": 1, "maxLength": 300 },
+    "issuer": { "$ref": "#/$defs/identifier" },
+    "tenantId": { "$ref": "#/$defs/identifier" },
+    "launchId": { "$ref": "#/$defs/identifier" },
+    "environment": { "const": "production" },
+    "repositoryCommit": { "type": "string", "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$" },
+    "sbomSha256": { "$ref": "#/$defs/sha256" },
+    "decision": { "enum": ["passed", "approved"] },
+    "approvedAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "oneOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }] },
+    "subject": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "approvalType": { "const": "productionChangeApproval" } },
+        "required": ["approvalType"]
+      },
+      "then": {
+        "properties": { "subject": { "$ref": "#/$defs/productionChangeApprovalSubject" } }
+      }
+    }
+  ],
+  "$defs": {
+    "identifier": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "productionChangeApprovalSubject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changeId", "ticketUrl", "deploymentId", "componentSetSha256", "waveObservationSetSha256",
+        "guardrailPolicySha256", "rollbackForwardDrillSha256", "executor", "approverEvidence", "windowStart", "windowEnd"
+      ],
+      "properties": {
+        "changeId": { "$ref": "#/$defs/identifier" },
+        "ticketUrl": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "deploymentId": { "$ref": "#/$defs/identifier" },
+        "componentSetSha256": { "$ref": "#/$defs/sha256" },
+        "guardrailPolicySha256": { "$ref": "#/$defs/sha256" },
+        "waveObservationSetSha256": { "$ref": "#/$defs/sha256" },
+        "rollbackForwardDrillSha256": { "$ref": "#/$defs/sha256" },
+        "executor": {
+          "type": "object", "additionalProperties": false, "required": ["actorId", "issuer", "keyId"],
+          "properties": { "actorId": { "$ref": "#/$defs/identifier" }, "issuer": { "$ref": "#/$defs/identifier" }, "keyId": { "$ref": "#/$defs/identifier" } }
+        },
+        "approverEvidence": {
+          "type": "array", "minItems": 2, "maxItems": 10, "uniqueItems": true,
+          "items": { "type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": { "path": { "type": "string", "minLength": 1, "maxLength": 1024 }, "sha256": { "$ref": "#/$defs/sha256" } } }
+        },
+        "windowStart": { "type": "string", "format": "date-time" },
+        "windowEnd": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "$comment": "The executable validator closes subject fields per approvalType and cross-checks every envelope field against B127."
+}

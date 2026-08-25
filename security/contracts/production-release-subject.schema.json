@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-life-time-machine.example/contracts/production-release-subject.v1.schema.json",
+  "title": "Canonical production release subject",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "deploymentId", "targetBaseUrl", "repositoryCommit", "profileVersion",
+    "componentSetSha256", "lockfileSha256", "migrationManifestSha256", "consentPolicyCatalogSha256",
+    "mediaLifecycleCatalogSha256", "mediaSafetyPolicySha256", "guardrailPolicySha256", "waveObservationSetSha256",
+    "rollbackForwardDrillSha256", "workloadImages",
+    "requiredProviderIds", "secretReferences", "forcedRlsTables", "databaseUrlReference",
+    "legal", "accessibility", "applications", "penetrationTest", "disasterRecovery", "goLive", "supplyChain"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "ltm.production-release-subject.v1" },
+    "deploymentId": { "$ref": "#/$defs/identifier" },
+    "targetBaseUrl": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "repositoryCommit": { "type": "string", "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$" },
+    "profileVersion": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "componentSetSha256": { "$ref": "#/$defs/sha256" },
+    "lockfileSha256": { "$ref": "#/$defs/sha256" },
+    "migrationManifestSha256": { "$ref": "#/$defs/sha256" },
+    "consentPolicyCatalogSha256": { "$ref": "#/$defs/sha256" },
+    "mediaLifecycleCatalogSha256": { "$ref": "#/$defs/sha256" },
+    "mediaSafetyPolicySha256": { "$ref": "#/$defs/sha256" },
+    "guardrailPolicySha256": { "$ref": "#/$defs/sha256" },
+    "waveObservationSetSha256": { "$ref": "#/$defs/sha256" },
+    "rollbackForwardDrillSha256": { "$ref": "#/$defs/sha256" },
+    "workloadImages": {
+      "type": "array", "minItems": 5, "maxItems": 5, "uniqueItems": true,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["role", "digest"],
+        "properties": { "role": { "$ref": "#/$defs/identifier" }, "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" } }
+      }
+    },
+    "requiredProviderIds": { "$ref": "#/$defs/nonEmptyIdentifiers" },
+    "secretReferences": { "$ref": "#/$defs/nonEmptyStrings" },
+    "forcedRlsTables": {
+      "const": [
+        "audit_log", "authorized_agent_authorizations", "consents", "evidence_consumptions",
+        "evidence_decisions", "external_business_events", "external_command_transitions",
+        "external_commands", "external_evidence", "guardian_authorizations", "idempotency",
+        "inbox", "ledger_lines", "ledger_transactions", "outbox", "participants", "records"
+      ]
+    },
+    "databaseUrlReference": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "legal": {
+      "type": "object", "additionalProperties": false, "required": ["legalEntityId", "jurisdictions"],
+      "properties": { "legalEntityId": { "$ref": "#/$defs/identifier" }, "jurisdictions": { "$ref": "#/$defs/nonEmptyIdentifiers" } }
+    },
+    "accessibility": {
+      "type": "object", "additionalProperties": false,
+      "required": ["standard", "platforms", "browsers", "assistiveTechnologies", "journeys"],
+      "properties": {
+        "standard": { "const": "WCAG-2.2-AA" }, "platforms": { "$ref": "#/$defs/nonEmptyIdentifiers" },
+        "browsers": { "$ref": "#/$defs/nonEmptyIdentifiers" }, "assistiveTechnologies": { "$ref": "#/$defs/nonEmptyIdentifiers" },
+        "journeys": { "$ref": "#/$defs/nonEmptyIdentifiers" }
+      }
+    },
+    "applications": {
+      "type": "object", "additionalProperties": false,
+      "required": ["appleAppStoreDecision", "googlePlayDecision", "wechatMiniProgramDecision"],
+      "properties": {
+        "appleAppStoreDecision": { "$ref": "#/$defs/application" },
+        "googlePlayDecision": { "$ref": "#/$defs/application" },
+        "wechatMiniProgramDecision": { "$ref": "#/$defs/application" }
+      }
+    },
+    "penetrationTest": {
+      "type": "object", "additionalProperties": false, "required": ["targetOrigin", "reportArtifactSha256", "findingRegistrySha256"],
+      "properties": { "targetOrigin": { "type": "string", "format": "uri" }, "reportArtifactSha256": { "$ref": "#/$defs/sha256" }, "findingRegistrySha256": { "$ref": "#/$defs/sha256" } }
+    },
+    "disasterRecovery": {
+      "type": "object", "additionalProperties": false,
+      "required": ["deploymentId", "reportArtifactSha256", "sourceRegion", "failoverRegion", "schemaVersion", "targetRtoSeconds", "targetRpoSeconds"],
+      "properties": {
+        "deploymentId": { "$ref": "#/$defs/identifier" }, "reportArtifactSha256": { "$ref": "#/$defs/sha256" },
+        "sourceRegion": { "$ref": "#/$defs/identifier" }, "failoverRegion": { "$ref": "#/$defs/identifier" },
+        "schemaVersion": { "const": "5" }, "targetRtoSeconds": { "type": "integer", "minimum": 1 }, "targetRpoSeconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "goLive": {
+      "type": "object", "additionalProperties": false, "required": ["windowStart", "windowEnd", "scheduledAt"],
+      "properties": { "windowStart": { "type": "string", "format": "date-time" }, "windowEnd": { "type": "string", "format": "date-time" }, "scheduledAt": { "type": "string", "format": "date-time" } }
+    },
+    "supplyChain": {
+      "type": "object", "additionalProperties": false, "required": ["bundleSha256", "provenanceSha256", "trustKeyId"],
+      "properties": { "bundleSha256": { "$ref": "#/$defs/sha256" }, "provenanceSha256": { "$ref": "#/$defs/sha256" }, "trustKeyId": { "$ref": "#/$defs/identifier" } }
+    }
+  },
+  "$defs": {
+    "identifier": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "nonEmptyIdentifiers": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/identifier" } },
+    "nonEmptyStrings": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 512 } },
+    "application": {
+      "type": "object", "additionalProperties": false, "required": ["store", "applicationId", "accountId", "version", "buildSha256"],
+      "properties": { "store": { "type": "string", "minLength": 1 }, "applicationId": { "type": "string", "minLength": 1 }, "accountId": { "type": "string", "minLength": 1 }, "version": { "type": "string", "minLength": 1 }, "buildSha256": { "$ref": "#/$defs/sha256" } }
+    }
+  }
+}

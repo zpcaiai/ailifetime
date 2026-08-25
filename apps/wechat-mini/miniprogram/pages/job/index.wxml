@@ -1,0 +1,10 @@
+<view class="page">
+  <view class="card">
+    <view class="title">{{title}}</view>
+    <view class="muted">{{description}}</view>
+    <view class="status">状态：{{state}}</view>
+    <button class="button secondary" bindtap="refresh">刷新</button>
+    <button class="button" wx:if="{{complete}}" bindtap="library">查看作品库</button>
+    <view class="status error" wx:if="{{error}}">{{error}}</view>
+  </view>
+</view>

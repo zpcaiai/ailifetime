@@ -1,5 +1,20 @@
-import type { CapabilityRegistry, JsonValue as CapabilityJsonValue } from "@ltm/capabilities";
-import { DomainError } from "@ltm/core";
+import {
+  CAPABILITY_PORTAL_MANIFEST,
+  EXTERNAL_EVENT_REDUCER_TARGET_COLLECTIONS,
+  capabilityPortalForSkill,
+  roleCanAccessCapabilityPortal,
+  type CapabilityPortalId,
+  type CapabilityRegistry,
+  type JsonValue as CapabilityJsonValue,
+} from "@ltm/capabilities";
+import {
+  DomainError,
+  DurableShareGrantService,
+  EXTERNAL_COMMAND_CALLBACK_ROUTES,
+  RIGHTS_REQUEST_COLLECTION,
+  RIGHTS_REQUEST_TYPES,
+  hasPermission,
+} from "@ltm/core";
 import type {
   ActorContext,
   EvidenceEnvironment,
@@ -10,11 +25,27 @@ import type {
   LedgerDirection,
   LifeTimeMachineRuntimePort,
   OutboxStatus,
+  ParticipantAuthorityCapacity,
+  ParticipantMinorStatus,
   SignedExternalEvidence,
   VerifiedBusinessEvent,
 } from "@ltm/core";
 
 type InputObject = Record<string, unknown>;
+
+const EXTERNAL_COMMAND_COLLECTIONS = new Set<string>(
+  EXTERNAL_COMMAND_CALLBACK_ROUTES.map((route) => route.collection),
+);
+const SERVER_MANAGED_MUTATION_COLLECTIONS = new Set<string>([
+  ...EXTERNAL_COMMAND_COLLECTIONS,
+  ...EXTERNAL_EVENT_REDUCER_TARGET_COLLECTIONS,
+  RIGHTS_REQUEST_COLLECTION,
+]);
+const SHARE_COMMAND_COLLECTIONS = new Set<string>(
+  EXTERNAL_COMMAND_CALLBACK_ROUTES
+    .filter((route) => route.batchId === "B10" && (route.operation === "publishExport" || route.operation === "revokeExport"))
+    .map((route) => route.collection),
+);
 
 export const COMMANDS = [
   "record.create",
@@ -26,6 +57,15 @@ export const COMMANDS = [
   "inbox.receive",
   "evidence.register",
   "evidence.revoke",
+  "participant.register",
+  "participant.revoke",
+  "participant-authority.grant",
+  "participant-authority.revoke",
+  "rights-request.submit",
+  "rights-request.task-receipt",
+  "rights-request.review",
+  "rights-request.escalate",
+  "share-grant.revoke",
   "external-command.transition",
   "external-event.apply",
 ] as const;
@@ -35,6 +75,8 @@ export const QUERIES = [
   "record.list",
   "consent.require",
   "consent.list",
+  "rights-request.get",
+  "rights-request.list",
   "ledger.get",
   "ledger.balance",
   "ledger.trialBalance",
@@ -45,6 +87,8 @@ export const QUERIES = [
   "evidence.get",
   "evidence.list",
   "external-command.get",
+  "share-grant.get",
+  "share-grant.list",
 ] as const;
 
 export interface DispatchEnvelope {
@@ -56,9 +100,17 @@ export interface CapabilityCatalogEntry {
   readonly batchId: string;
   readonly skill: string;
   readonly operation: string;
+  readonly permission: string;
+  readonly portalId: CapabilityPortalId;
   readonly mode: string;
   readonly requirements: readonly string[];
   readonly requiresExternalEvidence: boolean;
+}
+
+export interface VisibleCapabilityPortalEntry {
+  readonly id: CapabilityPortalId;
+  readonly skills: readonly string[];
+  readonly capabilityCount: number;
 }
 
 export function parseDispatchEnvelope(body: unknown, operationField: "command" | "query"): DispatchEnvelope {
@@ -71,14 +123,50 @@ export function parseDispatchEnvelope(body: unknown, operationField: "command" |
 }
 
 export function capabilityCatalog(registry: CapabilityRegistry): readonly CapabilityCatalogEntry[] {
-  return registry.list().map((definition) => ({
-    batchId: definition.batchId,
-    skill: definition.skill,
-    operation: definition.operation,
-    mode: definition.mode,
-    requirements: definition.requirements,
-    requiresExternalEvidence: definition.requiresExternalEvidence ?? false,
-  }));
+  return registry.list().map((definition) => {
+    const portal = capabilityPortalForSkill(definition.skill);
+    if (portal === undefined) {
+      throw new DomainError("INTERNAL_ERROR", "Capability skill is missing from the portal manifest", {
+        details: { batchId: definition.batchId, skill: definition.skill },
+      });
+    }
+    return {
+      batchId: definition.batchId,
+      skill: definition.skill,
+      operation: definition.operation,
+      permission: definition.permission,
+      portalId: portal.id,
+      mode: definition.mode,
+      requirements: definition.requirements,
+      requiresExternalEvidence: definition.requiresExternalEvidence ?? false,
+    };
+  });
+}
+
+export function visibleCapabilityCatalog(
+  registry: CapabilityRegistry,
+  context: ActorContext,
+): readonly CapabilityCatalogEntry[] {
+  const accessiblePortals = new Set(
+    CAPABILITY_PORTAL_MANIFEST
+      .filter((portal) => roleCanAccessCapabilityPortal(context.roles, portal))
+      .map((portal) => portal.id),
+  );
+  return capabilityCatalog(registry).filter(
+    (capability) => accessiblePortals.has(capability.portalId) && hasPermission(context, capability.permission),
+  );
+}
+
+export function visibleCapabilityPortals(
+  context: ActorContext,
+  capabilities: readonly CapabilityCatalogEntry[],
+): readonly VisibleCapabilityPortalEntry[] {
+  return CAPABILITY_PORTAL_MANIFEST.flatMap((portal) => {
+    if (!roleCanAccessCapabilityPortal(context.roles, portal)) return [];
+    const skills = portal.skills.filter((skill) => capabilities.some((capability) => capability.skill === skill));
+    const capabilityCount = capabilities.filter((capability) => capability.portalId === portal.id).length;
+    return capabilityCount === 0 ? [] : [{ id: portal.id, skills, capabilityCount }];
+  });
 }
 
 export async function dispatchCapability(
@@ -89,13 +177,17 @@ export async function dispatchCapability(
   inputValue: unknown,
   idempotencyKey: string,
 ): Promise<CapabilityJsonValue> {
-  const batchId = string(batchIdValue, "batchId", 8);
+  const batchId = normalizeCapabilityBatchId(batchIdValue);
   const definition = registry.get(batchId);
   if (definition === undefined) {
     throw new DomainError("RESOURCE_NOT_FOUND", "Capability was not found", { details: { batchId } });
   }
   const input = jsonObject(inputValue ?? {}, "input") as Record<string, CapabilityJsonValue>;
   return registry.execute(runtime, batchId, { actor: context, idempotencyKey, input });
+}
+
+export function normalizeCapabilityBatchId(batchIdValue: unknown): string {
+  return string(batchIdValue, "batchId", 8);
 }
 
 export async function dispatchCommand(
@@ -107,9 +199,11 @@ export async function dispatchCommand(
   idempotencyKey: string,
 ): Promise<unknown> {
   switch (command) {
-    case "record.create":
+    case "record.create": {
+      const collection = callerMutableCollection(input.collection);
       return runtime.createRecord(context, {
-        collection: string(input.collection, "input.collection", 80),
+        collection,
+        processingPurpose: string(input.processingPurpose, "input.processingPurpose", 120),
         data: jsonObject(input.data, "input.data"),
         idempotencyKey,
         ...(input.id === undefined ? {} : { id: string(input.id, "input.id", 128) }),
@@ -123,9 +217,11 @@ export async function dispatchCommand(
           ? {}
           : { containsMinor: boolean(input.containsMinor, "input.containsMinor") }),
       });
-    case "record.update":
+    }
+    case "record.update": {
+      const collection = callerMutableCollection(input.collection);
       return runtime.updateRecord(context, {
-        collection: string(input.collection, "input.collection", 80),
+        collection,
         id: string(input.id, "input.id", 128),
         expectedVersion: integer(input.expectedVersion, "input.expectedVersion", 1),
         data: jsonObject(input.data, "input.data"),
@@ -140,14 +236,20 @@ export async function dispatchCommand(
           ? {}
           : { containsMinor: boolean(input.containsMinor, "input.containsMinor") }),
       });
-    case "record.delete":
+    }
+    case "record.delete": {
+      const collection = callerMutableCollection(input.collection);
       return runtime.deleteRecord(context, {
-        collection: string(input.collection, "input.collection", 80),
+        collection,
         id: string(input.id, "input.id", 128),
         expectedVersion: integer(input.expectedVersion, "input.expectedVersion", 1),
         idempotencyKey,
       });
+    }
     case "consent.grant":
+      assertOnlyKeys(input, [
+        "participantId", "grantorCapacity", "purpose", "scope", "policyVersion", "evidenceHash", "id", "expiresAt",
+      ], "input");
       return runtime.grantConsent(context, {
         participantId: string(input.participantId, "input.participantId", 128),
         grantorCapacity: oneOf(
@@ -156,21 +258,147 @@ export async function dispatchCommand(
           ["self", "guardian", "authorized_agent"] as const,
         ) as GrantorCapacity,
         purpose: string(input.purpose, "input.purpose", 120),
-        scope: jsonObject(input.scope, "input.scope"),
+        scope: consentScope(input.scope, "input.scope"),
         policyVersion: string(input.policyVersion, "input.policyVersion", 128),
-        evidenceHash: string(input.evidenceHash, "input.evidenceHash", 64),
         idempotencyKey,
+        ...(input.evidenceHash === undefined
+          ? {}
+          : { evidenceHash: string(input.evidenceHash, "input.evidenceHash", 64) }),
         ...(input.id === undefined ? {} : { id: string(input.id, "input.id", 128) }),
-        ...(input.isMinor === undefined ? {} : { isMinor: boolean(input.isMinor, "input.isMinor") }),
         ...(input.expiresAt === undefined
           ? {}
           : { expiresAt: nullableString(input.expiresAt, "input.expiresAt", 64) }),
       });
     case "consent.withdraw":
+      assertOnlyKeys(input, ["consentId", "expectedVersion", "reason"], "input");
       return runtime.withdrawConsent(context, {
         consentId: string(input.consentId, "input.consentId", 128),
         expectedVersion: integer(input.expectedVersion, "input.expectedVersion", 1),
         reason: string(input.reason, "input.reason", 500),
+        idempotencyKey,
+      });
+    case "participant.register":
+      assertOnlyKeys(input, [
+        "participantId", "ownerActorId", "minorStatus", "expiresAt", "expectedVersion", "evidenceId",
+      ], "input");
+      return runtime.registerParticipant(context, {
+        participantId: string(input.participantId, "input.participantId", 128),
+        ownerActorId: string(input.ownerActorId, "input.ownerActorId", 128),
+        minorStatus: oneOf(
+          input.minorStatus,
+          "input.minorStatus",
+          ["adult", "minor"] as const,
+        ) as ParticipantMinorStatus,
+        expiresAt: string(input.expiresAt, "input.expiresAt", 64),
+        expectedVersion: input.expectedVersion === null
+          ? null
+          : integer(input.expectedVersion, "input.expectedVersion", 1),
+        evidenceId: string(input.evidenceId, "input.evidenceId", 128),
+        idempotencyKey,
+      });
+    case "participant.revoke":
+      assertOnlyKeys(input, ["participantId", "expectedVersion", "reason", "evidenceId"], "input");
+      return runtime.revokeParticipant(context, {
+        participantId: string(input.participantId, "input.participantId", 128),
+        expectedVersion: integer(input.expectedVersion, "input.expectedVersion", 1),
+        reason: string(input.reason, "input.reason", 500),
+        evidenceId: string(input.evidenceId, "input.evidenceId", 128),
+        idempotencyKey,
+      });
+    case "participant-authority.grant":
+      assertOnlyKeys(input, [
+        "authorizationId", "authorizedActorId", "participantId", "capacity", "scope", "expiresAt", "evidenceId",
+      ], "input");
+      return runtime.grantParticipantAuthority(context, {
+        authorizationId: string(input.authorizationId, "input.authorizationId", 128),
+        authorizedActorId: string(input.authorizedActorId, "input.authorizedActorId", 128),
+        participantId: string(input.participantId, "input.participantId", 128),
+        capacity: oneOf(
+          input.capacity,
+          "input.capacity",
+          ["guardian", "authorized_agent"] as const,
+        ) as ParticipantAuthorityCapacity,
+        scope: consentScope(input.scope, "input.scope"),
+        expiresAt: string(input.expiresAt, "input.expiresAt", 64),
+        evidenceId: string(input.evidenceId, "input.evidenceId", 128),
+        idempotencyKey,
+      });
+    case "participant-authority.revoke":
+      assertOnlyKeys(input, ["authorizationId", "capacity", "expectedVersion", "reason", "evidenceId"], "input");
+      return runtime.revokeParticipantAuthority(context, {
+        authorizationId: string(input.authorizationId, "input.authorizationId", 128),
+        capacity: oneOf(
+          input.capacity,
+          "input.capacity",
+          ["guardian", "authorized_agent"] as const,
+        ) as ParticipantAuthorityCapacity,
+        expectedVersion: integer(input.expectedVersion, "input.expectedVersion", 1),
+        reason: string(input.reason, "input.reason", 500),
+        evidenceId: string(input.evidenceId, "input.evidenceId", 128),
+        idempotencyKey,
+      });
+    case "rights-request.submit":
+      assertOnlyKeys(input, [
+        "requestId",
+        "participantId",
+        "requestType",
+        "requestedProcessingPurpose",
+        "correctionFields",
+        "correctionPayloadSha256",
+        "parentRequestId",
+      ], "input");
+      return runtime.submitRightsRequest(context, {
+        participantId: string(input.participantId, "input.participantId", 128),
+        requestType: oneOf(input.requestType, "input.requestType", RIGHTS_REQUEST_TYPES),
+        requestedProcessingPurpose: string(
+          input.requestedProcessingPurpose,
+          "input.requestedProcessingPurpose",
+          120,
+        ),
+        idempotencyKey,
+        ...(input.requestId === undefined ? {} : { requestId: string(input.requestId, "input.requestId", 128) }),
+        ...(input.correctionFields === undefined
+          ? {}
+          : { correctionFields: stringArray(input.correctionFields, "input.correctionFields", 50) }),
+        ...(input.correctionPayloadSha256 === undefined
+          ? {}
+          : { correctionPayloadSha256: string(input.correctionPayloadSha256, "input.correctionPayloadSha256", 64) }),
+        ...(input.parentRequestId === undefined
+          ? {}
+          : { parentRequestId: string(input.parentRequestId, "input.parentRequestId", 128) }),
+      });
+    case "rights-request.task-receipt":
+      assertOnlyKeys(input, [
+        "requestId", "taskId", "outcome", "resultSha256", "providerOccurredAt", "evidenceId", "errorCode",
+      ], "input");
+      return runtime.recordRightsTaskReceipt(context, {
+        requestId: string(input.requestId, "input.requestId", 128),
+        taskId: string(input.taskId, "input.taskId", 128),
+        outcome: oneOf(input.outcome, "input.outcome", ["succeeded", "blocked", "failed"] as const),
+        resultSha256: string(input.resultSha256, "input.resultSha256", 64),
+        providerOccurredAt: string(input.providerOccurredAt, "input.providerOccurredAt", 64),
+        evidenceId: string(input.evidenceId, "input.evidenceId", 128),
+        ...(input.errorCode === undefined ? {} : { errorCode: string(input.errorCode, "input.errorCode", 80) }),
+        idempotencyKey,
+      });
+    case "rights-request.review":
+      assertOnlyKeys(input, ["requestId", "decision", "reasonCode", "caseReference"], "input");
+      return runtime.reviewRightsRequest(context, {
+        requestId: string(input.requestId, "input.requestId", 128),
+        decision: oneOf(input.decision, "input.decision", ["approve", "deny"] as const),
+        reasonCode: string(input.reasonCode, "input.reasonCode", 80),
+        caseReference: string(input.caseReference, "input.caseReference", 128),
+        idempotencyKey,
+      });
+    case "rights-request.escalate":
+      assertOnlyKeys(input, ["requestId", "reasonCode"], "input");
+      return runtime.escalateRightsRequest(context, {
+        requestId: string(input.requestId, "input.requestId", 128),
+        reasonCode: oneOf(
+          input.reasonCode,
+          "input.reasonCode",
+          ["sla_due", "dependency_blocked", "receipt_failed", "review_disagreement"] as const,
+        ),
         idempotencyKey,
       });
     case "ledger.post": {
@@ -223,6 +451,13 @@ export async function dispatchCommand(
       return runtime.revokeExternalEvidence(context, {
         evidenceId: string(input.evidenceId, "input.evidenceId", 128),
         expectedVersion: integer(input.expectedVersion, "input.expectedVersion", 1),
+        reason: string(input.reason, "input.reason", 500),
+        idempotencyKey,
+      });
+    case "share-grant.revoke":
+      assertOnlyKeys(input, ["exportCommandId", "reason"], "input");
+      return new DurableShareGrantService(runtime).requestRevocation(context, {
+        exportCommandId: string(input.exportCommandId, "input.exportCommandId", 128),
         reason: string(input.reason, "input.reason", 500),
         idempotencyKey,
       });
@@ -289,32 +524,53 @@ export async function dispatchQuery(
   input: InputObject,
 ): Promise<unknown> {
   switch (query) {
-    case "record.get":
+    case "record.get": {
+      const collection = callerReadableCollection(input.collection);
       return runtime.getRecord(
         context,
-        string(input.collection, "input.collection", 80),
+        collection,
         string(input.id, "input.id", 128),
       );
-    case "record.list":
+    }
+    case "record.list": {
+      const collection = callerReadableCollection(input.collection);
       return runtime.listRecords(context, {
-        collection: string(input.collection, "input.collection", 80),
+        collection,
         ...(input.limit === undefined ? {} : { limit: integer(input.limit, "input.limit", 1, 200) }),
         ...(input.cursor === undefined ? {} : { cursor: string(input.cursor, "input.cursor", 128) }),
         ...(input.includeDeleted === undefined
           ? {}
           : { includeDeleted: boolean(input.includeDeleted, "input.includeDeleted") }),
       });
-    case "consent.require":
+    }
+    case "consent.require": {
+      assertOnlyKeys(input, ["participantIds", "purpose", "scope", "at"], "input");
+      const scope = object(input.scope, "input.scope");
+      assertOnlyKeys(scope, ["resource", "action"], "input.scope");
       return runtime.requireConsent(context, {
         participantIds: stringArray(input.participantIds, "input.participantIds", 100),
         ...(input.purpose === undefined ? {} : { purpose: string(input.purpose, "input.purpose", 120) }),
+        scope: {
+          resource: string(scope.resource, "input.scope.resource", 256),
+          action: string(scope.action, "input.scope.action", 80),
+        },
         ...(input.at === undefined ? {} : { at: string(input.at, "input.at", 64) }),
       });
+    }
     case "consent.list":
       return runtime.listConsents(
         context,
         input.participantId === undefined ? undefined : string(input.participantId, "input.participantId", 128),
       );
+    case "rights-request.get":
+      assertOnlyKeys(input, ["requestId"], "input");
+      return runtime.getRightsRequest(context, string(input.requestId, "input.requestId", 128));
+    case "rights-request.list":
+      assertOnlyKeys(input, ["limit", "cursor"], "input");
+      return runtime.listRightsRequests(context, {
+        ...(input.limit === undefined ? {} : { limit: integer(input.limit, "input.limit", 1, 200) }),
+        ...(input.cursor === undefined ? {} : { cursor: string(input.cursor, "input.cursor", 128) }),
+      });
     case "ledger.get":
       return runtime.getLedgerTransaction(context, string(input.transactionId, "input.transactionId", 128));
     case "ledger.balance":
@@ -354,9 +610,55 @@ export async function dispatchQuery(
     case "external-command.get":
       assertOnlyKeys(input, ["commandId"], "input");
       return runtime.getExternalCommand(context, string(input.commandId, "input.commandId", 128));
+    case "share-grant.get":
+      assertOnlyKeys(input, ["exportCommandId"], "input");
+      return new DurableShareGrantService(runtime).get(
+        context,
+        string(input.exportCommandId, "input.exportCommandId", 128),
+      );
+    case "share-grant.list":
+      assertOnlyKeys(input, ["limit", "cursor"], "input");
+      return new DurableShareGrantService(runtime).list(context, {
+        ...(input.limit === undefined ? {} : { limit: integer(input.limit, "input.limit", 1, 200) }),
+        ...(input.cursor === undefined ? {} : { cursor: string(input.cursor, "input.cursor", 128) }),
+      });
     default:
       throw new DomainError("RESOURCE_NOT_FOUND", "Query was not found", { details: { query } });
   }
+}
+
+function callerMutableCollection(value: unknown): string {
+  const collection = string(value, "input.collection", 80);
+  if (collection === "media.intake-results") {
+    throw new DomainError(
+      "AUTH_FORBIDDEN",
+      "Media intake records are server-managed; use the server-verified B07 capability path",
+    );
+  }
+  if (SERVER_MANAGED_MUTATION_COLLECTIONS.has(collection)) {
+    throw new DomainError(
+      "AUTH_FORBIDDEN",
+      "Provider-owned aggregates are server-managed; use their capability or signed external-event contract",
+    );
+  }
+  return collection;
+}
+
+function callerReadableCollection(value: unknown): string {
+  const collection = string(value, "input.collection", 80);
+  if (collection === RIGHTS_REQUEST_COLLECTION) {
+    throw new DomainError(
+      "AUTH_FORBIDDEN",
+      "Rights requests are exposed only through the minimized rights-request projection contract",
+    );
+  }
+  if (SHARE_COMMAND_COLLECTIONS.has(collection)) {
+    throw new DomainError(
+      "AUTH_FORBIDDEN",
+      "Share command aggregates are not exposed through generic record queries; use the share-grant projection contract",
+    );
+  }
+  return collection;
 }
 
 export function object(value: unknown, label: string): InputObject {
@@ -424,6 +726,19 @@ function stringArray(value: unknown, label: string, maximumItems: number): reado
     throw new DomainError("VALIDATION_FAILED", `${label} must be an array with at most ${maximumItems} items`);
   }
   return value.map((item, index) => string(item, `${label}[${index}]`, 128));
+}
+
+function consentScope(value: unknown, label: string): JsonObject {
+  const scope = object(value, label);
+  assertOnlyKeys(scope, ["resource", "actions"], label);
+  const actions = stringArray(scope.actions, `${label}.actions`, 32);
+  if (actions.length === 0 || new Set(actions).size !== actions.length) {
+    throw new DomainError("VALIDATION_FAILED", `${label}.actions must be a non-empty unique list`);
+  }
+  return {
+    resource: string(scope.resource, `${label}.resource`, 256),
+    actions: [...actions],
+  };
 }
 
 function oneOf<T extends string>(value: unknown, label: string, allowed: readonly T[]): T {

@@ -3,10 +3,21 @@ import { chmodSync, createReadStream, existsSync, mkdirSync, statSync, unlinkSyn
 import { dirname, resolve } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import { canonicalJson, fingerprint, jsonObject, parseJsonObject, sha256 } from "./canonical.js";
+import { resolveConsentPolicy, verifyConsentPolicyCatalog } from "./consent-policy.js";
+import {
+  authorityScopeCoversConsent,
+  consentScopeAllows,
+  deriveRecordConsentRequirementScope,
+  normalizeConsentRequirementScope,
+  normalizeConsentScope,
+  participantEvidenceScope,
+} from "./consent-scope.js";
 import { evidenceScopeAllowed, validateTrustedEvidenceKey, verifyExternalEvidenceSignature } from "./evidence.js";
 import { DomainError } from "./errors.js";
 import {
   assertExternalCommandTransition,
+  assertExternalCommandRequestCorrelation,
+  externalCommandRequestIdentity,
   isExternalCommandTerminal,
   normalizeApplyExternalBusinessEventInput,
   normalizeExternalBusinessAggregateTarget,
@@ -14,6 +25,29 @@ import {
   normalizeTransitionExternalCommandInput,
 } from "./external-business-events.js";
 import { authorize as enforceAuthorization, hasPermission, validateContext } from "./policy.js";
+import {
+  RIGHTS_REQUEST_COLLECTION,
+  applyRightsReview,
+  applyRightsTaskReceipt,
+  createRightsRequestData,
+  escalateRightsRequestData,
+  normalizeRightsSubmission,
+  parseRightsRequestRecord,
+  projectRightsRequest,
+  rightsAuthorityScope,
+  rightsTaskEvidenceScope,
+} from "./rights-requests.js";
+import type {
+  EscalateRightsRequestInput,
+  ListRightsRequestsInput,
+  NormalizedRightsSubmission,
+  ReviewRightsRequestInput,
+  RightsAuthorityDecision,
+  RightsRequestData,
+  RightsRequestProjection,
+  RightsTaskReceiptInput,
+  SubmitRightsRequestInput,
+} from "./rights-requests.js";
 import { SCHEMA_SQL, SCHEMA_VERSION } from "./schema.js";
 import type {
   AccountBalance,
@@ -26,30 +60,46 @@ import type {
   AuthorizationResource,
   BackupVerification,
   ConsentRecord,
+  ConsentPolicyCatalogMetadata,
   ConsentRequirement,
+  ConsentRequirementScope,
+  ConsentScope,
   CreateRecordInput,
   CreateExternalCommandInput,
   CreatedExternalCommand,
+  DeadLetterExternalCommandInput,
   DeleteRecordInput,
+  EvidenceGatedMutationResult,
+  ExecuteEvidenceGatedMutationInput,
+  GrantParticipantAuthorityInput,
   GrantConsentInput,
   IdempotentResult,
   InboxEvent,
   JsonObject,
   LedgerLine,
   LedgerTransaction,
+  ListShareGrantCommandBindingsInput,
   ListRecordsInput,
   OutboxEvent,
   OutboxPublisher,
   OutboxStatus,
   PostLedgerInput,
+  ParticipantAuthorityCapacity,
+  ParticipantAuthorityRecord,
+  ParticipantRecord,
   ReadinessResult,
   ReceiveInboxInput,
   RegisterExternalEvidenceInput,
+  RegisterParticipantInput,
   RegisteredExternalEvidence,
   RecordEnvelope,
   RevokeExternalEvidenceInput,
+  RevokeParticipantAuthorityInput,
+  RevokeParticipantInput,
   RuntimeClock,
   RuntimeOptions,
+  ShareGrantCommandAccess,
+  ShareGrantCommandBinding,
   EvidenceEnvironment,
   ExternalBusinessReduction,
   ExternalCommandRecord,
@@ -60,11 +110,13 @@ import type {
   TransitionExternalCommandInput,
   WithdrawConsentInput,
 } from "./types.js";
+import type { TrustedConsentPolicyKey, VerifiedConsentPolicyCatalog } from "./consent-policy.js";
 
 interface RecordRow {
   id: string;
   tenant_id: string;
   collection: string;
+  processing_purpose: string;
   owner_actor_id: string | null;
   participant_ids_json: string;
   contains_minor: number;
@@ -90,12 +142,50 @@ interface ConsentRow {
   purpose: string;
   scope_json: string;
   policy_version: string;
+  policy_catalog_sha256: string | null;
+  jurisdiction: string | null;
+  locale: string | null;
   status: "active" | "expired" | "withdrawn" | "disputed" | "superseded";
   evidence_hash: string;
   is_minor: number;
   granted_at: string;
   expires_at: string | null;
   withdrawn_at: string | null;
+  version: number;
+}
+
+interface ParticipantRow {
+  tenant_id: string;
+  participant_id: string;
+  owner_actor_id: string;
+  minor_status: "adult" | "minor";
+  status: "active" | "revoked";
+  evidence_id: string;
+  evidence_scope: string;
+  registered_at: string;
+  expires_at: string;
+  revoked_at: string | null;
+  revocation_reason: string | null;
+  revocation_evidence_id: string | null;
+  revocation_evidence_scope: string | null;
+  version: number;
+}
+
+interface ParticipantAuthorityRow {
+  tenant_id: string;
+  authorization_id: string;
+  authorized_actor_id: string;
+  participant_id: string;
+  status: "active" | "revoked" | "superseded";
+  scope_json: string;
+  evidence_id: string;
+  evidence_scope: string;
+  granted_at: string;
+  expires_at: string;
+  revoked_at: string | null;
+  revocation_reason: string | null;
+  revocation_evidence_id: string | null;
+  revocation_evidence_scope: string | null;
   version: number;
 }
 
@@ -239,6 +329,29 @@ function token(value: string, label: string, pattern: RegExp = IDENTIFIER): stri
   return normalized;
 }
 
+function assertShareGrantCommand(command: ExternalCommandRecord): void {
+  const valid = command.batchId === "B10" && (
+    (command.operation === "publishExport" && command.aggregateCollection === "sharing.export-commands") ||
+    (command.operation === "revokeExport" && command.aggregateCollection === "sharing.export-revoke-commands")
+  );
+  if (!valid) {
+    throw new DomainError("RESOURCE_NOT_FOUND", "Share grant command was not found");
+  }
+}
+
+function assertShareGrantOwnerAccess(
+  context: ActorContext,
+  record: RecordEnvelope,
+  access: ShareGrantCommandAccess,
+): void {
+  if (record.ownerActorId === null) {
+    throw new DomainError("EVENT_FINGERPRINT_CONFLICT", "Share grant is missing its persisted owner");
+  }
+  if (record.ownerActorId !== context.actorId && !hasPermission(context, `share-grant:${access}:any`)) {
+    throw new DomainError("AUTH_FORBIDDEN", "Share grant access is restricted to its owner or an explicit administrator");
+  }
+}
+
 function textValue(value: string, label: string, maximum = 500): string {
   const normalized = value.trim();
   if (normalized.length === 0 || normalized.length > maximum || /[\u0000-\u001f\u007f]/.test(normalized)) {
@@ -292,6 +405,7 @@ function recordFromRow<T extends JsonObject>(row: RecordRow): RecordEnvelope<T> 
     id: row.id,
     tenantId: row.tenant_id,
     collection: row.collection,
+    processingPurpose: row.processing_purpose,
     ownerActorId: row.owner_actor_id,
     participantIds: parseParticipantIds(row.participant_ids_json),
     containsMinor: row.contains_minor === 1,
@@ -311,14 +425,60 @@ function consentFromRow(row: ConsentRow): ConsentRecord {
     grantorActorId: row.grantor_actor_id,
     grantorCapacity: row.grantor_capacity,
     purpose: row.purpose,
-    scope: parseJsonObject(row.scope_json, "consent scope"),
+    scope: normalizeConsentScope(parseJsonObject(row.scope_json, "consent scope"), "stored consent scope"),
     policyVersion: row.policy_version,
+    policyCatalogSha256: row.policy_catalog_sha256,
+    jurisdiction: row.jurisdiction,
+    locale: row.locale,
     status: row.status,
     evidenceHash: row.evidence_hash,
     isMinor: row.is_minor === 1,
     grantedAt: row.granted_at,
     expiresAt: row.expires_at,
     withdrawnAt: row.withdrawn_at,
+    version: row.version,
+  };
+}
+
+function participantFromRow(row: ParticipantRow): ParticipantRecord {
+  return {
+    tenantId: row.tenant_id,
+    participantId: row.participant_id,
+    ownerActorId: row.owner_actor_id,
+    minorStatus: row.minor_status,
+    status: row.status,
+    evidenceId: row.evidence_id,
+    evidenceScope: row.evidence_scope,
+    registeredAt: row.registered_at,
+    expiresAt: row.expires_at,
+    revokedAt: row.revoked_at,
+    revocationReason: row.revocation_reason,
+    revocationEvidenceId: row.revocation_evidence_id,
+    revocationEvidenceScope: row.revocation_evidence_scope,
+    version: row.version,
+  };
+}
+
+function participantAuthorityFromRow(
+  row: ParticipantAuthorityRow,
+  capacity: ParticipantAuthorityCapacity,
+): ParticipantAuthorityRecord {
+  return {
+    tenantId: row.tenant_id,
+    authorizationId: row.authorization_id,
+    authorizedActorId: row.authorized_actor_id,
+    participantId: row.participant_id,
+    capacity,
+    status: row.status,
+    scope: normalizeConsentScope(parseJsonObject(row.scope_json, "participant authority scope"), "stored authority scope"),
+    evidenceId: row.evidence_id,
+    evidenceScope: row.evidence_scope,
+    grantedAt: row.granted_at,
+    expiresAt: row.expires_at,
+    revokedAt: row.revoked_at,
+    revocationReason: row.revocation_reason,
+    revocationEvidenceId: row.revocation_evidence_id,
+    revocationEvidenceScope: row.revocation_evidence_scope,
     version: row.version,
   };
 }
@@ -578,6 +738,11 @@ export class LifeTimeMachineRuntime {
   readonly #evidenceEnvironment: EvidenceEnvironment;
   readonly #evidenceClockSkewMs: number;
   readonly #maxEvidenceLifetimeMs: number;
+  readonly #consentPolicyCatalog: VerifiedConsentPolicyCatalog | null;
+  readonly #trustedConsentPolicyKeys: readonly TrustedConsentPolicyKey[];
+  readonly #consentPolicyJurisdiction: string | null;
+  readonly #consentPolicyLocale: string | null;
+  readonly #allowLegacyConsentPolicy: boolean;
   #closed = false;
 
   constructor(options: RuntimeOptions) {
@@ -603,6 +768,51 @@ export class LifeTimeMachineRuntime {
       throw new DomainError("CONFIGURATION_INVALID", "maxEvidenceLifetimeMs must be between one minute and 366 days");
     }
     this.#validateEvidenceTrustConfiguration();
+    this.#trustedConsentPolicyKeys = [...(options.trustedConsentPolicyKeys ?? [])];
+    this.#allowLegacyConsentPolicy = options.allowLegacyConsentPolicy === true;
+    const hasCatalog = options.consentPolicyCatalog !== undefined;
+    const hasTrust = this.#trustedConsentPolicyKeys.length > 0;
+    const hasJurisdiction = options.consentPolicyJurisdiction !== undefined;
+    const hasLocale = options.consentPolicyLocale !== undefined;
+    const hasCompletePolicy = hasCatalog && hasTrust && hasJurisdiction && hasLocale;
+    if ((hasCatalog || hasTrust || hasJurisdiction || hasLocale) && !hasCompletePolicy) {
+      throw new DomainError(
+        "CONFIGURATION_INVALID",
+        "Consent policy catalog, trust keys, jurisdiction, and locale must be configured together",
+      );
+    }
+    const isProductionRuntime = this.#evidencePolicy === "production" || this.#evidenceEnvironment === "production";
+    if (this.#allowLegacyConsentPolicy && (hasCompletePolicy || isProductionRuntime)) {
+      throw new DomainError(
+        "CONFIGURATION_INVALID",
+        "Legacy consent policy mode is test-only and cannot be combined with a verified or production policy",
+      );
+    }
+    if (isProductionRuntime && !hasCompletePolicy) {
+      throw new DomainError(
+        "CONFIGURATION_INVALID",
+        "Production requires a signed consent policy catalog, trust keys, jurisdiction, and locale",
+      );
+    }
+    this.#consentPolicyCatalog = hasCompletePolicy
+      ? verifyConsentPolicyCatalog(
+          options.consentPolicyCatalog,
+          this.#trustedConsentPolicyKeys,
+          this.#evidenceEnvironment,
+          this.#clock.now().toISOString(),
+        )
+      : null;
+    this.#consentPolicyJurisdiction = hasCompletePolicy
+      ? textValue(options.consentPolicyJurisdiction!, "consent policy jurisdiction", 32)
+      : null;
+    this.#consentPolicyLocale = hasCompletePolicy
+      ? textValue(options.consentPolicyLocale!, "consent policy locale", 16)
+      : null;
+    if ((this.#consentPolicyJurisdiction !== null &&
+         !/^(?:GLOBAL|[A-Z]{2}(?:-[A-Z0-9]{1,8})*)$/.test(this.#consentPolicyJurisdiction)) ||
+        (this.#consentPolicyLocale !== null && !/^[a-z]{2,3}(?:-[A-Z]{2})?$/.test(this.#consentPolicyLocale))) {
+      throw new DomainError("CONFIGURATION_INVALID", "Consent policy jurisdiction or locale is not canonical");
+    }
     if (this.#databasePath !== ":memory:") {
       mkdirSync(dirname(this.#databasePath), { recursive: true, mode: 0o700 });
     }
@@ -616,6 +826,8 @@ export class LifeTimeMachineRuntime {
       this.#assertSupportedExistingSchema();
       this.#migrateEvidenceEnvironmentColumn();
       this.#migrateBusinessEvidenceDigestColumns();
+      this.#migrateProcessingPurposeColumn();
+      this.#migrateConsentPolicyColumns();
       this.#database.exec(SCHEMA_SQL);
       const schema = this.#database.prepare("SELECT value FROM schema_metadata WHERE key = 'schema_version'").get() as
         | SchemaVersionRow
@@ -631,6 +843,11 @@ export class LifeTimeMachineRuntime {
         details: { cause: error instanceof Error ? error.name : "unknown" },
       });
     }
+  }
+
+  currentTime(): Date {
+    this.#assertOpen();
+    return new Date(this.#clock.now().getTime());
   }
 
   close(): void {
@@ -668,7 +885,7 @@ export class LifeTimeMachineRuntime {
 
   readiness(): ReadinessResult {
     if (this.#closed) {
-      return { ready: false, database: "error", auditChain: "error", evidenceTrust: "error" };
+      return { ready: false, database: "error", auditChain: "error", evidenceTrust: "error", consentPolicy: "error" };
     }
     try {
       this.#database.prepare("SELECT 1").get();
@@ -692,20 +909,42 @@ export class LifeTimeMachineRuntime {
         (key.notBefore === undefined || key.notBefore <= now) &&
         (key.notAfter === undefined || key.notAfter >= now));
       const evidenceTrust = this.#evidencePolicy === "disabled" ? "disabled" : hasActiveTrust ? "ok" : "error";
+      const consentPolicy = this.#consentPolicyReadiness(now);
       return {
-        ready: auditValid && evidenceTrust !== "error",
+        ready: auditValid && evidenceTrust !== "error" && consentPolicy !== "error",
         database: "ok",
         auditChain: auditValid ? "ok" : "error",
         evidenceTrust,
+        consentPolicy,
       };
     } catch {
-      return { ready: false, database: "error", auditChain: "error", evidenceTrust: "error" };
+      return { ready: false, database: "error", auditChain: "error", evidenceTrust: "error", consentPolicy: "error" };
     }
   }
 
   authorize(context: ActorContext, action: string, resource: AuthorizationResource = {}): void {
     this.#assertOpen();
     enforceAuthorization(context, textValue(action, "action", 160), resource);
+  }
+
+  getConsentPolicyCatalogMetadata(context: ActorContext): ConsentPolicyCatalogMetadata {
+    this.authorize(context, "consent-policy:publish", { tenantId: context.tenantId });
+    const catalog = this.#requiredActiveConsentPolicy(this.#now());
+    if (this.#consentPolicyJurisdiction === null || this.#consentPolicyLocale === null) {
+      throw new DomainError("CONFIGURATION_INVALID", "Verified consent policy location is unavailable");
+    }
+    return {
+      schemaVersion: "ltm.consent-policy-catalog-metadata.v1",
+      catalogId: catalog.document.catalogId,
+      issuer: catalog.document.issuer,
+      environment: catalog.document.environment as Exclude<EvidenceEnvironment, "test">,
+      catalogSha256: catalog.sha256,
+      issuedAt: catalog.document.issuedAt,
+      expiresAt: catalog.document.expiresAt,
+      jurisdiction: this.#consentPolicyJurisdiction,
+      locale: this.#consentPolicyLocale,
+      policyVersions: [...catalog.policies.keys()].sort(),
+    };
   }
 
   registerExternalEvidence(
@@ -797,55 +1036,59 @@ export class LifeTimeMachineRuntime {
   ): readonly RegisteredExternalEvidence[] {
     this.#assertOpen();
     validateContext(context);
-    const scope = textValue(scopeValue, "external evidence scope", 512);
-    const ids = [...new Set(evidenceIds.map((id) => token(id, "external evidence ID")))].sort();
-    if (ids.length === 0 || ids.length > 100) {
-      throw new DomainError("VALIDATION_FAILED", "Between 1 and 100 external evidence IDs are required");
+    const requirement = this.#normalizeEvidenceRequirement(scopeValue, evidenceIds);
+    return this.#transaction(() => this.#requireExternalEvidenceInternal(context, requirement.scope, requirement.ids));
+  }
+
+  executeEvidenceGatedMutation(
+    context: ActorContext,
+    input: ExecuteEvidenceGatedMutationInput,
+  ): EvidenceGatedMutationResult {
+    validateContext(context);
+    const requirement = this.#normalizeEvidenceRequirement(input.scope, input.evidenceIds);
+    const key = idempotencyKey(input.idempotencyKey);
+    const action = textValue(input.audit.action, "capability audit action", 160);
+    const actionMatch = /^capability\.(B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7]))\.(execute|transition)$/.exec(action);
+    const expectedAuditKind = input.mutation.kind === "record.transition" ? "transition" : "execute";
+    if (actionMatch === null || actionMatch[2] !== expectedAuditKind) {
+      throw new DomainError("VALIDATION_FAILED", "Capability audit action does not match the mutation kind");
     }
-    if (this.#trustedEvidenceKeys.length === 0) {
-      throw new DomainError("EXTERNAL_ADAPTER_UNAVAILABLE", "No trusted external evidence keys are configured");
+    const replayAction = input.audit.replayAction === undefined
+      ? undefined
+      : textValue(input.audit.replayAction, "capability replay audit action", 160);
+    if (replayAction !== undefined && replayAction !== `capability.${actionMatch[1]}.transition-replayed`) {
+      throw new DomainError("VALIDATION_FAILED", "Capability replay audit action does not match the mutation");
     }
-    return this.#transaction(() => {
-      const verified: RegisteredExternalEvidence[] = [];
-      for (const evidenceId of ids) {
-        let evidence: RegisteredExternalEvidence;
-        try {
-          evidence = this.#requiredEvidence(context.tenantId, evidenceId);
-        } catch (error) {
-          if (error instanceof DomainError && error.code === "RESOURCE_NOT_FOUND") {
-            throw new DomainError("EXTERNAL_EVIDENCE_UNVERIFIED", "External evidence is not registered", {
-              details: { evidenceId, scope },
-            });
-          }
-          throw error;
-        }
-        if (evidence.scope !== scope) {
-          throw new DomainError("EVIDENCE_SCOPE_MISMATCH", "External evidence scope does not match this operation", {
-            details: { evidenceId, requiredScope: scope },
-          });
-        }
-        if (evidence.status === "revoked") {
-          throw new DomainError("EVIDENCE_REVOKED", "External evidence has been revoked", {
-            details: { evidenceId },
-          });
-        }
-        if (evidence.expiresAt <= this.#now()) {
-          throw new DomainError("EVIDENCE_EXPIRED", "External evidence has expired", { details: { evidenceId } });
-        }
-        this.#verifyStoredEvidence(evidence);
-        if (evidence.replayPolicy === "single_use") {
-          this.#consumeEvidence(context, evidence, scope);
-          evidence = this.#requiredEvidence(context.tenantId, evidenceId);
-        }
-        verified.push(evidence);
+    if (input.mutation.kind !== "ledger.post") {
+      const mutationBatchId = input.mutation.kind === "external-command.create"
+        ? input.mutation.input.batchId
+        : input.mutation.input.data.batchId;
+      if (mutationBatchId !== undefined && mutationBatchId !== actionMatch[1]) {
+        throw new DomainError("VALIDATION_FAILED", "Capability audit batch does not match the mutation batch");
       }
-      this.#appendAuditInternal(context, {
-        action: "evidence.required",
-        resourceType: "external_evidence_set",
-        resourceId: sha256(ids.join("\n")),
-        details: { scope, evidenceIds: ids },
-      });
-      return verified;
+    }
+    const details = jsonObject(input.audit.details ?? {}, "capability audit details");
+    const normalized: ExecuteEvidenceGatedMutationInput = {
+      scope: requirement.scope,
+      evidenceIds: requirement.ids,
+      idempotencyKey: key,
+      mutation: input.mutation,
+      audit: { action, ...(replayAction === undefined ? {} : { replayAction }), details },
+    };
+    const operation = `evidence-gated.mutate:${normalized.mutation.kind}`;
+    const requestFingerprint = fingerprint(operation, normalized);
+    return this.#transaction(() => {
+      this.#requireExternalEvidenceInternal(context, requirement.scope, requirement.ids);
+      const result = this.#idempotentValueInternal(
+        context,
+        key,
+        operation,
+        requestFingerprint,
+        () => this.#applyEvidenceGatedMutation(context, normalized),
+      );
+      return result.replayed
+        ? { ...result.value, replayed: true } as EvidenceGatedMutationResult
+        : result.value;
     });
   }
 
@@ -928,6 +1171,7 @@ export class LifeTimeMachineRuntime {
     const ownerActorId = input.record.ownerActorId === undefined ? context.actorId : input.record.ownerActorId;
     const participantIds = this.#participantIds(input.record.participantIds ?? []);
     const containsMinor = input.record.containsMinor ?? false;
+    const processingPurpose = this.#processingPurposeForCreate(context, input.record.processingPurpose);
     const requestedData = jsonObject(input.record.data, "record data") as T;
     const data = jsonObject({
       ...requestedData,
@@ -939,7 +1183,6 @@ export class LifeTimeMachineRuntime {
     const key = idempotencyKey(input.idempotencyKey);
     this.authorize(context, "record:create", { tenantId: context.tenantId, ownerActorId, containsMinor });
     this.#protectMinorSharing(context, collection, containsMinor);
-    this.#requireParticipantConsent(context, participantIds);
     return this.#idempotent(
       context,
       key,
@@ -950,6 +1193,7 @@ export class LifeTimeMachineRuntime {
         batchId,
         operation,
         collection,
+        processingPurpose,
         ownerActorId,
         participantIds,
         containsMinor,
@@ -957,19 +1201,26 @@ export class LifeTimeMachineRuntime {
         details,
       },
       () => {
+        this.#requireParticipantConsent(
+          context,
+          participantIds,
+          processingPurpose,
+          deriveRecordConsentRequirementScope(collection, id, data, "create"),
+        );
         if (this.#selectRecord(context.tenantId, collection, id, true) !== undefined) {
           throw new DomainError("VERSION_CONFLICT", "External command aggregate already exists");
         }
         const now = this.#now();
         this.#database.prepare(
           `INSERT INTO records(
-            tenant_id,collection,id,owner_actor_id,participant_ids_json,contains_minor,
+            tenant_id,collection,id,processing_purpose,owner_actor_id,participant_ids_json,contains_minor,
             data_json,version,created_at,updated_at,deleted_at
-          ) VALUES (?,?,?,?,?,?,?,1,?,?,NULL)`,
+          ) VALUES (?,?,?,?,?,?,?,?,1,?,?,NULL)`,
         ).run(
           context.tenantId,
           collection,
           id,
+          processingPurpose,
           ownerActorId,
           canonicalJson(participantIds),
           containsMinor ? 1 : 0,
@@ -1019,6 +1270,71 @@ export class LifeTimeMachineRuntime {
   getExternalCommand(context: ActorContext, commandIdValue: string): ExternalCommandRecord {
     this.authorize(context, "external-command:read", { tenantId: context.tenantId });
     return this.#requiredExternalCommand(context.tenantId, token(commandIdValue, "command ID"));
+  }
+
+  getShareGrantCommandBinding(
+    context: ActorContext,
+    commandIdValue: string,
+    access: ShareGrantCommandAccess,
+  ): ShareGrantCommandBinding {
+    validateContext(context);
+    const command = this.#requiredExternalCommand(context.tenantId, token(commandIdValue, "command ID"));
+    assertShareGrantCommand(command);
+    const record = this.#requiredRecord(context.tenantId, command.aggregateCollection, command.aggregateId, false);
+    assertShareGrantOwnerAccess(context, record, access);
+    return {
+      command,
+      record,
+      sharingConsentActive: this.#hasParticipantConsent(
+        context,
+        record.participantIds,
+        "sharing",
+        deriveRecordConsentRequirementScope(record.collection, record.id, record.data, "read"),
+      ),
+    };
+  }
+
+  listShareGrantCommandBindings(
+    context: ActorContext,
+    input: ListShareGrantCommandBindingsInput = {},
+  ): readonly ShareGrantCommandBinding[] {
+    validateContext(context);
+    const limit = positiveLimit(input.limit, 50, 200);
+    const cursor = input.cursor === undefined ? "" : token(input.cursor, "cursor");
+    const parameters: Array<string | number> = [context.tenantId, "sharing.export-commands", cursor];
+    const conditions = ["tenant_id=?", "collection=?", "id>?", "deleted_at IS NULL"];
+    if (!hasPermission(context, "share-grant:read:any")) {
+      conditions.push("owner_actor_id=?");
+      parameters.push(context.actorId);
+    }
+    parameters.push(limit);
+    const rows = this.#database.prepare(
+      `SELECT * FROM records WHERE ${conditions.join(" AND ")} ORDER BY id LIMIT ?`,
+    ).all(...parameters) as unknown as RecordRow[];
+    return rows.map((row) => {
+      const record = recordFromRow(row);
+      assertShareGrantOwnerAccess(context, record, "read");
+      const storedCommandId = record.data.externalCommandId;
+      if (typeof storedCommandId !== "string") {
+        throw new DomainError("EVENT_FINGERPRINT_CONFLICT", "Share grant record is missing its command binding");
+      }
+      const command = this.#requiredExternalCommand(context.tenantId, token(storedCommandId, "stored command ID"));
+      assertShareGrantCommand(command);
+      if (command.operation !== "publishExport" || command.aggregateCollection !== "sharing.export-commands" ||
+          command.aggregateId !== record.id) {
+        throw new DomainError("EVENT_FINGERPRINT_CONFLICT", "Share grant list binding is invalid");
+      }
+      return {
+        command,
+        record,
+        sharingConsentActive: this.#hasParticipantConsent(
+          context,
+          record.participantIds,
+          "sharing",
+          deriveRecordConsentRequirementScope(record.collection, record.id, record.data, "read"),
+        ),
+      };
+    });
   }
 
   applyExternalBusinessEvent(
@@ -1092,7 +1408,7 @@ export class LifeTimeMachineRuntime {
           : this.#postExternalBusinessLedger(context, reduction.ledger);
         const command = reduction.commandTransition === undefined
           ? null
-          : this.#transitionExternalCommandInternal(context, {
+          : this.#transitionExternalCommandFromBusinessEvent(context, event, {
               commandId: reduction.commandTransition.commandId,
               batchId: event.batchId,
               operation: event.operation,
@@ -1107,7 +1423,7 @@ export class LifeTimeMachineRuntime {
                 ? {}
                 : { details: reduction.commandTransition.details }),
               idempotencyKey: `external-event:${event.provider}:${event.eventId}`,
-            }, randomUUID());
+            });
         const finalAggregate = command === null
           ? aggregate
           : this.#requiredRecord(context.tenantId, target.collection, target.aggregateId, true);
@@ -1218,10 +1534,12 @@ export class LifeTimeMachineRuntime {
     input: CreateRecordInput<T>,
   ): IdempotentResult<RecordEnvelope<T>> {
     const collection = token(input.collection, "collection", COLLECTION);
+    this.#assertGenericRecordCollection(collection);
     const id = token(input.id ?? randomUUID(), "record ID");
     const ownerActorId = input.ownerActorId === undefined ? context.actorId : input.ownerActorId;
     const participantIds = this.#participantIds(input.participantIds ?? []);
     const containsMinor = input.containsMinor ?? false;
+    const processingPurpose = this.#processingPurposeForCreate(context, input.processingPurpose);
     const data = jsonObject(input.data, "record data") as T;
     const key = idempotencyKey(input.idempotencyKey);
     this.authorize(context, "record:create", {
@@ -1230,14 +1548,18 @@ export class LifeTimeMachineRuntime {
       containsMinor,
     });
     this.#protectMinorSharing(context, collection, containsMinor);
-    this.#requireParticipantConsent(context, participantIds);
-
     return this.#idempotent(
       context,
       key,
       `record.create:${collection}`,
-      { requestedId: input.id ?? null, ownerActorId, participantIds, containsMinor, data },
+      { requestedId: input.id ?? null, processingPurpose, ownerActorId, participantIds, containsMinor, data },
       () => {
+        this.#requireParticipantConsent(
+          context,
+          participantIds,
+          processingPurpose,
+          deriveRecordConsentRequirementScope(collection, id, data, "create"),
+        );
         const exists = this.#selectRecord(context.tenantId, collection, id, true);
         if (exists !== undefined) {
           throw new DomainError("VERSION_CONFLICT", "A record with this ID already exists", {
@@ -1248,14 +1570,15 @@ export class LifeTimeMachineRuntime {
         this.#database
           .prepare(
             `INSERT INTO records(
-              tenant_id, collection, id, owner_actor_id, participant_ids_json, contains_minor,
+              tenant_id, collection, id, processing_purpose, owner_actor_id, participant_ids_json, contains_minor,
               data_json, version, created_at, updated_at, deleted_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NULL)`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NULL)`,
           )
           .run(
             context.tenantId,
             collection,
             id,
+            processingPurpose,
             ownerActorId,
             canonicalJson(participantIds),
             containsMinor ? 1 : 0,
@@ -1280,16 +1603,24 @@ export class LifeTimeMachineRuntime {
 
   getRecord<T extends JsonObject>(context: ActorContext, collectionValue: string, idValue: string): RecordEnvelope<T> {
     const collection = token(collectionValue, "collection", COLLECTION);
+    this.#assertGenericRecordCollection(collection);
     const id = token(idValue, "record ID");
     validateContext(context);
     const record = this.#requiredRecord<T>(context.tenantId, collection, id, false);
     this.authorize(context, "record:read", record);
-    this.#requireParticipantConsent(context, record.participantIds);
+    this.#assertRecordProcessingPurpose(context, record, "read");
+    this.#requireParticipantConsent(
+      context,
+      record.participantIds,
+      record.processingPurpose,
+      deriveRecordConsentRequirementScope(record.collection, record.id, record.data, "read"),
+    );
     return record;
   }
 
   listRecords<T extends JsonObject>(context: ActorContext, input: ListRecordsInput): readonly RecordEnvelope<T>[] {
     const collection = token(input.collection, "collection", COLLECTION);
+    this.#assertGenericRecordCollection(collection);
     const limit = positiveLimit(input.limit, 50, 200);
     const cursor = input.cursor === undefined ? "" : token(input.cursor, "cursor");
     this.authorize(context, "record:read", { tenantId: context.tenantId });
@@ -1311,7 +1642,15 @@ export class LifeTimeMachineRuntime {
       .all(...parameters) as unknown as RecordRow[];
     return rows
       .map((row) => recordFromRow<T>(row))
-      .filter((record) => this.#hasParticipantConsent(context, record.participantIds));
+      .filter((record) => {
+        this.#assertRecordProcessingPurpose(context, record, "list");
+        return this.#hasParticipantConsent(
+          context,
+          record.participantIds,
+          record.processingPurpose,
+          deriveRecordConsentRequirementScope(record.collection, record.id, record.data, "read"),
+        );
+      });
   }
 
   updateRecord<T extends JsonObject>(
@@ -1319,6 +1658,7 @@ export class LifeTimeMachineRuntime {
     input: UpdateRecordInput<T>,
   ): IdempotentResult<RecordEnvelope<T>> {
     const collection = token(input.collection, "collection", COLLECTION);
+    this.#assertGenericRecordCollection(collection);
     const id = token(input.id, "record ID");
     if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion <= 0) {
       throw new DomainError("VALIDATION_FAILED", "expectedVersion must be a positive integer");
@@ -1331,15 +1671,26 @@ export class LifeTimeMachineRuntime {
     const participantIds = this.#participantIds(input.participantIds ?? current.participantIds);
     const containsMinor = input.containsMinor ?? current.containsMinor;
     this.authorize(context, "record:update", { ...current, ownerActorId, containsMinor });
+    this.#assertRecordProcessingPurpose(context, current, "update");
     this.#protectMinorSharing(context, collection, containsMinor);
-    this.#requireParticipantConsent(context, participantIds);
-
     return this.#idempotent(
       context,
       key,
       `record.update:${collection}`,
       { id, expectedVersion: input.expectedVersion, ownerActorId, participantIds, containsMinor, data },
       () => {
+        this.#requireParticipantConsent(
+          context,
+          participantIds,
+          current.processingPurpose,
+          deriveRecordConsentRequirementScope(collection, id, current.data, "update"),
+        );
+        this.#requireParticipantConsent(
+          context,
+          participantIds,
+          current.processingPurpose,
+          deriveRecordConsentRequirementScope(collection, id, data, "update"),
+        );
         const now = this.#now();
         const result = this.#database
           .prepare(
@@ -1379,6 +1730,7 @@ export class LifeTimeMachineRuntime {
 
   deleteRecord(context: ActorContext, input: DeleteRecordInput): IdempotentResult<RecordEnvelope> {
     const collection = token(input.collection, "collection", COLLECTION);
+    this.#assertGenericRecordCollection(collection);
     const id = token(input.id, "record ID");
     if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion <= 0) {
       throw new DomainError("VALIDATION_FAILED", "expectedVersion must be a positive integer");
@@ -1387,13 +1739,19 @@ export class LifeTimeMachineRuntime {
     validateContext(context);
     const current = this.#requiredRecord(context.tenantId, collection, id, true);
     this.authorize(context, "record:delete", current);
-
+    this.#assertRecordProcessingPurpose(context, current, "delete");
     return this.#idempotent(
       context,
       key,
       `record.delete:${collection}`,
       { id, expectedVersion: input.expectedVersion },
       () => {
+        this.#requireParticipantConsent(
+          context,
+          current.participantIds,
+          current.processingPurpose,
+          deriveRecordConsentRequirementScope(collection, id, current.data, "delete"),
+        );
         const now = this.#now();
         const result = this.#database
           .prepare(
@@ -1421,33 +1779,415 @@ export class LifeTimeMachineRuntime {
     );
   }
 
+  registerParticipant(
+    context: ActorContext,
+    input: RegisterParticipantInput,
+  ): IdempotentResult<ParticipantRecord> {
+    const participantId = token(input.participantId, "participant ID");
+    const ownerActorId = token(input.ownerActorId, "participant owner actor ID");
+    if (input.minorStatus !== "adult" && input.minorStatus !== "minor") {
+      throw new DomainError("VALIDATION_FAILED", "minorStatus must be adult or minor");
+    }
+    const expiresAt = isoTimestamp(input.expiresAt, "participant registry expiry");
+    if (input.expectedVersion !== null &&
+        (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion <= 0)) {
+      throw new DomainError("VALIDATION_FAILED", "expectedVersion must be null or a positive integer");
+    }
+    const evidenceId = token(input.evidenceId, "external evidence ID");
+    const key = idempotencyKey(input.idempotencyKey);
+    this.#authorizeServiceOperation(context, "participant:register");
+    const mutation = {
+      operation: "participant.register" as const,
+      tenantId: context.tenantId,
+      participantId,
+      ownerActorId,
+      minorStatus: input.minorStatus,
+      expiresAt,
+      expectedVersion: input.expectedVersion,
+    };
+    const evidenceScope = participantEvidenceScope(mutation);
+    return this.#idempotent(context, key, "participant.register", { ...mutation, evidenceId }, () => {
+      const evidence = this.#requireIdentityMutationEvidence(context, evidenceScope, evidenceId);
+      const now = this.#now();
+      if (expiresAt <= now || expiresAt > evidence.expiresAt) {
+        throw new DomainError("VALIDATION_FAILED", "Participant registry expiry must be future and evidence-bounded");
+      }
+      const current = this.#selectParticipant(context.tenantId, participantId);
+      if (input.expectedVersion === null) {
+        if (current !== undefined) {
+          throw new DomainError("VERSION_CONFLICT", "Participant is already registered");
+        }
+        this.#database.prepare(
+          `INSERT INTO participants(
+            tenant_id,participant_id,owner_actor_id,minor_status,status,evidence_id,evidence_scope,
+            registered_at,expires_at,revoked_at,revocation_reason,revocation_evidence_id,
+            revocation_evidence_scope,version
+          ) VALUES (?,?,?,?,'active',?,?,?, ?,NULL,NULL,NULL,NULL,1)`,
+        ).run(
+          context.tenantId,
+          participantId,
+          ownerActorId,
+          input.minorStatus,
+          evidenceId,
+          evidenceScope,
+          now,
+          expiresAt,
+        );
+      } else {
+        if (current === undefined || current.version !== input.expectedVersion) {
+          throw new DomainError("VERSION_CONFLICT", "Participant registry version changed", {
+            details: { participantId, expectedVersion: input.expectedVersion },
+          });
+        }
+        this.#withdrawActiveConsentsForParticipantAuthority(context, {
+          participantId,
+          reason: `participant_registry_replaced:${participantId}`,
+          now,
+        });
+        const updated = this.#database.prepare(
+          `UPDATE participants SET owner_actor_id=?,minor_status=?,status='active',evidence_id=?,evidence_scope=?,
+             registered_at=?,expires_at=?,revoked_at=NULL,revocation_reason=NULL,
+             revocation_evidence_id=NULL,revocation_evidence_scope=NULL,version=version+1
+           WHERE tenant_id=? AND participant_id=? AND version=?`,
+        ).run(
+          ownerActorId,
+          input.minorStatus,
+          evidenceId,
+          evidenceScope,
+          now,
+          expiresAt,
+          context.tenantId,
+          participantId,
+          input.expectedVersion,
+        );
+        if (updated.changes !== 1) throw new DomainError("VERSION_CONFLICT", "Participant registry version changed");
+      }
+      const participant = this.#requiredParticipant(context.tenantId, participantId, false);
+      this.#appendAuditInternal(context, {
+        action: "participant.registered",
+        resourceType: "participant",
+        resourceId: participantId,
+        details: { ownerActorId, minorStatus: input.minorStatus, evidenceId, expiresAt, version: participant.version },
+      });
+      this.#emitOutbox(context.tenantId, "participant", participantId, "participant.registered", {
+        participantId,
+        ownerActorId,
+        minorStatus: input.minorStatus,
+        evidenceId,
+        expiresAt,
+        version: participant.version,
+      });
+      return participant;
+    });
+  }
+
+  revokeParticipant(
+    context: ActorContext,
+    input: RevokeParticipantInput,
+  ): IdempotentResult<ParticipantRecord> {
+    const participantId = token(input.participantId, "participant ID");
+    if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion <= 0) {
+      throw new DomainError("VALIDATION_FAILED", "expectedVersion must be a positive integer");
+    }
+    const reason = textValue(input.reason, "participant revocation reason", 500);
+    const evidenceId = token(input.evidenceId, "external evidence ID");
+    const key = idempotencyKey(input.idempotencyKey);
+    this.#authorizeServiceOperation(context, "participant:revoke");
+    const mutation = {
+      operation: "participant.revoke" as const,
+      tenantId: context.tenantId,
+      participantId,
+      expectedVersion: input.expectedVersion,
+      reason,
+    };
+    const evidenceScope = participantEvidenceScope(mutation);
+    return this.#idempotent(context, key, "participant.revoke", { ...mutation, evidenceId }, () => {
+      this.#requireIdentityMutationEvidence(context, evidenceScope, evidenceId);
+      const current = this.#requiredParticipant(context.tenantId, participantId, true);
+      if (current.status !== "active" || current.version !== input.expectedVersion) {
+        throw new DomainError("VERSION_CONFLICT", "Participant registry version changed");
+      }
+      const revokedAt = this.#now();
+      const updated = this.#database.prepare(
+        `UPDATE participants SET status='revoked',revoked_at=?,revocation_reason=?,
+           revocation_evidence_id=?,revocation_evidence_scope=?,version=version+1
+         WHERE tenant_id=? AND participant_id=? AND status='active' AND version=?`,
+      ).run(
+        revokedAt,
+        reason,
+        evidenceId,
+        evidenceScope,
+        context.tenantId,
+        participantId,
+        input.expectedVersion,
+      );
+      if (updated.changes !== 1) throw new DomainError("VERSION_CONFLICT", "Participant registry version changed");
+      this.#withdrawActiveConsentsForParticipantAuthority(context, {
+        participantId,
+        reason: `participant_revoked:${reason}`,
+        now: revokedAt,
+      });
+      const participant = this.#requiredParticipant(context.tenantId, participantId, true);
+      this.#appendAuditInternal(context, {
+        action: "participant.revoked",
+        resourceType: "participant",
+        resourceId: participantId,
+        details: { reason, evidenceId, version: participant.version },
+      });
+      this.#emitOutbox(context.tenantId, "participant", participantId, "participant.revoked", {
+        participantId,
+        revokedAt,
+        evidenceId,
+        version: participant.version,
+      });
+      return participant;
+    });
+  }
+
+  grantParticipantAuthority(
+    context: ActorContext,
+    input: GrantParticipantAuthorityInput,
+  ): IdempotentResult<ParticipantAuthorityRecord> {
+    const authorizationId = token(input.authorizationId, "participant authorization ID");
+    const authorizedActorId = token(input.authorizedActorId, "authorized actor ID");
+    const participantId = token(input.participantId, "participant ID");
+    const capacity = this.#participantAuthorityCapacity(input.capacity);
+    const scope = normalizeConsentScope(jsonObject(input.scope, "participant authority scope"), "participant authority scope");
+    const expiresAt = isoTimestamp(input.expiresAt, "participant authority expiry");
+    const evidenceId = token(input.evidenceId, "external evidence ID");
+    const key = idempotencyKey(input.idempotencyKey);
+    this.#authorizeServiceOperation(context, "participant-authority:grant");
+    const mutation = {
+      operation: "participant-authority.grant" as const,
+      tenantId: context.tenantId,
+      authorizationId,
+      authorizedActorId,
+      participantId,
+      capacity,
+      scope,
+      expiresAt,
+    };
+    const evidenceScope = participantEvidenceScope(mutation);
+    return this.#idempotent(context, key, "participant-authority.grant", { ...mutation, evidenceId }, () => {
+      const evidence = this.#requireIdentityMutationEvidence(context, evidenceScope, evidenceId);
+      const participant = this.#requiredParticipant(context.tenantId, participantId, false);
+      const now = this.#now();
+      if (expiresAt <= now || expiresAt > evidence.expiresAt || expiresAt > participant.expiresAt) {
+        throw new DomainError("VALIDATION_FAILED", "Participant authority expiry must be future and evidence/participant bounded");
+      }
+      if (capacity === "guardian" && participant.minorStatus !== "minor") {
+        throw new DomainError("AUTH_FORBIDDEN", "Guardian authority is only valid for a registered minor");
+      }
+      if (capacity === "authorized_agent" && participant.minorStatus === "minor") {
+        throw new DomainError("AUTH_FORBIDDEN", "A minor requires exact guardian authority");
+      }
+      if (this.#selectParticipantAuthority(context.tenantId, authorizationId, capacity) !== undefined) {
+        throw new DomainError("VERSION_CONFLICT", "Participant authorization ID already exists");
+      }
+      const binding = this.#participantAuthorityStorage(capacity);
+      this.#database.prepare(
+        `UPDATE ${binding.table} SET status='superseded',version=version+1
+         WHERE tenant_id=? AND ${binding.actorColumn}=? AND participant_id=? AND status='active'`,
+      ).run(context.tenantId, authorizedActorId, participantId);
+      this.#withdrawActiveConsentsForParticipantAuthority(context, {
+        participantId,
+        grantorActorId: authorizedActorId,
+        grantorCapacity: capacity,
+        reason: `participant_authority_superseded:${authorizationId}`,
+        now,
+      });
+      this.#database.prepare(
+        `INSERT INTO ${binding.table}(
+          tenant_id,authorization_id,${binding.actorColumn},participant_id,status,scope_json,
+          evidence_id,evidence_scope,granted_at,expires_at,revoked_at,revocation_reason,
+          revocation_evidence_id,revocation_evidence_scope,version
+        ) VALUES (?,?,?,?,'active',?,?,?,?,?,NULL,NULL,NULL,NULL,1)`,
+      ).run(
+        context.tenantId,
+        authorizationId,
+        authorizedActorId,
+        participantId,
+        canonicalJson(scope),
+        evidenceId,
+        evidenceScope,
+        now,
+        expiresAt,
+      );
+      const authorization = this.#requiredParticipantAuthority(context.tenantId, authorizationId, capacity);
+      this.#appendAuditInternal(context, {
+        action: "participant_authority.granted",
+        resourceType: "participant_authority",
+        resourceId: authorizationId,
+        details: { authorizedActorId, participantId, capacity, scope: jsonObject(scope), evidenceId, expiresAt },
+      });
+      this.#emitOutbox(context.tenantId, "participant_authority", authorizationId, "participant_authority.granted", {
+        authorizationId,
+        authorizedActorId,
+        participantId,
+        capacity,
+        scope: jsonObject(scope),
+        evidenceId,
+        expiresAt,
+      });
+      return authorization;
+    });
+  }
+
+  revokeParticipantAuthority(
+    context: ActorContext,
+    input: RevokeParticipantAuthorityInput,
+  ): IdempotentResult<ParticipantAuthorityRecord> {
+    const authorizationId = token(input.authorizationId, "participant authorization ID");
+    const capacity = this.#participantAuthorityCapacity(input.capacity);
+    if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion <= 0) {
+      throw new DomainError("VALIDATION_FAILED", "expectedVersion must be a positive integer");
+    }
+    const reason = textValue(input.reason, "participant authority revocation reason", 500);
+    const evidenceId = token(input.evidenceId, "external evidence ID");
+    const key = idempotencyKey(input.idempotencyKey);
+    this.#authorizeServiceOperation(context, "participant-authority:revoke");
+    const mutation = {
+      operation: "participant-authority.revoke" as const,
+      tenantId: context.tenantId,
+      authorizationId,
+      capacity,
+      expectedVersion: input.expectedVersion,
+      reason,
+    };
+    const evidenceScope = participantEvidenceScope(mutation);
+    return this.#idempotent(context, key, "participant-authority.revoke", { ...mutation, evidenceId }, () => {
+      this.#requireIdentityMutationEvidence(context, evidenceScope, evidenceId);
+      const current = this.#requiredParticipantAuthority(context.tenantId, authorizationId, capacity);
+      if (current.status !== "active" || current.version !== input.expectedVersion) {
+        throw new DomainError("VERSION_CONFLICT", "Participant authority version changed");
+      }
+      const binding = this.#participantAuthorityStorage(capacity);
+      const revokedAt = this.#now();
+      const updated = this.#database.prepare(
+        `UPDATE ${binding.table} SET status='revoked',revoked_at=?,revocation_reason=?,
+           revocation_evidence_id=?,revocation_evidence_scope=?,version=version+1
+         WHERE tenant_id=? AND authorization_id=? AND status='active' AND version=?`,
+      ).run(
+        revokedAt,
+        reason,
+        evidenceId,
+        evidenceScope,
+        context.tenantId,
+        authorizationId,
+        input.expectedVersion,
+      );
+      if (updated.changes !== 1) throw new DomainError("VERSION_CONFLICT", "Participant authority version changed");
+      this.#withdrawActiveConsentsForParticipantAuthority(context, {
+        participantId: current.participantId,
+        grantorActorId: current.authorizedActorId,
+        grantorCapacity: capacity,
+        reason: `participant_authority_revoked:${authorizationId}:${reason}`,
+        now: revokedAt,
+      });
+      const authorization = this.#requiredParticipantAuthority(context.tenantId, authorizationId, capacity);
+      this.#appendAuditInternal(context, {
+        action: "participant_authority.revoked",
+        resourceType: "participant_authority",
+        resourceId: authorizationId,
+        details: { capacity, reason, evidenceId, version: authorization.version },
+      });
+      this.#emitOutbox(context.tenantId, "participant_authority", authorizationId, "participant_authority.revoked", {
+        authorizationId,
+        capacity,
+        revokedAt,
+        evidenceId,
+        version: authorization.version,
+      });
+      return authorization;
+    });
+  }
+
   grantConsent(context: ActorContext, input: GrantConsentInput): IdempotentResult<ConsentRecord> {
     const id = token(input.id ?? randomUUID(), "consent ID");
     const participantId = token(input.participantId, "participant ID");
     const purpose = textValue(input.purpose, "consent purpose", 120);
     const policyVersion = token(input.policyVersion, "policy version");
-    const evidenceHash = input.evidenceHash.trim().toLowerCase();
-    if (!/^[a-f0-9]{64}$/.test(evidenceHash)) {
-      throw new DomainError("VALIDATION_FAILED", "evidenceHash must be a lowercase SHA-256 digest");
+    const requestedEvidenceHash = input.evidenceHash === undefined ? null : input.evidenceHash.trim().toLowerCase();
+    if (requestedEvidenceHash !== null &&
+        (!/^[a-f0-9]{64}$/.test(requestedEvidenceHash) || requestedEvidenceHash !== input.evidenceHash)) {
+      throw new DomainError("VALIDATION_FAILED", "evidenceHash must be a canonical lowercase SHA-256 digest");
     }
     if (purpose !== context.purpose) {
       throw new DomainError("PURPOSE_REQUIRED", "Consent purpose must match the request purpose");
     }
-    const scope = jsonObject(input.scope, "consent scope");
-    const isMinor = input.isMinor ?? false;
+    const scope = normalizeConsentScope(jsonObject(input.scope, "consent scope"));
     const expiresAt = input.expiresAt === undefined || input.expiresAt === null ? null : isoTimestamp(input.expiresAt, "expiresAt");
     const key = idempotencyKey(input.idempotencyKey);
     validateContext(context);
-    this.#authorizeConsentGrant(context, participantId, input.grantorCapacity, isMinor);
 
     return this.#idempotent(
       context,
       key,
       "consent.grant",
-      { requestedId: input.id ?? null, participantId, purpose, scope, policyVersion, evidenceHash, isMinor, expiresAt },
+      {
+        requestedId: input.id ?? null,
+        participantId,
+        purpose,
+        scope,
+        policyVersion,
+        requestedEvidenceHash,
+        claimedIsMinor: input.isMinor ?? null,
+        expiresAt,
+        policyCatalogSha256: this.#consentPolicyCatalog?.sha256 ?? null,
+        jurisdiction: this.#consentPolicyJurisdiction,
+        locale: this.#consentPolicyLocale,
+        legacyTestPolicy: this.#allowLegacyConsentPolicy,
+      },
       () => {
-        if (expiresAt !== null && expiresAt <= this.#now()) {
-          throw new DomainError("VALIDATION_FAILED", "Consent expiry must be in the future");
+        const now = this.#now();
+        const participant = this.#requiredParticipant(context.tenantId, participantId, false, now);
+        const isMinor = participant.minorStatus === "minor";
+        if (input.isMinor !== undefined && input.isMinor !== isMinor) {
+          throw new DomainError("VALIDATION_FAILED", "isMinor does not match the server-derived participant registry status");
+        }
+        this.#authorizeConsentGrant(context, participant, input.grantorCapacity, scope);
+        let evidenceHash: string;
+        let effectiveExpiresAt: string | null;
+        let policyCatalogSha256: string | null;
+        let jurisdiction: string | null;
+        let locale: string | null;
+        if (this.#allowLegacyConsentPolicy) {
+          if (requestedEvidenceHash === null) {
+            throw new DomainError("VALIDATION_FAILED", "Explicit legacy-test consent requires evidenceHash");
+          }
+          if (expiresAt !== null && (expiresAt <= now || expiresAt > participant.expiresAt)) {
+            throw new DomainError("VALIDATION_FAILED", "Consent expiry must be future and participant-registry bounded");
+          }
+          evidenceHash = requestedEvidenceHash;
+          effectiveExpiresAt = expiresAt;
+          policyCatalogSha256 = null;
+          jurisdiction = null;
+          locale = null;
+        } else {
+          const catalog = this.#requiredActiveConsentPolicy(now);
+          if (this.#consentPolicyJurisdiction === null || this.#consentPolicyLocale === null) {
+            throw new DomainError("CONFIGURATION_INVALID", "Verified consent policy location is unavailable");
+          }
+          const resolved = resolveConsentPolicy(catalog, {
+            policyVersion,
+            purpose,
+            jurisdiction: this.#consentPolicyJurisdiction,
+            locale: this.#consentPolicyLocale,
+            scope: jsonObject(scope, "consent scope"),
+            grantorCapacity: input.grantorCapacity,
+            isMinor,
+            requestedExpiresAt: expiresAt,
+            participantExpiresAt: participant.expiresAt,
+            at: now,
+          });
+          if (requestedEvidenceHash !== null && requestedEvidenceHash !== resolved.disclosureSha256) {
+            throw new DomainError("VALIDATION_FAILED", "evidenceHash does not match the server-resolved disclosure");
+          }
+          evidenceHash = resolved.disclosureSha256;
+          effectiveExpiresAt = resolved.expiresAt;
+          policyCatalogSha256 = resolved.catalogSha256;
+          jurisdiction = resolved.jurisdiction;
+          locale = resolved.locale;
         }
         const exists = this.#database
           .prepare("SELECT id FROM consents WHERE tenant_id = ? AND id = ?")
@@ -1458,16 +2198,16 @@ export class LifeTimeMachineRuntime {
         this.#database
           .prepare(
             `UPDATE consents SET status = 'superseded', version = version + 1
-             WHERE tenant_id = ? AND participant_id = ? AND purpose = ? AND status = 'active'`,
+             WHERE tenant_id = ? AND participant_id = ? AND purpose = ? AND scope_json = ? AND status = 'active'`,
           )
-          .run(context.tenantId, participantId, purpose);
-        const now = this.#now();
+          .run(context.tenantId, participantId, purpose, canonicalJson(scope));
         this.#database
           .prepare(
             `INSERT INTO consents(
               tenant_id, id, participant_id, grantor_actor_id, grantor_capacity, purpose, scope_json,
-              policy_version, status, evidence_hash, is_minor, granted_at, expires_at, withdrawn_at, version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, NULL, 1)`,
+              policy_version, policy_catalog_sha256, jurisdiction, locale, status, evidence_hash,
+              is_minor, granted_at, expires_at, withdrawn_at, version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, NULL, 1)`,
           )
           .run(
             context.tenantId,
@@ -1478,23 +2218,29 @@ export class LifeTimeMachineRuntime {
             purpose,
             canonicalJson(scope),
             policyVersion,
+            policyCatalogSha256,
+            jurisdiction,
+            locale,
             evidenceHash,
             isMinor ? 1 : 0,
             now,
-            expiresAt,
+            effectiveExpiresAt,
           );
         const consent = this.#requiredConsent(context.tenantId, id);
         this.#appendAuditInternal(context, {
           action: "consent.granted",
           resourceType: "consent",
           resourceId: id,
-          details: { participantId, policyVersion, isMinor },
+          details: { participantId, policyVersion, policyCatalogSha256, jurisdiction, locale, isMinor },
         });
         this.#emitOutbox(context.tenantId, "consent", id, "consent.granted", {
           consentId: id,
           participantId,
           purpose,
           policyVersion,
+          policyCatalogSha256,
+          jurisdiction,
+          locale,
           isMinor,
         });
         return consent;
@@ -1511,14 +2257,7 @@ export class LifeTimeMachineRuntime {
     const key = idempotencyKey(input.idempotencyKey);
     validateContext(context);
     const current = this.#requiredConsent(context.tenantId, consentId);
-    const ownsConsent = current.grantorActorId === context.actorId;
-    if (ownsConsent) {
-      if (!hasPermission(context, "consent:withdraw:self") && !hasPermission(context, "consent:withdraw")) {
-        throw new DomainError("AUTH_FORBIDDEN", "Permission to withdraw consent is required");
-      }
-    } else {
-      this.authorize(context, "consent:withdraw", { tenantId: current.tenantId });
-    }
+    this.#authorizeConsentAccess(context, current, "withdraw");
 
     return this.#idempotent(
       context,
@@ -1554,9 +2293,394 @@ export class LifeTimeMachineRuntime {
           purpose: consent.purpose,
           withdrawnAt: consent.withdrawnAt,
         });
+        this.#closeShareExportsForWithdrawnConsent(context, consent, reason, now);
         return consent;
       },
     );
+  }
+
+  #withdrawActiveConsentsForParticipantAuthority(
+    context: ActorContext,
+    options: {
+      readonly participantId: string;
+      readonly grantorActorId?: string;
+      readonly grantorCapacity?: ParticipantAuthorityCapacity;
+      readonly reason: string;
+      readonly now: string;
+    },
+  ): void {
+    const rows = this.#database.prepare(
+      `SELECT * FROM consents
+       WHERE tenant_id=? AND participant_id=? AND status='active'
+         AND (? IS NULL OR grantor_actor_id=?)
+         AND (? IS NULL OR grantor_capacity=?)
+       ORDER BY granted_at,id`,
+    ).all(
+      context.tenantId,
+      options.participantId,
+      options.grantorActorId ?? null,
+      options.grantorActorId ?? null,
+      options.grantorCapacity ?? null,
+      options.grantorCapacity ?? null,
+    ) as unknown as ConsentRow[];
+    for (const row of rows) {
+      const prior = consentFromRow(row);
+      const updated = this.#database.prepare(
+        `UPDATE consents SET status='withdrawn',withdrawn_at=?,version=version+1
+         WHERE tenant_id=? AND id=? AND status='active' AND version=?`,
+      ).run(options.now, context.tenantId, prior.id, prior.version);
+      if (updated.changes !== 1) {
+        throw new DomainError("VERSION_CONFLICT", "Consent changed during participant-authority lifecycle closure", {
+          details: { consentId: prior.id, participantId: options.participantId },
+        });
+      }
+      const consent = this.#requiredConsent(context.tenantId, prior.id);
+      this.#appendAuditInternal(context, {
+        action: "consent.withdrawn_by_participant_authority_lifecycle",
+        resourceType: "consent",
+        resourceId: consent.id,
+        details: {
+          participantId: consent.participantId,
+          grantorActorId: consent.grantorActorId,
+          grantorCapacity: consent.grantorCapacity,
+          reason: options.reason,
+          version: consent.version,
+        },
+      });
+      this.#emitOutbox(context.tenantId, "consent", consent.id, "consent.withdrawn", {
+        consentId: consent.id,
+        participantId: consent.participantId,
+        purpose: consent.purpose,
+        withdrawnAt: consent.withdrawnAt,
+        lifecycleReason: options.reason,
+      });
+      this.#closeShareExportsForWithdrawnConsent(context, consent, options.reason, options.now);
+    }
+  }
+
+  /** Atomically closes every B10 export touched by a sharing-consent withdrawal. */
+  #closeShareExportsForWithdrawnConsent(
+    context: ActorContext,
+    consent: ConsentRecord,
+    withdrawalReason: string,
+    now: string,
+  ): void {
+    if (consent.purpose !== "sharing") return;
+    const rows = this.#database.prepare(
+      `SELECT r.* FROM records r
+       JOIN external_commands c
+         ON c.tenant_id=r.tenant_id
+        AND c.aggregate_collection=r.collection
+        AND c.aggregate_id=r.id
+       WHERE r.tenant_id=? AND r.collection='sharing.export-commands' AND r.deleted_at IS NULL
+         AND c.batch_id='B10' AND c.operation='publishExport'
+         AND EXISTS (SELECT 1 FROM json_each(r.participant_ids_json) p WHERE p.value=?)
+       ORDER BY r.id`,
+    ).all(context.tenantId, consent.participantId) as unknown as RecordRow[];
+
+    for (const row of rows) {
+      const exportRecord = recordFromRow(row);
+      const workId = exportRecord.data.workId;
+      if (typeof workId !== "string" || !consentScopeAllows(consent.scope, { resource: `work:${workId}`, action: "share" })) {
+        continue;
+      }
+      const commandId = exportRecord.data.externalCommandId;
+      if (typeof commandId !== "string") {
+        throw new DomainError("EVENT_FINGERPRINT_CONFLICT", "B10 export is missing its command binding");
+      }
+      const exportCommand = this.#requiredExternalCommand(context.tenantId, token(commandId, "B10 export command ID"));
+      if (exportCommand.batchId !== "B10" || exportCommand.operation !== "publishExport" ||
+          exportCommand.aggregateCollection !== exportRecord.collection || exportCommand.aggregateId !== exportRecord.id) {
+        throw new DomainError("EVENT_FINGERPRINT_CONFLICT", "B10 export command binding is invalid");
+      }
+      if (exportCommand.state === "succeeded" && exportCommand.providerOperationId !== null) {
+        this.#ensureConsentWithdrawalShareRevoke(
+          context,
+          consent,
+          withdrawalReason,
+          exportRecord,
+          exportCommand,
+          now,
+        );
+      } else if (exportCommand.state === "requested" &&
+          this.#suppressPendingExternalCommandRequest(context.tenantId, exportCommand, now)) {
+        this.#cancelShareExportForConsentWithdrawal(context, consent, exportRecord, exportCommand, now);
+      } else if (["requested", "dispatched", "acknowledged"].includes(exportCommand.state)) {
+        this.#freezeShareExportForConsentWithdrawal(context, consent, exportRecord, exportCommand, now);
+      }
+    }
+  }
+
+  #suppressPendingExternalCommandRequest(
+    tenantId: string,
+    command: ExternalCommandRecord,
+    now: string,
+  ): boolean {
+    const rows = this.#database.prepare(
+      `SELECT * FROM outbox_events
+       WHERE tenant_id=? AND aggregate_type=? AND aggregate_id=?
+         AND event_type='external_command.requested'
+         AND json_extract(payload_json,'$.command.commandId')=?
+       ORDER BY created_at,id`,
+    ).all(
+      tenantId,
+      command.aggregateCollection,
+      command.aggregateId,
+      command.commandId,
+    ) as unknown as OutboxRow[];
+    if (rows.length !== 1 || rows[0]?.status !== "pending" || rows[0].attempts !== 0) return false;
+    const updated = this.#database.prepare(
+      `UPDATE outbox_events
+       SET status='published',published_at=?,last_error='suppressed_by_consent_withdrawal'
+       WHERE tenant_id=? AND id=? AND status='pending' AND attempts=0`,
+    ).run(now, tenantId, rows[0].id);
+    return updated.changes === 1;
+  }
+
+  #cancelShareExportForConsentWithdrawal(
+    context: ActorContext,
+    consent: ConsentRecord,
+    record: RecordEnvelope,
+    command: ExternalCommandRecord,
+    now: string,
+  ): void {
+    assertExternalCommandTransition(command.state, "cancelled");
+    const details = jsonObject({
+      ...command.details,
+      cancellationAuthority: "participant_consent_withdrawal",
+      withdrawnConsentId: consent.id,
+      withdrawnParticipantId: consent.participantId,
+    }, "consent withdrawal cancellation details");
+    const updated = this.#database.prepare(
+      `UPDATE external_commands
+       SET state='cancelled',version=version+1,updated_at=?,terminal_at=?,details_json=?
+       WHERE tenant_id=? AND command_id=? AND state='requested' AND version=?
+         AND decision_state='active' AND reconciliation_state='clear'`,
+    ).run(now, now, canonicalJson(details), context.tenantId, command.commandId, command.version);
+    if (updated.changes !== 1) {
+      throw new DomainError("VERSION_CONFLICT", "B10 export changed while consent withdrawal was closing it");
+    }
+    this.#database.prepare(
+      `INSERT INTO external_command_transitions(
+        tenant_id,transition_id,command_id,from_state,to_state,provider_operation_id,evidence_id,details_json,occurred_at
+      ) VALUES (?,?,?,'requested','cancelled',NULL,NULL,?,?)`,
+    ).run(
+      context.tenantId,
+      randomUUID(),
+      command.commandId,
+      canonicalJson({ authority: "participant_consent_withdrawal", consentId: consent.id }),
+      now,
+    );
+    const aggregateData = jsonObject({
+      ...record.data,
+      commandState: "cancelled",
+      executionState: "cancelled",
+      externalReceipt: { providerOperationId: null, evidenceId: null, state: "cancelled", updatedAt: now },
+      consentWithdrawal: { consentId: consent.id, participantId: consent.participantId, occurredAt: now },
+    }, "cancelled B10 export aggregate");
+    const recordUpdate = this.#database.prepare(
+      `UPDATE records SET data_json=?,version=version+1,updated_at=?
+       WHERE tenant_id=? AND collection=? AND id=? AND version=? AND deleted_at IS NULL`,
+    ).run(canonicalJson(aggregateData), now, context.tenantId, record.collection, record.id, record.version);
+    if (recordUpdate.changes !== 1) {
+      throw new DomainError("VERSION_CONFLICT", "B10 export aggregate changed during consent withdrawal");
+    }
+    const cancelled = this.#requiredExternalCommand(context.tenantId, command.commandId);
+    this.#appendAuditInternal(context, {
+      action: "external_command.cancelled_by_consent_withdrawal",
+      resourceType: record.collection,
+      resourceId: record.id,
+      details: { commandId: command.commandId, consentId: consent.id, participantId: consent.participantId },
+    });
+    this.#emitOutbox(context.tenantId, record.collection, record.id, "external_command.cancelled", {
+      command: jsonObject(cancelled),
+    });
+  }
+
+  #freezeShareExportForConsentWithdrawal(
+    context: ActorContext,
+    consent: ConsentRecord,
+    record: RecordEnvelope,
+    command: ExternalCommandRecord,
+    now: string,
+  ): void {
+    if (command.decisionState === "frozen" || command.reconciliationState === "reconciliation_required") return;
+    const details = jsonObject({
+      ...command.details,
+      reconciliationReason: "participant_consent_withdrawal_with_uncertain_delivery",
+      withdrawnConsentId: consent.id,
+      withdrawnParticipantId: consent.participantId,
+    }, "consent withdrawal reconciliation details");
+    const updated = this.#database.prepare(
+      `UPDATE external_commands
+       SET decision_state='frozen',reconciliation_state='reconciliation_required',
+           version=version+1,updated_at=?,details_json=?
+       WHERE tenant_id=? AND command_id=? AND version=?
+         AND decision_state='active' AND reconciliation_state='clear'`,
+    ).run(now, canonicalJson(details), context.tenantId, command.commandId, command.version);
+    if (updated.changes !== 1) {
+      throw new DomainError("VERSION_CONFLICT", "B10 export changed while consent withdrawal was freezing it");
+    }
+    this.#database.prepare(
+      `INSERT INTO external_command_transitions(
+        tenant_id,transition_id,command_id,from_state,to_state,provider_operation_id,evidence_id,details_json,occurred_at
+      ) VALUES (?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      context.tenantId,
+      randomUUID(),
+      command.commandId,
+      command.state,
+      command.state,
+      command.providerOperationId,
+      command.evidenceId,
+      canonicalJson({
+        authority: "participant_consent_withdrawal",
+        consentId: consent.id,
+        reconciliationState: "reconciliation_required",
+      }),
+      now,
+    );
+    const aggregateData = jsonObject({
+      ...record.data,
+      executionState: "revocation_required",
+      commandState: command.state,
+      _externalDecisionState: "frozen",
+      _externalReconciliationState: "reconciliation_required",
+      consentWithdrawal: { consentId: consent.id, participantId: consent.participantId, occurredAt: now },
+    }, "frozen B10 export aggregate");
+    const recordUpdate = this.#database.prepare(
+      `UPDATE records SET data_json=?,version=version+1,updated_at=?
+       WHERE tenant_id=? AND collection=? AND id=? AND version=? AND deleted_at IS NULL`,
+    ).run(canonicalJson(aggregateData), now, context.tenantId, record.collection, record.id, record.version);
+    if (recordUpdate.changes !== 1) {
+      throw new DomainError("VERSION_CONFLICT", "B10 export aggregate changed during consent withdrawal reconciliation");
+    }
+    const frozen = this.#requiredExternalCommand(context.tenantId, command.commandId);
+    const frozenRecord = this.#requiredRecord(context.tenantId, record.collection, record.id, false);
+    this.#appendAuditInternal(context, {
+      action: "external_command.reconciliation_required",
+      resourceType: record.collection,
+      resourceId: record.id,
+      details: {
+        commandId: command.commandId,
+        consentId: consent.id,
+        participantId: consent.participantId,
+        reason: "participant_consent_withdrawal_with_uncertain_delivery",
+      },
+    });
+    this.#emitOutbox(context.tenantId, record.collection, record.id, "external_command.reconciliation_required", {
+      command: jsonObject(frozen),
+      record: jsonObject(frozenRecord),
+      consentId: consent.id,
+    });
+  }
+
+  #ensureConsentWithdrawalShareRevoke(
+    context: ActorContext,
+    consent: ConsentRecord,
+    withdrawalReason: string,
+    exportRecord: RecordEnvelope,
+    exportCommand: ExternalCommandRecord,
+    now: string,
+  ): void {
+    const digest = createHash("sha256")
+      .update("ltm-share-revoke-v1\0")
+      .update(exportCommand.commandId)
+      .digest("hex");
+    const revokeCommandId = `B10-revoke:${digest}`;
+    const existing = this.#database.prepare(
+      "SELECT command_id FROM external_commands WHERE tenant_id=? AND command_id=?",
+    ).get(context.tenantId, revokeCommandId) as { command_id: string } | undefined;
+    if (existing !== undefined) {
+      const revoke = this.#requiredExternalCommand(context.tenantId, revokeCommandId);
+      if (["failed", "cancelled"].includes(revoke.state)) {
+        this.#freezeShareExportForConsentWithdrawal(context, consent, exportRecord, exportCommand, now);
+      }
+      return;
+    }
+
+    const workId = exportRecord.data.workId;
+    const expiresAt = exportRecord.data.expiresAt;
+    if (typeof workId !== "string" || typeof expiresAt !== "string") {
+      this.#freezeShareExportForConsentWithdrawal(context, consent, exportRecord, exportCommand, now);
+      return;
+    }
+    token(workId, "stored share work ID");
+    isoTimestamp(expiresAt, "stored share expiry");
+    const reason = `consent_withdrawn:${consent.id}:${withdrawalReason}`.slice(0, 500);
+    const data = jsonObject({
+      batchId: "B10",
+      skill: "building-consumer-time-machine",
+      operation: "revokeExport",
+      operationMode: "external-command",
+      purpose: "sharing_revocation",
+      exportCommandId: exportCommand.commandId,
+      exportRecordId: exportRecord.id,
+      targetProviderOperationId: exportCommand.providerOperationId,
+      workId,
+      expiresAt,
+      requestedByActorId: context.actorId,
+      reason,
+      externalCommandId: revokeCommandId,
+      commandState: "requested",
+      executionState: "requested",
+    }, "automatic B10 revoke record");
+    this.#database.prepare(
+      `INSERT INTO records(
+        tenant_id,collection,id,processing_purpose,owner_actor_id,participant_ids_json,contains_minor,
+        data_json,version,created_at,updated_at,deleted_at
+      ) VALUES (?, 'sharing.export-revoke-commands', ?, 'sharing', ?, '[]', 0, ?, 1, ?, ?, NULL)`,
+    ).run(
+      context.tenantId,
+      revokeCommandId,
+      exportRecord.ownerActorId,
+      canonicalJson(data),
+      now,
+      now,
+    );
+    const command = this.#insertRequestedExternalCommand(
+      context,
+      {
+        commandId: revokeCommandId,
+        batchId: "B10",
+        operation: "revokeExport",
+        aggregateCollection: "sharing.export-revoke-commands",
+        aggregateId: revokeCommandId,
+        details: {
+          requestedBy: context.actorId,
+          exportCommandId: exportCommand.commandId,
+          exportRecordId: exportRecord.id,
+          targetProviderOperationId: exportCommand.providerOperationId,
+          trigger: "participant_consent_withdrawal",
+          consentId: consent.id,
+        },
+      },
+      now,
+    );
+    const revokeRecord = this.#requiredRecord(context.tenantId, "sharing.export-revoke-commands", revokeCommandId, true);
+    this.#appendAuditInternal(context, {
+      action: "share_grant.revocation_queued_by_consent_withdrawal",
+      resourceType: exportRecord.collection,
+      resourceId: exportRecord.id,
+      details: {
+        exportCommandId: exportCommand.commandId,
+        revokeCommandId,
+        consentId: consent.id,
+        participantId: consent.participantId,
+      },
+    });
+    this.#emitOutbox(
+      context.tenantId,
+      revokeRecord.collection,
+      revokeRecord.id,
+      `${revokeRecord.collection}.created`,
+      { record: jsonObject(revokeRecord), command: jsonObject(command) },
+    );
+  }
+
+  assertConsent(context: ActorContext, requirement: ConsentRequirement): void {
+    validateContext(context);
+    this.#activeConsents(context, requirement, false);
   }
 
   requireConsent(context: ActorContext, requirement: ConsentRequirement): readonly ConsentRecord[] {
@@ -1572,8 +2696,7 @@ export class LifeTimeMachineRuntime {
   listConsents(context: ActorContext, participantIdValue?: string): readonly ConsentRecord[] {
     validateContext(context);
     const participantId = participantIdValue === undefined ? undefined : token(participantIdValue, "participant ID");
-    const mayReadAll = hasPermission(context, "consent:read");
-    if (!mayReadAll && !hasPermission(context, "consent:read:self")) {
+    if (!hasPermission(context, "consent:read") && !hasPermission(context, "consent:read:self")) {
       throw new DomainError("AUTH_FORBIDDEN", "Permission to inspect consent is required");
     }
     const conditions = ["tenant_id = ?"];
@@ -1582,14 +2705,269 @@ export class LifeTimeMachineRuntime {
       conditions.push("participant_id = ?");
       parameters.push(participantId);
     }
-    if (!mayReadAll) {
-      conditions.push("grantor_actor_id = ?");
-      parameters.push(context.actorId);
-    }
     const rows = this.#database
       .prepare(`SELECT * FROM consents WHERE ${conditions.join(" AND ")} ORDER BY granted_at DESC, id DESC LIMIT 200`)
       .all(...parameters) as unknown as ConsentRow[];
-    return rows.map(consentFromRow);
+    return rows.map(consentFromRow).filter((consent) => this.#canAccessConsent(context, consent, "read"));
+  }
+
+  submitRightsRequest(
+    context: ActorContext,
+    input: SubmitRightsRequestInput,
+  ): IdempotentResult<RightsRequestProjection> {
+    this.#assertRightsPurpose(context);
+    this.authorize(context, "rights-request:create", { tenantId: context.tenantId });
+    const submission = normalizeRightsSubmission(input);
+    const requestId = token(input.requestId ?? randomUUID(), "rights request ID");
+    const key = idempotencyKey(input.idempotencyKey);
+    return this.#idempotent(
+      context,
+      key,
+      "rights-request.submit",
+      { requestedId: input.requestId ?? null, submission },
+      () => {
+        if (this.#selectRecord(context.tenantId, RIGHTS_REQUEST_COLLECTION, requestId, true) !== undefined) {
+          throw new DomainError("VERSION_CONFLICT", "Rights request ID already exists");
+        }
+        const now = this.#now();
+        const authority = this.#rightsAuthorityDecision(context, submission, now);
+        const participant = this.#requiredParticipant(context.tenantId, submission.participantId, false, now);
+        if (submission.parentRequestId !== null) {
+          const parent = this.#requiredRightsRecord(context.tenantId, submission.parentRequestId, false);
+          const parentData = parseRightsRequestRecord(parent);
+          if (parentData.subjectParticipantId !== submission.participantId ||
+              (parentData.status !== "completed" && parentData.status !== "denied")) {
+            throw new DomainError("VALIDATION_FAILED", "Appeal parent must be a terminal request for the same participant");
+          }
+        }
+        const data = createRightsRequestData({
+          requestId,
+          submission,
+          requesterActorId: context.actorId,
+          requesterCapacity: authority.requesterCapacity,
+          discoveredAssetIds: this.#discoverRightsAssetIds(context.tenantId, submission.participantId),
+          now,
+        });
+        this.#database.prepare(
+          `INSERT INTO records(
+            tenant_id,collection,id,processing_purpose,owner_actor_id,participant_ids_json,contains_minor,
+            data_json,version,created_at,updated_at,deleted_at
+          ) VALUES (?, ?, ?, 'privacy_rights', ?, ?, ?, ?, 1, ?, ?, NULL)`,
+        ).run(
+          context.tenantId,
+          RIGHTS_REQUEST_COLLECTION,
+          requestId,
+          participant.ownerActorId,
+          canonicalJson([submission.participantId]),
+          participant.minorStatus === "minor" ? 1 : 0,
+          canonicalJson(data),
+          now,
+          now,
+        );
+        if (["withdraw", "delete", "restrict_processing"].includes(submission.requestType)) {
+          this.#withdrawConsentsForRightsRequest(context, submission, requestId, now);
+        }
+        const record = this.#requiredRightsRecord(context.tenantId, requestId, false);
+        this.#appendAuditInternal(context, {
+          action: "rights_request.submitted",
+          resourceType: RIGHTS_REQUEST_COLLECTION,
+          resourceId: requestId,
+          details: {
+            requestType: submission.requestType,
+            requesterCapacity: authority.requesterCapacity,
+            requestedProcessingPurpose: submission.requestedProcessingPurpose,
+            taskCount: data.tasks.length,
+            dueAt: data.dueAt,
+            policyVersion: data.policyVersion,
+          },
+        });
+        for (const task of data.tasks) {
+          this.#emitOutbox(context.tenantId, RIGHTS_REQUEST_COLLECTION, requestId, "privacy.rights.task.requested", {
+            requestId,
+            taskId: task.taskId,
+            target: task.target,
+            operation: task.operation,
+            assetId: task.assetId,
+            requestedProcessingPurpose: submission.requestedProcessingPurpose,
+            dueAt: data.dueAt,
+          });
+        }
+        return projectRightsRequest(record, context, new Date(now));
+      },
+    );
+  }
+
+  recordRightsTaskReceipt(
+    context: ActorContext,
+    input: RightsTaskReceiptInput,
+  ): IdempotentResult<RightsRequestProjection> {
+    this.#assertRightsPurpose(context);
+    this.#authorizeServiceOperation(context, "rights-request:receipt");
+    const requestId = token(input.requestId, "rights request ID");
+    const taskId = token(input.taskId, "rights task ID");
+    const evidenceId = token(input.evidenceId, "external evidence ID");
+    const key = idempotencyKey(input.idempotencyKey);
+    return this.#idempotent(context, key, "rights-request.task-receipt", {
+      requestId,
+      taskId,
+      outcome: input.outcome,
+      resultSha256: input.resultSha256,
+      providerOccurredAt: input.providerOccurredAt,
+      evidenceId,
+      errorCode: input.errorCode ?? null,
+    }, () => {
+      const record = this.#requiredRightsRecord(context.tenantId, requestId, false);
+      const data = parseRightsRequestRecord(record);
+      const task = data.tasks.find((entry) => entry.taskId === taskId);
+      if (task === undefined) throw new DomainError("RESOURCE_NOT_FOUND", "Rights propagation task was not found");
+      const applied = applyRightsTaskReceipt({
+        data,
+        taskId,
+        outcome: input.outcome,
+        resultSha256: input.resultSha256,
+        evidenceId,
+        providerOccurredAt: input.providerOccurredAt,
+        errorCode: input.errorCode ?? null,
+        recordedAt: this.#now(),
+      });
+      const scope = rightsTaskEvidenceScope({
+        tenantId: context.tenantId,
+        requestId,
+        task,
+        outcome: input.outcome,
+        resultSha256: input.resultSha256,
+        providerOccurredAt: input.providerOccurredAt,
+        errorCode: input.errorCode ?? null,
+      });
+      const evidence = this.#requireExternalEvidenceInternal(context, scope, [evidenceId])[0];
+      if (evidence === undefined || evidence.replayPolicy !== "single_use" ||
+          evidence.artifactSha256 !== input.resultSha256) {
+        throw new DomainError(
+          "EXTERNAL_EVIDENCE_UNVERIFIED",
+          "Rights propagation receipts require single-use signed evidence bound to the exact result digest",
+        );
+      }
+      const updated = this.#replaceRightsRecordData(context, record, applied.data, "rights_request.task_receipt_recorded", {
+        taskId,
+        target: task.target,
+        outcome: input.outcome,
+        evidenceId,
+        resultSha256: input.resultSha256,
+      });
+      this.#emitOutbox(context.tenantId, RIGHTS_REQUEST_COLLECTION, requestId, "privacy.rights.task.receipt-recorded", {
+        requestId,
+        taskId,
+        target: task.target,
+        outcome: input.outcome,
+        status: applied.data.status,
+      });
+      return { value: projectRightsRequest(updated, context, new Date(this.#now())), replayed: applied.replayed };
+    });
+  }
+
+  reviewRightsRequest(
+    context: ActorContext,
+    input: ReviewRightsRequestInput,
+  ): IdempotentResult<RightsRequestProjection> {
+    this.#assertRightsPurpose(context);
+    this.authorize(context, "rights-request:review", { tenantId: context.tenantId, sensitive: true });
+    const requestId = token(input.requestId, "rights request ID");
+    const key = idempotencyKey(input.idempotencyKey);
+    return this.#idempotent(context, key, "rights-request.review", {
+      requestId,
+      decision: input.decision,
+      reasonCode: input.reasonCode,
+      caseReference: input.caseReference,
+    }, () => {
+      const record = this.#requiredRightsRecord(context.tenantId, requestId, false);
+      const reviewedAt = this.#now();
+      const applied = applyRightsReview({
+        data: parseRightsRequestRecord(record),
+        reviewerActorId: context.actorId,
+        decision: input.decision,
+        reasonCode: input.reasonCode,
+        caseReference: input.caseReference,
+        reviewId: `rights-review:${sha256(canonicalJson({ requestId, actorId: context.actorId, key }))}`,
+        reviewedAt,
+      });
+      const updated = this.#replaceRightsRecordData(context, record, applied.data, "rights_request.reviewed", {
+        decision: input.decision,
+        reasonCode: input.reasonCode,
+        caseReference: input.caseReference,
+        status: applied.data.status,
+      });
+      this.#emitOutbox(context.tenantId, RIGHTS_REQUEST_COLLECTION, requestId, "privacy.rights.review.recorded", {
+        requestId,
+        decision: input.decision,
+        status: applied.data.status,
+        reviewCount: applied.data.reviews.length,
+      });
+      return { value: projectRightsRequest(updated, context, new Date(reviewedAt)), replayed: applied.replayed };
+    });
+  }
+
+  escalateRightsRequest(
+    context: ActorContext,
+    input: EscalateRightsRequestInput,
+  ): IdempotentResult<RightsRequestProjection> {
+    this.#assertRightsPurpose(context);
+    if (context.roles.includes("service_account")) {
+      this.#authorizeServiceOperation(context, "rights-request:escalate");
+    } else {
+      this.authorize(context, "rights-request:escalate", { tenantId: context.tenantId, sensitive: true });
+    }
+    const requestId = token(input.requestId, "rights request ID");
+    const key = idempotencyKey(input.idempotencyKey);
+    return this.#idempotent(context, key, "rights-request.escalate", { requestId, reasonCode: input.reasonCode }, () => {
+      const record = this.#requiredRightsRecord(context.tenantId, requestId, false);
+      const data = parseRightsRequestRecord(record);
+      const at = this.#now();
+      this.#assertRightsEscalationReason(data, input.reasonCode, at);
+      const next = escalateRightsRequestData(data, at);
+      const updated = this.#replaceRightsRecordData(context, record, next, "rights_request.escalated", {
+        reasonCode: input.reasonCode,
+      });
+      this.#emitOutbox(context.tenantId, RIGHTS_REQUEST_COLLECTION, requestId, "privacy.rights.escalated", {
+        requestId,
+        reasonCode: input.reasonCode,
+        escalatedAt: next.escalatedAt,
+      });
+      return projectRightsRequest(updated, context, new Date(at));
+    });
+  }
+
+  getRightsRequest(context: ActorContext, requestIdValue: string): RightsRequestProjection {
+    this.#assertRightsPurpose(context);
+    const requestId = token(requestIdValue, "rights request ID");
+    const record = this.#requiredRightsRecord(context.tenantId, requestId, false);
+    if (!this.#canReadRightsRequestCurrent(context, record)) {
+      throw new DomainError("AUTH_FORBIDDEN", "Rights request is outside the actor's data-subject authority");
+    }
+    return projectRightsRequest(record, context, this.#clock.now());
+  }
+
+  listRightsRequests(
+    context: ActorContext,
+    input: ListRightsRequestsInput = {},
+  ): readonly RightsRequestProjection[] {
+    this.#assertRightsPurpose(context);
+    const limit = positiveLimit(input.limit, 50, 200);
+    const cursor = input.cursor === undefined ? "" : token(input.cursor, "cursor");
+    if (!hasPermission(context, "rights-request:read:any") && !hasPermission(context, "rights-request:read:self")) {
+      throw new DomainError("AUTH_FORBIDDEN", "Permission to inspect rights requests is required");
+    }
+    const rows = this.#database.prepare(
+      `SELECT * FROM records
+       WHERE tenant_id=? AND collection=? AND deleted_at IS NULL AND id>?
+       ORDER BY id LIMIT 10001`,
+    ).all(context.tenantId, RIGHTS_REQUEST_COLLECTION, cursor) as unknown as RecordRow[];
+    if (rows.length > 10_000) {
+      throw new DomainError("VALIDATION_FAILED", "Rights request visibility scan exceeds the closed processing limit");
+    }
+    return rows.map((row) => recordFromRow(row))
+      .filter((record) => this.#canReadRightsRequestCurrent(context, record))
+      .slice(0, limit)
+      .map((record) => projectRightsRequest(record, context, this.#clock.now()));
   }
 
   postLedgerTransaction(
@@ -1937,7 +3315,14 @@ export class LifeTimeMachineRuntime {
       if (result.changes !== 1) {
         throw new DomainError("VERSION_CONFLICT", "Outbox event is not leased by this worker");
       }
-      return this.#requiredOutbox(context.tenantId, eventId);
+      const event = this.#requiredOutbox(context.tenantId, eventId);
+      if (status === "dead" && event.eventType === "external_command.requested") {
+        throw new DomainError(
+          "VALIDATION_FAILED",
+          "External command requests must use the atomic command dead-letter path",
+        );
+      }
+      return event;
     });
   }
 
@@ -1962,14 +3347,174 @@ export class LifeTimeMachineRuntime {
         const message = error instanceof Error ? error.message : "Unknown publisher error";
         const delayMs = Math.min(300_000, 1_000 * 2 ** Math.min(event.attempts, 8));
         const retryAt = new Date(this.#clock.now().getTime() + delayMs).toISOString();
-        this.markOutboxFailed(context, event.id, workerId, message.slice(0, 2_000), {
-          retryAt,
-          dead: event.attempts >= 10,
-        });
-        failed += 1;
+        if (event.attempts >= 10 && event.eventType === "external_command.requested") {
+          const outcome = this.deadLetterExternalCommand(context, {
+            eventId: event.id,
+            workerId,
+            error: message.slice(0, 2_000),
+          });
+          if (outcome.status === "published") published += 1;
+          else failed += 1;
+        } else {
+          this.markOutboxFailed(context, event.id, workerId, message.slice(0, 2_000), {
+            retryAt,
+            dead: event.attempts >= 10,
+          });
+          failed += 1;
+        }
       }
     }
     return { published, failed };
+  }
+
+  deadLetterExternalCommand(
+    context: ActorContext,
+    input: DeadLetterExternalCommandInput,
+  ): OutboxEvent {
+    this.#authorizeServiceOperation(context, "outbox:publish");
+    const eventId = token(input.eventId, "outbox event ID");
+    const workerId = token(input.workerId, "worker ID");
+    const deliveryError = textValue(input.error, "delivery error", 2_000);
+    return this.#transaction(() => {
+      const row = this.#database.prepare(
+        `SELECT * FROM outbox_events
+         WHERE tenant_id=? AND id=? AND status='leased' AND lease_owner=?`,
+      ).get(context.tenantId, eventId, workerId) as OutboxRow | undefined;
+      if (row === undefined) {
+        throw new DomainError("VERSION_CONFLICT", "Outbox event is not leased by this worker");
+      }
+      const event = outboxFromRow(row);
+      if (event.eventType !== "external_command.requested") {
+        throw new DomainError("VALIDATION_FAILED", "Only an external command request can use command dead-letter handling");
+      }
+      if (event.attempts < 10) {
+        throw new DomainError("VERSION_CONFLICT", "External command cannot be dead-lettered before ten delivery attempts");
+      }
+      const identity = externalCommandRequestIdentity(event);
+      const current = this.#requiredExternalCommand(context.tenantId, identity.commandId);
+      assertExternalCommandRequestCorrelation(event, identity, current);
+      const now = this.#now();
+
+      if (["acknowledged", "succeeded", "failed", "cancelled", "compensated"].includes(current.state)) {
+        this.#database.prepare(
+          `UPDATE outbox_events
+           SET status='published',published_at=?,lease_owner=NULL,lease_until=NULL,last_error=NULL
+           WHERE tenant_id=? AND id=? AND status='leased' AND lease_owner=?`,
+        ).run(now, context.tenantId, eventId, workerId);
+        this.#appendAuditInternal(context, {
+          action: "external_command.delivery_confirmed_after_error",
+          resourceType: current.aggregateCollection,
+          resourceId: current.aggregateId,
+          details: { commandId: current.commandId, eventId, commandState: current.state },
+        });
+        return this.#requiredOutbox(context.tenantId, eventId);
+      }
+
+      this.#database.prepare(
+        `UPDATE outbox_events
+         SET status='dead',available_at=?,lease_owner=NULL,lease_until=NULL,last_error=?
+         WHERE tenant_id=? AND id=? AND status='leased' AND lease_owner=?`,
+      ).run(now, deliveryError, context.tenantId, eventId, workerId);
+      if (current.decisionState === "active" && current.reconciliationState === "clear") {
+        const details = jsonObject({
+          ...current.details,
+          deadLetterEventId: eventId,
+          deadLetteredAt: now,
+          deliveryAttempts: event.attempts,
+          lastDeliveryError: deliveryError,
+        }, "external command dead-letter details");
+        const updated = this.#database.prepare(
+          `UPDATE external_commands
+           SET decision_state='frozen',reconciliation_state='reconciliation_required',
+               version=version+1,updated_at=?,details_json=?
+           WHERE tenant_id=? AND command_id=? AND version=?
+             AND decision_state='active' AND reconciliation_state='clear'`,
+        ).run(now, canonicalJson(details), context.tenantId, current.commandId, current.version);
+        if (updated.changes !== 1) {
+          throw new DomainError("VERSION_CONFLICT", "External command changed while it was being dead-lettered");
+        }
+        this.#database.prepare(
+          `INSERT INTO external_command_transitions(
+            tenant_id,transition_id,command_id,from_state,to_state,provider_operation_id,
+            evidence_id,details_json,occurred_at
+          ) VALUES (?,?,?,?,?,?,?,?,?)`,
+        ).run(
+          context.tenantId,
+          randomUUID(),
+          current.commandId,
+          current.state,
+          current.state,
+          current.providerOperationId,
+          current.evidenceId,
+          canonicalJson({
+            reason: "outbox_dead_letter",
+            eventId,
+            deliveryAttempts: event.attempts,
+            reconciliationState: "reconciliation_required",
+          }),
+          now,
+        );
+        const aggregate = this.#requiredRecord(
+          context.tenantId,
+          current.aggregateCollection,
+          current.aggregateId,
+          true,
+        );
+        const aggregateData = jsonObject({
+          ...aggregate.data,
+          executionState: "reconciliation_required",
+          commandState: current.state,
+          _externalDecisionState: "frozen",
+          _externalReconciliationState: "reconciliation_required",
+          lastDeliveryFailure: {
+            eventId,
+            attempts: event.attempts,
+            error: deliveryError,
+            occurredAt: now,
+          },
+        }, "external command dead-letter aggregate data");
+        const recordUpdate = this.#database.prepare(
+          `UPDATE records SET data_json=?,version=version+1,updated_at=?
+           WHERE tenant_id=? AND collection=? AND id=? AND version=?`,
+        ).run(
+          canonicalJson(aggregateData),
+          now,
+          context.tenantId,
+          current.aggregateCollection,
+          current.aggregateId,
+          aggregate.version,
+        );
+        if (recordUpdate.changes !== 1) {
+          throw new DomainError("VERSION_CONFLICT", "External command aggregate changed while it was being dead-lettered");
+        }
+        const frozen = this.#requiredExternalCommand(context.tenantId, current.commandId);
+        const frozenAggregate = this.#requiredRecord(
+          context.tenantId,
+          current.aggregateCollection,
+          current.aggregateId,
+          true,
+        );
+        this.#appendAuditInternal(context, {
+          action: "external_command.reconciliation_required",
+          resourceType: current.aggregateCollection,
+          resourceId: current.aggregateId,
+          details: {
+            commandId: current.commandId,
+            eventId,
+            commandState: current.state,
+            deliveryAttempts: event.attempts,
+          },
+        });
+        this.#emitOutbox(
+          context.tenantId,
+          current.aggregateCollection,
+          current.aggregateId,
+          "external_command.reconciliation_required",
+          { command: jsonObject(frozen), record: jsonObject(frozenAggregate), deadLetterEventId: eventId },
+        );
+      }
+      return this.#requiredOutbox(context.tenantId, eventId);
+    });
   }
 
   appendAudit(context: ActorContext, input: AppendAuditInput): AuditEntry {
@@ -2180,6 +3725,32 @@ export class LifeTimeMachineRuntime {
     return command;
   }
 
+  #transitionExternalCommandFromBusinessEvent(
+    context: ActorContext,
+    event: ApplyExternalBusinessEventInput["event"],
+    input: TransitionExternalCommandInput,
+  ): ExternalCommandRecord {
+    if (input.commandId !== event.subjectId || event.correlationId !== event.subjectId) {
+      throw new DomainError(
+        "EVENT_FINGERPRINT_CONFLICT",
+        "External-command callback must bind its exact subject and correlation to the command ID",
+      );
+    }
+    const current = this.#requiredExternalCommand(context.tenantId, input.commandId);
+    if (input.toState === "succeeded" && current.state === "dispatched") {
+      this.#transitionExternalCommandInternal(context, {
+        ...input,
+        toState: "acknowledged",
+        details: {
+          ...(input.details ?? {}),
+          implicitProviderAcknowledgement: true,
+          providerResultSha256: event.artifactSha256,
+        },
+      }, randomUUID());
+    }
+    return this.#transitionExternalCommandInternal(context, input, randomUUID());
+  }
+
   #assertBusinessEvidenceBinding(event: ApplyExternalBusinessEventInput["event"], evidence: SignedExternalEvidence): void {
     if (evidence.evidenceId !== event.evidenceId || evidence.tenantId !== event.tenantId ||
         evidence.provider !== event.provider || evidence.scope !== event.evidenceScope ||
@@ -2330,6 +3901,10 @@ export class LifeTimeMachineRuntime {
   #externalAggregateState(current: RecordEnvelope | null, stateField: string): string | null {
     if (current === null) return null;
     const state = current.data[stateField];
+    // Requested external-command aggregates intentionally have no provider
+    // state until their first signed callback. Reducers must explicitly allow
+    // null for that first transition; a present non-string value is corrupt.
+    if (state === undefined) return null;
     if (typeof state !== "string") {
       throw new DomainError("VERSION_CONFLICT", "Existing aggregate does not expose the reducer state field");
     }
@@ -2403,6 +3978,7 @@ export class LifeTimeMachineRuntime {
     }, "external business aggregate data");
     const now = this.#now();
     if (current === null) {
+      const processingPurpose = this.#processingPurposeForCreate(context);
       const ownerActorId = target.ownerActorId === undefined ? context.actorId : target.ownerActorId;
       this.authorize(context, "record:create", {
         tenantId: context.tenantId,
@@ -2410,16 +3986,22 @@ export class LifeTimeMachineRuntime {
         containsMinor: target.containsMinor,
       });
       this.#protectMinorSharing(context, target.collection, target.containsMinor);
-      this.#requireParticipantConsent(context, target.participantIds);
+      this.#requireParticipantConsent(
+        context,
+        target.participantIds,
+        processingPurpose,
+        deriveRecordConsentRequirementScope(target.collection, target.aggregateId, data, "create"),
+      );
       this.#database.prepare(
         `INSERT INTO records(
-          tenant_id,collection,id,owner_actor_id,participant_ids_json,contains_minor,data_json,
+          tenant_id,collection,id,processing_purpose,owner_actor_id,participant_ids_json,contains_minor,data_json,
           version,created_at,updated_at,deleted_at
-        ) VALUES (?,?,?,?,?,?,?,1,?,?,NULL)`,
+        ) VALUES (?,?,?,?,?,?,?,?,1,?,?,NULL)`,
       ).run(
         context.tenantId,
         target.collection,
         target.aggregateId,
+        processingPurpose,
         ownerActorId,
         canonicalJson(target.participantIds),
         target.containsMinor ? 1 : 0,
@@ -2429,6 +4011,19 @@ export class LifeTimeMachineRuntime {
       );
     } else {
       if (current.deletedAt !== null) throw new DomainError("VERSION_CONFLICT", "External business aggregate is deleted");
+      this.#assertRecordProcessingPurpose(context, current, "update");
+      this.#requireParticipantConsent(
+        context,
+        current.participantIds,
+        current.processingPurpose,
+        deriveRecordConsentRequirementScope(current.collection, current.id, current.data, "update"),
+      );
+      this.#requireParticipantConsent(
+        context,
+        current.participantIds,
+        current.processingPurpose,
+        deriveRecordConsentRequirementScope(current.collection, current.id, data, "update"),
+      );
       const updated = this.#database.prepare(
         `UPDATE records SET data_json=?,version=version+1,updated_at=?
          WHERE tenant_id=? AND collection=? AND id=? AND version=? AND deleted_at IS NULL`,
@@ -2622,6 +4217,25 @@ export class LifeTimeMachineRuntime {
     }
   }
 
+  #consentPolicyReadiness(at: string): ReadinessResult["consentPolicy"] {
+    if (this.#allowLegacyConsentPolicy) return "legacy_test_only";
+    if (this.#consentPolicyCatalog === null || this.#consentPolicyJurisdiction === null ||
+        this.#consentPolicyLocale === null) return "error";
+    const document = this.#consentPolicyCatalog.document;
+    const trustActive = this.#trustedConsentPolicyKeys.some((key) =>
+      key.keyId === document.keyId && key.issuer === document.issuer &&
+      key.allowedEnvironments.includes(this.#evidenceEnvironment) &&
+      key.notBefore <= at && key.notAfter > at && (key.revokedAt === undefined || key.revokedAt === null || key.revokedAt > at));
+    return document.issuedAt <= at && document.expiresAt > at && trustActive ? "ok" : "error";
+  }
+
+  #requiredActiveConsentPolicy(at: string): VerifiedConsentPolicyCatalog {
+    if (this.#consentPolicyReadiness(at) !== "ok" || this.#consentPolicyCatalog === null) {
+      throw new DomainError("CONFIGURATION_INVALID", "A currently valid signed consent policy catalog is required");
+    }
+    return this.#consentPolicyCatalog;
+  }
+
   #validateSignedEvidence(context: ActorContext, value: SignedExternalEvidence): SignedExternalEvidence {
     if (this.#trustedEvidenceKeys.length === 0) {
       throw new DomainError("EXTERNAL_ADAPTER_UNAVAILABLE", "No trusted external evidence keys are configured");
@@ -2772,6 +4386,78 @@ export class LifeTimeMachineRuntime {
     }
   }
 
+  #migrateProcessingPurposeColumn(): void {
+    const table = this.#database
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'records'")
+      .get() as { name: string } | undefined;
+    if (table === undefined) return;
+    const columns = this.#database.prepare("PRAGMA table_info(records)").all() as unknown as Array<{ name: string }>;
+    const metadata = this.#database.prepare("SELECT value FROM schema_metadata WHERE key='schema_version'").get() as
+      | SchemaVersionRow
+      | undefined;
+    const hasColumn = columns.some((column) => column.name === "processing_purpose");
+    if (hasColumn && metadata?.value === String(SCHEMA_VERSION)) return;
+
+    // Legacy generic records did not durably bind a purpose. Only an explicit,
+    // valid data.purpose can be migrated; every other row receives a sentinel
+    // that the runtime refuses to read or mutate until separately reconciled.
+    if (!hasColumn) {
+      this.#database.exec(
+        "ALTER TABLE records ADD COLUMN processing_purpose TEXT NOT NULL DEFAULT '__legacy_unmapped__'",
+      );
+    }
+    const rows = this.#database.prepare(
+      "SELECT rowid,data_json FROM records WHERE processing_purpose='__legacy_unmapped__'",
+    ).all() as unknown as Array<{
+      rowid: number;
+      data_json: string;
+    }>;
+    const update = this.#database.prepare("UPDATE records SET processing_purpose=? WHERE rowid=?");
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      for (const row of rows) {
+        let purpose: unknown;
+        try {
+          const data = JSON.parse(row.data_json) as Record<string, unknown>;
+          purpose = data.purpose;
+        } catch {
+          purpose = undefined;
+        }
+        if (typeof purpose !== "string") continue;
+        try {
+          const normalized = textValue(purpose, "legacy record processing purpose", 120);
+          if (normalized !== "__legacy_unmapped__") update.run(normalized, row.rowid);
+        } catch {
+          // Preserve the fail-closed sentinel for invalid legacy purpose data.
+        }
+      }
+      this.#database.exec("COMMIT");
+    } catch (error) {
+      this.#database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  #migrateConsentPolicyColumns(): void {
+    const table = this.#database
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='consents'")
+      .get() as { name: string } | undefined;
+    if (table === undefined) return;
+    const columns = this.#database.prepare("PRAGMA table_info(consents)").all() as unknown as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === "policy_catalog_sha256")) {
+      this.#database.exec(
+        "ALTER TABLE consents ADD COLUMN policy_catalog_sha256 TEXT " +
+        "CHECK (policy_catalog_sha256 IS NULL OR length(policy_catalog_sha256)=64)",
+      );
+    }
+    if (!columns.some((column) => column.name === "jurisdiction")) {
+      this.#database.exec("ALTER TABLE consents ADD COLUMN jurisdiction TEXT");
+    }
+    if (!columns.some((column) => column.name === "locale")) {
+      this.#database.exec("ALTER TABLE consents ADD COLUMN locale TEXT");
+    }
+  }
+
   #assertSupportedExistingSchema(): void {
     const table = this.#database
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_metadata'")
@@ -2780,7 +4466,7 @@ export class LifeTimeMachineRuntime {
     const schema = this.#database.prepare("SELECT value FROM schema_metadata WHERE key = 'schema_version'").get() as
       | SchemaVersionRow
       | undefined;
-    if (schema === undefined || !["1", "2", "3", String(SCHEMA_VERSION)].includes(schema.value)) {
+    if (schema === undefined || !["1", "2", "3", "4", String(SCHEMA_VERSION)].includes(schema.value)) {
       throw new DomainError("DEPENDENCY_UNAVAILABLE", "Unsupported database schema version");
     }
   }
@@ -2819,6 +4505,449 @@ export class LifeTimeMachineRuntime {
          VALUES (?, ?, ?, ?, ?)`,
       )
       .run(context.tenantId, evidence.evidenceId, scope, consumptionKeyHash, this.#now());
+  }
+
+  #applyEvidenceGatedMutation(
+    context: ActorContext,
+    input: ExecuteEvidenceGatedMutationInput,
+  ): EvidenceGatedMutationResult {
+    const mutation = input.mutation;
+    if (mutation.kind === "record.create") {
+      const collection = token(mutation.input.collection, "collection", COLLECTION);
+      const id = token(mutation.input.id ?? randomUUID(), "record ID");
+      const ownerActorId = mutation.input.ownerActorId === undefined ? context.actorId : mutation.input.ownerActorId;
+      const participantIds = this.#participantIds(mutation.input.participantIds ?? []);
+      const containsMinor = mutation.input.containsMinor ?? false;
+      const processingPurpose = this.#processingPurposeForCreate(context, mutation.input.processingPurpose);
+      const data = jsonObject(mutation.input.data, "record data");
+      this.authorize(context, "record:create", { tenantId: context.tenantId, ownerActorId, containsMinor });
+      this.#protectMinorSharing(context, collection, containsMinor);
+      this.#requireParticipantConsent(
+        context,
+        participantIds,
+        processingPurpose,
+        deriveRecordConsentRequirementScope(collection, id, data, "create"),
+      );
+      if (this.#selectRecord(context.tenantId, collection, id, true) !== undefined) {
+        throw new DomainError("VERSION_CONFLICT", "A record with this ID already exists", {
+          details: { collection, id },
+        });
+      }
+      const now = this.#now();
+      this.#database.prepare(
+        `INSERT INTO records(
+          tenant_id,collection,id,processing_purpose,owner_actor_id,participant_ids_json,contains_minor,
+          data_json,version,created_at,updated_at,deleted_at
+        ) VALUES (?,?,?,?,?,?,?,?,1,?,?,NULL)`,
+      ).run(
+        context.tenantId,
+        collection,
+        id,
+        processingPurpose,
+        ownerActorId,
+        canonicalJson(participantIds),
+        containsMinor ? 1 : 0,
+        canonicalJson(data),
+        now,
+        now,
+      );
+      const record = this.#requiredRecord(context.tenantId, collection, id, true);
+      this.#appendAuditInternal(context, {
+        action: "record.created",
+        resourceType: collection,
+        resourceId: id,
+        details: { version: record.version },
+      });
+      this.#emitOutbox(context.tenantId, collection, id, `${collection}.created`, { record: jsonObject(record) });
+      this.#appendEvidenceGatedAudit(context, input, collection, id, {
+        replayed: false,
+        recordVersion: record.version,
+      });
+      return { kind: mutation.kind, value: record, replayed: false };
+    }
+
+    if (mutation.kind === "record.transition") {
+      const collection = token(mutation.input.collection, "collection", COLLECTION);
+      const id = token(mutation.input.id, "record ID");
+      const stateField = token(mutation.input.stateField, "state field");
+      const fromState = textValue(mutation.input.fromState, "from state", 160);
+      const toState = textValue(mutation.input.toState, "to state", 160);
+      const initialFromStates = [...new Set(mutation.input.initialFromStates.map((state) =>
+        textValue(state, "initial from state", 160)))];
+      if (initialFromStates.length === 0) {
+        throw new DomainError("VALIDATION_FAILED", "At least one initial transition state is required");
+      }
+      const baseData = jsonObject(mutation.input.data, "record data");
+      const currentRow = this.#selectRecord(context.tenantId, collection, id, false);
+      const current = currentRow === undefined ? undefined : recordFromRow(currentRow);
+      if (current !== undefined) {
+        this.authorize(context, "record:read", current);
+        this.#assertRecordProcessingPurpose(context, current, "update");
+        this.#requireParticipantConsent(
+          context,
+          current.participantIds,
+          current.processingPurpose,
+          deriveRecordConsentRequirementScope(collection, id, current.data, "update"),
+        );
+      }
+      if (current?.data.lastTransitionKey === input.idempotencyKey && current.data[stateField] === toState) {
+        this.#appendEvidenceGatedAudit(context, input, collection, id, {
+          replayed: true,
+          recordVersion: current.version,
+          fromState,
+          toState,
+        }, true);
+        return {
+          kind: mutation.kind,
+          value: current,
+          previousState: fromState,
+          state: toState,
+          replayed: true,
+        };
+      }
+      if (current === undefined && !initialFromStates.includes(fromState)) {
+        throw new DomainError("RESOURCE_NOT_FOUND", "State transition cannot initialize from the supplied state", {
+          details: { collection, id, fromState },
+        });
+      }
+      if (current !== undefined && current.data[stateField] !== fromState) {
+        throw new DomainError("VERSION_CONFLICT", "State transition received a stale aggregate state", {
+          details: { collection, id, expectedState: current.data[stateField] ?? null, suppliedState: fromState },
+        });
+      }
+      const ownerActorId = mutation.input.ownerActorId === undefined
+        ? (current?.ownerActorId ?? context.actorId)
+        : mutation.input.ownerActorId;
+      const participantIds = this.#participantIds(mutation.input.participantIds ?? current?.participantIds ?? []);
+      const containsMinor = mutation.input.containsMinor ?? current?.containsMinor ?? false;
+      const processingPurpose = current?.processingPurpose ??
+        this.#processingPurposeForCreate(context, mutation.input.processingPurpose);
+      const priorTransitionCount = current?.data.transitionCount;
+      const transitionCount = typeof priorTransitionCount === "number" && Number.isSafeInteger(priorTransitionCount)
+        ? priorTransitionCount + 1
+        : 1;
+      const data = jsonObject({
+        ...baseData,
+        [stateField]: toState,
+        previousState: fromState,
+        transitionCount,
+        lastTransitionKey: input.idempotencyKey,
+      }, "state transition record data");
+      this.#protectMinorSharing(context, collection, containsMinor);
+      this.#requireParticipantConsent(
+        context,
+        participantIds,
+        processingPurpose,
+        deriveRecordConsentRequirementScope(collection, id, data, current === undefined ? "create" : "update"),
+      );
+      const now = this.#now();
+      let record: RecordEnvelope;
+      if (current === undefined) {
+        this.authorize(context, "record:create", { tenantId: context.tenantId, ownerActorId, containsMinor });
+        this.#database.prepare(
+          `INSERT INTO records(
+            tenant_id,collection,id,processing_purpose,owner_actor_id,participant_ids_json,contains_minor,
+            data_json,version,created_at,updated_at,deleted_at
+          ) VALUES (?,?,?,?,?,?,?,?,1,?,?,NULL)`,
+        ).run(
+          context.tenantId,
+          collection,
+          id,
+          processingPurpose,
+          ownerActorId,
+          canonicalJson(participantIds),
+          containsMinor ? 1 : 0,
+          canonicalJson(data),
+          now,
+          now,
+        );
+        record = this.#requiredRecord(context.tenantId, collection, id, true);
+        this.#appendAuditInternal(context, {
+          action: "record.created",
+          resourceType: collection,
+          resourceId: id,
+          details: { version: record.version },
+        });
+        this.#emitOutbox(context.tenantId, collection, id, `${collection}.created`, { record: jsonObject(record) });
+      } else {
+        this.authorize(context, "record:update", { ...current, ownerActorId, containsMinor });
+        const updated = this.#database.prepare(
+          `UPDATE records SET owner_actor_id=?,participant_ids_json=?,contains_minor=?,data_json=?,
+             version=version+1,updated_at=?
+           WHERE tenant_id=? AND collection=? AND id=? AND deleted_at IS NULL AND version=?`,
+        ).run(
+          ownerActorId,
+          canonicalJson(participantIds),
+          containsMinor ? 1 : 0,
+          canonicalJson(data),
+          now,
+          context.tenantId,
+          collection,
+          id,
+          current.version,
+        );
+        if (updated.changes !== 1) {
+          this.#throwRecordMutationConflict(context.tenantId, collection, id, current.version);
+        }
+        record = this.#requiredRecord(context.tenantId, collection, id, false);
+        this.#appendAuditInternal(context, {
+          action: "record.updated",
+          resourceType: collection,
+          resourceId: id,
+          details: { previousVersion: current.version, version: record.version },
+        });
+        this.#emitOutbox(context.tenantId, collection, id, `${collection}.updated`, { record: jsonObject(record) });
+      }
+      this.#appendEvidenceGatedAudit(context, input, collection, id, {
+        replayed: false,
+        recordVersion: record.version,
+        fromState,
+        toState,
+      });
+      return {
+        kind: mutation.kind,
+        value: record,
+        previousState: fromState,
+        state: toState,
+        replayed: false,
+      };
+    }
+
+    if (mutation.kind === "external-command.create") {
+      const recordInput = mutation.input.record;
+      const collection = token(recordInput.collection, "collection", COLLECTION);
+      const id = token(recordInput.id ?? randomUUID(), "record ID");
+      const commandId = token(mutation.input.commandId ?? randomUUID(), "command ID");
+      const batchId = token(
+        mutation.input.batchId,
+        "batchId",
+        /^B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])$/,
+      ) as `B${string}`;
+      const operation = token(mutation.input.operation, "operation");
+      const ownerActorId = recordInput.ownerActorId === undefined ? context.actorId : recordInput.ownerActorId;
+      const participantIds = this.#participantIds(recordInput.participantIds ?? []);
+      const containsMinor = recordInput.containsMinor ?? false;
+      const processingPurpose = this.#processingPurposeForCreate(context, recordInput.processingPurpose);
+      const requestedData = jsonObject(recordInput.data, "record data");
+      const data = jsonObject({
+        ...requestedData,
+        externalCommandId: commandId,
+        commandState: "requested",
+        executionState: "requested",
+      }, "external command record data");
+      const commandDetails = jsonObject(mutation.input.details ?? {}, "external command details");
+      this.authorize(context, "record:create", { tenantId: context.tenantId, ownerActorId, containsMinor });
+      this.#protectMinorSharing(context, collection, containsMinor);
+      this.#requireParticipantConsent(
+        context,
+        participantIds,
+        processingPurpose,
+        deriveRecordConsentRequirementScope(collection, id, data, "create"),
+      );
+      if (this.#selectRecord(context.tenantId, collection, id, true) !== undefined) {
+        throw new DomainError("VERSION_CONFLICT", "External command aggregate already exists");
+      }
+      const now = this.#now();
+      this.#database.prepare(
+        `INSERT INTO records(
+          tenant_id,collection,id,processing_purpose,owner_actor_id,participant_ids_json,contains_minor,
+          data_json,version,created_at,updated_at,deleted_at
+        ) VALUES (?,?,?,?,?,?,?,?,1,?,?,NULL)`,
+      ).run(
+        context.tenantId,
+        collection,
+        id,
+        processingPurpose,
+        ownerActorId,
+        canonicalJson(participantIds),
+        containsMinor ? 1 : 0,
+        canonicalJson(data),
+        now,
+        now,
+      );
+      const record = this.#requiredRecord(context.tenantId, collection, id, true);
+      const command = this.#insertRequestedExternalCommand(
+        context,
+        { commandId, batchId, operation, aggregateCollection: collection, aggregateId: id, details: commandDetails },
+        now,
+      );
+      this.#appendAuditInternal(context, {
+        action: "external_command.created",
+        resourceType: collection,
+        resourceId: id,
+        details: { commandId, batchId, operation, recordVersion: record.version },
+      });
+      this.#emitOutbox(context.tenantId, collection, id, `${collection}.created`, { record: jsonObject(record) });
+      this.#appendEvidenceGatedAudit(context, input, collection, id, {
+        replayed: false,
+        recordVersion: record.version,
+        externalCommandId: command.commandId,
+        commandState: command.state,
+      });
+      return { kind: mutation.kind, value: { record, command }, replayed: false };
+    }
+
+    this.authorize(context, "ledger:post", { tenantId: context.tenantId });
+    const transactionId = token(mutation.input.transactionId ?? randomUUID(), "transaction ID");
+    const sourceType = token(mutation.input.sourceType, "source type");
+    const sourceId = token(mutation.input.sourceId, "source ID");
+    const description = textValue(mutation.input.description, "description", 500);
+    const occurredAt = mutation.input.occurredAt === undefined
+      ? this.#now()
+      : isoTimestamp(mutation.input.occurredAt, "occurredAt");
+    const reversedTransactionId = mutation.input.reversedTransactionId === undefined ||
+      mutation.input.reversedTransactionId === null
+      ? null
+      : token(mutation.input.reversedTransactionId, "reversed transaction ID");
+    const lines = this.#ledgerLines(mutation.input.lines);
+    this.#assertBalanced(lines);
+    const sourceFingerprint = fingerprint("ledger.post.source", {
+      sourceType,
+      sourceId,
+      description,
+      requestedOccurredAt: mutation.input.occurredAt ?? null,
+      reversedTransactionId,
+      lines,
+    });
+    const existing = this.#database.prepare(
+      "SELECT * FROM ledger_transactions WHERE tenant_id=? AND source_type=? AND source_id=?",
+    ).get(context.tenantId, sourceType, sourceId) as LedgerTransactionRow | undefined;
+    if (existing !== undefined) {
+      if (existing.request_fingerprint !== sourceFingerprint) {
+        throw new DomainError("IDEMPOTENCY_CONFLICT", "Ledger source reference was reused with different data");
+      }
+      const transaction = this.#ledgerTransactionFromRow(existing);
+      this.#appendEvidenceGatedAudit(context, input, "ledger_transaction", transaction.id, {
+        replayed: true,
+      }, true);
+      return { kind: mutation.kind, value: transaction, replayed: true };
+    }
+    if (reversedTransactionId !== null) {
+      const reversed = this.#requiredLedgerTransaction(context.tenantId, reversedTransactionId);
+      this.#assertExactReversal(reversed.lines, lines);
+    }
+    const createdAt = this.#now();
+    this.#database.prepare(
+      `INSERT INTO ledger_transactions(
+        tenant_id,id,source_type,source_id,request_fingerprint,description,
+        occurred_at,created_at,reversed_transaction_id
+      ) VALUES (?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      context.tenantId,
+      transactionId,
+      sourceType,
+      sourceId,
+      sourceFingerprint,
+      description,
+      occurredAt,
+      createdAt,
+      reversedTransactionId,
+    );
+    const insertLine = this.#database.prepare(
+      `INSERT INTO ledger_lines(
+        tenant_id,transaction_id,line_number,account_code,direction,amount_minor,currency,memo
+      ) VALUES (?,?,?,?,?,?,?,?)`,
+    );
+    lines.forEach((line, index) => insertLine.run(
+      context.tenantId,
+      transactionId,
+      index,
+      line.accountCode,
+      line.direction,
+      line.amountMinor,
+      line.currency,
+      line.memo ?? null,
+    ));
+    const transaction = this.#requiredLedgerTransaction(context.tenantId, transactionId);
+    this.#appendAuditInternal(context, {
+      action: "ledger.posted",
+      resourceType: "ledger_transaction",
+      resourceId: transactionId,
+      details: { sourceType, sourceId, reversedTransactionId, lineCount: lines.length },
+    });
+    this.#emitOutbox(context.tenantId, "ledger_transaction", transactionId, "ledger.transaction.posted", {
+      transaction: jsonObject(transaction),
+    });
+    this.#appendEvidenceGatedAudit(context, input, "ledger_transaction", transactionId, { replayed: false });
+    return { kind: mutation.kind, value: transaction, replayed: false };
+  }
+
+  #appendEvidenceGatedAudit(
+    context: ActorContext,
+    input: ExecuteEvidenceGatedMutationInput,
+    resourceType: string,
+    resourceId: string,
+    details: JsonObject,
+    replayed = false,
+  ): void {
+    this.#appendAuditInternal(context, {
+      action: replayed && input.audit.replayAction !== undefined
+        ? input.audit.replayAction
+        : input.audit.action,
+      resourceType,
+      resourceId,
+      details: { ...(input.audit.details ?? {}), ...details },
+    });
+  }
+
+  #normalizeEvidenceRequirement(
+    scopeValue: string,
+    evidenceIds: readonly string[],
+  ): { readonly scope: string; readonly ids: readonly string[] } {
+    const scope = textValue(scopeValue, "external evidence scope", 512);
+    const ids = [...new Set(evidenceIds.map((id) => token(id, "external evidence ID")))].sort();
+    if (ids.length === 0 || ids.length > 100) {
+      throw new DomainError("VALIDATION_FAILED", "Between 1 and 100 external evidence IDs are required");
+    }
+    if (this.#trustedEvidenceKeys.length === 0) {
+      throw new DomainError("EXTERNAL_ADAPTER_UNAVAILABLE", "No trusted external evidence keys are configured");
+    }
+    return { scope, ids };
+  }
+
+  #requireExternalEvidenceInternal(
+    context: ActorContext,
+    scope: string,
+    ids: readonly string[],
+  ): readonly RegisteredExternalEvidence[] {
+    const verified: RegisteredExternalEvidence[] = [];
+    for (const evidenceId of ids) {
+      let evidence: RegisteredExternalEvidence;
+      try {
+        evidence = this.#requiredEvidence(context.tenantId, evidenceId);
+      } catch (error) {
+        if (error instanceof DomainError && error.code === "RESOURCE_NOT_FOUND") {
+          throw new DomainError("EXTERNAL_EVIDENCE_UNVERIFIED", "External evidence is not registered", {
+            details: { evidenceId, scope },
+          });
+        }
+        throw error;
+      }
+      if (evidence.scope !== scope) {
+        throw new DomainError("EVIDENCE_SCOPE_MISMATCH", "External evidence scope does not match this operation", {
+          details: { evidenceId, requiredScope: scope },
+        });
+      }
+      if (evidence.status === "revoked") {
+        throw new DomainError("EVIDENCE_REVOKED", "External evidence has been revoked", { details: { evidenceId } });
+      }
+      if (evidence.expiresAt <= this.#now()) {
+        throw new DomainError("EVIDENCE_EXPIRED", "External evidence has expired", { details: { evidenceId } });
+      }
+      this.#verifyStoredEvidence(evidence);
+      if (evidence.replayPolicy === "single_use") {
+        this.#consumeEvidence(context, evidence, scope);
+        evidence = this.#requiredEvidence(context.tenantId, evidenceId);
+      }
+      verified.push(evidence);
+    }
+    this.#appendAuditInternal(context, {
+      action: "evidence.required",
+      resourceType: "external_evidence_set",
+      resourceId: sha256(ids.join("\n")),
+      details: { scope, evidenceIds: [...ids] },
+    });
+    return verified;
   }
 
   #evidenceSelectSql(suffix: string): string {
@@ -2882,43 +5011,88 @@ export class LifeTimeMachineRuntime {
   ): IdempotentResult<T> {
     validateContext(context);
     const requestFingerprint = fingerprint(operation, input);
-    return this.#transaction(() => {
-      const existing = this.#database
-        .prepare(
-          `SELECT operation, request_fingerprint, response_json FROM idempotency_records
-           WHERE tenant_id = ? AND actor_id = ? AND idempotency_key = ?`,
-        )
-        .get(context.tenantId, context.actorId, key) as IdempotencyRow | undefined;
-      if (existing !== undefined) {
-        if (existing.operation !== operation || existing.request_fingerprint !== requestFingerprint) {
-          throw new DomainError("IDEMPOTENCY_CONFLICT", "Idempotency key was reused for a different request", {
-            details: { idempotencyKey: key, operation },
-          });
-        }
-        return { value: JSON.parse(existing.response_json) as T, replayed: true };
+    return this.#transaction(() => this.#idempotentInternal(context, key, operation, requestFingerprint, work));
+  }
+
+  #idempotentInternal<T>(
+    context: ActorContext,
+    key: string,
+    operation: string,
+    requestFingerprint: string,
+    work: () => T | IdempotentResult<T>,
+  ): IdempotentResult<T> {
+    const existing = this.#database
+      .prepare(
+        `SELECT operation, request_fingerprint, response_json FROM idempotency_records
+         WHERE tenant_id = ? AND actor_id = ? AND idempotency_key = ?`,
+      )
+      .get(context.tenantId, context.actorId, key) as IdempotencyRow | undefined;
+    if (existing !== undefined) {
+      if (existing.operation !== operation || existing.request_fingerprint !== requestFingerprint) {
+        throw new DomainError("IDEMPOTENCY_CONFLICT", "Idempotency key was reused for a different request", {
+          details: { idempotencyKey: key, operation },
+        });
       }
-      const outcome = work();
-      const isWrapped =
-        typeof outcome === "object" && outcome !== null && "value" in outcome && "replayed" in outcome;
-      const value = isWrapped ? (outcome as IdempotentResult<T>).value : (outcome as T);
-      const replayed = isWrapped ? (outcome as IdempotentResult<T>).replayed : false;
-      this.#database
-        .prepare(
-          `INSERT INTO idempotency_records(
-            tenant_id, actor_id, idempotency_key, operation, request_fingerprint, response_json, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          context.tenantId,
-          context.actorId,
-          key,
-          operation,
-          requestFingerprint,
-          canonicalJson(value),
-          this.#now(),
-        );
-      return { value, replayed };
-    });
+      return { value: JSON.parse(existing.response_json) as T, replayed: true };
+    }
+    const outcome = work();
+    const isWrapped = typeof outcome === "object" && outcome !== null && "value" in outcome && "replayed" in outcome;
+    const value = isWrapped ? (outcome as IdempotentResult<T>).value : (outcome as T);
+    const replayed = isWrapped ? (outcome as IdempotentResult<T>).replayed : false;
+    this.#database
+      .prepare(
+        `INSERT INTO idempotency_records(
+          tenant_id, actor_id, idempotency_key, operation, request_fingerprint, response_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        context.tenantId,
+        context.actorId,
+        key,
+        operation,
+        requestFingerprint,
+        canonicalJson(value),
+        this.#now(),
+      );
+    return { value, replayed };
+  }
+
+  #idempotentValueInternal<T>(
+    context: ActorContext,
+    key: string,
+    operation: string,
+    requestFingerprint: string,
+    work: () => T,
+  ): IdempotentResult<T> {
+    const existing = this.#database
+      .prepare(
+        `SELECT operation, request_fingerprint, response_json FROM idempotency_records
+         WHERE tenant_id = ? AND actor_id = ? AND idempotency_key = ?`,
+      )
+      .get(context.tenantId, context.actorId, key) as IdempotencyRow | undefined;
+    if (existing !== undefined) {
+      if (existing.operation !== operation || existing.request_fingerprint !== requestFingerprint) {
+        throw new DomainError("IDEMPOTENCY_CONFLICT", "Idempotency key was reused for a different request", {
+          details: { idempotencyKey: key, operation },
+        });
+      }
+      return { value: JSON.parse(existing.response_json) as T, replayed: true };
+    }
+    const value = work();
+    this.#database.prepare(
+      `INSERT INTO idempotency_records(
+        tenant_id, actor_id, idempotency_key, operation, request_fingerprint, response_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      context.tenantId,
+      context.actorId,
+      key,
+      operation,
+      requestFingerprint,
+      canonicalJson(value),
+      this.#now(),
+    );
+    return { value, replayed: false };
   }
 
   #selectRecord(tenantId: string, collection: string, id: string, includeDeleted: boolean): RecordRow | undefined {
@@ -2926,6 +5100,206 @@ export class LifeTimeMachineRuntime {
     return this.#database
       .prepare(`SELECT * FROM records WHERE tenant_id = ? AND collection = ? AND id = ?${deletedClause}`)
       .get(tenantId, collection, id) as RecordRow | undefined;
+  }
+
+  #assertRightsPurpose(context: ActorContext): void {
+    validateContext(context);
+    if (textValue(context.purpose, "request purpose", 120) !== "privacy_rights") {
+      throw new DomainError("PURPOSE_REQUIRED", "Data-subject rights operations require the privacy_rights purpose");
+    }
+  }
+
+  #assertGenericRecordCollection(collection: string): void {
+    if (collection === RIGHTS_REQUEST_COLLECTION) {
+      throw new DomainError("AUTH_FORBIDDEN", "Rights requests are available only through the minimized rights workflow");
+    }
+  }
+
+  #requiredRightsRecord(tenantId: string, requestId: string, includeDeleted: boolean): RecordEnvelope {
+    return this.#requiredRecord(tenantId, RIGHTS_REQUEST_COLLECTION, requestId, includeDeleted);
+  }
+
+  #rightsAuthorityDecision(
+    context: ActorContext,
+    submission: NormalizedRightsSubmission,
+    at: string,
+  ): RightsAuthorityDecision {
+    const participant = this.#requiredParticipant(context.tenantId, submission.participantId, false, at);
+    if (participant.ownerActorId === context.actorId && participant.minorStatus === "adult" &&
+        hasPermission(context, "rights-request:create")) {
+      return {
+        participantId: participant.participantId,
+        requesterCapacity: "self",
+        authorityExpiresAt: participant.expiresAt,
+      };
+    }
+    const requirement = rightsAuthorityScope(participant.participantId, submission.requestType);
+    const authorityScope: ConsentScope = { resource: requirement.resource, actions: [requirement.action] };
+    if (participant.minorStatus === "minor" && context.roles.includes("guardian") && context.guardianVerified === true &&
+        this.#hasParticipantAuthority(context, participant.participantId, "guardian", authorityScope, at)) {
+      return {
+        participantId: participant.participantId,
+        requesterCapacity: "guardian",
+        authorityExpiresAt: participant.expiresAt,
+      };
+    }
+    if (hasPermission(context, "rights-request:create:agent") &&
+        this.#hasParticipantAuthority(context, participant.participantId, "authorized_agent", authorityScope, at)) {
+      return {
+        participantId: participant.participantId,
+        requesterCapacity: "authorized_agent",
+        authorityExpiresAt: participant.expiresAt,
+      };
+    }
+    throw new DomainError(
+      participant.minorStatus === "minor" ? "GUARDIAN_VERIFICATION_REQUIRED" : "AUTH_FORBIDDEN",
+      "Exact active data-subject, guardian, or authorized-agent authority is required",
+    );
+  }
+
+  #canReadRightsRequestCurrent(context: ActorContext, record: RecordEnvelope): boolean {
+    if (record.tenantId !== context.tenantId) return false;
+    if (hasPermission(context, "rights-request:read:any") || context.roles.includes("platform_admin")) return true;
+    const data = parseRightsRequestRecord(record);
+    let participant: ParticipantRecord;
+    try {
+      participant = this.#requiredParticipant(context.tenantId, data.subjectParticipantId, true);
+    } catch {
+      return false;
+    }
+    if (participant.ownerActorId === context.actorId && hasPermission(context, "rights-request:read:self")) return true;
+    const now = this.#now();
+    try {
+      participant = this.#requiredParticipant(context.tenantId, data.subjectParticipantId, false, now);
+    } catch {
+      return false;
+    }
+    const requirement = rightsAuthorityScope(participant.participantId, data.requestType);
+    const scope: ConsentScope = { resource: requirement.resource, actions: [requirement.action] };
+    if (participant.minorStatus === "minor" && context.roles.includes("guardian") && context.guardianVerified === true &&
+        this.#hasParticipantAuthority(context, participant.participantId, "guardian", scope, now)) return true;
+    return hasPermission(context, "rights-request:read:agent") &&
+      this.#hasParticipantAuthority(context, participant.participantId, "authorized_agent", scope, now);
+  }
+
+  #discoverRightsAssetIds(tenantId: string, participantId: string): readonly string[] {
+    const rows = this.#database.prepare(
+      `SELECT * FROM records
+       WHERE tenant_id=? AND collection='media.intake-results' AND deleted_at IS NULL
+         AND EXISTS (SELECT 1 FROM json_each(records.participant_ids_json) p WHERE p.value=?)
+       ORDER BY id LIMIT 10001`,
+    ).all(tenantId, participantId) as unknown as RecordRow[];
+    if (rows.length > 10_000) {
+      throw new DomainError("VALIDATION_FAILED", "Rights request asset inventory exceeds the closed processing limit");
+    }
+    return rows.map((row) => {
+      const record = recordFromRow(row);
+      const assetId = record.data.assetId;
+      if (typeof assetId !== "string" || token(assetId, "stored media asset ID") !== record.id) {
+        throw new DomainError("EVENT_FINGERPRINT_CONFLICT", "Stored B07 asset binding is invalid");
+      }
+      return assetId;
+    });
+  }
+
+  #withdrawConsentsForRightsRequest(
+    context: ActorContext,
+    submission: NormalizedRightsSubmission,
+    requestId: string,
+    now: string,
+  ): void {
+    const conditions = ["tenant_id=?", "participant_id=?", "status='active'"];
+    const parameters: string[] = [context.tenantId, submission.participantId];
+    if (submission.requestedProcessingPurpose !== "all") {
+      conditions.push("purpose=?");
+      parameters.push(submission.requestedProcessingPurpose);
+    }
+    const rows = this.#database.prepare(
+      `SELECT * FROM consents WHERE ${conditions.join(" AND ")} ORDER BY granted_at,id`,
+    ).all(...parameters) as unknown as ConsentRow[];
+    const restricted = submission.requestType === "restrict_processing";
+    for (const row of rows) {
+      const prior = consentFromRow(row);
+      const updated = this.#database.prepare(
+        `UPDATE consents SET status=?,withdrawn_at=?,version=version+1
+         WHERE tenant_id=? AND id=? AND status='active' AND version=?`,
+      ).run(restricted ? "disputed" : "withdrawn", now, context.tenantId, prior.id, prior.version);
+      if (updated.changes !== 1) {
+        throw new DomainError("VERSION_CONFLICT", "Consent changed during rights-request closure");
+      }
+      const consent = this.#requiredConsent(context.tenantId, prior.id);
+      this.#appendAuditInternal(context, {
+        action: restricted ? "consent.restricted_by_rights_request" : "consent.withdrawn_by_rights_request",
+        resourceType: "consent",
+        resourceId: consent.id,
+        details: {
+          rightsRequestId: requestId,
+          participantId: consent.participantId,
+          purpose: consent.purpose,
+          version: consent.version,
+        },
+      });
+      this.#emitOutbox(
+        context.tenantId,
+        "consent",
+        consent.id,
+        restricted ? "consent.processing_restricted" : "consent.withdrawn",
+        {
+        consentId: consent.id,
+        participantId: consent.participantId,
+        purpose: consent.purpose,
+        withdrawnAt: consent.withdrawnAt,
+        rightsRequestId: requestId,
+        },
+      );
+      this.#closeShareExportsForWithdrawnConsent(context, consent, `rights_request:${requestId}`, now);
+    }
+  }
+
+  #replaceRightsRecordData(
+    context: ActorContext,
+    record: RecordEnvelope,
+    data: RightsRequestData,
+    auditAction: string,
+    details: JsonObject,
+  ): RecordEnvelope {
+    const now = this.#now();
+    const result = this.#database.prepare(
+      `UPDATE records SET data_json=?,version=version+1,updated_at=?
+       WHERE tenant_id=? AND collection=? AND id=? AND deleted_at IS NULL AND version=?`,
+    ).run(
+      canonicalJson(data),
+      now,
+      context.tenantId,
+      RIGHTS_REQUEST_COLLECTION,
+      record.id,
+      record.version,
+    );
+    if (result.changes !== 1) {
+      this.#throwRecordMutationConflict(context.tenantId, RIGHTS_REQUEST_COLLECTION, record.id, record.version);
+    }
+    const updated = this.#requiredRightsRecord(context.tenantId, record.id, false);
+    this.#appendAuditInternal(context, {
+      action: auditAction,
+      resourceType: RIGHTS_REQUEST_COLLECTION,
+      resourceId: record.id,
+      details: { ...details, previousVersion: record.version, version: updated.version },
+    });
+    return updated;
+  }
+
+  #assertRightsEscalationReason(
+    data: RightsRequestData,
+    reason: EscalateRightsRequestInput["reasonCode"],
+    at: string,
+  ): void {
+    const valid = reason === "sla_due" ? data.dueAt <= at
+      : reason === "dependency_blocked" ? data.tasks.some((task) => task.state === "blocked")
+        : reason === "receipt_failed" ? data.tasks.some((task) => task.state === "failed")
+          : reason === "review_disagreement" ? data.reviews.length === 2 &&
+            data.reviews[0]!.decision !== data.reviews[1]!.decision
+            : false;
+    if (!valid) throw new DomainError("VALIDATION_FAILED", "Escalation reason is not supported by current durable workflow facts");
   }
 
   #requiredRecord<T extends JsonObject>(
@@ -2964,9 +5338,281 @@ export class LifeTimeMachineRuntime {
     }
   }
 
-  #hasParticipantConsent(context: ActorContext, participantIds: readonly string[]): boolean {
+  #processingPurposeForCreate(context: ActorContext, requestedPurpose?: string): string {
+    const requestPurpose = textValue(context.purpose, "request processing purpose", 120);
+    const processingPurpose = requestedPurpose === undefined
+      ? requestPurpose
+      : textValue(requestedPurpose, "record processing purpose", 120);
+    if (processingPurpose === "__legacy_unmapped__") {
+      throw new DomainError("PURPOSE_REQUIRED", "The fail-closed legacy purpose cannot be used for new records");
+    }
+    if (processingPurpose !== requestPurpose) {
+      throw new DomainError("PURPOSE_REQUIRED", "Record processing purpose must exactly match the request purpose", {
+        details: { requestPurpose, processingPurpose },
+      });
+    }
+    return processingPurpose;
+  }
+
+  #assertRecordProcessingPurpose(
+    context: ActorContext,
+    record: RecordEnvelope,
+    operation: "read" | "list" | "update" | "delete",
+  ): void {
+    const requestPurpose = textValue(context.purpose, "request processing purpose", 120);
+    if (record.processingPurpose === "__legacy_unmapped__") {
+      throw new DomainError("PURPOSE_REQUIRED", "Legacy record processing purpose is unmapped and access is fail-closed", {
+        details: { collection: record.collection, recordId: record.id },
+      });
+    }
+    if (record.processingPurpose === requestPurpose) return;
+    if (!hasPermission(context, "record:purpose:cross")) {
+      throw new DomainError("PURPOSE_REQUIRED", "Request purpose does not match the record processing purpose", {
+        details: {
+          collection: record.collection,
+          recordId: record.id,
+          requestPurpose,
+          processingPurpose: record.processingPurpose,
+        },
+      });
+    }
+    this.#appendAuditInternal(context, {
+      action: "record.cross_purpose_access",
+      resourceType: record.collection,
+      resourceId: record.id,
+      details: { operation, requestPurpose, processingPurpose: record.processingPurpose },
+    });
+  }
+
+  #participantAuthorityCapacity(value: unknown): ParticipantAuthorityCapacity {
+    if (value !== "guardian" && value !== "authorized_agent") {
+      throw new DomainError("VALIDATION_FAILED", "Participant authority capacity is invalid");
+    }
+    return value;
+  }
+
+  #participantAuthorityStorage(capacity: ParticipantAuthorityCapacity): {
+    readonly table: "guardian_authorizations" | "authorized_agent_authorizations";
+    readonly actorColumn: "guardian_actor_id" | "agent_actor_id";
+  } {
+    return capacity === "guardian"
+      ? { table: "guardian_authorizations", actorColumn: "guardian_actor_id" }
+      : { table: "authorized_agent_authorizations", actorColumn: "agent_actor_id" };
+  }
+
+  #selectParticipant(tenantId: string, participantId: string): ParticipantRow | undefined {
+    return this.#database.prepare(
+      "SELECT * FROM participants WHERE tenant_id=? AND participant_id=?",
+    ).get(tenantId, participantId) as ParticipantRow | undefined;
+  }
+
+  #requiredParticipant(
+    tenantId: string,
+    participantId: string,
+    includeInactive: boolean,
+    at: string = this.#now(),
+  ): ParticipantRecord {
+    const row = this.#selectParticipant(tenantId, participantId);
+    if (row === undefined) {
+      throw new DomainError("RESOURCE_NOT_FOUND", "Participant is not registered", { details: { participantId } });
+    }
+    const participant = participantFromRow(row);
+    if (!includeInactive) {
+      if (participant.status !== "active" || participant.expiresAt <= at ||
+          !this.#evidenceRemainsValid(tenantId, participant.evidenceId, at)) {
+        throw new DomainError("CONSENT_REQUIRED", "Participant registry authority is inactive or expired", {
+          details: { participantId },
+        });
+      }
+    }
+    return participant;
+  }
+
+  #selectParticipantAuthority(
+    tenantId: string,
+    authorizationId: string,
+    capacity: ParticipantAuthorityCapacity,
+  ): ParticipantAuthorityRecord | undefined {
+    const binding = this.#participantAuthorityStorage(capacity);
+    const row = this.#database.prepare(
+      `SELECT *,${binding.actorColumn} AS authorized_actor_id FROM ${binding.table}
+       WHERE tenant_id=? AND authorization_id=?`,
+    ).get(tenantId, authorizationId) as ParticipantAuthorityRow | undefined;
+    return row === undefined ? undefined : participantAuthorityFromRow(row, capacity);
+  }
+
+  #requiredParticipantAuthority(
+    tenantId: string,
+    authorizationId: string,
+    capacity: ParticipantAuthorityCapacity,
+  ): ParticipantAuthorityRecord {
+    const authorization = this.#selectParticipantAuthority(tenantId, authorizationId, capacity);
+    if (authorization === undefined) {
+      throw new DomainError("RESOURCE_NOT_FOUND", "Participant authority was not found", {
+        details: { authorizationId, capacity },
+      });
+    }
+    return authorization;
+  }
+
+  #requireIdentityMutationEvidence(
+    context: ActorContext,
+    scope: string,
+    evidenceId: string,
+  ): RegisteredExternalEvidence {
+    const evidence = this.#requireExternalEvidenceInternal(context, scope, [evidenceId])[0];
+    if (evidence === undefined || evidence.replayPolicy !== "single_use") {
+      throw new DomainError("EXTERNAL_EVIDENCE_UNVERIFIED", "Identity mutations require single-use signed evidence");
+    }
+    return evidence;
+  }
+
+  #evidenceRemainsValid(tenantId: string, evidenceId: string, at: string): boolean {
     try {
-      this.#activeConsents(context, { participantIds }, false);
+      const evidence = this.#requiredEvidence(tenantId, evidenceId);
+      if (evidence.status !== "verified" || evidence.expiresAt <= at) return false;
+      this.#verifyStoredEvidence(evidence);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  #hasParticipantAuthority(
+    context: ActorContext,
+    participantId: string,
+    capacity: ParticipantAuthorityCapacity,
+    consentScope: ConsentScope,
+    at: string,
+  ): boolean {
+    return this.#hasParticipantAuthorityForActor(
+      context.tenantId,
+      context.actorId,
+      participantId,
+      capacity,
+      consentScope,
+      at,
+    );
+  }
+
+  #hasParticipantAuthorityForActor(
+    tenantId: string,
+    actorId: string,
+    participantId: string,
+    capacity: ParticipantAuthorityCapacity,
+    consentScope: ConsentScope,
+    at: string,
+  ): boolean {
+    const binding = this.#participantAuthorityStorage(capacity);
+    const rows = this.#database.prepare(
+      `SELECT *,${binding.actorColumn} AS authorized_actor_id FROM ${binding.table}
+       WHERE tenant_id=? AND ${binding.actorColumn}=? AND participant_id=? AND status='active' AND expires_at>?`,
+    ).all(tenantId, actorId, participantId, at) as unknown as ParticipantAuthorityRow[];
+    return rows.some((row) => {
+      try {
+        const authorization = participantAuthorityFromRow(row, capacity);
+        return this.#evidenceRemainsValid(tenantId, authorization.evidenceId, at) &&
+          authorityScopeCoversConsent(authorization.scope, consentScope);
+      } catch {
+        return false;
+      }
+    });
+  }
+
+  #canAccessConsent(
+    context: ActorContext,
+    consent: ConsentRecord,
+    operation: "read" | "withdraw",
+  ): boolean {
+    let participant: ParticipantRecord;
+    try {
+      participant = this.#requiredParticipant(context.tenantId, consent.participantId, true);
+    } catch {
+      return false;
+    }
+    const permission = operation === "read" ? "consent:read" : "consent:withdraw";
+    if (context.permissions?.includes(`${permission}:any`) === true ||
+        (operation === "read" && context.roles.includes("platform_admin"))) return true;
+    const selfPermission = `${permission}:self`;
+    const isOwner = participant.ownerActorId === context.actorId &&
+      (hasPermission(context, permission) || hasPermission(context, selfPermission));
+    if (operation === "withdraw" && isOwner) {
+      return true;
+    }
+    try {
+      participant = this.#requiredParticipant(context.tenantId, consent.participantId, false);
+    } catch {
+      return false;
+    }
+    if (isOwner) return true;
+    const now = this.#now();
+    if (context.roles.includes("guardian") && context.guardianVerified === true && hasPermission(context, permission) &&
+        this.#hasParticipantAuthority(context, participant.participantId, "guardian", consent.scope, now)) {
+      return true;
+    }
+    return hasPermission(context, `${permission}:agent`) &&
+      this.#hasParticipantAuthority(context, participant.participantId, "authorized_agent", consent.scope, now);
+  }
+
+  #authorizeConsentAccess(
+    context: ActorContext,
+    consent: ConsentRecord,
+    operation: "read" | "withdraw",
+  ): void {
+    if (!this.#canAccessConsent(context, consent, operation)) {
+      throw new DomainError("AUTH_FORBIDDEN", `Exact participant authority is required to ${operation} consent`);
+    }
+  }
+
+  #consentRowAllows(row: ConsentRow, scope: ConsentRequirementScope): boolean {
+    try {
+      return consentScopeAllows(
+        normalizeConsentScope(parseJsonObject(row.scope_json, "stored consent scope"), "stored consent scope"),
+        scope,
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  #consentRowPolicyActive(row: ConsentRow, participant: ParticipantRecord, at: string): boolean {
+    if (this.#allowLegacyConsentPolicy) {
+      return row.policy_catalog_sha256 === null && row.jurisdiction === null && row.locale === null;
+    }
+    if (row.policy_catalog_sha256 === null || row.jurisdiction === null || row.locale === null ||
+        row.expires_at === null || this.#consentPolicyCatalog === null ||
+        row.policy_catalog_sha256 !== this.#consentPolicyCatalog.sha256 ||
+        row.jurisdiction !== this.#consentPolicyJurisdiction || row.locale !== this.#consentPolicyLocale) {
+      return false;
+    }
+    try {
+      const resolved = resolveConsentPolicy(this.#requiredActiveConsentPolicy(at), {
+        policyVersion: row.policy_version,
+        purpose: row.purpose,
+        jurisdiction: row.jurisdiction,
+        locale: row.locale,
+        scope: parseJsonObject(row.scope_json, "stored consent scope"),
+        grantorCapacity: row.grantor_capacity,
+        isMinor: row.is_minor === 1,
+        requestedExpiresAt: row.expires_at,
+        participantExpiresAt: participant.expiresAt,
+        at,
+      });
+      return resolved.disclosureSha256 === row.evidence_hash && resolved.catalogSha256 === row.policy_catalog_sha256;
+    } catch {
+      return false;
+    }
+  }
+
+  #hasParticipantConsent(
+    context: ActorContext,
+    participantIds: readonly string[],
+    purpose: string,
+    scope: ConsentRequirementScope,
+  ): boolean {
+    if (participantIds.length === 0) return true;
+    try {
+      this.#activeConsents(context, { participantIds, purpose, scope }, false);
       return true;
     } catch (error) {
       if (error instanceof DomainError && (error.code === "CONSENT_REQUIRED" || error.code === "CONSENT_WITHDRAWN")) {
@@ -2976,9 +5622,14 @@ export class LifeTimeMachineRuntime {
     }
   }
 
-  #requireParticipantConsent(context: ActorContext, participantIds: readonly string[]): void {
+  #requireParticipantConsent(
+    context: ActorContext,
+    participantIds: readonly string[],
+    purpose: string,
+    scope: ConsentRequirementScope,
+  ): void {
     if (participantIds.length > 0) {
-      this.#activeConsents(context, { participantIds }, false);
+      this.#activeConsents(context, { participantIds, purpose, scope }, false);
     }
   }
 
@@ -2988,10 +5639,26 @@ export class LifeTimeMachineRuntime {
     enforceSelfVisibility: boolean,
   ): readonly ConsentRecord[] {
     const participantIds = this.#participantIds(requirement.participantIds);
+    if (participantIds.length === 0) {
+      throw new DomainError("VALIDATION_FAILED", "At least one participant is required for a consent check");
+    }
     const purpose = textValue(requirement.purpose ?? context.purpose, "consent purpose", 120);
+    const scope = normalizeConsentRequirementScope(requirement.scope);
     const at = requirement.at === undefined ? this.#now() : isoTimestamp(requirement.at, "consent check time");
+    this.#assertProcessingNotRestricted(context.tenantId, participantIds, purpose);
     const results: ConsentRecord[] = [];
     for (const participantId of participantIds) {
+      let participant: ParticipantRecord;
+      try {
+        participant = this.#requiredParticipant(context.tenantId, participantId, false, at);
+      } catch (error) {
+        if (error instanceof DomainError && error.code === "RESOURCE_NOT_FOUND") {
+          throw new DomainError("CONSENT_REQUIRED", "A durable participant registry entry is required", {
+            details: { participantId },
+          });
+        }
+        throw error;
+      }
       const rows = this.#database
         .prepare(
           `SELECT * FROM consents
@@ -2999,58 +5666,91 @@ export class LifeTimeMachineRuntime {
            ORDER BY granted_at DESC, id DESC`,
         )
         .all(context.tenantId, participantId, purpose) as unknown as ConsentRow[];
-      const active = rows.find((row) => row.status === "active" && (row.expires_at === null || row.expires_at > at));
+      const active = rows.find((row) =>
+        row.status === "active" &&
+        (row.expires_at === null || row.expires_at > at) &&
+        this.#consentRowAllows(row, scope) &&
+        this.#consentRowPolicyActive(row, participant, at));
       if (active === undefined) {
-        const hasWithdrawn = rows.some((row) => row.status === "withdrawn");
-        throw new DomainError(hasWithdrawn ? "CONSENT_WITHDRAWN" : "CONSENT_REQUIRED", "Active purpose-specific consent is required", {
-          details: { participantId, purpose },
+        const hasWithdrawn = rows.some((row) => row.status === "withdrawn" && this.#consentRowAllows(row, scope));
+        throw new DomainError(hasWithdrawn ? "CONSENT_WITHDRAWN" : "CONSENT_REQUIRED", "Active exact-scope consent is required", {
+          details: { participantId, purpose, resource: scope.resource, action: scope.action },
         });
       }
-      if (
-        enforceSelfVisibility &&
-        !hasPermission(context, "consent:read") &&
-        active.grantor_actor_id !== context.actorId
-      ) {
-        throw new DomainError("AUTH_FORBIDDEN", "Consent belongs to another actor");
+      const consent = consentFromRow(active);
+      const authorityValid = consent.grantorCapacity === "self"
+        ? participant.minorStatus === "adult" && participant.ownerActorId === consent.grantorActorId
+        : this.#hasParticipantAuthorityForActor(
+            context.tenantId,
+            consent.grantorActorId,
+            participantId,
+            consent.grantorCapacity,
+            consent.scope,
+            at,
+          );
+      if (!authorityValid) {
+        throw new DomainError("CONSENT_REQUIRED", "Consent grantor authority does not cover the requested lifetime", {
+          details: { participantId, purpose, resource: scope.resource, action: scope.action, at },
+        });
       }
-      results.push(consentFromRow(active));
+      if (enforceSelfVisibility && !this.#canAccessConsent(context, consent, "read")) {
+        throw new DomainError("AUTH_FORBIDDEN", "Consent receipt is outside the actor's participant authority");
+      }
+      results.push(consent);
     }
     return results;
   }
 
+  #assertProcessingNotRestricted(
+    tenantId: string,
+    participantIds: readonly string[],
+    purpose: string,
+  ): void {
+    for (const participantId of participantIds) {
+      const rows = this.#database.prepare(
+        `SELECT * FROM records
+         WHERE tenant_id=? AND collection=? AND deleted_at IS NULL
+           AND json_extract(data_json,'$.subjectParticipantId')=?
+         ORDER BY id`,
+      ).all(tenantId, RIGHTS_REQUEST_COLLECTION, participantId) as unknown as RecordRow[];
+      const blocking = rows.map((row) => recordFromRow(row)).find((record) => {
+        const data = parseRightsRequestRecord(record);
+        return (data.requestType === "delete" || data.requestType === "restrict_processing") &&
+          data.status !== "denied" &&
+          (data.scope.requestedProcessingPurpose === "all" || data.scope.requestedProcessingPurpose === purpose);
+      });
+      if (blocking !== undefined) {
+        throw new DomainError("PROCESSING_RESTRICTED", "Processing is frozen by an active data-subject rights request", {
+          details: { participantId, purpose, rightsRequestId: blocking.id },
+        });
+      }
+    }
+  }
+
   #authorizeConsentGrant(
     context: ActorContext,
-    participantId: string,
+    participant: ParticipantRecord,
     capacity: GrantConsentInput["grantorCapacity"],
-    isMinor: boolean,
+    scope: ConsentScope,
   ): void {
-    if (isMinor) {
-      if (capacity !== "guardian") {
-        throw new DomainError("GUARDIAN_VERIFICATION_REQUIRED", "A minor's consent must be granted by a guardian");
+    if (capacity === "self") {
+      if (participant.minorStatus === "minor" || participant.ownerActorId !== context.actorId ||
+          (!hasPermission(context, "consent:grant:self") && !hasPermission(context, "consent:grant"))) {
+        throw new DomainError("AUTH_FORBIDDEN", "Self consent requires the registered adult data-subject owner");
       }
-      if (!context.roles.includes("guardian")) {
-        throw new DomainError("GUARDIAN_VERIFICATION_REQUIRED", "A verified guardian role is required");
-      }
-      this.authorize(context, "consent:grant", { tenantId: context.tenantId, containsMinor: true });
       return;
     }
     if (capacity === "guardian") {
-      throw new DomainError("AUTH_FORBIDDEN", "A guardian cannot grant consent for a non-minor participant");
-    }
-    if (capacity === "authorized_agent") {
-      this.authorize(context, "consent:grant:agent", { tenantId: context.tenantId });
+      if (participant.minorStatus !== "minor" || !context.roles.includes("guardian") || context.guardianVerified !== true ||
+          !hasPermission(context, "consent:grant") ||
+          !this.#hasParticipantAuthority(context, participant.participantId, "guardian", scope, this.#now())) {
+        throw new DomainError("GUARDIAN_VERIFICATION_REQUIRED", "Exact active guardian authority is required");
+      }
       return;
     }
-    if (!hasPermission(context, "consent:grant:self") && !hasPermission(context, "consent:grant")) {
-      throw new DomainError("AUTH_FORBIDDEN", "Permission to grant consent is required");
-    }
-    const participant = this.#selectRecord(context.tenantId, "participants", participantId, false);
-    if (participant === undefined) {
-      if (participantId !== context.actorId && !hasPermission(context, "consent:grant:any")) {
-        throw new DomainError("AUTH_FORBIDDEN", "Participant ownership must be established before granting consent");
-      }
-    } else if (participant.owner_actor_id !== context.actorId && !hasPermission(context, "consent:grant:any")) {
-      throw new DomainError("AUTH_FORBIDDEN", "The participant is owned by another actor");
+    if (!hasPermission(context, "consent:grant:agent") ||
+        !this.#hasParticipantAuthority(context, participant.participantId, "authorized_agent", scope, this.#now())) {
+      throw new DomainError("AUTH_FORBIDDEN", "Exact durable authorized-agent authority is required");
     }
   }
 

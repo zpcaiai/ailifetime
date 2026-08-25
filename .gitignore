@@ -1,12 +1,15 @@
 .env
 .env.*
 !.env.example
+apps/wechat-mini/project.private.config.json
+apps/wechat-mini/miniprogram/ext.json
 .DS_Store
 node_modules/
 .next/
 dist/
 build/
 apps/web/public/assets/app.js
+apps/web/public/assets/auth*.js
 apps/web/public/assets/surface*.js
 .gradle/
 .venv/

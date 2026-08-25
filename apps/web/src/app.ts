@@ -1,38 +1,77 @@
-import { PORTALS, localized, normalizeLocale, portalForSkill, translate, type CopyKey, type SupportedLocale } from "./surface.js";
+import { BrowserOidcClient, EphemeralBrowserAuthentication, type BrowserOidcConfiguration } from "./auth.js";
+import { localized, normalizeLocale, portalById, translate, type CopyKey, type PortalId, type SupportedLocale } from "./surface.js";
 
 interface Capability {
   batchId: string;
   skill: string;
   operation: string;
+  permission: string;
+  portalId: PortalId;
   mode: string;
   requirements: readonly string[];
   requiresExternalEvidence?: boolean;
 }
 
+interface AuthenticatedSession {
+  actorId: string;
+  tenantId: string;
+  roles: readonly string[];
+  purpose: string;
+  stepUp: boolean;
+  guardianVerified: boolean;
+  authenticationState: "server_verified";
+}
+
+interface VisiblePortal {
+  id: PortalId;
+  skills: readonly string[];
+  capabilityCount: number;
+}
+
 const connection = element<HTMLDivElement>("connection");
 const healthOutput = element<HTMLPreElement>("health-output");
+const sessionOutput = element<HTMLPreElement>("session-output");
 const list = element<HTMLDivElement>("capability-list");
 const summary = element<HTMLDivElement>("capability-summary");
 const registeredCount = element<HTMLElement>("registered-count");
 const search = element<HTMLInputElement>("capability-search");
 const journeyForm = element<HTMLFormElement>("journey-form");
 const journeyResult = element<HTMLDivElement>("journey-result");
+const rightsForm = element<HTMLFormElement>("rights-form");
+const rightsOutput = element<HTMLDivElement>("rights-output");
+const rightsRefresh = element<HTMLButtonElement>("rights-refresh");
 const toast = element<HTMLDivElement>("toast");
 const localeSelect = element<HTMLSelectElement>("locale");
 const workspaceNav = element<HTMLElement>("workspace-nav");
 const workspaceContent = element<HTMLDivElement>("workspace-content");
+const loginButton = element<HTMLButtonElement>("login-button");
+const logoutButton = element<HTMLButtonElement>("logout-button");
+const authenticationOutput = element<HTMLSpanElement>("authentication-output");
 const capabilityDialog = element<HTMLDialogElement>("capability-dialog");
 const capabilityDialogContent = element<HTMLDivElement>("capability-dialog-content");
 const tabs = [...document.querySelectorAll<HTMLButtonElement>(".tab")];
 const initialUrl = new URL(window.location.href);
+if (initialUrl.pathname === "/auth/callback" && initialUrl.search !== "") {
+  window.history.replaceState(null, "", `${initialUrl.origin}${initialUrl.pathname}`);
+}
+const authentication = new EphemeralBrowserAuthentication();
+const oidc = new BrowserOidcClient();
 
 let capabilities: Capability[] = [];
+let visiblePortals: VisiblePortal[] = [];
+let session: AuthenticatedSession | undefined;
 let locale: SupportedLocale = normalizeLocale(initialUrl.searchParams.get("lang") ?? navigator.language);
-let activePortalId = initialUrl.searchParams.get("portal") ?? PORTALS[0]?.id ?? "consumer";
+let activePortalId = initialUrl.searchParams.get("portal") ?? "consumer";
+let authenticationRevision = 0;
+let browserOidcConfiguration: BrowserOidcConfiguration | undefined;
 
 document.documentElement.lang = locale;
 localeSelect.value = locale;
 applyTranslations();
+updateAuthenticationControls();
+
+loginButton.addEventListener("click", () => void beginLogin());
+logoutButton.addEventListener("click", () => signOut());
 
 for (const tab of tabs) {
   tab.addEventListener("click", () => activatePanel(tab, false));
@@ -41,6 +80,8 @@ for (const tab of tabs) {
 
 search.addEventListener("input", () => renderCapabilities(search.value));
 journeyForm.addEventListener("submit", (event) => void runJourney(event));
+rightsForm.addEventListener("submit", (event) => void submitRightsRequest(event));
+rightsRefresh.addEventListener("click", () => void listRightsRequests());
 localeSelect.addEventListener("change", () => {
   locale = normalizeLocale(localeSelect.value);
   document.documentElement.lang = locale;
@@ -78,22 +119,318 @@ void initialize();
 
 async function initialize(): Promise<void> {
   try {
-    const health = await api<Record<string, unknown>>("/health/ready");
-    connection.classList.add("online");
-    connection.innerHTML = `<span aria-hidden="true"></span><span class="status-copy" data-i18n="online">${escapeHtml(translate(locale, "online"))}</span>`;
+    browserOidcConfiguration = oidc.parseConfiguration(
+      await api<unknown>("/v1/auth/browser/config", undefined, false),
+    );
+    if (oidc.isCallback(browserOidcConfiguration, initialUrl.toString())) {
+      authenticationOutput.textContent = translate(locale, "signingIn");
+      const accessToken = await oidc.completeAuthorization(browserOidcConfiguration, initialUrl.toString());
+      if (accessToken === undefined) throw new Error("OIDC callback did not return an access token");
+      authentication.setBearerToken(accessToken, "product_operation");
+      const health = await api<Record<string, unknown>>("/health/ready", undefined, false);
+      healthOutput.textContent = JSON.stringify(health, null, 2);
+      const verified = await authenticateWorkspace();
+      if (!verified) {
+        authentication.clear();
+        throw new Error("The API rejected the OIDC access token");
+      }
+      authenticationOutput.textContent = translate(locale, "authenticated");
+      updateAuthenticationControls();
+      return;
+    }
+    const health = await api<Record<string, unknown>>("/health/ready", undefined, false);
     healthOutput.textContent = JSON.stringify(health, null, 2);
-    const catalog = await api<{ capabilities: Capability[] }>("/v1/capabilities");
+    await authenticateWorkspace();
+    updateAuthenticationControls();
+  } catch (error) {
+    authentication.clear();
+    setConnection("auth-required", "authRequired");
+    const message = error instanceof Error ? error.message : String(error);
+    authenticationOutput.textContent = `${translate(locale, "authenticationFailed")}: ${message}`;
+    clearAuthorizedWorkspace();
+    updateAuthenticationControls();
+    showToast(translate(locale, "authenticationFailed"));
+  }
+}
+
+async function authenticateWorkspace(): Promise<boolean> {
+  const revision = ++authenticationRevision;
+  try {
+    const [sessionEnvelope, catalog] = await Promise.all([
+      api<{ session: AuthenticatedSession }>("/v1/session"),
+      api<{ schemaVersion: string; capabilities: Capability[]; portals: VisiblePortal[]; count: number }>("/v1/capabilities/visible"),
+    ]);
+    if (revision !== authenticationRevision) return false;
+    validateAuthorizedProjection(
+      sessionEnvelope.session,
+      catalog.schemaVersion,
+      catalog.capabilities,
+      catalog.portals,
+      catalog.count,
+    );
+    session = sessionEnvelope.session;
     capabilities = catalog.capabilities;
+    visiblePortals = catalog.portals;
+    activePortalId = visiblePortals.some((portal) => portal.id === activePortalId)
+      ? activePortalId
+      : visiblePortals[0]?.id ?? "consumer";
+    element<HTMLInputElement>("tenantId").value = session.tenantId;
+    element<HTMLInputElement>("actorId").value = session.actorId;
     registeredCount.textContent = String(capabilities.length);
-    renderCapabilities("");
+    sessionOutput.textContent = JSON.stringify({
+      actorId: session.actorId,
+      tenantId: session.tenantId,
+      roles: session.roles,
+      purpose: session.purpose,
+      authenticationState: session.authenticationState,
+      visibleCapabilities: capabilities.length,
+      visiblePortals: visiblePortals.map((portal) => portal.id),
+    }, null, 2);
+    setConnection("online", "authenticated");
+    renderCapabilities(search.value);
     renderWorkspaces();
     applyInitialDeepLink();
+    updateAuthenticationControls();
+    return true;
   } catch (error) {
-    connection.classList.add("offline");
-    connection.innerHTML = `<span aria-hidden="true"></span><span class="status-copy" data-i18n="offline">${escapeHtml(translate(locale, "offline"))}</span>`;
-    healthOutput.textContent = error instanceof Error ? error.message : String(error);
-    showToast(translate(locale, "startApi"));
+    if (revision !== authenticationRevision) return false;
+    clearAuthorizedWorkspace();
+    setConnection("auth-required", "authRequired");
+    sessionOutput.textContent = error instanceof Error ? error.message : String(error);
+    showToast(translate(locale, "authRequiredDescription"));
+    updateAuthenticationControls();
+    return false;
   }
+}
+
+async function beginLogin(): Promise<void> {
+  if (browserOidcConfiguration === undefined) {
+    authenticationOutput.textContent = translate(locale, "authenticationFailed");
+    return;
+  }
+  loginButton.disabled = true;
+  authenticationOutput.textContent = translate(locale, "signingIn");
+  try {
+    const authorizationUrl = await oidc.beginAuthorization(browserOidcConfiguration, window.location.href);
+    window.location.assign(authorizationUrl);
+  } catch (error) {
+    loginButton.disabled = false;
+    authenticationOutput.textContent = `${translate(locale, "authenticationFailed")}: ${error instanceof Error ? error.message : String(error)}`;
+    showToast(translate(locale, "authenticationFailed"));
+  }
+}
+
+function signOut(): void {
+  authentication.clear();
+  oidc.clearTransaction();
+  authenticationRevision += 1;
+  clearAuthorizedWorkspace();
+  setConnection("auth-required", "authRequired");
+  authenticationOutput.textContent = translate(locale, "signedOut");
+  updateAuthenticationControls();
+}
+
+function updateAuthenticationControls(): void {
+  const authenticated = authentication.snapshot().hasInjectedBearer && session !== undefined;
+  loginButton.hidden = authenticated;
+  loginButton.disabled = browserOidcConfiguration === undefined;
+  logoutButton.hidden = !authenticated;
+}
+
+function clearAuthorizedWorkspace(): void {
+  session = undefined;
+  capabilities = [];
+  visiblePortals = [];
+  element<HTMLInputElement>("tenantId").value = "";
+  element<HTMLInputElement>("actorId").value = "";
+  registeredCount.textContent = "0";
+  renderCapabilities(search.value);
+  renderWorkspaces();
+  rightsOutput.innerHTML = "<strong>需要登录</strong><p>服务器验证会话建立后才能提交或查询隐私权请求。</p>";
+}
+
+async function submitRightsRequest(event: SubmitEvent): Promise<void> {
+  event.preventDefault();
+  if (session === undefined) {
+    showToast("需要服务器验证会话");
+    return;
+  }
+  try {
+    const participantId = boundedIdentifier(element<HTMLInputElement>("rights-participant").value, "参与者标识");
+    const requestType = element<HTMLSelectElement>("rights-type").value;
+    if (!RIGHTS_REQUEST_TYPES.has(requestType)) throw new Error("权利类型无效");
+    const requestedProcessingPurpose = element<HTMLInputElement>("rights-purpose").value.trim();
+    if (requestedProcessingPurpose !== "all" && !/^[a-z][a-z0-9_:-]{0,119}$/.test(requestedProcessingPurpose)) {
+      throw new Error("处理用途必须为 all 或精确规范用途");
+    }
+    const requestId = `rights-${crypto.randomUUID()}`;
+    const input: Record<string, unknown> = {
+      requestId,
+      participantId,
+      requestType,
+      requestedProcessingPurpose,
+    };
+    if (requestType === "correction") {
+      const correctionFields = [...new Set(element<HTMLInputElement>("rights-correction-fields").value
+        .split(",").map((value) => value.trim()).filter((value) => value !== ""))];
+      const correctionPayloadSha256 = element<HTMLInputElement>("rights-correction-digest").value.trim().toLowerCase();
+      if (correctionFields.length === 0 || correctionFields.some((field) => !/^[a-z][a-z0-9_.-]{0,79}$/.test(field)) ||
+          !/^[a-f0-9]{64}$/.test(correctionPayloadSha256)) {
+        throw new Error("更正请求需要规范字段名和安全载荷 SHA-256");
+      }
+      input.correctionFields = correctionFields;
+      input.correctionPayloadSha256 = correctionPayloadSha256;
+    }
+    if (requestType === "appeal") {
+      input.parentRequestId = boundedIdentifier(element<HTMLInputElement>("rights-parent").value, "原请求标识");
+    }
+    const envelope = await api<{ data: unknown }>("/v1/commands", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": requestId,
+        "X-Purpose": "privacy_rights",
+      },
+      body: JSON.stringify({ command: "rights-request.submit", input }),
+    });
+    const mutation = objectValue(envelope.data, "权利请求响应");
+    renderRightsProjection(minimizedRightsProjection("value" in mutation ? mutation.value : mutation));
+  } catch (error) {
+    rightsOutput.innerHTML = `<strong>请求未提交</strong><p>${escapeHtml(error instanceof Error ? error.message : String(error))}</p>`;
+  }
+}
+
+async function listRightsRequests(): Promise<void> {
+  try {
+    const envelope = await api<{ data: unknown }>("/v1/queries", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Purpose": "privacy_rights" },
+      body: JSON.stringify({ query: "rights-request.list", input: { limit: 100 } }),
+    });
+    if (!Array.isArray(envelope.data)) throw new Error("权利请求列表响应无效");
+    const projections = envelope.data.map((value) => minimizedRightsProjection(value));
+    rightsOutput.innerHTML = projections.length === 0
+      ? "<strong>暂无请求</strong><p>没有当前账户可见的隐私权请求。</p>"
+      : `<pre class="result-json">${escapeHtml(JSON.stringify(projections, null, 2))}</pre>`;
+  } catch (error) {
+    rightsOutput.innerHTML = `<strong>查询失败</strong><p>${escapeHtml(error instanceof Error ? error.message : String(error))}</p>`;
+  }
+}
+
+const RIGHTS_REQUEST_TYPES = new Set([
+  "access", "correction", "export", "withdraw", "delete", "restrict_processing", "appeal",
+]);
+
+function minimizedRightsProjection(value: unknown): Record<string, unknown> {
+  const projection = objectValue(value, "权利请求投影");
+  const requestId = boundedIdentifier(projection.requestId, "请求标识");
+  const requestType = typeof projection.requestType === "string" && RIGHTS_REQUEST_TYPES.has(projection.requestType)
+    ? projection.requestType : invalidRightsProjection();
+  const status = typeof projection.status === "string" ? projection.status : invalidRightsProjection();
+  const subjectReference = typeof projection.subjectReference === "string" && /^subject_[a-f0-9]{16}$/.test(projection.subjectReference)
+    ? projection.subjectReference : invalidRightsProjection();
+  const progress = objectValue(projection.progress, "传播进度");
+  const review = objectValue(projection.review, "复核进度");
+  const tasks = Array.isArray(projection.tasks) ? projection.tasks.map((raw) => {
+    const task = objectValue(raw, "传播任务");
+    return {
+      taskId: boundedIdentifier(task.taskId, "任务标识"),
+      target: typeof task.target === "string" ? task.target : invalidRightsProjection(),
+      assetReference: task.assetReference === null ||
+        (typeof task.assetReference === "string" && /^asset_[a-f0-9]{16}$/.test(task.assetReference))
+        ? task.assetReference : invalidRightsProjection(),
+      state: typeof task.state === "string" ? task.state : invalidRightsProjection(),
+      attempts: typeof task.attempts === "number" && Number.isSafeInteger(task.attempts) ? task.attempts : invalidRightsProjection(),
+    };
+  }) : invalidRightsProjection();
+  return {
+    requestId,
+    requestType,
+    subjectReference,
+    requestedProcessingPurpose: projection.requestedProcessingPurpose,
+    status,
+    submittedAt: projection.submittedAt,
+    dueAt: projection.dueAt,
+    overdue: projection.overdue,
+    completedAt: projection.completedAt,
+    parentRequestId: projection.parentRequestId,
+    progress: {
+      total: progress.total,
+      succeeded: progress.succeeded,
+      pending: progress.pending,
+      blocked: progress.blocked,
+      failed: progress.failed,
+    },
+    tasks,
+    review: {
+      approvals: review.approvals,
+      denials: review.denials,
+      requiredDistinctReviewers: review.requiredDistinctReviewers,
+    },
+    explanationCode: projection.explanationCode,
+  };
+}
+
+function renderRightsProjection(projection: Record<string, unknown>): void {
+  rightsOutput.innerHTML = `<pre class="result-json">${escapeHtml(JSON.stringify(projection, null, 2))}</pre>`;
+}
+
+function boundedIdentifier(value: unknown, label: string): string {
+  if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value)) {
+    throw new Error(`${label}无效`);
+  }
+  return value;
+}
+
+function objectValue(value: unknown, label: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`${label}无效`);
+  return value as Record<string, unknown>;
+}
+
+function invalidRightsProjection(): never {
+  throw new Error("服务端权利请求脱敏投影无效");
+}
+
+function validateAuthorizedProjection(
+  sessionValue: AuthenticatedSession,
+  schemaVersion: string,
+  capabilityValues: Capability[],
+  portalValues: VisiblePortal[],
+  count: number,
+): void {
+  if (
+    schemaVersion !== "ltm.visible-capability-manifest.v1"
+    || sessionValue.authenticationState !== "server_verified"
+    || sessionValue.actorId.trim() === ""
+    || sessionValue.tenantId.trim() === ""
+    || sessionValue.purpose.trim() === ""
+    || sessionValue.roles.length === 0
+    || new Set(sessionValue.roles).size !== sessionValue.roles.length
+  ) {
+    throw new Error("server returned an invalid authenticated session");
+  }
+  if (count !== capabilityValues.length || new Set(capabilityValues.map((item) => item.batchId)).size !== capabilityValues.length) {
+    throw new Error("server returned an inconsistent visible capability catalog");
+  }
+  const portalIds = new Set(portalValues.map((portal) => portal.id));
+  if (
+    portalIds.size !== portalValues.length
+    || portalValues.some((portal) => (
+      portalById(portal.id) === undefined
+      || portal.capabilityCount !== capabilityValues.filter((capability) => capability.portalId === portal.id).length
+    ))
+    || capabilityValues.some((capability) => {
+      const portal = portalValues.find((item) => item.id === capability.portalId);
+      return portal === undefined || !portal.skills.includes(capability.skill) || capability.permission.trim() === "";
+    })
+  ) {
+    throw new Error("server returned an invalid visible portal projection");
+  }
+}
+
+function setConnection(style: "online" | "offline" | "auth-required", key: CopyKey): void {
+  connection.className = `status ${style}`;
+  connection.innerHTML = `<span aria-hidden="true"></span><span class="status-copy" data-i18n="${escapeHtml(key)}">${escapeHtml(translate(locale, key))}</span>`;
 }
 
 function applyInitialDeepLink(): void {
@@ -143,6 +480,7 @@ function moveTabFocus(event: KeyboardEvent, current: HTMLButtonElement): void {
 
 async function runJourney(event: SubmitEvent): Promise<void> {
   event.preventDefault();
+  if (session === undefined) return showToast(translate(locale, "authRequiredDescription"));
   const tenantId = element<HTMLInputElement>("tenantId").value.trim();
   const actorId = element<HTMLInputElement>("actorId").value.trim();
   const currentAge = Number(element<HTMLInputElement>("currentAge").value);
@@ -153,20 +491,17 @@ async function runJourney(event: SubmitEvent): Promise<void> {
 
   journeyResult.innerHTML = `<strong>${escapeHtml(translate(locale, "creating"))}</strong><p>${escapeHtml(translate(locale, "policyCheck"))}</p>`;
   try {
-    const journeyId = crypto.randomUUID();
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    const evidenceHash = await sha256(`${tenantId}:${actorId}:${journeyId}:age_transformation`);
-    await api<unknown>("/v1/capabilities/B04", {
-      method: "POST",
-      headers: actorHeaders(`consent-${journeyId}`, "age_transformation"),
-      body: JSON.stringify({ participantId: actorId, subjectId: actorId, purpose: "age_transformation", policyVersion: "local-synthetic-v1", evidenceHash, expiresAt, status: "active", isMinor: false }),
+    const localPlan = Object.freeze({
+      schemaVersion: "ltm.local-journey-plan.v1",
+      planId: crypto.randomUUID(),
+      actorId,
+      tenantId,
+      currentAge,
+      targetAges,
+      submitted: false,
+      reason: "media intake, B07 safety approval, and purpose-scoped participant consent are required before B08/B14",
     });
-    const result = await api<unknown>("/v1/capabilities/B14", {
-      method: "POST",
-      headers: actorHeaders(`timeline-${journeyId}`, "age_transformation"),
-      body: JSON.stringify({ jobId: `job-${journeyId}`, currentAge, targetAges, sourceAssetId: "asset-synthetic-portrait", participantIds: [actorId], seed: journeyId, promptPolicyVersion: "illustrative-v1", illustrativeLabel: true }),
-    });
-    journeyResult.innerHTML = `<strong>${escapeHtml(translate(locale, "timelineCreated"))}</strong><p>${escapeHtml(translate(locale, "timelineCreatedDescription"))}</p><pre class="result-json">${escapeHtml(JSON.stringify(result, null, 2))}</pre>`;
+    journeyResult.innerHTML = `<strong>${escapeHtml(translate(locale, "timelineCreated"))}</strong><p>${escapeHtml(translate(locale, "timelineCreatedDescription"))}</p><pre class="result-json">${escapeHtml(JSON.stringify(localPlan, null, 2))}</pre>`;
   } catch (error) {
     journeyResult.innerHTML = `<strong>${escapeHtml(translate(locale, "safeStop"))}</strong><p>${escapeHtml(error instanceof Error ? error.message : String(error))}</p>`;
   }
@@ -179,19 +514,28 @@ function renderCapabilities(query: string): void {
   const external = capabilities.filter((item) => item.requiresExternalEvidence).length;
   summary.innerHTML = `<article><strong>${capabilities.length}</strong><small>${escapeHtml(translate(locale, "registeredBatches"))}</small></article><article><strong>${skills.size}</strong><small>${escapeHtml(translate(locale, "skillDomains"))}</small></article><article><strong>${external}</strong><small>${escapeHtml(translate(locale, "externalEvidenceCount"))}</small></article>`;
   list.innerHTML = filtered.map((item) => {
-    const portal = portalForSkill(item.skill);
-    const href = capabilityHref(item.batchId, portal?.id);
+    const href = capabilityHref(item.batchId, item.portalId);
     return `<article class="capability"><code>${escapeHtml(item.batchId)}</code><div><strong>${escapeHtml(item.operation)}</strong><small>${escapeHtml(item.skill)} · ${escapeHtml(item.mode)}</small></div><div>${item.requiresExternalEvidence ? `<span class="external">${escapeHtml(translate(locale, "externalGate"))}</span>` : ""}<a class="capability-open" href="${escapeHtml(href)}" data-batch="${escapeHtml(item.batchId)}">${escapeHtml(translate(locale, "view"))}</a></div></article>`;
   }).join("");
   if (filtered.length === 0) list.innerHTML = `<div class="card">${escapeHtml(translate(locale, "noMatch"))}</div>`;
 }
 
 function renderWorkspaces(): void {
-  const portal = PORTALS.find((item) => item.id === activePortalId) ?? PORTALS[0];
-  if (portal === undefined) return;
-  activePortalId = portal.id;
-  workspaceNav.innerHTML = PORTALS.map((item) => `<button type="button" data-portal="${item.id}" class="${item.id === portal.id ? "active" : ""}" aria-current="${item.id === portal.id ? "page" : "false"}">${escapeHtml(localized(item.title, locale))}</button>`).join("");
-  const workspaces = portal.skills.map((skill) => {
+  const projectedPortal = visiblePortals.find((item) => item.id === activePortalId) ?? visiblePortals[0];
+  if (projectedPortal === undefined) {
+    workspaceNav.innerHTML = "";
+    workspaceContent.innerHTML = `<div class="card"><strong>${escapeHtml(translate(locale, "authRequired"))}</strong><p>${escapeHtml(translate(locale, "authRequiredDescription"))}</p></div>`;
+    return;
+  }
+  const portal = portalById(projectedPortal.id);
+  if (portal === undefined) throw new Error("visible portal has no localized shell");
+  activePortalId = projectedPortal.id;
+  workspaceNav.innerHTML = visiblePortals.map((item) => {
+    const copy = portalById(item.id);
+    if (copy === undefined) return "";
+    return `<button type="button" data-portal="${item.id}" class="${item.id === projectedPortal.id ? "active" : ""}" aria-current="${item.id === projectedPortal.id ? "page" : "false"}">${escapeHtml(localized(copy.title, locale))}</button>`;
+  }).join("");
+  const workspaces = projectedPortal.skills.map((skill) => {
     const operations = capabilities.filter((item) => item.skill === skill);
     const links = operations.map((item) => `<a class="operation-link" href="${escapeHtml(capabilityHref(item.batchId, portal.id))}" data-batch="${escapeHtml(item.batchId)}"><code>${escapeHtml(item.batchId)}</code><span>${escapeHtml(item.operation)}</span></a>`).join("");
     return `<section class="domain-workspace" aria-labelledby="workspace-${escapeHtml(skill)}"><h3 id="workspace-${escapeHtml(skill)}">${escapeHtml(humanizeSkill(skill))} · ${operations.length}</h3><div class="operation-grid">${links}</div></section>`;
@@ -209,8 +553,7 @@ function openCapability(batchId: string): void {
   capabilityDialogContent.innerHTML = `<p class="eyebrow">${escapeHtml(capability.batchId)} · ${escapeHtml(capability.skill)}</p><h2 id="capability-dialog-title">${escapeHtml(capability.operation)}</h2><p>${escapeHtml(translate(locale, "executionMode"))}：<code>${escapeHtml(capability.mode)}</code></p><p>${escapeHtml(translate(locale, "stableEndpoint"))}：<code>POST /v1/capabilities/${escapeHtml(capability.batchId)}</code></p><h3>${escapeHtml(translate(locale, "atomicRequirements"))}</h3><ul class="requirement-list">${requirements}</ul>${capability.requiresExternalEvidence ? `<p class="evidence-status"><strong>${escapeHtml(translate(locale, "externalRequired"))}</strong> ${escapeHtml(translate(locale, "externalRequiredDescription"))}</p>` : `<p>${escapeHtml(translate(locale, "protectedOperation"))}</p>`}`;
   const url = new URL(window.location.href);
   url.searchParams.set("capability", capability.batchId);
-  const portal = portalForSkill(capability.skill);
-  if (portal !== undefined) url.searchParams.set("portal", portal.id);
+  url.searchParams.set("portal", capability.portalId);
   window.history.replaceState(null, "", url);
   if (!capabilityDialog.open) capabilityDialog.showModal();
 }
@@ -246,22 +589,15 @@ function applyTranslations(): void {
   }
 }
 
-function actorHeaders(idempotencyKey: string, purpose: string): HeadersInit {
-  return {
-    "content-type": "application/json",
-    authorization: "Bearer local-consumer",
-    "x-purpose": purpose,
-    "idempotency-key": idempotencyKey,
-  };
-}
-
-async function sha256(value: string): Promise<string> {
-  const bytes = new TextEncoder().encode(value);
-  return [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((item) => item.toString(16).padStart(2, "0")).join("");
-}
-
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
+async function api<T>(path: string, init?: RequestInit, authenticated = true): Promise<T> {
+  const headers = authenticated ? authentication.authenticatedHeaders(init?.headers) : new Headers(init?.headers);
+  const response = await fetch(path, {
+    ...init,
+    headers,
+    credentials: "omit",
+    cache: "no-store",
+    redirect: "error",
+  });
   const body = await response.json().catch(() => ({ error: { message: response.statusText } })) as { error?: { message?: string } };
   if (!response.ok) throw new Error(body.error?.message ?? `Request failed (${response.status})`);
   return body as T;

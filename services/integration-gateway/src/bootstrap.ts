@@ -16,13 +16,9 @@ import {
   S3EvidenceArtifactStore,
   SignedCommerceBindingResolver,
   SignedPartnerCommandAdapter,
-  SignedPartnerWebhookIntegration,
   WechatPayEvidenceIntegration,
-  assertCapabilityEvidenceBinding,
   parseJsonObject,
   requiredString,
-  type CapabilityEvidenceBinding,
-  type CapabilityEvidenceBindingTemplate,
   type PartnerWebhookSignatureScheme,
   type SecretReference,
   type SignedCapabilityEvidence,
@@ -35,6 +31,11 @@ import type {
   IntegrationGatewayOptions,
 } from "./gateway.js";
 import { ApiExternalBusinessEventOutput, RotatingFileBearerTokenProvider } from "./evidence-output.js";
+import {
+  createExternalCommandPartnerCallbackHandler,
+  loadExternalCommandPartnerPolicies,
+  partnerCallbackPath,
+} from "./partner-callbacks.js";
 
 export interface BuiltGateway {
   readonly options: IntegrationGatewayOptions;
@@ -159,43 +160,19 @@ export async function buildIntegrationGateway(configuration: IntegrationGatewayC
     });
   }
   if (configuration.partnerPoliciesReference !== undefined) {
-    const policies = await loadPartnerPolicies(configuration.partnerPoliciesReference, secrets, configuration);
+    const policies = await loadExternalCommandPartnerPolicies(configuration.partnerPoliciesReference, secrets, configuration);
     for (const policy of policies) {
-      if (routes.has(`/v1/callbacks/partners/${policy.routeId}`)) {
+      const path = partnerCallbackPath(policy);
+      if (routes.has(path)) {
         throw new ProductionIntegrationError("CONFIGURATION_INVALID", "partner webhook route is duplicated");
       }
       await preflightSignatureKeys(secrets, [[policy.verificationKeyReference, policy.signatureScheme]]);
-      const integration = new SignedPartnerWebhookIntegration<CapabilityEvidenceBindingTemplate>({
-        provider: policy.binding.provider,
-        signatureScheme: policy.signatureScheme,
-        verificationKeyReference: policy.verificationKeyReference,
-        maximumClockSkewSeconds: policy.maximumClockSkewSeconds,
-        retentionClass: policy.retentionClass,
-        validate(payload, binding) {
-          validatePartnerPayload(policy, payload, binding.subjectId);
-        },
-      }, secrets, innerReplays, artifacts, attestor);
-      routes.set(`/v1/callbacks/partners/${policy.routeId}`, {
-        maximumBodyBytes: policy.maximumBodyBytes,
-        async process(request) {
-          const payload = parseJsonObject(request.rawBody, "partner webhook body");
-          const subjectId = requiredString(pathValue(payload, policy.subjectField), "partner subject", 128);
-          const businessDraft = partnerBusinessEventDraft(policy, payload);
-          const attestedEvent = await integration.verifyAndAttestBusinessEvent({
-            binding: { ...policy.binding, subjectId },
-            rawBody: request.rawBody,
-            timestamp: header(request.headers, "x-ltm-timestamp"),
-            nonce: header(request.headers, "x-ltm-nonce"),
-            signature: header(request.headers, "x-ltm-signature"),
-          }, businessDraft);
-          return attested(businessDraft.eventId, attestedEvent.evidence, attestedEvent.event, {
-            routeId: policy.routeId,
-            provider: policy.binding.provider,
-            subjectId,
-            artifactSha256: attestedEvent.evidence.artifactSha256,
-          });
-        },
-      });
+      routes.set(path, createExternalCommandPartnerCallbackHandler(policy, {
+        secrets,
+        replays: innerReplays,
+        artifacts,
+        attestor,
+      }));
     }
   }
   const outputTokenProvider = new RotatingFileBearerTokenProvider(configuration.output.bearerTokenFile);
@@ -286,244 +263,6 @@ class ManagedWechatPlatformKeyResolver implements WechatPlatformKeyResolver {
   }
 }
 
-interface LoadedPartnerPolicy {
-  readonly routeId: string;
-  readonly binding: CapabilityEvidenceBindingTemplate;
-  readonly signatureScheme: PartnerWebhookSignatureScheme;
-  readonly verificationKeyReference: SecretReference;
-  readonly maximumClockSkewSeconds: number;
-  readonly maximumBodyBytes: number;
-  readonly retentionClass: "financial" | "release" | "operational";
-  readonly subjectField: string;
-  readonly requiredFields: readonly string[];
-  readonly stateField?: string;
-  readonly allowedStates?: readonly string[];
-  readonly eventIdField: string;
-  readonly eventTypeField: string;
-  readonly eventTypeMap: Readonly<Record<string, string>>;
-  readonly subjectType: string;
-  readonly providerOccurredAtField: string;
-  readonly correlationIdField: string;
-  readonly sequenceField?: string;
-  readonly canonicalClaimFields: Readonly<Record<string, string>>;
-}
-
-async function loadPartnerPolicies(
-  reference: SecretReference,
-  secrets: AwsSecretsManagerResolver,
-  configuration: IntegrationGatewayConfiguration,
-): Promise<readonly LoadedPartnerPolicy[]> {
-  const bytes = Buffer.from(await secrets.resolve(reference));
-  try {
-    const payload = parseJsonObject(bytes, "partner webhook policy document");
-    if (payload.version !== "ltm.partner-webhook-policies.v1" || !Array.isArray(payload.routes) ||
-        payload.routes.length === 0 || payload.routes.length > 64) {
-      throw new ProductionIntegrationError("CONFIGURATION_INVALID", "partner webhook policy document is invalid");
-    }
-    const seen = new Set<string>();
-    return payload.routes.map((value) => {
-      const record = objectValue(value, "partner webhook route");
-      const routeId = token(requiredString(record.routeId, "partner routeId", 64), "partner routeId");
-      if (seen.has(routeId)) throw new ProductionIntegrationError("CONFIGURATION_INVALID", "partner routeId is duplicated");
-      seen.add(routeId);
-      const binding = {
-        tenantId: configuration.tenantId,
-        batchId: requiredString(record.batchId, "partner batchId", 16),
-        operation: requiredString(record.operation, "partner operation", 160),
-        kind: requiredString(record.kind, "partner kind", 160),
-        provider: requiredString(record.provider, "partner provider", 128),
-        environment: configuration.evidenceEnvironment,
-        subjectId: "configuration-check",
-      } as unknown as CapabilityEvidenceBindingTemplate;
-      try {
-        assertCapabilityEvidenceBinding({ ...binding, artifactSha256: "0".repeat(64) } as CapabilityEvidenceBinding);
-      } catch {
-        throw new ProductionIntegrationError("CONFIGURATION_INVALID", `partner route ${routeId} has an unsupported evidence tuple`);
-      }
-      const eventContract = businessEventContract(binding.batchId, binding.operation);
-      const requiredFields = stringArray(record.requiredFields, "partner requiredFields", 64);
-      const stateField = optionalString(record.stateField, "partner stateField", 256);
-      const allowedStates = record.allowedStates === undefined
-        ? undefined
-        : stringArray(record.allowedStates, "partner allowedStates", 64);
-      if ((stateField === undefined) !== (allowedStates === undefined)) {
-        throw new ProductionIntegrationError("CONFIGURATION_INVALID", "partner stateField and allowedStates are required together");
-      }
-      const eventTypeMapValue = objectValue(record.eventTypeMap, "partner eventTypeMap");
-      const eventTypeMap: Record<string, string> = {};
-      for (const [nativeType, canonicalTypeValue] of Object.entries(eventTypeMapValue)) {
-        const native = token(nativeType, "partner native event type");
-        const canonical = token(requiredString(canonicalTypeValue, "partner canonical event type", 128), "partner canonical event type");
-        if (!eventContract.eventTypes.includes(canonical)) {
-          throw new ProductionIntegrationError("CONFIGURATION_INVALID", `partner route ${routeId} maps an unsupported business event type`);
-        }
-        eventTypeMap[native] = canonical;
-      }
-      if (Object.keys(eventTypeMap).length === 0 || Object.keys(eventTypeMap).length > 64) {
-        throw new ProductionIntegrationError("CONFIGURATION_INVALID", "partner eventTypeMap must be non-empty and bounded");
-      }
-      const claimFieldsValue = objectValue(record.canonicalClaimFields, "partner canonicalClaimFields");
-      const canonicalClaimFields: Record<string, string> = {};
-      for (const [claimName, fieldPathValue] of Object.entries(claimFieldsValue)) {
-        if (!eventContract.claims.includes(claimName)) {
-          throw new ProductionIntegrationError("CONFIGURATION_INVALID", `partner route ${routeId} maps a non-permitted canonical claim`);
-        }
-        canonicalClaimFields[token(claimName, "partner canonical claim name")] = jsonPath(
-          requiredString(fieldPathValue, "partner canonical claim field", 256),
-        );
-      }
-      if (Object.keys(canonicalClaimFields).length === 0) {
-        throw new ProductionIntegrationError("CONFIGURATION_INVALID", "partner canonicalClaimFields must be non-empty");
-      }
-      const subjectType = token(requiredString(record.subjectType, "partner subjectType", 128), "partner subjectType");
-      if (subjectType !== eventContract.subjectType) {
-        throw new ProductionIntegrationError("CONFIGURATION_INVALID", `partner route ${routeId} subjectType does not match its capability contract`);
-      }
-      const sequenceField = optionalString(record.sequenceField, "partner sequenceField", 256);
-      return {
-        routeId,
-        binding,
-        signatureScheme: enumValue(record.signatureScheme, "partner signatureScheme", ["hmac-sha256", "ed25519", "es256"] as const),
-        verificationKeyReference: managedReference(record.verificationKeyReference, "partner verificationKeyReference"),
-        maximumClockSkewSeconds: integerValue(record.maximumClockSkewSeconds, 300, 30, 900, "partner maximumClockSkewSeconds"),
-        maximumBodyBytes: integerValue(record.maximumBodyBytes, 1_048_576, 1_024, 10_485_760, "partner maximumBodyBytes"),
-        retentionClass: enumValue(record.retentionClass, "partner retentionClass", ["financial", "release", "operational"] as const),
-        subjectField: jsonPath(requiredString(record.subjectField, "partner subjectField", 256)),
-        requiredFields: requiredFields.map(jsonPath),
-        eventIdField: jsonPath(requiredString(record.eventIdField, "partner eventIdField", 256)),
-        eventTypeField: jsonPath(requiredString(record.eventTypeField, "partner eventTypeField", 256)),
-        eventTypeMap,
-        subjectType,
-        providerOccurredAtField: jsonPath(requiredString(record.providerOccurredAtField, "partner providerOccurredAtField", 256)),
-        correlationIdField: jsonPath(requiredString(record.correlationIdField, "partner correlationIdField", 256)),
-        ...(sequenceField === undefined ? {} : { sequenceField: jsonPath(sequenceField) }),
-        canonicalClaimFields,
-        ...(stateField === undefined || allowedStates === undefined
-          ? {}
-          : { stateField: jsonPath(stateField), allowedStates }),
-      };
-    });
-  } finally {
-    bytes.fill(0);
-  }
-}
-
-interface PartnerBusinessEventContract {
-  readonly subjectType: string;
-  readonly eventTypes: readonly string[];
-  readonly claims: readonly string[];
-}
-
-function businessEventContract(batchId: string, operation: string): PartnerBusinessEventContract {
-  const key = `${batchId}:${operation}`;
-  const contracts: Readonly<Record<string, PartnerBusinessEventContract>> = {
-    "B74:scheduleMultiChannelNotification": {
-      subjectType: "notification",
-      eventTypes: ["notification.acknowledged", "notification.delivered", "notification.failed", "notification.suppressed"],
-      claims: ["providerOperationId"],
-    },
-    "B89:requestTaxDocument": {
-      subjectType: "tax-document",
-      eventTypes: ["tax-document.acknowledged", "tax-document.issued", "tax-document.rejected", "tax-document.reissue", "tax-document.red_letter"],
-      claims: ["providerOperationId"],
-    },
-    "B98:createVendorProductionJob": {
-      subjectType: "vendor-job",
-      eventTypes: ["vendor-job.accepted", "vendor-job.rejected", "vendor-job.scheduled", "vendor-job.production", "vendor-job.qc", "vendor-job.shipped", "vendor-job.failed"],
-      claims: ["providerOperationId", "vendorId"],
-    },
-    "B99:recordShipment": {
-      subjectType: "shipment",
-      eventTypes: ["shipment.label_created", "shipment.picked_up", "shipment.in_transit", "shipment.delayed", "shipment.out_for_delivery", "shipment.delivered", "shipment.exception", "shipment.returned", "shipment.cancelled"],
-      claims: ["carrierTrackingRef", "locationCode", "vendorId", "vendorJobId", "onTime"],
-    },
-    "B100:recordInventoryAdjustment": {
-      subjectType: "inventory-item",
-      eventTypes: ["inventory.adjusted"],
-      claims: ["vendorId", "sku", "warehouseId", "quantityDelta", "reservationDelta", "adjustmentReason"],
-    },
-    "B101:createReturnOrClaim": {
-      subjectType: "return-claim",
-      eventTypes: ["return-claim.eligible", "return-claim.accepted", "return-claim.in_transit", "return-claim.refunded", "return-claim.replaced", "return-claim.recovered", "return-claim.denied"],
-      claims: ["providerOperationId", "vendorId"],
-    },
-    "B102:publishVendorScorecard": {
-      subjectType: "vendor",
-      eventTypes: ["scorecard.vendor_job", "scorecard.shipment", "scorecard.claim", "scorecard.settlement"],
-      claims: ["projectedFactId"],
-    },
-  };
-  const contract = contracts[key];
-  if (contract === undefined) {
-    throw new ProductionIntegrationError("CONFIGURATION_INVALID", "partner webhook route is not an atomic external business event capability");
-  }
-  return contract;
-}
-
-function partnerBusinessEventDraft(
-  policy: LoadedPartnerPolicy,
-  payload: Readonly<Record<string, unknown>>,
-): Pick<VerifiedBusinessEvent, "eventId" | "subjectType" | "subjectId" | "eventType" | "providerOccurredAt" | "sequence" | "correlationId" | "canonicalClaims"> {
-  const eventId = token(requiredString(pathValue(payload, policy.eventIdField), "partner eventId", 128), "partner eventId");
-  const subjectId = token(requiredString(pathValue(payload, policy.subjectField), "partner subjectId", 128), "partner subjectId");
-  const nativeEventType = token(requiredString(pathValue(payload, policy.eventTypeField), "partner eventType", 128), "partner eventType");
-  const eventType = policy.eventTypeMap[nativeEventType];
-  if (eventType === undefined) {
-    throw new ProductionIntegrationError("PROVIDER_REJECTED", "partner event type is not allowlisted by route policy");
-  }
-  const occurredValue = requiredString(pathValue(payload, policy.providerOccurredAtField), "partner providerOccurredAt", 64);
-  const occurredMilliseconds = Date.parse(occurredValue);
-  if (!Number.isFinite(occurredMilliseconds)) {
-    throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", "partner providerOccurredAt is invalid");
-  }
-  const canonicalClaims: Record<string, import("@ltm/core").JsonValue> = {};
-  for (const [claimName, path] of Object.entries(policy.canonicalClaimFields)) {
-    const value = pathValue(payload, path);
-    if (value === undefined) {
-      throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", `partner canonical claim ${claimName} is missing`);
-    }
-    canonicalClaims[claimName] = value as import("@ltm/core").JsonValue;
-  }
-  const sequenceValue = policy.sequenceField === undefined ? null : pathValue(payload, policy.sequenceField);
-  if (sequenceValue !== null && (!Number.isSafeInteger(sequenceValue) || (sequenceValue as number) < 0)) {
-    throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", "partner sequence must be null or a non-negative integer");
-  }
-  return {
-    eventId,
-    subjectType: policy.subjectType,
-    subjectId,
-    eventType,
-    providerOccurredAt: new Date(occurredMilliseconds).toISOString(),
-    sequence: sequenceValue as number | null,
-    correlationId: token(
-      requiredString(pathValue(payload, policy.correlationIdField), "partner correlationId", 128),
-      "partner correlationId",
-    ),
-    canonicalClaims,
-  };
-}
-
-function validatePartnerPayload(
-  policy: LoadedPartnerPolicy,
-  payload: Readonly<Record<string, unknown>>,
-  subjectId: string,
-): void {
-  if (pathValue(payload, policy.subjectField) !== subjectId) {
-    throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", "partner payload subject does not match its evidence binding");
-  }
-  for (const path of policy.requiredFields) {
-    if (pathValue(payload, path) === undefined) {
-      throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", `partner payload is missing required field ${path}`);
-    }
-  }
-  if (policy.stateField !== undefined && policy.allowedStates !== undefined) {
-    const state = pathValue(payload, policy.stateField);
-    if (typeof state !== "string" || !policy.allowedStates.includes(state)) {
-      throw new ProductionIntegrationError("PROVIDER_REJECTED", "partner payload state is not allowed");
-    }
-  }
-}
-
 async function validateAttestorKey(secrets: AwsSecretsManagerResolver, reference: SecretReference): Promise<void> {
   const bytes = Buffer.from(await secrets.resolve(reference));
   try {
@@ -587,61 +326,4 @@ function header(headers: Readonly<Record<string, string>>, name: string): string
   const value = headers[name];
   if (value === undefined) throw new ProductionIntegrationError("PROVIDER_SIGNATURE_INVALID", `${name} header is required`);
   return value;
-}
-
-function pathValue(value: Readonly<Record<string, unknown>>, path: string): unknown {
-  let current: unknown = value;
-  for (const part of path.split(".")) {
-    if (current === null || typeof current !== "object" || Array.isArray(current)) return undefined;
-    current = (current as Readonly<Record<string, unknown>>)[part];
-  }
-  return current;
-}
-
-function jsonPath(value: string): string {
-  if (!/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){0,5}$/.test(value)) {
-    throw new ProductionIntegrationError("CONFIGURATION_INVALID", "partner JSON field path is invalid");
-  }
-  return value;
-}
-
-function objectValue(value: unknown, label: string): Record<string, unknown> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new ProductionIntegrationError("CONFIGURATION_INVALID", `${label} must be an object`);
-  }
-  return value as Record<string, unknown>;
-}
-
-function stringArray(value: unknown, label: string, maximum: number): readonly string[] {
-  if (!Array.isArray(value) || value.length === 0 || value.length > maximum ||
-      value.some((item) => typeof item !== "string") || new Set(value).size !== value.length) {
-    throw new ProductionIntegrationError("CONFIGURATION_INVALID", `${label} must be a bounded unique string array`);
-  }
-  return value as string[];
-}
-
-function optionalString(value: unknown, label: string, maximum: number): string | undefined {
-  return value === undefined ? undefined : requiredString(value, label, maximum);
-}
-
-function integerValue(value: unknown, fallback: number, minimum: number, maximum: number, label: string): number {
-  const resolved = value === undefined ? fallback : value;
-  if (!Number.isSafeInteger(resolved) || (resolved as number) < minimum || (resolved as number) > maximum) {
-    throw new ProductionIntegrationError("CONFIGURATION_INVALID", `${label} must be between ${minimum} and ${maximum}`);
-  }
-  return resolved as number;
-}
-
-function token(value: string, label: string): string {
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value)) {
-    throw new ProductionIntegrationError("CONFIGURATION_INVALID", `${label} is invalid`);
-  }
-  return value;
-}
-
-function enumValue<T extends string>(value: unknown, label: string, allowed: readonly T[]): T {
-  if (typeof value !== "string" || !allowed.includes(value as T)) {
-    throw new ProductionIntegrationError("CONFIGURATION_INVALID", `${label} is invalid`);
-  }
-  return value as T;
 }

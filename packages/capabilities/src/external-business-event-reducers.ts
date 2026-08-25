@@ -1,4 +1,9 @@
-import { DomainError } from "@ltm/core";
+import {
+  DomainError,
+  EXTERNAL_COMMAND_CALLBACK_ROUTES,
+  EXTERNAL_COMMAND_TERMINAL_EVENT_TYPES,
+  externalCommandCallbackProviderAllowed,
+} from "@ltm/core";
 import type {
   ExternalBusinessAggregateTarget,
   ExternalBusinessEventReducer,
@@ -7,6 +12,7 @@ import type {
   ExternalBusinessReduction,
   JsonObject,
   JsonValue,
+  ExternalCommandCallbackRoute,
   VerifiedBusinessEvent,
 } from "@ltm/core";
 
@@ -14,6 +20,20 @@ type BatchOperation = `${VerifiedBusinessEvent["batchId"]}:${string}`;
 
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const CURRENCY = /^[A-Z]{3}$/;
+const SPECIALIZED_COMMAND_BATCHES = new Set(["B74", "B89", "B98", "B101"]);
+
+export const EXTERNAL_EVENT_REDUCER_TARGET_COLLECTION = Object.freeze({
+  storeEntitlements: "commerce.store-entitlements",
+  wechatPayments: "commerce.wechat-payments",
+  shipments: "supply.shipments",
+  inventoryBalances: "supply.inventory-balances",
+  vendorScorecards: "supply.vendor-scorecards",
+} as const);
+
+/** Collections whose writes are owned exclusively by signed external-event reducers. */
+export const EXTERNAL_EVENT_REDUCER_TARGET_COLLECTIONS = Object.freeze(
+  Object.values(EXTERNAL_EVENT_REDUCER_TARGET_COLLECTION),
+);
 
 interface RoutedReducer extends ExternalBusinessEventReducer {
   readonly batchId: VerifiedBusinessEvent["batchId"];
@@ -27,6 +47,9 @@ interface RoutedReducer extends ExternalBusinessEventReducer {
 const reducers: readonly RoutedReducer[] = [
   entitlementReducer(),
   wechatPaymentReducer(),
+  ...EXTERNAL_COMMAND_CALLBACK_ROUTES
+    .filter((definition) => !SPECIALIZED_COMMAND_BATCHES.has(definition.batchId))
+    .map(genericTerminalCommandReducer),
   notificationReducer(),
   taxDocumentReducer(),
   vendorJobReducer(),
@@ -85,7 +108,7 @@ function entitlementReducer(): RoutedReducer {
     locate(event) {
       route(event, batchId, operation, ["apple-app-store", "google-play"], "account");
       const productId = claimIdentifier(event, "productId");
-      return target("commerce.store-entitlements", `${event.subjectId}:${productId}`, event.subjectId);
+      return target(EXTERNAL_EVENT_REDUCER_TARGET_COLLECTION.storeEntitlements, `${event.subjectId}:${productId}`, event.subjectId);
     },
     reduce(event) {
       route(event, batchId, operation, ["apple-app-store", "google-play"], "account");
@@ -127,7 +150,7 @@ function wechatPaymentReducer(): RoutedReducer {
     operation,
     locate(event) {
       route(event, batchId, operation, ["wechat-pay"], "payment");
-      return target("commerce.wechat-payments", event.subjectId, claimIdentifier(event, "accountId"));
+      return target(EXTERNAL_EVENT_REDUCER_TARGET_COLLECTION.wechatPayments, event.subjectId, claimIdentifier(event, "accountId"));
     },
     reduce(event) {
       route(event, batchId, operation, ["wechat-pay"], "payment");
@@ -184,18 +207,28 @@ function wechatPaymentReducer(): RoutedReducer {
   };
 }
 
+function genericTerminalCommandReducer(routeDefinition: ExternalCommandCallbackRoute): RoutedReducer {
+  return commandReducer({
+    name: `external-command-terminal-${routeDefinition.batchId.toLowerCase()}-v1`,
+    route: routeDefinition,
+    decisionType: "external-command-provider-decision",
+    mapping: {},
+  });
+}
+
+function commandCallbackRoute(batchId: string): ExternalCommandCallbackRoute {
+  const routeDefinition = EXTERNAL_COMMAND_CALLBACK_ROUTES.find((candidate) => candidate.batchId === batchId);
+  if (routeDefinition === undefined) {
+    throw new DomainError("INTERNAL_ERROR", `Missing external-command callback route for ${batchId}`);
+  }
+  return routeDefinition;
+}
+
 function notificationReducer(): RoutedReducer {
-  const batchId = "B74" as const;
-  const operation = "scheduleMultiChannelNotification";
   return commandReducer({
     name: "notification-delivery-v1",
-    batchId,
-    operation,
-    providerPrefix: "notification:",
-    subjectType: "notification",
-    collection: "notification.delivery-commands",
+    route: commandCallbackRoute("B74"),
     decisionType: "notification-provider-decision",
-    providerBinding: "provider-id",
     mapping: {
       // Worker dispatch owns requested -> dispatched -> acknowledged. The signed
       // provider callback projects delivery state without replaying that edge.
@@ -210,13 +243,8 @@ function notificationReducer(): RoutedReducer {
 function taxDocumentReducer(): RoutedReducer {
   return commandReducer({
     name: "tax-document-v1",
-    batchId: "B89",
-    operation: "requestTaxDocument",
-    providerPrefix: "tax-authority:",
-    subjectType: "tax-document",
-    collection: "finance.tax-document-commands",
+    route: commandCallbackRoute("B89"),
     decisionType: "tax-document-provider-decision",
-    providerBinding: "provider-id",
     mapping: {
       "tax-document.acknowledged": { allowed: [null, "requested"], next: "acknowledged" },
       "tax-document.issued": { allowed: ["acknowledged", "reissue"], next: "issued", command: "succeeded" },
@@ -232,14 +260,8 @@ function taxDocumentReducer(): RoutedReducer {
 function vendorJobReducer(): RoutedReducer {
   return commandReducer({
     name: "vendor-production-job-v1",
-    batchId: "B98",
-    operation: "createVendorProductionJob",
-    providerPrefix: "vendor:",
-    subjectType: "vendor-job",
-    collection: "supply.vendor-production-commands",
+    route: commandCallbackRoute("B98"),
     decisionType: "vendor-job-provider-decision",
-    providerBinding: "vendor-id",
-    requiredClaimIdentifiers: ["vendorId"],
     mapping: {
       "vendor-job.accepted": { allowed: [null, "requested"], next: "accepted" },
       "vendor-job.rejected": { allowed: [null, "requested"], next: "rejected", command: "failed" },
@@ -273,7 +295,7 @@ function shipmentReducer(): RoutedReducer {
     locate(event) {
       routePrefix(event, batchId, operation, "carrier:", "shipment");
       return {
-        ...target("supply.shipments", event.subjectId),
+        ...target(EXTERNAL_EVENT_REDUCER_TARGET_COLLECTION.shipments, event.subjectId),
         relatedRecords: [{
           key: "vendorJob",
           collection: "supply.vendor-production-commands",
@@ -315,7 +337,7 @@ function inventoryReducer(): RoutedReducer {
       routePrefix(event, batchId, operation, "vendor:", "inventory-item");
       rejectClaims(event, ["availableAfter", "onHandAfter", "reservedAfter"]);
       assertVendorAuthority(event, claimIdentifier(event, "vendorId"));
-      return target("supply.inventory-balances", event.subjectId);
+      return target(EXTERNAL_EVENT_REDUCER_TARGET_COLLECTION.inventoryBalances, event.subjectId);
     },
     reduce(event, context) {
       routePrefix(event, batchId, operation, "vendor:", "inventory-item");
@@ -359,14 +381,8 @@ function inventoryReducer(): RoutedReducer {
 function returnClaimReducer(): RoutedReducer {
   return commandReducer({
     name: "return-claim-v1",
-    batchId: "B101",
-    operation: "createReturnOrClaim",
-    providerPrefixes: ["vendor:", "carrier:"],
-    subjectType: "return-claim",
-    collection: "supply.return-claim-commands",
+    route: commandCallbackRoute("B101"),
     decisionType: "return-claim-provider-decision",
-    providerBinding: "provider-type-id",
-    requiredClaimIdentifiers: ["vendorId"],
     mapping: {
       "return-claim.eligible": { allowed: [null, "requested"], next: "eligible" },
       "return-claim.accepted": { allowed: [null, "requested", "eligible"], next: "accepted" },
@@ -384,7 +400,7 @@ function vendorScorecardReducer(): RoutedReducer {
   const operation = "publishVendorScorecard";
   const factRoutes = {
     "scorecard.vendor_job": { key: "fact", collection: "supply.vendor-production-commands", kind: "job" },
-    "scorecard.shipment": { key: "fact", collection: "supply.shipments", kind: "shipment" },
+    "scorecard.shipment": { key: "fact", collection: EXTERNAL_EVENT_REDUCER_TARGET_COLLECTION.shipments, kind: "shipment" },
     "scorecard.claim": { key: "fact", collection: "supply.return-claim-commands", kind: "claim" },
     "scorecard.settlement": { key: "fact", collection: "supply.vendor-settlements", kind: "settlement" },
   } as const;
@@ -401,7 +417,7 @@ function vendorScorecardReducer(): RoutedReducer {
       ]);
       const factRoute = knownEvent(event, factRoutes);
       return {
-        ...target("supply.vendor-scorecards", event.subjectId),
+        ...target(EXTERNAL_EVENT_REDUCER_TARGET_COLLECTION.vendorScorecards, event.subjectId),
         relatedRecords: [{
           key: factRoute.key,
           collection: factRoute.collection,
@@ -462,15 +478,8 @@ function vendorScorecardReducer(): RoutedReducer {
 
 interface CommandReducerOptions {
   readonly name: string;
-  readonly batchId: VerifiedBusinessEvent["batchId"];
-  readonly operation: string;
-  readonly providerPrefix?: string;
-  readonly providerPrefixes?: readonly string[];
-  readonly subjectType: string;
-  readonly collection: string;
+  readonly route: ExternalCommandCallbackRoute;
   readonly decisionType: string;
-  readonly providerBinding?: "provider-id" | "vendor-id" | "provider-type-id";
-  readonly requiredClaimIdentifiers?: readonly string[];
   readonly mapping: Readonly<Record<string, {
     readonly allowed: readonly (string | null)[];
     readonly next: string;
@@ -479,27 +488,49 @@ interface CommandReducerOptions {
 }
 
 function commandReducer(options: CommandReducerOptions): RoutedReducer {
+  const successfulProviderStates = Object.values(options.mapping)
+    .filter((candidate) => candidate.command === "succeeded")
+    .map((candidate) => candidate.next);
+  const nonTerminalProviderStates = Object.values(options.mapping)
+    .filter((candidate) => candidate.command === undefined)
+    .map((candidate) => candidate.next);
+  const mapping: CommandReducerOptions["mapping"] = {
+    [EXTERNAL_COMMAND_TERMINAL_EVENT_TYPES.succeeded]: {
+      allowed: [null, ...nonTerminalProviderStates], next: "succeeded", command: "succeeded",
+    },
+    [EXTERNAL_COMMAND_TERMINAL_EVENT_TYPES.failed]: {
+      allowed: [null, ...nonTerminalProviderStates], next: "failed", command: "failed",
+    },
+    [EXTERNAL_COMMAND_TERMINAL_EVENT_TYPES.cancelled]: {
+      allowed: [null, ...nonTerminalProviderStates], next: "cancelled", command: "cancelled",
+    },
+    [EXTERNAL_COMMAND_TERMINAL_EVENT_TYPES.compensated]: {
+      allowed: ["succeeded", ...successfulProviderStates], next: "compensated", command: "compensated",
+    },
+    ...options.mapping,
+  };
   return {
     name: options.name,
-    batchId: options.batchId,
-    operation: options.operation,
+    batchId: options.route.batchId,
+    operation: options.route.operation,
     locate(event) {
       commandRoute(event, options);
-      return target(options.collection, event.subjectId);
+      return target(options.route.collection, event.subjectId);
     },
     reduce(event, context) {
       commandRoute(event, options);
       assertCommandProviderBinding(event, context, options);
-      const transition = knownEvent(event, options.mapping);
-      const providerOperationId = optionalClaimIdentifier(event, "providerOperationId") ?? event.correlationId;
+      const transition = knownEvent(event, mapping);
+      const providerOperationId = claimIdentifier(event, "providerOperationId");
       const claimPatch = Object.fromEntries(
-        (options.requiredClaimIdentifiers ?? []).map((field) => [field, claimIdentifier(event, field)]),
+        (options.route.requiredClaimIdentifiers ?? []).map((field) => [field, claimIdentifier(event, field)]),
       );
       const base = reduction(event, transition.allowed, transition.next, options.decisionType, {
         ...claimPatch,
         providerOperationId,
         providerStatus: transition.next,
-      });
+        providerResultSha256: event.artifactSha256,
+      }, "providerState");
       if (transition.command === undefined) return base;
       return {
         ...base,
@@ -508,7 +539,11 @@ function commandReducer(options: CommandReducerOptions): RoutedReducer {
           toState: transition.command,
           providerOperationId,
           evidenceId: event.evidenceId,
-          details: { providerEventId: event.eventId, providerStatus: transition.next },
+          details: {
+            providerEventId: event.eventId,
+            providerStatus: transition.next,
+            providerResultSha256: event.artifactSha256,
+          },
         },
       };
     },
@@ -524,29 +559,36 @@ function assertCommandProviderBinding(
   if (current === null) {
     throw new DomainError("RESOURCE_NOT_FOUND", "Provider callback cannot create an unsolicited external command aggregate");
   }
-  let expectedProvider: string | undefined;
-  if (options.providerBinding === "provider-id") {
-    const providerId = persistedIdentifier(current.data.providerId, "providerId");
-    expectedProvider = `${event.provider.split(":", 1)[0]}:${providerId}`;
-  } else if (options.providerBinding === "vendor-id") {
-    const vendorId = persistedIdentifier(current.data.vendorId, "vendorId");
-    expectedProvider = `vendor:${vendorId}`;
-    if (claimIdentifier(event, "vendorId") !== vendorId) {
-      throw new DomainError("TENANT_SCOPE_MISMATCH", "Vendor callback does not match the requested command");
-    }
-  } else if (options.providerBinding === "provider-type-id") {
-    const providerType = persistedIdentifier(current.data.providerType, "providerType");
-    const providerId = persistedIdentifier(current.data.providerId, "providerId");
-    expectedProvider = `${providerType}:${providerId}`;
-    const callbackVendorId = claimIdentifier(event, "vendorId");
-    if (persistedIdentifier(current.data.vendorId, "vendorId") !== callbackVendorId) {
-      throw new DomainError("TENANT_SCOPE_MISMATCH", "Return/claim callback vendor does not match the requested command");
-    }
+  if (current.collection !== options.route.collection || current.id !== event.subjectId ||
+      current.data.batchId !== options.route.batchId || current.data.operation !== options.route.operation ||
+      current.data.operationMode !== "external-command" || current.data.externalCommandId !== event.subjectId) {
+    throw new DomainError("EVENT_FINGERPRINT_CONFLICT", "Provider callback does not match the persisted external command aggregate");
   }
-  if (expectedProvider !== undefined && event.provider !== expectedProvider) {
+  const providerBinding = options.route.providerBinding;
+  let expectedProvider: string;
+  if (providerBinding.kind === "exact") {
+    expectedProvider = providerBinding.provider;
+  } else if (providerBinding.kind === "record-field") {
+    expectedProvider = `${providerBinding.prefix}${persistedIdentifier(current.data[providerBinding.field], providerBinding.field)}`;
+  } else {
+    const providerType = persistedIdentifier(current.data[providerBinding.typeField], providerBinding.typeField);
+    if (!providerBinding.allowedTypes.includes(providerType)) {
+      throw new DomainError("INTERNAL_ERROR", "External command has an unsupported persisted provider type");
+    }
+    expectedProvider = `${providerType}:${persistedIdentifier(current.data[providerBinding.idField], providerBinding.idField)}`;
+  }
+  if (event.provider !== expectedProvider) {
     throw new DomainError("TENANT_SCOPE_MISMATCH", "Provider callback does not match the requested command authority", {
       details: { expectedProvider, actualProvider: event.provider },
     });
+  }
+  for (const field of options.route.requiredClaimIdentifiers ?? []) {
+    const callbackValue = claimIdentifier(event, field);
+    if (persistedIdentifier(current.data[field], field) !== callbackValue) {
+      throw new DomainError("TENANT_SCOPE_MISMATCH", "Provider callback claim does not match the requested command", {
+        details: { field },
+      });
+    }
   }
 }
 
@@ -567,12 +609,27 @@ function persistedIdentifier(value: JsonValue | undefined, field: string): strin
 }
 
 function commandRoute(event: VerifiedBusinessEvent, options: CommandReducerOptions): void {
-  if (options.providerPrefix !== undefined) {
-    routePrefix(event, options.batchId, options.operation, options.providerPrefix, options.subjectType);
-    return;
+  const routeDefinition = options.route;
+  if (event.batchId !== routeDefinition.batchId || event.operation !== routeDefinition.operation ||
+      event.subjectType !== routeDefinition.subjectType ||
+      !externalCommandCallbackProviderAllowed(routeDefinition, event.provider)) {
+    throw invalid("External business event route is not allowed by this reducer", {
+      batchId: event.batchId,
+      operation: event.operation,
+      provider: event.provider,
+      subjectType: event.subjectType,
+    });
   }
-  const prefixes = options.providerPrefixes ?? [];
-  route(event, options.batchId, options.operation, prefixes, options.subjectType, true);
+  identifier(event.subjectId, "subjectId");
+  if (event.correlationId !== event.subjectId) {
+    throw new DomainError("EVENT_FINGERPRINT_CONFLICT", "External-command callback correlation must equal the exact command ID");
+  }
+  rejectClaims(event, [
+    "tenantId", "batchId", "operation", "collection", "aggregateCollection", "aggregateId",
+    "patch", "state", "providerState", "nextState", "toState", "commandState", "executionState",
+    "terminal", "succeeded", "failed", "cancelled", "compensated", "commandId", "subjectId",
+    "provider", "artifactSha256", "resultSha256", "resultDigest",
+  ]);
 }
 
 function target(collection: string, aggregateId: string, ownerActorId?: string): ExternalBusinessAggregateTarget {
@@ -589,9 +646,10 @@ function reduction(
   nextState: string,
   decisionType: string,
   patch: JsonObject,
+  stateField = "state",
 ): ExternalBusinessReduction {
   return {
-    stateField: "state",
+    stateField,
     allowedPriorStates,
     nextState,
     patch: {

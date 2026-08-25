@@ -172,6 +172,14 @@ export class StaticTokenAuthenticator implements RequestAuthenticator {
         roles: ["consumer"],
         allowedPurposes: ["*"],
       },
+      {
+        token: "local-platform-admin",
+        actorId: "platform-admin-synthetic",
+        tenantId: "tenant-local",
+        roles: ["platform_admin"],
+        allowedPurposes: ["platform_architecture", "product_operation"],
+        stepUp: true,
+      },
     ]);
   }
 }

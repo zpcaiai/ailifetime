@@ -1,10 +1,10 @@
 export type SupportedLocale = "zh-CN" | "zh-TW" | "en";
+export type PortalId = "consumer" | "family" | "partner" | "studio" | "operations" | "support" | "developer";
 
 export interface PortalDefinition {
-  readonly id: "consumer" | "family" | "partner" | "studio" | "operations" | "support" | "developer";
+  readonly id: PortalId;
   readonly title: Readonly<Record<SupportedLocale, string>>;
   readonly description: Readonly<Record<SupportedLocale, string>>;
-  readonly skills: readonly string[];
 }
 
 export const PORTALS: readonly PortalDefinition[] = [
@@ -16,7 +16,6 @@ export const PORTALS: readonly PortalDefinition[] = [
       "zh-TW": "建立、生成、購買和跨行動端管理個人時光機作品。",
       en: "Create, generate, purchase, and manage personal time-machine works across devices.",
     },
-    skills: ["building-consumer-time-machine", "building-age-media-pipeline", "building-mobile-and-mini-programs"],
   },
   {
     id: "family",
@@ -26,7 +25,6 @@ export const PORTALS: readonly PortalDefinition[] = [
       "zh-TW": "管理家庭、監護授權、共同創作和未來自我互動。",
       en: "Manage households, guardian consent, co-creation, and future-self interactions.",
     },
-    skills: ["building-family-future-self"],
   },
   {
     id: "partner",
@@ -36,7 +34,6 @@ export const PORTALS: readonly PortalDefinition[] = [
       "zh-TW": "夥伴、門市、工作室和產業通路的合約化業務工作台。",
       en: "Contract-governed workflows for partners, stores, studios, and industry channels.",
     },
-    skills: ["building-partner-platform", "building-channel-solutions"],
   },
   {
     id: "studio",
@@ -46,7 +43,6 @@ export const PORTALS: readonly PortalDefinition[] = [
       "zh-TW": "印前、打樣、生產、庫存、配送、退貨與供應商績效。",
       en: "Preflight, proofing, production, inventory, delivery, returns, and vendor performance.",
     },
-    skills: ["building-physical-supply-network"],
   },
   {
     id: "operations",
@@ -56,21 +52,6 @@ export const PORTALS: readonly PortalDefinition[] = [
       "zh-TW": "平台、商業、成長、通知、財務、資料、安全、合規與發佈控制。",
       en: "Platform, commerce, growth, messaging, finance, data, security, compliance, and release controls.",
     },
-    skills: [
-      "orchestrating-life-time-machine",
-      "bootstrapping-life-time-machine-platform",
-      "building-commerce-fulfillment",
-      "building-growth-data-loop",
-      "building-notification-lifecycle-platform",
-      "building-finance-tax-operations",
-      "building-marketing-content-platform",
-      "building-data-intelligence-platform",
-      "securing-operating-life-time-machine",
-      "certifying-life-time-machine-release",
-      "designing-life-time-machine-experience",
-      "hardening-enterprise-platform",
-      "launching-complete-commercial-product",
-    ],
   },
   {
     id: "support",
@@ -80,7 +61,6 @@ export const PORTALS: readonly PortalDefinition[] = [
       "zh-TW": "工單、升級、知識、服務復原和客戶健康管理。",
       en: "Cases, escalations, knowledge, service recovery, and customer health.",
     },
-    skills: ["building-customer-support-success"],
   },
   {
     id: "developer",
@@ -90,11 +70,12 @@ export const PORTALS: readonly PortalDefinition[] = [
       "zh-TW": "API、OAuth、SDK、Webhook、連接器和夥伴整合認證。",
       en: "APIs, OAuth, SDKs, webhooks, connectors, and partner integration certification.",
     },
-    skills: ["building-developer-integration-platform"],
   },
 ] as const;
 
-export const ALL_SURFACE_SKILLS = PORTALS.flatMap((portal) => portal.skills);
+export function portalById(id: string): PortalDefinition | undefined {
+  return PORTALS.find((portal) => portal.id === id);
+}
 
 const ZH_CN = {
   appSubtitle: "本地商业能力控制台",
@@ -105,6 +86,14 @@ const ZH_CN = {
   connecting: "正在连接",
   online: "本地运行正常",
   offline: "本地 API 未启动",
+  authenticated: "身份已由服务器验证",
+  authRequired: "需要登录",
+  authRequiredDescription: "未建立服务器验证会话，业务工作台已失败关闭。请使用安全登录。",
+  signIn: "登录",
+  signOut: "退出",
+  signingIn: "正在通过安全身份提供商登录",
+  signedOut: "已退出；内存会话已清除",
+  authenticationFailed: "登录失败，工作台已安全关闭",
   heroLine1: "让未来成为一种",
   heroLine2: "可以共同珍藏的想象",
   disclaimer: "年龄变化、家庭场景与未来自我内容均为 AI 艺术化示意，不是对真实容貌、寿命、健康、职业或人生结果的预测。",
@@ -154,8 +143,8 @@ const ZH_CN = {
   completeJourney: "请完整填写旅程参数",
   creating: "正在创建…",
   policyCheck: "执行授权与策略检查。",
-  timelineCreated: "时间轴计划已创建",
-  timelineCreatedDescription: "结果带有租户、授权、幂等与审计上下文。",
+  timelineCreated: "本地计划已生成（未提交）",
+  timelineCreatedDescription: "生产提交必须先完成服务端媒体入口、B07 安全批准和参与者用途授权；此页面不会伪造资产或成功状态。",
   safeStop: "安全停止",
   noMatch: "没有匹配的能力。",
   stableEndpoint: "稳定 API 入口",
@@ -169,7 +158,7 @@ const ZH_CN = {
 export type CopyKey = keyof typeof ZH_CN;
 
 const ZH_TW: Readonly<Record<CopyKey, string>> = {
-  appSubtitle: "本機商業能力控制台", skipMain: "跳到主要內容", language: "介面語言", consoleViews: "控制台視圖", businessPortals: "業務入口", connecting: "正在連線", online: "本機運行正常", offline: "本機 API 未啟動",
+  appSubtitle: "本機商業能力控制台", skipMain: "跳到主要內容", language: "介面語言", consoleViews: "控制台視圖", businessPortals: "業務入口", connecting: "正在連線", online: "本機運行正常", offline: "本機 API 未啟動", authenticated: "身分已由伺服器驗證", authRequired: "需要登入", authRequiredDescription: "未建立伺服器驗證工作階段，業務工作台已失敗關閉。請使用安全登入。", signIn: "登入", signOut: "退出", signingIn: "正在透過安全身分提供者登入", signedOut: "已退出；記憶體工作階段已清除", authenticationFailed: "登入失敗，工作台已安全關閉",
   heroLine1: "讓未來成為一種", heroLine2: "可以共同珍藏的想像", disclaimer: "年齡變化、家庭場景與未來自我內容均為 AI 藝術化示意，不是對真實容貌、壽命、健康、職業或人生結果的預測。",
   boundaryTitle: "不可關閉的產品邊界", boundaryConsent: "每位可識別參與者按用途授權", boundaryMinor: "兒童內容預設私密並採用更嚴格策略", boundaryDeletion: "分享可撤回，刪除傳播到全部副本", boundaryProvenance: "AI 標識與來源資訊始終保留",
   tabJourney: "核心旅程", tabWorkspaces: "業務工作台", tabCapabilities: "128 項能力", tabOperations: "運行狀態", journeyTitle: "合成資料核心旅程", syntheticOnly: "不會上傳真實照片",
@@ -178,11 +167,11 @@ const ZH_TW: Readonly<Record<CopyKey, string>> = {
   capabilityTitle: "能力註冊表", filter: "篩選", filterPlaceholder: "批次、領域或操作", operationsTitle: "運行與認證邊界", codeBatches: "程式碼級批次", codeBatchesDescription: "必須與 B00—B127 清單逐項一致。",
   localEnvironment: "目前環境", localEnvironmentDescription: "只允許合成資料和沙箱供應商。", productionRelease: "生產發佈", productionReleaseDescription: "真實支付、商店、稅務、供應鏈和外部審查仍需獨立證據。", local: "本機", uncertified: "未認證", footer: "隱私優先 · 合成資料 · 可稽核",
   view: "查看", externalGate: "外部證據門", externalEvidenceCount: "需要可信外部證據", registeredBatches: "已註冊批次", skillDomains: "技能領域", closeDetails: "關閉能力詳情",
-  startApi: "請先運行 pnpm dev 啟動本機 API", syntheticConfirm: "必須確認合成資料與本機測試用途", completeJourney: "請完整填寫旅程參數", creating: "正在建立…", policyCheck: "執行授權與策略檢查。", timelineCreated: "時間軸計畫已建立", timelineCreatedDescription: "結果帶有租戶、授權、冪等與稽核上下文。", safeStop: "安全停止", noMatch: "沒有匹配的能力。", stableEndpoint: "穩定 API 入口", executionMode: "執行模式", atomicRequirements: "原子需求", externalRequired: "生產外部證據必需。", externalRequiredDescription: "未設定可信簽發者、簽章、作用域和有效期時，此操作會失敗關閉。", protectedOperation: "該操作由租戶、權限、冪等、稽核和持久化控制保護。",
+  startApi: "請先運行 pnpm dev 啟動本機 API", syntheticConfirm: "必須確認合成資料與本機測試用途", completeJourney: "請完整填寫旅程參數", creating: "正在建立…", policyCheck: "建立不提交的本機計畫。", timelineCreated: "本機計畫已產生（未提交）", timelineCreatedDescription: "生產提交必須先完成伺服器媒體入口、B07 安全批准和參與者用途授權；此頁不會偽造資產或成功狀態。", safeStop: "安全停止", noMatch: "沒有匹配的能力。", stableEndpoint: "穩定 API 入口", executionMode: "執行模式", atomicRequirements: "原子需求", externalRequired: "生產外部證據必需。", externalRequiredDescription: "未設定可信簽發者、簽章、作用域和有效期時，此操作會失敗關閉。", protectedOperation: "該操作由租戶、權限、冪等、稽核和持久化控制保護。",
 };
 
 const EN: Readonly<Record<CopyKey, string>> = {
-  appSubtitle: "Local commercial capability console", skipMain: "Skip to main content", language: "Interface language", consoleViews: "Console views", businessPortals: "Business portals", connecting: "Connecting", online: "Local runtime ready", offline: "Local API is not running",
+  appSubtitle: "Local commercial capability console", skipMain: "Skip to main content", language: "Interface language", consoleViews: "Console views", businessPortals: "Business portals", connecting: "Connecting", online: "Local runtime ready", offline: "Local API is not running", authenticated: "Identity verified by the server", authRequired: "Sign-in required", authRequiredDescription: "No server-verified session exists, so the business workspace has failed closed. Use secure sign-in.", signIn: "Sign in", signOut: "Sign out", signingIn: "Signing in through the trusted identity provider", signedOut: "Signed out; the in-memory session was cleared", authenticationFailed: "Sign-in failed; the workspace is safely closed",
   heroLine1: "Make the future an imagination", heroLine2: "worth preserving together", disclaimer: "Age transformations, family scenes, and future-self content are illustrative AI artwork, not predictions of real appearance, lifespan, health, career, or life outcomes.",
   boundaryTitle: "Non-negotiable product boundaries", boundaryConsent: "Every identifiable participant authorizes each purpose", boundaryMinor: "Children's content is private by default with stricter safeguards", boundaryDeletion: "Sharing is revocable and deletion propagates to every copy", boundaryProvenance: "AI labels and provenance always remain attached",
   tabJourney: "Core journey", tabWorkspaces: "Business workspaces", tabCapabilities: "128 capabilities", tabOperations: "Runtime status", journeyTitle: "Synthetic-data core journey", syntheticOnly: "No real photo is uploaded",
@@ -191,7 +180,7 @@ const EN: Readonly<Record<CopyKey, string>> = {
   capabilityTitle: "Capability registry", filter: "Filter", filterPlaceholder: "Batch, domain, or operation", operationsTitle: "Runtime and certification boundary", codeBatches: "Code-level batches", codeBatchesDescription: "Must match the B00—B127 catalog exactly.",
   localEnvironment: "Current environment", localEnvironmentDescription: "Synthetic data and sandbox providers only.", productionRelease: "Production release", productionReleaseDescription: "Real payments, stores, tax, supply chain, and external reviews still require independent evidence.", local: "Local", uncertified: "Not certified", footer: "Privacy first · Synthetic data · Auditable",
   view: "View", externalGate: "External evidence gate", externalEvidenceCount: "Require trusted external evidence", registeredBatches: "Registered batches", skillDomains: "Skill domains", closeDetails: "Close capability details",
-  startApi: "Run pnpm dev to start the local API", syntheticConfirm: "Confirm synthetic data and the local test purpose", completeJourney: "Complete all journey parameters", creating: "Creating…", policyCheck: "Checking authorization and policy.", timelineCreated: "Timeline plan created", timelineCreatedDescription: "The result includes tenant, authorization, idempotency, and audit context.", safeStop: "Safely stopped", noMatch: "No matching capability.", stableEndpoint: "Stable API endpoint", executionMode: "Execution mode", atomicRequirements: "Atomic requirements", externalRequired: "Production external evidence is required.", externalRequiredDescription: "The operation fails closed without a trusted issuer, signature, exact scope, and validity period.", protectedOperation: "Tenant, authorization, idempotency, audit, and durable storage controls protect this operation.",
+  startApi: "Run pnpm dev to start the local API", syntheticConfirm: "Confirm synthetic data and the local test purpose", completeJourney: "Complete all journey parameters", creating: "Creating…", policyCheck: "Building a local, non-submitted plan.", timelineCreated: "Local plan generated (not submitted)", timelineCreatedDescription: "Production submission first requires server media intake, B07 safety approval, and purpose-scoped participant consent; this page does not fabricate an asset or success state.", safeStop: "Safely stopped", noMatch: "No matching capability.", stableEndpoint: "Stable API endpoint", executionMode: "Execution mode", atomicRequirements: "Atomic requirements", externalRequired: "Production external evidence is required.", externalRequiredDescription: "The operation fails closed without a trusted issuer, signature, exact scope, and validity period.", protectedOperation: "Tenant, authorization, idempotency, audit, and durable storage controls protect this operation.",
 };
 
 const COPY: Readonly<Record<SupportedLocale, Readonly<Record<CopyKey, string>>>> = { "zh-CN": ZH_CN, "zh-TW": ZH_TW, en: EN };
@@ -207,10 +196,6 @@ export function normalizeLocale(value: string | null | undefined): SupportedLoca
   if (normalized === "zh-tw" || normalized === "zh-hk" || normalized === "zh-hant") return "zh-TW";
   if (normalized?.startsWith("en")) return "en";
   return "zh-CN";
-}
-
-export function portalForSkill(skill: string): PortalDefinition | undefined {
-  return PORTALS.find((portal) => portal.skills.includes(skill));
 }
 
 export function localized(value: Readonly<Record<SupportedLocale, string>>, locale: SupportedLocale): string {

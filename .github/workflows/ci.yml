@@ -55,7 +55,7 @@ jobs:
     timeout-minutes: 15
     services:
       postgres:
-        image: postgres:17.5-alpine
+        image: postgres:17.5-alpine@sha256:6567bca8d7bc8c82c5922425a0baee57be8402df92bae5eacad5f01ae9544daa
         env:
           POSTGRES_DB: ltm_integration
           POSTGRES_PASSWORD: postgres
@@ -76,14 +76,22 @@ jobs:
           node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Apply PostgreSQL runtime migrations in order
+      - name: Provision a least-privilege PostgreSQL migration role
         env:
           PGPASSWORD: postgres
+        run: >-
+          psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d ltm_integration -c
+          "CREATE ROLE ltm_migrator LOGIN PASSWORD 'postgres' NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE NOREPLICATION;
+          GRANT CREATE ON DATABASE ltm_integration TO ltm_migrator;"
+      - name: Apply checksum-bound migrations and prove idempotence
+        env:
+          PGPASSWORD: postgres
+          LTM_MIGRATOR_DATABASE_URL: postgresql://ltm_migrator@127.0.0.1:5432/ltm_integration?sslmode=disable
         run: |
-          psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d ltm_integration -f infra/postgres/migrations/001_core.sql
-          psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d ltm_integration -f infra/postgres/migrations/002_external_evidence.sql
-          psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d ltm_integration -f infra/postgres/migrations/003_runtime_compatibility.sql
-          psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d ltm_integration -f infra/postgres/migrations/004_external_business_events.sql
+          node tools/postgres-migrate.mjs --profile=test --allow-insecure-loopback=true --output=.artifacts/postgres-migration-first.json
+          node tools/postgres-migrate.mjs --profile=test --allow-insecure-loopback=true --output=.artifacts/postgres-migration-idempotent.json
+          test "$(jq '.migrations.newlyApplied | length' .artifacts/postgres-migration-first.json)" -eq 5
+          test "$(jq '.migrations.newlyApplied | length' .artifacts/postgres-migration-idempotent.json)" -eq 0
       - name: Provision a non-privileged FORCE-RLS runtime role
         env:
           PGPASSWORD: postgres
@@ -93,7 +101,7 @@ jobs:
           GRANT CONNECT ON DATABASE ltm_integration TO ltm_runtime;
           GRANT USAGE ON SCHEMA ltm TO ltm_runtime;
           GRANT SELECT ON ltm.schema_metadata TO ltm_runtime;
-          GRANT SELECT,INSERT,UPDATE,DELETE ON ltm.records,ltm.consents,ltm.idempotency,ltm.inbox,ltm.outbox,ltm.audit_log,ltm.ledger_transactions,ltm.ledger_lines,ltm.external_evidence,ltm.evidence_consumptions,ltm.external_commands,ltm.external_command_transitions,ltm.evidence_decisions,ltm.external_business_events TO ltm_runtime;
+          GRANT SELECT,INSERT,UPDATE,DELETE ON ltm.records,ltm.consents,ltm.idempotency,ltm.inbox,ltm.outbox,ltm.audit_log,ltm.ledger_transactions,ltm.ledger_lines,ltm.external_evidence,ltm.evidence_consumptions,ltm.external_commands,ltm.external_command_transitions,ltm.evidence_decisions,ltm.external_business_events,ltm.participants,ltm.guardian_authorizations,ltm.authorized_agent_authorizations TO ltm_runtime;
           GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA ltm TO ltm_runtime;"
       - name: Verify PostgreSQL core and HTTP integration
         env:
@@ -103,8 +111,17 @@ jobs:
         run: |
           pnpm run build
           pnpm --filter @ltm/core test
+          pnpm --filter @ltm/capabilities test
           pnpm --filter @ltm/api test
           pnpm run test:release-certification
+          pnpm run test:infra
+      - name: Upload PostgreSQL migration evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: postgres-migration-evidence
+          path: .artifacts/postgres-migration-*.json
+          if-no-files-found: error
 
   b123-security-assurance:
     runs-on: ubuntu-latest
@@ -164,15 +181,19 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: "0"
           hide-progress: true
-      - name: Build the exact API, worker, and callback-gateway OCI artifacts
+      - name: Build the exact API, worker, callback-gateway, client-broker, and migrator OCI artifacts
         run: |
           docker build --file services/api/Dockerfile --tag "ltm-api:${GITHUB_SHA}" .
           docker build --file services/workers/Dockerfile --tag "ltm-workers:${GITHUB_SHA}" .
           docker build --file services/integration-gateway/Dockerfile --tag "ltm-integration-gateway:${GITHUB_SHA}" .
+          docker build --file services/client-integration-broker/Dockerfile --tag "ltm-client-integration-broker:${GITHUB_SHA}" .
+          docker build --file services/migrator/Dockerfile --tag "ltm-migrator:${GITHUB_SHA}" .
           node tools/security-image-manifest.mjs capture \
             --image="api=ltm-api:${GITHUB_SHA}" \
             --image="workers=ltm-workers:${GITHUB_SHA}" \
             --image="integration-gateway=ltm-integration-gateway:${GITHUB_SHA}" \
+            --image="client-integration-broker=ltm-client-integration-broker:${GITHUB_SHA}" \
+            --image="migrator=ltm-migrator:${GITHUB_SHA}" \
             --environment=ci \
             --out=.artifacts/security/oci-artifact-manifest.json
       - name: Scan API OCI artifact with Trivy
@@ -205,6 +226,26 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: "0"
           hide-progress: true
+      - name: Scan client-integration-broker OCI artifact with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ltm-client-integration-broker:${{ github.sha }}
+          format: json
+          output: .artifacts/security/trivy-client-integration-broker-image.json
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+          hide-progress: true
+      - name: Scan migrator OCI artifact with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ltm-migrator:${{ github.sha }}
+          format: json
+          output: .artifacts/security/trivy-migrator-image.json
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+          hide-progress: true
       - name: Execute live auth, tenant, upload, webhook, payment, SSRF, XSS, CSRF, and admin DAST
         env:
           APP_ENV: test
@@ -212,6 +253,7 @@ jobs:
           LTM_DEPLOYMENT_PROFILE: single-node
           LTM_DATABASE_PATH: .data/dast-security.sqlite
           LTM_STATIC_DIR: apps/web/public
+          LTM_ALLOW_LEGACY_CONSENT_POLICY: "true"
           LTM_API_TOKENS_JSON: >-
             [{"token":"dast-primary-token-synthetic","actorId":"dast-admin","tenantId":"tenant-dast-a","roles":["platform_admin"],"allowedPurposes":["security_test"]},{"token":"dast-secondary-token-synthetic","actorId":"dast-consumer","tenantId":"tenant-dast-b","roles":["consumer"],"allowedPurposes":["security_test"]}]
           LTM_DAST_PRIMARY_TOKEN: dast-primary-token-synthetic
@@ -242,11 +284,15 @@ jobs:
           --trivy-image=.artifacts/security/trivy-api-image.json
           --trivy-image=.artifacts/security/trivy-workers-image.json
           --trivy-image=.artifacts/security/trivy-integration-gateway-image.json
+          --trivy-image=.artifacts/security/trivy-client-integration-broker-image.json
+          --trivy-image=.artifacts/security/trivy-migrator-image.json
           --expected-image=ltm-api:${{ github.sha }}
           --expected-image=ltm-workers:${{ github.sha }}
           --expected-image=ltm-integration-gateway:${{ github.sha }}
+          --expected-image=ltm-client-integration-broker:${{ github.sha }}
+          --expected-image=ltm-migrator:${{ github.sha }}
           --dast-report=.artifacts/security/dast.json
-          --expected-image-count=3
+          --expected-image-count=5
           --output=.artifacts/security/unified-gate.json
           --sarif=.artifacts/security/native-guardrails.sarif
       - name: Generate and verify signed reproducible CycloneDX/SPDX/provenance evidence

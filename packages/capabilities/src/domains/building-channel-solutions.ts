@@ -128,10 +128,10 @@ const definitions: readonly DomainCapabilityDefinition[] = [
     mode: "external-command",
     collection: "channels.gift-memorial-commands",
     recordIdField: "channelOrderId",
-    consent(data, invocation) {
+    consent(data, invocation, context) {
       return data.subjectStatus === "deceased"
         ? []
-        : { participantIds: jsonStringList(data.participantIds, "participantIds", 1), purpose: invocation.actor.purpose };
+        : participantConsent()(data, invocation, context);
     },
   }),
   defineCapability("B37", SKILL, "configureEducationExperience", configureEducationExperience, {

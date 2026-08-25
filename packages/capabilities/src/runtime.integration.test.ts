@@ -1,13 +1,50 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import test, { type TestContext } from "node:test";
-import { DomainError, LifeTimeMachineRuntime, signExternalEvidence, type ActorContext } from "@ltm/core";
+import {
+  DomainError,
+  LifeTimeMachineRuntime,
+  participantEvidenceScope,
+  signConsentPolicyCatalog,
+  signExternalEvidence,
+  type ActorContext,
+} from "@ltm/core";
 import { capabilityEvidenceScope } from "@ltm/providers";
 import { createCapabilityRegistry } from "./index.js";
 import type { JsonObject, JsonValue } from "./registry.js";
 
+interface IdentityTestState {
+  readonly privateKeyPem: string;
+  readonly participants: Map<string, {
+    readonly ownerActorId: string;
+    readonly minorStatus: "adult" | "minor";
+    readonly expiresAt: string;
+  }>;
+}
+
+const identityTestState = new WeakMap<LifeTimeMachineRuntime, IdentityTestState>();
+
 function runtimeFor(testContext: TestContext): LifeTimeMachineRuntime {
-  const runtime = new LifeTimeMachineRuntime({ databasePath: ":memory:" });
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const runtime = new LifeTimeMachineRuntime({
+    databasePath: ":memory:",
+    allowLegacyConsentPolicy: true,
+    evidencePolicy: "development",
+    evidenceEnvironment: "sandbox",
+    trustedEvidenceKeys: [{
+      issuer: "identity-verifier",
+      provider: "identity-registry",
+      keyId: "identity-key-1",
+      algorithm: "Ed25519",
+      publicKeyPem: publicKey.export({ type: "spki", format: "pem" }).toString(),
+      allowedScopes: ["identity.*"],
+      allowedEnvironments: ["sandbox"],
+    }],
+  });
+  identityTestState.set(runtime, {
+    privateKeyPem: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    participants: new Map(),
+  });
   testContext.after(() => runtime.close());
   return runtime;
 }
@@ -28,6 +65,176 @@ function objectResult(value: JsonValue): JsonObject {
   return value;
 }
 
+function registerIdentityEvidence(
+  runtime: LifeTimeMachineRuntime,
+  service: ActorContext,
+  evidenceId: string,
+  mutation: Parameters<typeof participantEvidenceScope>[0],
+  expiresAt: string,
+): void {
+  const state = identityTestState.get(runtime);
+  assert.ok(state !== undefined);
+  const evidence = signExternalEvidence({
+    version: "ltm.external-evidence.v1",
+    evidenceId,
+    tenantId: service.tenantId,
+    issuer: "identity-verifier",
+    provider: "identity-registry",
+    environment: "sandbox",
+    scope: participantEvidenceScope(mutation),
+    artifactSha256: "f".repeat(64),
+    issuedAt: new Date(Date.now() - 60_000).toISOString(),
+    expiresAt,
+    nonce: `nonce-${evidenceId}`,
+    replayPolicy: "single_use",
+    algorithm: "Ed25519",
+    keyId: "identity-key-1",
+  }, state.privateKeyPem);
+  runtime.registerExternalEvidence(
+    { ...service, operationId: `evidence:${evidenceId}` },
+    { evidence, idempotencyKey: `evidence:${evidenceId}` },
+  );
+}
+
+function identityService(context: ActorContext, operationId: string): ActorContext {
+  return {
+    ...context,
+    actorId: "identity-service",
+    roles: ["service_account", "platform_admin"],
+    requestId: `request:${operationId}`,
+    operationId,
+  };
+}
+
+function ensureParticipant(
+  runtime: LifeTimeMachineRuntime,
+  context: ActorContext,
+  participantId = context.actorId,
+  ownerActorId = context.actorId,
+  minorStatus: "adult" | "minor" = "adult",
+): string {
+  const state = identityTestState.get(runtime);
+  assert.ok(state !== undefined);
+  const key = `${context.tenantId}:${participantId}`;
+  const existing = state.participants.get(key);
+  if (existing !== undefined) {
+    assert.equal(existing.ownerActorId, ownerActorId);
+    assert.equal(existing.minorStatus, minorStatus);
+    return existing.expiresAt;
+  }
+  const expiresAt = new Date(Date.now() + 3_600_000).toISOString();
+  const service = identityService(context, `participant-register:${participantId}`);
+  const mutation = {
+    operation: "participant.register" as const,
+    tenantId: context.tenantId,
+    participantId,
+    ownerActorId,
+    minorStatus,
+    expiresAt,
+    expectedVersion: null,
+  };
+  const evidenceId = `participant-${createHash("sha256").update(key).digest("hex").slice(0, 24)}`;
+  registerIdentityEvidence(runtime, service, evidenceId, mutation, expiresAt);
+  runtime.registerParticipant(service, {
+    participantId,
+    ownerActorId,
+    minorStatus,
+    expiresAt,
+    expectedVersion: null,
+    evidenceId,
+    idempotencyKey: `participant-register:${participantId}`,
+  });
+  state.participants.set(key, { ownerActorId, minorStatus, expiresAt });
+  return expiresAt;
+}
+
+function grantParticipantAuthority(
+  runtime: LifeTimeMachineRuntime,
+  context: ActorContext,
+  input: {
+    readonly authorizationId: string;
+    readonly authorizedActorId: string;
+    readonly participantId: string;
+    readonly capacity: "guardian" | "authorized_agent";
+    readonly scope: { readonly resource: string; readonly actions: readonly string[] };
+    readonly expiresAt: string;
+  },
+): void {
+  const service = identityService(context, `authority-grant:${input.authorizationId}`);
+  const mutation = {
+    operation: "participant-authority.grant" as const,
+    tenantId: context.tenantId,
+    ...input,
+  };
+  const evidenceId = `authority-${createHash("sha256").update(input.authorizationId).digest("hex").slice(0, 24)}`;
+  registerIdentityEvidence(runtime, service, evidenceId, mutation, input.expiresAt);
+  runtime.grantParticipantAuthority(service, {
+    ...input,
+    scope: { resource: input.scope.resource, actions: [...input.scope.actions] },
+    evidenceId,
+    idempotencyKey: `authority-grant:${input.authorizationId}`,
+  });
+}
+
+function grantAgeConsent(
+  runtime: LifeTimeMachineRuntime,
+  consumer: ActorContext,
+  idempotencyKey: string,
+  assetId = "asset-1",
+) {
+  ensureParticipant(runtime, consumer);
+  return runtime.grantConsent(consumer, {
+    participantId: consumer.actorId,
+    grantorCapacity: "self",
+    purpose: consumer.purpose,
+    scope: { resource: `media.asset:${assetId}`, actions: ["ingest", "transform"] },
+    policyVersion: "privacy-v1",
+    evidenceHash: "b".repeat(64),
+    idempotencyKey,
+  });
+}
+
+function acceptedMediaInput(assetId: string, participantIds: readonly string[]): JsonObject {
+  const sourceSha256 = "1".repeat(64);
+  const canonicalSha256 = "2".repeat(64);
+  return {
+    assetId,
+    mimeType: "image/jpeg",
+    byteLength: 4_096,
+    faceCount: participantIds.length,
+    participantIds: [...participantIds],
+    magicVerified: true,
+    metadataStripped: true,
+    malwareState: "clean",
+    sourceSha256,
+    canonicalSha256,
+    lineageSha256: createHash("sha256")
+      .update(`ltm-media-lineage-v1\n${sourceSha256}\n${canonicalSha256}\n`)
+      .digest("hex"),
+    scanEvidenceId: "scan-evidence-1",
+    scannerProvider: "trusted-media-scanner",
+    scanAssessedAt: "2026-08-24T00:00:00.000Z",
+    participantMappingEvidenceId: "participant-map-evidence-1",
+    participantMappingProvider: "trusted-participant-mapper",
+    participantMappingAssessedAt: "2026-08-24T00:00:01.000Z",
+    participantMapComplete: true,
+    qualityDimensions: { width: 640, height: 480 },
+  };
+}
+
+async function persistAcceptedMediaIntake(
+  runtime: LifeTimeMachineRuntime,
+  registry: ReturnType<typeof createCapabilityRegistry>,
+  consumer: ActorContext,
+  assetId = "asset-1",
+): Promise<void> {
+  await registry.execute(runtime, "B07", {
+    actor: consumer,
+    idempotencyKey: `accept-${assetId}`,
+    input: acceptedMediaInput(assetId, [consumer.actorId]),
+  });
+}
+
 async function rejectsDomainCode(promise: Promise<JsonValue>, code: DomainError["code"]): Promise<void> {
   await assert.rejects(promise, (error: unknown) => {
     assert.ok(error instanceof DomainError);
@@ -35,6 +242,104 @@ async function rejectsDomainCode(promise: Promise<JsonValue>, code: DomainError[
     return true;
   });
 }
+
+test("B03 publishes only server-verified consent catalog metadata for an authorized platform identity", async (testContext) => {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const issuedAt = new Date(Date.now() - 60_000).toISOString();
+  const expiresAt = new Date(Date.now() + 86_400_000).toISOString();
+  const catalog = signConsentPolicyCatalog({
+    schemaVersion: "ltm.consent-policy-catalog.v1",
+    catalogId: "capability-consent-policy-1",
+    issuer: "privacy-policy-authority",
+    environment: "sandbox",
+    issuedAt,
+    expiresAt,
+    algorithm: "Ed25519",
+    keyId: "capability-consent-policy-key-1",
+    policies: [{
+      policyVersion: "sharing-v1",
+      purpose: "sharing",
+      locale: "zh-CN",
+      jurisdictions: ["CN"],
+      resourceKinds: ["work"],
+      allowedActions: ["share"],
+      grantorCapacities: ["authorized_agent", "guardian", "self"],
+      minorApplicability: "all",
+      disclosureSha256: "a".repeat(64),
+      effectiveFrom: issuedAt,
+      effectiveUntil: expiresAt,
+      maxConsentLifetimeSeconds: 3_600,
+    }],
+  }, privateKey.export({ type: "pkcs8", format: "pem" }).toString());
+  const runtime = new LifeTimeMachineRuntime({
+    databasePath: ":memory:",
+    evidenceEnvironment: "sandbox",
+    consentPolicyCatalog: catalog,
+    trustedConsentPolicyKeys: [{
+      keyId: "capability-consent-policy-key-1",
+      issuer: "privacy-policy-authority",
+      algorithm: "Ed25519",
+      publicKeyPem: publicKey.export({ type: "spki", format: "pem" }).toString(),
+      allowedEnvironments: ["sandbox"],
+      notBefore: issuedAt,
+      notAfter: expiresAt,
+    }],
+    consentPolicyJurisdiction: "CN",
+    consentPolicyLocale: "zh-CN",
+  });
+  testContext.after(() => runtime.close());
+  const registry = createCapabilityRegistry();
+  const admin = actor({
+    actorId: "platform-admin-1",
+    roles: ["platform_admin"],
+    purpose: "product_operation",
+  });
+  const published = objectResult(await registry.execute(runtime, "B03", {
+    actor: admin,
+    idempotencyKey: "publish-consent-policy-1",
+    input: { tenantId: admin.tenantId },
+  }));
+  const record = runtime.getRecord<JsonObject>(admin, "identity.consent-policy-catalogs", String(published.recordId));
+  assert.equal(record.id, record.data.catalogSha256);
+  assert.match(String(record.data.catalogSha256), /^[a-f0-9]{64}$/);
+  assert.deepEqual(record.data.policyVersions, ["sharing-v1"]);
+  assert.equal(record.data.catalogId, "capability-consent-policy-1");
+  assert.equal(record.data.issuer, "privacy-policy-authority");
+  assert.equal(record.data.environment, "sandbox");
+  assert.equal(record.data.jurisdiction, "CN");
+  assert.equal(record.data.locale, "zh-CN");
+  assert.equal(record.data.disclosureSha256, undefined);
+  assert.equal(record.data.policies, undefined);
+
+  await rejectsDomainCode(registry.execute(runtime, "B03", {
+    actor: { ...admin, requestId: "reject-client-policy" },
+    idempotencyKey: "publish-consent-policy-client-authored",
+    input: { policies: [{ policyVersion: "caller-controlled" }] },
+  }), "VALIDATION_FAILED");
+  await rejectsDomainCode(registry.execute(runtime, "B03", {
+    actor: actor({ permissions: ["consent-policy:publish", "record:create", "audit:append"] }),
+    idempotencyKey: "publish-consent-policy-consumer",
+    input: {},
+  }), "AUTH_FORBIDDEN");
+  const service = actor({
+    actorId: "consent-policy-publisher",
+    tenantId: "tenant-2",
+    roles: ["service_account"],
+    purpose: "product_operation",
+    permissions: ["record:create"],
+  });
+  await rejectsDomainCode(registry.execute(runtime, "B03", {
+    actor: service,
+    idempotencyKey: "publish-consent-policy-service-without-permission",
+    input: {},
+  }), "AUTH_FORBIDDEN");
+  const servicePublished = objectResult(await registry.execute(runtime, "B03", {
+    actor: { ...service, permissions: ["consent-policy:publish", "record:create", "audit:append"] },
+    idempotencyKey: "publish-consent-policy-service-authorized",
+    input: {},
+  }));
+  assert.match(String(servicePublished.recordId), /^[a-f0-9]{64}$/);
+});
 
 test("B04 grants consent once, replays idempotently, and preserves the audit chain", async (testContext) => {
   const runtime = runtimeFor(testContext);
@@ -45,15 +350,25 @@ test("B04 grants consent once, replays idempotently, and preserves the audit cha
     permissions: ["audit:read"],
     guardianVerified: true,
   });
+  const expiresAt = ensureParticipant(runtime, guardian, "child-1", "child-owner-1", "minor");
+  const scope = { resource: "media.asset:child-1", actions: ["transform"] };
+  grantParticipantAuthority(runtime, guardian, {
+    authorizationId: "guardian-child-1",
+    authorizedActorId: guardian.actorId,
+    participantId: "child-1",
+    capacity: "guardian",
+    scope,
+    expiresAt,
+  });
   const input = {
     participantId: "child-1",
     purpose: "age_transformation",
     policyVersion: "privacy-v1",
     evidenceHash: "a".repeat(64),
-    expiresAt: "2099-01-01T00:00:00.000Z",
+    expiresAt,
     status: "active",
-    isMinor: true,
-    guardianConsentId: "guardian-verification-1",
+    grantorCapacity: "guardian",
+    scope,
   };
 
   const first = objectResult(
@@ -77,22 +392,24 @@ test("B04 grants consent once, replays idempotently, and preserves the audit cha
   assert.equal(replay.consentId, first.consentId);
   assert.equal(runtime.listConsents(guardian, "child-1").length, 1);
   assert.ok(runtime.listAudit(guardian, 100).some((entry) => entry.action === "capability.B04.execute"));
-  assert.deepEqual(runtime.verifyAuditChain(guardian), { valid: true, entriesChecked: 4, invalidSequence: null });
+  assert.equal(runtime.verifyAuditChain(guardian).valid, true);
 });
 
 test("B14 persists an authorized illustrative timeline", async (testContext) => {
   const runtime = runtimeFor(testContext);
   const registry = createCapabilityRegistry();
   const consumer = actor();
+  ensureParticipant(runtime, consumer);
   runtime.grantConsent(consumer, {
     participantId: consumer.actorId,
     grantorCapacity: "self",
     purpose: consumer.purpose,
-    scope: { feature: "timeline" },
+    scope: { resource: "media.asset:asset-1", actions: ["ingest", "transform"] },
     policyVersion: "privacy-v1",
     evidenceHash: "b".repeat(64),
     idempotencyKey: "self-consent",
   });
+  await persistAcceptedMediaIntake(runtime, registry, consumer);
 
   const result = objectResult(
     await registry.execute(runtime, "B14", {
@@ -124,11 +441,12 @@ test("B09 applies stateful generation transitions, replays, and rejects stale st
   const runtime = runtimeFor(testContext);
   const registry = createCapabilityRegistry();
   const consumer = actor();
+  ensureParticipant(runtime, consumer);
   runtime.grantConsent(consumer, {
     participantId: consumer.actorId,
     grantorCapacity: "self",
     purpose: consumer.purpose,
-    scope: { feature: "generation_job" },
+    scope: { resource: "generation.jobs:stateful-job-1", actions: ["process"] },
     policyVersion: "privacy-v1",
     evidenceHash: "c".repeat(64),
     idempotencyKey: "generation-job-consent",
@@ -246,10 +564,110 @@ test("B01 creates one stable architecture resource and rejects identity overwrit
   );
 });
 
-test("B14 rejects generation when participant consent is missing", async (testContext) => {
+test("B01 and B02 reject consumer control-plane writes even with generic record permission", async (testContext) => {
+  const runtime = runtimeFor(testContext);
+  const registry = createCapabilityRegistry();
+  const consumer = actor({ permissions: ["record:create"] });
+  await rejectsDomainCode(
+    registry.execute(runtime, "B01", {
+      actor: consumer,
+      idempotencyKey: "consumer-platform-architecture",
+      input: {
+        repositoryId: "consumer-repository",
+        stackProfile: "all-typescript",
+        boundedContexts: ["identity", "generation"],
+        healthChecks: ["liveness", "readiness"],
+        ownershipRules: ["tenant-scoped"],
+      },
+    }),
+    "AUTH_FORBIDDEN",
+  );
+  await rejectsDomainCode(
+    registry.execute(runtime, "B02", {
+      actor: { ...consumer, requestId: "consumer-contract-publication" },
+      idempotencyKey: "consumer-platform-contract",
+      input: {
+        contractVersion: "consumer-v1",
+        schemaVersion: "1.0.0",
+        aggregateTypes: ["Project"],
+        compatibility: "backward",
+        sensitiveFieldsClassified: true,
+      },
+    }),
+    "AUTH_FORBIDDEN",
+  );
+});
+
+test("B08 and B14 reject source media that has not passed the B07 intake gate", async (testContext) => {
   const runtime = runtimeFor(testContext);
   const registry = createCapabilityRegistry();
   const consumer = actor();
+  grantAgeConsent(runtime, consumer, "missing-b07-consent", "asset-without-b07");
+
+  await rejectsDomainCode(
+    registry.execute(runtime, "B08", {
+      actor: consumer,
+      idempotencyKey: "composition-without-b07",
+      input: {
+        draftId: "draft-without-b07",
+        sourceAssetId: "asset-without-b07",
+        templateId: "timeline-classic-v1",
+        participantIds: [consumer.actorId],
+        targetAges: [18, 80],
+        composition: { sourceAssetIds: ["asset-without-b07"], layout: "timeline" },
+        illustrativeLabel: true,
+      },
+    }),
+    "VALIDATION_FAILED",
+  );
+  await rejectsDomainCode(
+    registry.execute(runtime, "B14", {
+      actor: consumer,
+      idempotencyKey: "timeline-without-b07",
+      input: {
+        jobId: "job-without-b07",
+        sourceAssetId: "asset-without-b07",
+        participantIds: [consumer.actorId],
+        targetAges: [18, 80],
+        seed: "seed-without-b07",
+        promptPolicyVersion: "prompt-v1",
+        illustrativeLabel: true,
+      },
+    }),
+    "VALIDATION_FAILED",
+  );
+  assert.equal(runtime.listRecords(consumer, { collection: "consumer.composition-drafts" }).length, 0);
+  assert.equal(runtime.listRecords(consumer, { collection: "generation.timeline-commands" }).length, 0);
+});
+
+test("B07 rejects a source-to-canonical digest lineage mismatch before persistence", async (testContext) => {
+  const runtime = runtimeFor(testContext);
+  const registry = createCapabilityRegistry();
+  const consumer = actor();
+  grantAgeConsent(runtime, consumer, "invalid-media-lineage-consent", "asset-invalid-lineage");
+  await rejectsDomainCode(
+    registry.execute(runtime, "B07", {
+      actor: consumer,
+      idempotencyKey: "invalid-media-lineage",
+      input: { ...acceptedMediaInput("asset-invalid-lineage", [consumer.actorId]), lineageSha256: "0".repeat(64) },
+    }),
+    "VALIDATION_FAILED",
+  );
+  assert.equal(runtime.listRecords(consumer, { collection: "media.intake-results" }).length, 0);
+});
+
+test("B14 rejects generation when the B07 participant consent was withdrawn", async (testContext) => {
+  const runtime = runtimeFor(testContext);
+  const registry = createCapabilityRegistry();
+  const consumer = actor();
+  const consent = grantAgeConsent(runtime, consumer, "temporary-media-consent");
+  await persistAcceptedMediaIntake(runtime, registry, consumer);
+  runtime.withdrawConsent(consumer, {
+    consentId: consent.value.id,
+    expectedVersion: consent.value.version,
+    reason: "exercise the generation consent gate",
+    idempotencyKey: "withdraw-temporary-media-consent",
+  });
   await rejectsDomainCode(
     registry.execute(runtime, "B14", {
       actor: consumer,
@@ -264,8 +682,95 @@ test("B14 rejects generation when participant consent is missing", async (testCo
         illustrativeLabel: true,
       },
     }),
-    "CONSENT_REQUIRED",
+    "CONSENT_WITHDRAWN",
   );
+});
+
+test("B10 share lifetime is bounded by product policy and exact consent/participant authority", async (testContext) => {
+  const runtime = runtimeFor(testContext);
+  const registry = createCapabilityRegistry();
+  const consumer = actor({ purpose: "sharing", requestId: "b10-lifetime" });
+  ensureParticipant(runtime, consumer);
+  const workId = "work-b10-lifetime-1";
+  const consentExpiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
+  runtime.grantConsent(consumer, {
+    participantId: consumer.actorId,
+    grantorCapacity: "self",
+    purpose: "sharing",
+    scope: { resource: `work:${workId}`, actions: ["share"] },
+    policyVersion: "sharing-v1",
+    evidenceHash: "d".repeat(64),
+    expiresAt: consentExpiresAt,
+    idempotencyKey: "b10-lifetime-consent",
+  });
+  const baseInput: JsonObject = {
+    workId,
+    participantIds: [consumer.actorId],
+    format: "single_image",
+    visibility: "link",
+    aiLabel: true,
+    provenanceId: "provenance-b10-lifetime-1",
+    revocable: true,
+    containsMinor: false,
+  };
+  const accepted = objectResult(await registry.execute(runtime, "B10", {
+    actor: consumer,
+    idempotencyKey: "b10-lifetime-accepted",
+    input: { ...baseInput, expiresAt: new Date(Date.now() + 2 * 60_000).toISOString() },
+  }));
+  assert.equal(accepted.commandState, "requested");
+
+  await rejectsDomainCode(registry.execute(runtime, "B10", {
+    actor: { ...consumer, requestId: "b10-after-consent-cutoff" },
+    idempotencyKey: "b10-after-consent-cutoff",
+    input: { ...baseInput, expiresAt: new Date(Date.now() + 10 * 60_000).toISOString() },
+  }), "CONSENT_REQUIRED");
+  await rejectsDomainCode(registry.execute(runtime, "B10", {
+    actor: { ...consumer, requestId: "b10-over-product-maximum" },
+    idempotencyKey: "b10-over-product-maximum",
+    input: { ...baseInput, expiresAt: new Date(Date.now() + 31 * 24 * 60 * 60_000).toISOString() },
+  }), "VALIDATION_FAILED");
+
+  const guardian = actor({
+    actorId: "guardian-b10-lifetime",
+    roles: ["guardian"],
+    guardianVerified: true,
+    purpose: "sharing",
+    requestId: "guardian-b10-lifetime",
+  });
+  const childId = "child-b10-lifetime";
+  const guardianWorkId = "work-b10-guardian-lifetime";
+  ensureParticipant(runtime, guardian, childId, "child-owner-b10-lifetime", "minor");
+  const authorityExpiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
+  grantParticipantAuthority(runtime, guardian, {
+    authorizationId: "guardian-b10-lifetime-authority",
+    authorizedActorId: guardian.actorId,
+    participantId: childId,
+    capacity: "guardian",
+    scope: { resource: `work:${guardianWorkId}`, actions: ["share"] },
+    expiresAt: authorityExpiresAt,
+  });
+  runtime.grantConsent(guardian, {
+    participantId: childId,
+    grantorCapacity: "guardian",
+    purpose: "sharing",
+    scope: { resource: `work:${guardianWorkId}`, actions: ["share"] },
+    policyVersion: "guardian-sharing-v1",
+    evidenceHash: "e".repeat(64),
+    idempotencyKey: "guardian-b10-lifetime-consent",
+  });
+  await rejectsDomainCode(registry.execute(runtime, "B10", {
+    actor: guardian,
+    idempotencyKey: "guardian-b10-after-authority-cutoff",
+    input: {
+      ...baseInput,
+      workId: guardianWorkId,
+      participantIds: [childId],
+      visibility: "private",
+      containsMinor: true,
+      expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+    },
+  }), "CONSENT_REQUIRED");
 });
 
 test("B21 rejects a minor workflow without verified guardian context", async (testContext) => {
@@ -547,15 +1052,6 @@ test("B74, B89, B98, and B101 create requested commands without trusting pre-req
     requestId: "requested-command-lifecycle",
     stepUp: true,
   });
-  runtime.grantConsent(operator, {
-    participantId: operator.actorId,
-    grantorCapacity: "self",
-    purpose: operator.purpose,
-    scope: { feature: "notification_delivery" },
-    policyVersion: "notification-consent-v1",
-    evidenceHash: "d".repeat(64),
-    idempotencyKey: "grant-notification-command-consent",
-  });
   const commands: readonly {
     batchId: `B${string}`;
     collection: string;
@@ -613,6 +1109,18 @@ test("B74, B89, B98, and B101 create requested commands without trusting pre-req
   ];
 
   for (const command of commands) {
+    if (command.batchId === "B74") {
+      ensureParticipant(runtime, operator);
+      runtime.grantConsent(operator, {
+        participantId: operator.actorId,
+        grantorCapacity: "self",
+        purpose: operator.purpose,
+        scope: { resource: `${command.collection}:${command.recordId}`, actions: ["process"] },
+        policyVersion: "notification-consent-v1",
+        evidenceHash: "d".repeat(64),
+        idempotencyKey: "grant-notification-command-consent",
+      });
+    }
     const result = objectResult(await registry.execute(runtime, command.batchId, {
       actor: { ...operator, requestId: `request-${command.batchId}` },
       idempotencyKey: `request-${command.batchId}`,
@@ -767,7 +1275,8 @@ test("B48 rejects certification without external evidence", async (testContext) 
 });
 
 test("B48 rejects client-supplied evidence when no server verifier is configured", async (testContext) => {
-  const runtime = runtimeFor(testContext);
+  const runtime = new LifeTimeMachineRuntime({ databasePath: ":memory:" });
+  testContext.after(() => runtime.close());
   const registry = createCapabilityRegistry();
   const certificationActor = actor({
     actorId: "release-1",

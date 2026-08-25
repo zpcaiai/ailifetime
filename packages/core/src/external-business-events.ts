@@ -6,8 +6,10 @@ import type {
   ExternalBusinessEventReducer,
   ExternalBusinessReduction,
   ExternalCommandState,
+  ExternalCommandRecord,
   JsonObject,
   LedgerLine,
+  OutboxEvent,
   TransitionExternalCommandInput,
   VerifiedBusinessEvent,
 } from "./types.js";
@@ -26,6 +28,48 @@ const COMMAND_STATES = new Set<ExternalCommandState>([
   "cancelled",
   "compensated",
 ]);
+
+export interface ExternalCommandRequestIdentity {
+  readonly commandId: string;
+  readonly batchId: `B${string}`;
+  readonly operation: string;
+  readonly aggregateCollection: string;
+  readonly aggregateId: string;
+}
+
+/** Parse the immutable command snapshot captured in external_command.requested. */
+export function externalCommandRequestIdentity(
+  event: Pick<OutboxEvent, "eventType" | "payload">,
+): ExternalCommandRequestIdentity {
+  if (event.eventType !== "external_command.requested") {
+    throw new DomainError("VALIDATION_FAILED", "Outbox event is not an external command request");
+  }
+  const value = event.payload.command;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new DomainError("EVENT_FINGERPRINT_CONFLICT", "External command request snapshot is missing");
+  }
+  const snapshot = value as JsonObject;
+  return {
+    commandId: identifier(snapshot.commandId as string, "commandId"),
+    batchId: identifier(snapshot.batchId as string, "batchId", BATCH) as `B${string}`,
+    operation: identifier(snapshot.operation as string, "operation"),
+    aggregateCollection: identifier(snapshot.aggregateCollection as string, "aggregateCollection", COLLECTION),
+    aggregateId: identifier(snapshot.aggregateId as string, "aggregateId"),
+  };
+}
+
+export function assertExternalCommandRequestCorrelation(
+  event: Pick<OutboxEvent, "aggregateType" | "aggregateId">,
+  identity: ExternalCommandRequestIdentity,
+  command: ExternalCommandRecord,
+): void {
+  if (identity.commandId !== command.commandId || identity.batchId !== command.batchId ||
+      identity.operation !== command.operation || identity.aggregateCollection !== command.aggregateCollection ||
+      identity.aggregateId !== command.aggregateId || event.aggregateType !== command.aggregateCollection ||
+      event.aggregateId !== command.aggregateId) {
+    throw new DomainError("EVENT_FINGERPRINT_CONFLICT", "External command request does not match its persisted intent");
+  }
+}
 
 export interface NormalizedApplyExternalBusinessEventInput {
   readonly event: VerifiedBusinessEvent;

@@ -94,6 +94,7 @@ export function loadWorkerConfiguration(environment: NodeJS.ProcessEnv, productR
         "outbox:read",
         "outbox:publish",
         "record:read",
+        "record:purpose:cross",
         "external-command:read",
         "external-command:transition",
         "audit:append",

@@ -1,0 +1,15 @@
+<view class="page">
+  <view class="card">
+    <view class="title">设置年龄主题</view>
+    <view class="muted">参与者必须已有有效的人物授权。年龄节点只是艺术化想象，不代表真实未来。</view>
+    <input class="field" value="{{participantId}}" placeholder="服务端参与者 ID" bindinput="participantChanged" />
+    <input class="field" value="{{ages}}" placeholder="年龄节点，例如 8,18,35,60" bindinput="agesChanged" />
+    <input class="field" value="{{templateId}}" placeholder="模板 ID" bindinput="templateChanged" />
+    <view class="muted">未成年人状态与监护关系由服务端人物登记和外部签名证据判定，客户端不能自行声明。</view>
+    <checkbox-group bindchange="consentChanged">
+      <label class="row"><checkbox value="accepted" checked="{{consentAccepted}}" />我同意本次 AI 年龄主题构图与生成，可随时撤回；原始上传会话最长保留 24 小时</label>
+    </checkbox-group>
+    <button class="button" disabled="{{busy || !consentAccepted}}" bindtap="generate">{{busy ? '正在提交' : '授权、保存草稿并开始生成'}}</button>
+    <view class="status error" wx:if="{{error}}">{{error}}</view>
+  </view>
+</view>

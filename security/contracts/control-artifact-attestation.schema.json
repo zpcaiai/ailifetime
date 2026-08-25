@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-life-time-machine.example/contracts/control-artifact-attestation.v1.schema.json",
+  "title": "Detached Ed25519 attestation for a B127 raw rollout-control artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "attestationId", "nonce", "issuer", "provider", "environment",
+    "authorityRole", "algorithm", "keyId", "issuedAt", "expiresAt", "scope", "claims", "signature"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "ltm.control-artifact-attestation.v1" },
+    "attestationId": { "$ref": "#/$defs/identifier" },
+    "nonce": { "$ref": "#/$defs/identifier" },
+    "issuer": { "$ref": "#/$defs/identifier" },
+    "provider": { "$ref": "#/$defs/identifier" },
+    "environment": { "const": "production" },
+    "authorityRole": {
+      "enum": [
+        "production-monitoring-query-signer",
+        "production-monitoring-result-signer",
+        "production-rollout-pause-controller",
+        "production-rollout-pause-receipt-authority"
+      ]
+    },
+    "algorithm": { "const": "Ed25519" },
+    "keyId": { "$ref": "#/$defs/identifier" },
+    "issuedAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "scope": { "type": "string", "pattern": "^ltm-control-artifact:v1:[a-f0-9]{64}$" },
+    "claims": { "$ref": "#/$defs/claims" },
+    "signature": { "type": "string", "pattern": "^[A-Za-z0-9_-]{86}$" }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "provider": { "type": "string", "pattern": "^monitoring-query:[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", "maxLength": 128 },
+        "authorityRole": { "const": "production-monitoring-query-signer" },
+        "claims": {
+          "properties": {
+            "artifactType": { "const": "monitoring_query" },
+            "relatedArtifactSha256": { "type": "null" },
+            "observedValue": { "type": "null" },
+            "state": { "const": "query_defined" }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "provider": { "type": "string", "pattern": "^monitoring-result:[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", "maxLength": 128 },
+        "authorityRole": { "const": "production-monitoring-result-signer" },
+        "claims": {
+          "properties": {
+            "artifactType": { "const": "monitoring_result" },
+            "relatedArtifactSha256": { "$ref": "#/$defs/sha256" },
+            "observedValue": { "$ref": "#/$defs/metricValue" },
+            "state": { "const": "result_complete" }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "provider": { "type": "string", "pattern": "^rollout-controller:[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", "maxLength": 128 },
+        "authorityRole": { "const": "production-rollout-pause-controller" },
+        "claims": {
+          "properties": {
+            "artifactType": { "const": "pause_command" },
+            "relatedArtifactSha256": { "type": "null" },
+            "observedValue": { "$ref": "#/$defs/metricValue" },
+            "state": { "const": "pause_issued" }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "provider": { "type": "string", "pattern": "^rollout-actuator:[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", "maxLength": 128 },
+        "authorityRole": { "const": "production-rollout-pause-receipt-authority" },
+        "claims": {
+          "properties": {
+            "artifactType": { "const": "pause_receipt" },
+            "relatedArtifactSha256": { "$ref": "#/$defs/sha256" },
+            "observedValue": { "$ref": "#/$defs/metricValue" },
+            "state": { "const": "pause_acknowledged" }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "identifier": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "metricValue": { "type": "number", "minimum": 0, "maximum": 1000000000000 },
+    "claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifactType", "artifactId", "artifactSha256", "relatedArtifactSha256", "releaseId",
+        "tenantId", "launchId", "deploymentId", "repositoryCommit", "componentSetSha256",
+        "guardrailPolicySha256", "wave", "domain", "signalId", "unit", "windowStart",
+        "windowEnd", "eventAt", "threshold", "observedValue", "state"
+      ],
+      "properties": {
+        "artifactType": { "enum": ["monitoring_query", "monitoring_result", "pause_command", "pause_receipt"] },
+        "artifactId": { "$ref": "#/$defs/identifier" },
+        "artifactSha256": { "$ref": "#/$defs/sha256" },
+        "relatedArtifactSha256": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "releaseId": { "$ref": "#/$defs/identifier" },
+        "tenantId": { "$ref": "#/$defs/identifier" },
+        "launchId": { "$ref": "#/$defs/identifier" },
+        "deploymentId": { "$ref": "#/$defs/identifier" },
+        "repositoryCommit": { "type": "string", "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$" },
+        "componentSetSha256": { "$ref": "#/$defs/sha256" },
+        "guardrailPolicySha256": { "$ref": "#/$defs/sha256" },
+        "wave": { "enum": ["internal", "pilot", "consumer_canary", "partner", "regional"] },
+        "domain": { "enum": ["quality", "payment", "refund", "message", "support", "ledger", "supply", "privacy", "security", "cost", "slo"] },
+        "signalId": { "$ref": "#/$defs/identifier" },
+        "unit": { "enum": ["ratio", "count", "minor_currency"] },
+        "windowStart": { "type": "string", "format": "date-time" },
+        "windowEnd": { "type": "string", "format": "date-time" },
+        "eventAt": { "type": "string", "format": "date-time" },
+        "threshold": { "$ref": "#/$defs/metricValue" },
+        "observedValue": { "oneOf": [{ "$ref": "#/$defs/metricValue" }, { "type": "null" }] },
+        "state": { "enum": ["query_defined", "result_complete", "pause_issued", "pause_acknowledged"] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "unit": { "const": "ratio" } }, "required": ["unit"] },
+          "then": {
+            "properties": {
+              "threshold": { "type": "number", "minimum": 0, "maximum": 1 },
+              "observedValue": { "oneOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }] }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "unit": { "enum": ["count", "minor_currency"] } }, "required": ["unit"] },
+          "then": {
+            "properties": {
+              "threshold": { "type": "integer", "minimum": 0, "maximum": 1000000000000 },
+              "observedValue": { "oneOf": [{ "type": "integer", "minimum": 0, "maximum": 1000000000000 }, { "type": "null" }] }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "$comment": "The verifier additionally requires provider suffix == claims.deploymentId and issuedAt == claims.eventAt, recomputes scope from canonical claims, verifies the detached Ed25519 signature and artifact digest, enforces issuer/key enrollment and validity windows (including expiry after issuance, no future issue, no expired document and at most seven days), and consumes the nonce once."
+}

@@ -47,7 +47,10 @@ export class OidcAuthenticator implements RequestAuthenticator {
     if (issuer.toString().replace(/\/$/, "") !== options.issuer.replace(/\/$/, "")) {
       throw new DomainError("CONFIGURATION_INVALID", "OIDC issuer must be a canonical HTTPS URL");
     }
-    strictHttpsUrl(options.jwksUrl.toString(), "OIDC JWKS URL", false);
+    const jwksUrl = strictHttpsUrl(options.jwksUrl.toString(), "OIDC JWKS URL", false);
+    if (jwksUrl.origin !== issuer.origin) {
+      throw new DomainError("CONFIGURATION_INVALID", "OIDC JWKS URL must share the trusted issuer origin");
+    }
     visible(options.audience, "OIDC audience", 512);
     if (options.algorithms.length === 0 || new Set(options.algorithms).size !== options.algorithms.length) {
       throw new DomainError("CONFIGURATION_INVALID", "OIDC algorithms must be a non-empty unique allowlist");

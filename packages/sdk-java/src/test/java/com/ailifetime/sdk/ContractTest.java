@@ -16,11 +16,15 @@ public final class ContractTest {
     private static final ClientSession SESSION = new ClientSession("synthetic-access-token", "product_operation");
     private final List<CapturedRequest> requests = new ArrayList<>();
     private final AtomicInteger retryAttempts = new AtomicInteger();
+    private volatile boolean invalidVisibleManifest;
+    private volatile boolean invalidSessionPurpose;
+    private volatile boolean invalidCatalogCount;
+    private volatile boolean invalidCatalogExtra;
 
     public static void main(String[] args) throws Exception {
         ContractTest test = new ContractTest();
         test.run();
-        System.out.println("Java SDK contract tests: 7 passed");
+        System.out.println("Java SDK contract tests: 12 passed");
     }
 
     private void run() throws Exception {
@@ -29,7 +33,12 @@ public final class ContractTest {
         server.start();
         URI baseUri = URI.create("http://127.0.0.1:" + server.getAddress().getPort());
         try {
+            typedSessionAndVisibleManifest(baseUri);
+            invalidIdentityProjectionFailsClosed(baseUri);
+            typedCatalogFailsClosedOnEnvelopeDrift(baseUri);
             exactRealHttpContract(baseUri);
+            typedConsentGrantLeavesDisclosureAndLocationWithServer(baseUri);
+            typedRightsSubmissionIsSubjectBound(baseUri);
             secureBaseUris();
             malformedAndOversizedResponses(baseUri);
             structuredError(baseUri);
@@ -38,6 +47,58 @@ public final class ContractTest {
             missingIdempotencyNeverReachesNetwork(baseUri);
         } finally {
             server.stop(0);
+        }
+    }
+
+    private void typedSessionAndVisibleManifest(URI baseUri) throws Exception {
+        requests.clear();
+        LifeTimeMachineClient client = new LifeTimeMachineClient(baseUri, SESSION, Duration.ofSeconds(2), 0);
+        AuthenticatedSessionResponse authenticated = client.getSession();
+        VisibleCapabilityManifest manifest = client.getVisibleCapabilityManifest();
+        List<CapabilitySummary> catalog = client.listCapabilities();
+        assertEquals("server_verified", authenticated.session().authenticationState());
+        assertEquals(List.of(AuthenticatedRole.CONSUMER), authenticated.session().roles());
+        assertEquals("ltm.visible-capability-manifest.v1", manifest.schemaVersion());
+        assertEquals("createTimeline", manifest.capabilities().get(0).operation());
+        assertEquals(CapabilityPortalId.CONSUMER, manifest.portals().get(0).id());
+        assertEquals(1, manifest.portals().get(0).capabilityCount());
+        assertEquals("createTimeline", catalog.get(0).operation());
+        assertEquals(List.of("/v1/session", "/v1/capabilities/visible", "/v1/capabilities"), requests.stream().map(CapturedRequest::path).toList());
+    }
+
+    private void typedCatalogFailsClosedOnEnvelopeDrift(URI baseUri) throws Exception {
+        LifeTimeMachineClient client = new LifeTimeMachineClient(baseUri, SESSION, Duration.ofSeconds(2), 0);
+        invalidCatalogCount = true;
+        try {
+            ApiException countError = assertThrows(ApiException.class, client::listCapabilities);
+            assertEquals("INVALID_RESPONSE", countError.code());
+        } finally {
+            invalidCatalogCount = false;
+        }
+        invalidCatalogExtra = true;
+        try {
+            ApiException extraError = assertThrows(ApiException.class, client::listCapabilities);
+            assertEquals("INVALID_RESPONSE", extraError.code());
+        } finally {
+            invalidCatalogExtra = false;
+        }
+    }
+
+    private void invalidIdentityProjectionFailsClosed(URI baseUri) throws Exception {
+        LifeTimeMachineClient client = new LifeTimeMachineClient(baseUri, SESSION, Duration.ofSeconds(2), 0);
+        invalidSessionPurpose = true;
+        try {
+            ApiException sessionError = assertThrows(ApiException.class, client::getSession);
+            assertEquals("INVALID_RESPONSE", sessionError.code());
+        } finally {
+            invalidSessionPurpose = false;
+        }
+        invalidVisibleManifest = true;
+        try {
+            ApiException manifestError = assertThrows(ApiException.class, client::getVisibleCapabilityManifest);
+            assertEquals("INVALID_RESPONSE", manifestError.code());
+        } finally {
+            invalidVisibleManifest = false;
         }
     }
 
@@ -64,6 +125,56 @@ public final class ContractTest {
         assertEquals("idem-execute-1", requests.get(0).idempotencyKey());
         assertEquals("idem-command-1", requests.get(1).idempotencyKey());
         assertEquals(null, requests.get(2).idempotencyKey());
+    }
+
+    private void typedConsentGrantLeavesDisclosureAndLocationWithServer(URI baseUri) throws Exception {
+        requests.clear();
+        LifeTimeMachineClient client = new LifeTimeMachineClient(baseUri, SESSION, Duration.ofSeconds(2), 0);
+        client.grantConsent(new ConsentGrantRequest(
+            "participant-1",
+            "self",
+            "sharing",
+            new ConsentScope("work:work-1", List.of("share")),
+            "sharing-v1",
+            null,
+            null,
+            null
+        ), "idem-consent-1");
+        assertEquals(1, requests.size());
+        assertEquals("/v1/commands", requests.get(0).path());
+        assertEquals(
+            "{\"command\":\"consent.grant\",\"input\":{\"participantId\":\"participant-1\",\"grantorCapacity\":\"self\",\"purpose\":\"sharing\",\"scope\":{\"resource\":\"work:work-1\",\"actions\":[\"share\"]},\"policyVersion\":\"sharing-v1\"}}",
+            requests.get(0).body()
+        );
+        assertTrue(!requests.get(0).body().contains("jurisdiction"), "client must not override jurisdiction");
+        assertTrue(!requests.get(0).body().contains("locale"), "client must not override locale");
+        assertTrue(!requests.get(0).body().contains("evidenceHash"), "client evidence acknowledgement must remain optional");
+    }
+
+    private void typedRightsSubmissionIsSubjectBound(URI baseUri) throws Exception {
+        requests.clear();
+        LifeTimeMachineClient client = new LifeTimeMachineClient(
+            baseUri,
+            new ClientSession("synthetic-access-token", "privacy_rights"),
+            Duration.ofSeconds(2),
+            0
+        );
+        client.submitRightsRequest(new RightsRequestSubmission(
+            "participant-1",
+            "correction",
+            "profile",
+            "rights-1",
+            List.of("profile.display_name"),
+            "a".repeat(64),
+            null
+        ), "rights-submit-1");
+        assertEquals(1, requests.size());
+        assertEquals(
+            "{\"command\":\"rights-request.submit\",\"input\":{\"participantId\":\"participant-1\",\"requestType\":\"correction\",\"requestedProcessingPurpose\":\"profile\",\"requestId\":\"rights-1\",\"correctionFields\":[\"profile.display_name\"],\"correctionPayloadSha256\":\"" + "a".repeat(64) + "\"}}",
+            requests.get(0).body()
+        );
+        assertTrue(!requests.get(0).body().contains("ownerActorId"), "owner is server-derived");
+        assertTrue(!requests.get(0).body().contains("participantIds"), "participant binding is server-derived");
     }
 
     private void secureBaseUris() {
@@ -156,6 +267,22 @@ public final class ContractTest {
             exchange.getRequestHeaders().getFirst("X-Actor-Role")
         ));
         String path = exchange.getRequestURI().getPath();
+        if ("/v1/session".equals(path)) {
+            String purpose = invalidSessionPurpose ? "wrong-purpose" : "product_operation";
+            respond(exchange, 200, "{\"session\":{\"actorId\":\"actor-1\",\"tenantId\":\"tenant-1\",\"roles\":[\"consumer\"],\"purpose\":\"" + purpose + "\",\"stepUp\":false,\"guardianVerified\":false,\"authenticationState\":\"server_verified\"},\"requestId\":\"req-session-1\"}", null, null);
+            return;
+        }
+        if ("/v1/capabilities/visible".equals(path)) {
+            int capabilityCount = invalidVisibleManifest ? 2 : 1;
+            respond(exchange, 200, "{\"schemaVersion\":\"ltm.visible-capability-manifest.v1\",\"capabilities\":[{\"batchId\":\"B14\",\"skill\":\"building-age-media-pipeline\",\"operation\":\"createTimeline\",\"permission\":\"record:create\",\"portalId\":\"consumer\",\"mode\":\"external-command\",\"requirements\":[\"B14-R01\",\"B14-R02\",\"B14-R03\",\"B14-R04\",\"B14-R05\"],\"requiresExternalEvidence\":false}],\"portals\":[{\"id\":\"consumer\",\"skills\":[\"building-age-media-pipeline\"],\"capabilityCount\":" + capabilityCount + "}],\"count\":1,\"requestId\":\"req-visible-1\"}", null, null);
+            return;
+        }
+        if ("/v1/capabilities".equals(path)) {
+            String extra = invalidCatalogExtra ? ",\"authority\":\"caller\"" : "";
+            int count = invalidCatalogCount ? 2 : 1;
+            respond(exchange, 200, "{\"capabilities\":[{\"batchId\":\"B14\",\"skill\":\"building-age-media-pipeline\",\"operation\":\"createTimeline\",\"permission\":\"record:create\",\"portalId\":\"consumer\",\"mode\":\"external-command\",\"requirements\":[\"B14-R01\",\"B14-R02\",\"B14-R03\",\"B14-R04\",\"B14-R05\"],\"requiresExternalEvidence\":false}],\"count\":" + count + ",\"requestId\":\"req-catalog-1\"" + extra + "}", null, null);
+            return;
+        }
         if ("/v1/capabilities/B14".equals(path)) {
             respond(exchange, 200, "{\"data\":{\"id\":\"timeline-1\"},\"meta\":{\"requestId\":\"req-execute\",\"batchId\":\"B14\"}}", "req-execute", null);
             return;
@@ -171,7 +298,11 @@ public final class ContractTest {
             respond(exchange, 200, "{\"data\":[{\"id\":\"record-1\"}],\"meta\":{\"requestId\":\"req-query\",\"query\":" + (body.contains("delay.operation") ? "\"delay.operation\"" : "\"record.list\"") + "}}", null, null);
             return;
         }
-        if (body.contains("malformed.operation")) {
+        if (body.contains("\"command\":\"consent.grant\"")) {
+            respond(exchange, 200, "{\"data\":{\"id\":\"consent-1\"},\"meta\":{\"requestId\":\"req-consent-1\",\"command\":\"consent.grant\"}}", null, null);
+        } else if (body.contains("\"command\":\"rights-request.submit\"")) {
+            respond(exchange, 200, "{\"data\":{\"requestId\":\"rights-1\"},\"meta\":{\"requestId\":\"req-rights-1\",\"command\":\"rights-request.submit\"}}", null, null);
+        } else if (body.contains("malformed.operation")) {
             respond(exchange, 200, "{\"id\":\"not-an-envelope\"}", null, null);
         } else if (body.contains("large.operation")) {
             respond(exchange, 200, "{\"data\":\"" + "x".repeat(100) + "\",\"meta\":{\"requestId\":\"req-large\",\"command\":\"large.operation\"}}", null, null);

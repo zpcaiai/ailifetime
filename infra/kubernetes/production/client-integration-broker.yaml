@@ -1,0 +1,251 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ltm-client-integration-broker
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  minReadySeconds: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ltm-client-integration-broker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ltm-client-integration-broker
+        ltm.openai.com/network-role: client-integration-broker
+    spec:
+      serviceAccountName: ltm-client-integration-broker
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: ltm-client-integration-broker
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: ltm-client-integration-broker
+      containers:
+        - name: client-integration-broker
+          image: __LTM_CLIENT_BROKER_IMAGE__
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: https
+              containerPort: 8443
+          envFrom:
+            - secretRef:
+                name: ltm-production-client-integration-broker
+          env:
+            - name: APP_ENV
+              value: production
+            - name: HOST
+              value: 0.0.0.0
+            - name: PORT
+              value: "8443"
+            - name: LTM_BROKER_TLS_CERT_FILE
+              value: /var/run/secrets/ltm-broker-tls/tls.crt
+            - name: LTM_BROKER_TLS_KEY_FILE
+              value: /var/run/secrets/ltm-broker-tls/tls.key
+            - name: LTM_BROKER_TLS_CA_FILE
+              value: /var/run/secrets/ltm-broker-tls/ca.crt
+            - name: LTM_WECHAT_APP_SECRET_FILE
+              value: /var/run/secrets/ltm-broker-credentials/wechat-app-secret
+            - name: LTM_ENTERPRISE_IDP_TOKEN_FILE
+              value: /var/run/secrets/ltm-broker-credentials/idp-token
+            - name: LTM_MEDIA_SAFETY_SCANNER_URL
+              value: "__LTM_MEDIA_SAFETY_SCANNER_URL__"
+            - name: LTM_MEDIA_SAFETY_SCANNER_TOKEN_FILE
+              value: /var/run/secrets/ltm-media-scanner/token
+            - name: LTM_MEDIA_SAFETY_RECEIPT_PUBLIC_KEY_FILE
+              value: /var/run/secrets/ltm-media-authority/scanner-receipt.pub
+            - name: LTM_MEDIA_SAFETY_EXPECTED_ENVIRONMENT
+              value: production
+            - name: LTM_MEDIA_LIFECYCLE_CATALOG_FILE
+              value: /var/run/secrets/ltm-media-authority/lifecycle-catalog.json
+            - name: LTM_MEDIA_LIFECYCLE_TRUST_PUBLIC_KEY_FILE
+              value: /var/run/secrets/ltm-media-authority/lifecycle-catalog.pub
+            - name: LTM_MEDIA_LIFECYCLE_EXPECTED_ISSUER
+              value: ltm-privacy-policy-authority
+            - name: LTM_MEDIA_LIFECYCLE_EXPECTED_ENVIRONMENT
+              value: production
+            - name: LTM_MEDIA_LIFECYCLE_TARGET_SECRET_ROOT
+              value: /var/run/secrets/ltm-media-lifecycle-targets
+            - name: LTM_MEDIA_DOWNLOAD_PRIVATE_KEY_FILE
+              value: /var/run/secrets/ltm-media-authority/download-signing.key
+            - name: LTM_MEDIA_DOWNLOAD_PUBLIC_KEY_FILE
+              value: /var/run/secrets/ltm-media-authority/download-signing.pub
+            - name: LTM_MEDIA_DOWNLOAD_BASE_URL
+              value: https://ltm-client-integration-broker.ltm-production.svc:8443
+            - name: LTM_MEDIA_DOWNLOAD_ISSUER
+              value: ltm-client-integration-broker
+            - name: NODE_EXTRA_CA_CERTS
+              value: /var/run/secrets/ltm-egress-ca-bundle/ca-bundle.pem
+            - name: AWS_WEB_IDENTITY_TOKEN_FILE
+              value: /var/run/secrets/ltm-workload/token
+          readinessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /health/ready
+              port: https
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /health/live
+              port: https
+            initialDelaySeconds: 20
+            timeoutSeconds: 3
+            periodSeconds: 20
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /health/live
+              port: https
+            periodSeconds: 5
+            failureThreshold: 24
+          resources:
+            requests:
+              cpu: 250m
+              memory: 384Mi
+            limits:
+              cpu: "2"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: broker-credentials
+              mountPath: /var/run/secrets/ltm-broker-credentials
+              readOnly: true
+            - name: broker-tls
+              mountPath: /var/run/secrets/ltm-broker-tls
+              readOnly: true
+            - name: media-scanner-credentials
+              mountPath: /var/run/secrets/ltm-media-scanner
+              readOnly: true
+            - name: media-authority
+              mountPath: /var/run/secrets/ltm-media-authority
+              readOnly: true
+            - name: media-lifecycle-targets
+              mountPath: /var/run/secrets/ltm-media-lifecycle-targets
+              readOnly: true
+            - name: egress-ca-bundle
+              mountPath: /var/run/secrets/ltm-egress-ca-bundle
+              readOnly: true
+            - name: workload-token
+              mountPath: /var/run/secrets/ltm-workload
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi
+        - name: broker-credentials
+          secret:
+            secretName: ltm-production-client-integration-broker-credentials
+            defaultMode: 0440
+            items:
+              - key: wechat-app-secret
+                path: wechat-app-secret
+              - key: idp-token
+                path: idp-token
+        - name: broker-tls
+          secret:
+            secretName: ltm-production-client-integration-broker-tls
+            defaultMode: 0440
+            items:
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key
+              - key: ca.crt
+                path: ca.crt
+        - name: media-scanner-credentials
+          secret:
+            secretName: ltm-production-client-integration-broker-scanner-credentials
+            optional: false
+            defaultMode: 0440
+            items:
+              - key: token
+                path: token
+        - name: media-authority
+          secret:
+            secretName: ltm-production-client-integration-broker-media-authority
+            optional: false
+            defaultMode: 0440
+            items:
+              - key: scanner-receipt.pub
+                path: scanner-receipt.pub
+              - key: lifecycle-catalog.json
+                path: lifecycle-catalog.json
+              - key: lifecycle-catalog.pub
+                path: lifecycle-catalog.pub
+              - key: download-signing.key
+                path: download-signing.key
+              - key: download-signing.pub
+                path: download-signing.pub
+        - name: media-lifecycle-targets
+          secret:
+            secretName: ltm-production-client-integration-broker-media-lifecycle-targets
+            optional: true
+            defaultMode: 0440
+        - name: egress-ca-bundle
+          secret:
+            secretName: ltm-production-client-integration-broker-egress-ca-bundle
+            optional: false
+            defaultMode: 0440
+            items:
+              - key: ca-bundle.pem
+                path: ca-bundle.pem
+              - key: idp-ca.crt
+                path: sources/idp-ca.crt
+              - key: scanner-ca.crt
+                path: sources/scanner-ca.crt
+        - name: workload-token
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: sts.amazonaws.com
+                  expirationSeconds: 3600
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ltm-client-integration-broker
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ltm-client-integration-broker
+  ports:
+    - name: https
+      port: 8443
+      targetPort: https

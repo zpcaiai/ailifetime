@@ -6,7 +6,16 @@ import argparse
 import json
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+def package_root() -> Path:
+    script = Path(__file__).resolve()
+    for ancestor in script.parents:
+        for candidate in (ancestor, ancestor / ".ai-life-time-machine/skill-package"):
+            if (candidate / "manifest.json").is_file() and (candidate / "manifests/batches.json").is_file():
+                return candidate
+    raise RuntimeError("AI Life Time Machine skill package could not be located from this repository")
+
+
+ROOT = package_root()
 BATCHES = json.loads((ROOT / "manifests/batches.json").read_text(encoding="utf-8"))
 
 

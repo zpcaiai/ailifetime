@@ -92,3 +92,15 @@ test("OIDC rejects unknown roles, wrong token type, and disallowed purpose", asy
     (error) => error instanceof DomainError && error.code === "AUTH_FORBIDDEN",
   );
 });
+
+test("OIDC rejects a JWKS endpoint outside the pinned issuer origin", () => {
+  assert.throws(
+    () => new OidcAuthenticator({
+      issuer: "https://identity.example.test",
+      audience: "ltm-api",
+      jwksUrl: new URL("https://keys.example.test/.well-known/jwks.json"),
+      algorithms: ["RS256"],
+    }),
+    (error) => error instanceof DomainError && error.code === "CONFIGURATION_INVALID",
+  );
+});

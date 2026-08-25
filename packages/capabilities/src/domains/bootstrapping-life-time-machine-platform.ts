@@ -14,7 +14,14 @@ import type { CapabilityInvocation, CapabilityRegistry } from "../registry.js";
 
 const SKILL = "bootstrapping-life-time-machine-platform";
 
-function architecture(input: JsonObject): JsonObject {
+function requirePlatformControlActor(invocation: CapabilityInvocation, batchId: "B01" | "B02"): void {
+  if (!invocation.actor.roles.some((role) => role === "platform_admin" || role === "service_account")) {
+    throw new DomainError("AUTH_FORBIDDEN", `${batchId} is restricted to a platform administrator or service identity`);
+  }
+}
+
+function architecture(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
+  requirePlatformControlActor(invocation, "B01");
   const repositoryId = requiredString(input, "repositoryId");
   const stackProfile = requiredString(input, "stackProfile");
   const boundedContexts = stringList(input, "boundedContexts", { min: 2, unique: true });
@@ -26,7 +33,8 @@ function architecture(input: JsonObject): JsonObject {
   return { repositoryId, stackProfile, boundedContexts, healthChecks, ownershipRules };
 }
 
-function contracts(input: JsonObject): JsonObject {
+function contracts(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
+  requirePlatformControlActor(invocation, "B02");
   const contractVersion = requiredString(input, "contractVersion");
   const schemaVersion = requiredString(input, "schemaVersion");
   const aggregateTypes = stringList(input, "aggregateTypes", { min: 1, unique: true });
@@ -38,16 +46,20 @@ function contracts(input: JsonObject): JsonObject {
   return { contractVersion, schemaVersion, aggregateTypes, compatibility, sensitiveFieldsClassified };
 }
 
-function identityPolicy(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
+function consentPolicyCatalogPublication(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
   assertActorTenant(input, invocation);
-  const policyVersion = requiredString(input, "policyVersion");
-  const actorTypes = stringList(input, "actorTypes", { min: 1, unique: true });
-  const decisionModel = assertKnownState(requiredString(input, "decisionModel"), ["rbac_abac"] as const, "decisionModel");
-  const databaseIsolation = requiredBoolean(input, "databaseIsolation");
-  if (!databaseIsolation) {
-    throw new DomainError("TENANT_SCOPE_MISMATCH", "database tenant isolation must be enabled");
+  if (!invocation.actor.roles.some((role) => role === "platform_admin" || role === "service_account")) {
+    throw new DomainError("AUTH_FORBIDDEN", "B03 is restricted to a platform administrator or service identity");
   }
-  return { policyVersion, actorTypes, decisionModel, databaseIsolation };
+  const unsupported = Object.keys(input).filter((field) => field !== "tenantId");
+  if (unsupported.length > 0) {
+    throw new DomainError(
+      "VALIDATION_FAILED",
+      "B03 accepts no client-authored policy; it publishes runtime-verified catalog metadata",
+      { details: { fields: unsupported.sort() } },
+    );
+  }
+  return {};
 }
 
 function consentRecord(input: JsonObject): JsonObject {
@@ -56,26 +68,40 @@ function consentRecord(input: JsonObject): JsonObject {
     : requiredString(input, "subjectId");
   const purpose = requiredString(input, "purpose");
   const policyVersion = requiredString(input, "policyVersion");
-  const evidenceHash = requiredString(input, "evidenceHash");
-  const expiresAt = assertISODate(requiredString(input, "expiresAt"), "expiresAt");
+  const evidenceHash = input.evidenceHash === undefined ? undefined : requiredString(input, "evidenceHash");
+  const expiresAt = input.expiresAt === undefined || input.expiresAt === null
+    ? undefined
+    : assertISODate(requiredString(input, "expiresAt"), "expiresAt");
   const status = assertKnownState(requiredString(input, "status"), ["active"] as const, "status");
-  const isMinor = requiredBoolean(input, "isMinor");
-  const guardianConsentId = typeof input.guardianConsentId === "string" ? input.guardianConsentId : undefined;
-  if (isMinor && (!guardianConsentId || status !== "active")) {
-    throw new DomainError("GUARDIAN_VERIFICATION_REQUIRED", "active, independent guardian consent is required");
+  const grantorCapacity = assertKnownState(
+    requiredString(input, "grantorCapacity"),
+    ["self", "guardian", "authorized_agent"] as const,
+    "grantorCapacity",
+  );
+  const scopeInput = requireNonEmptyObject(input, "scope");
+  const scope = {
+    resource: requiredString(scopeInput, "resource"),
+    actions: stringList(scopeInput, "actions", { min: 1, unique: true }),
+  };
+  if (Object.prototype.hasOwnProperty.call(input, "guardianConsentId") ||
+      Object.prototype.hasOwnProperty.call(input, "isMinor")) {
+    throw new DomainError(
+      "VALIDATION_FAILED",
+      "guardian and minor authority are derived from the durable participant registry, not client assertions",
+    );
   }
-  if (new Date(expiresAt).getTime() <= Date.now() && status === "active") {
+  if (expiresAt !== undefined && new Date(expiresAt).getTime() <= Date.now() && status === "active") {
     throw new DomainError("CONSENT_REQUIRED", "expired consent cannot be recorded as active");
   }
   return {
     participantId,
     purpose,
     policyVersion,
-    evidenceHash,
-    expiresAt,
+    ...(evidenceHash === undefined ? {} : { evidenceHash }),
+    ...(expiresAt === undefined ? {} : { expiresAt }),
     status,
-    isMinor,
-    ...(guardianConsentId ? { guardianConsentId } : {}),
+    grantorCapacity,
+    scope,
   };
 }
 
@@ -129,13 +155,19 @@ function durableWorkflow(input: JsonObject): JsonObject {
 
 const definitions: readonly DomainCapabilityDefinition[] = [
   defineCapability("B01", SKILL, "configureArchitecture", architecture, {
+    permission: "platform.architecture.manage",
     mode: "resource", collection: "platform.architectures", recordIdField: "repositoryId",
   }),
   defineCapability("B02", SKILL, "publishContracts", contracts, {
+    permission: "platform.contract.publish",
     mode: "resource", collection: "platform.contract-releases", recordIdField: "contractVersion",
   }),
-  defineCapability("B03", SKILL, "publishIdentityPolicy", identityPolicy, {
-    mode: "resource", collection: "identity.policies", recordIdField: "policyVersion",
+  defineCapability("B03", SKILL, "publishConsentPolicyCatalog", consentPolicyCatalogPublication, {
+    permission: "consent-policy:publish",
+    mode: "resource",
+    collection: "identity.consent-policy-catalogs",
+    recordIdField: "catalogSha256",
+    serverConsentPolicyMetadata: true,
   }),
   defineCapability("B04", SKILL, "recordConsent", consentRecord, { mode: "consent-write" }),
   defineCapability("B05", SKILL, "scheduleMediaLifecycle", mediaLifecycle, {

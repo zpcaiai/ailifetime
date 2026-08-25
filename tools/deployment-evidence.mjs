@@ -9,6 +9,12 @@ import {
   scopeAllowed,
   sha256Bytes,
 } from "./b127-certifier.mjs";
+import {
+  EvidenceContractError,
+  productionReleaseSubjectSha256,
+  validateDeploymentCheckReport,
+  validateProductionReleaseSubject,
+} from "./production-evidence-contracts.mjs";
 
 const SHA256 = /^[a-f0-9]{64}$/;
 const COMMIT = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
@@ -36,6 +42,7 @@ export const REQUIRED_DEPLOYMENT_CHECKS = Object.freeze([
   "tls-and-proxy",
   "managed-secret-references",
   "database-url-contract",
+  "runtime-policy-authority",
 ]);
 
 export function verifyProductionDeploymentEvidence(options) {
@@ -45,11 +52,33 @@ export function verifyProductionDeploymentEvidence(options) {
   const launchId = identifier(options.launchId, "launchId");
   const expectedCommit = exactCommit(options.expectedCommit, "expectedCommit");
   const releaseManifestSha256 = exactSha256(options.releaseManifestSha256, "releaseManifestSha256");
+  const mediaAuthorityArtifactSha256 = exactSha256(
+    options.expectedMediaAuthorityArtifactSha256,
+    "expectedMediaAuthorityArtifactSha256",
+  );
+  if (typeof options.expectedTargetBaseUrl !== "string" || options.expectedTargetBaseUrl.trim() === "") {
+    throw blocked("DEPLOYMENT_PUBLIC_ORIGIN_REQUIRED", "A configured production public HTTPS origin is required");
+  }
+  let releaseSubject;
+  try {
+    releaseSubject = validateProductionReleaseSubject(options.expectedReleaseSubject);
+  } catch (error) {
+    if (error instanceof EvidenceContractError) throw new CertificationError(error.code, error.message);
+    throw error;
+  }
+  const releaseSubjectSha256 = productionReleaseSubjectSha256(releaseSubject);
+  if (releaseSubject.repositoryCommit !== expectedCommit) throw new CertificationError("DEPLOYMENT_RELEASE_SUBJECT_COMMIT_MISMATCH", "Release subject commit does not match B127");
+  if (releaseSubject.targetBaseUrl !== httpsUrl(options.expectedTargetBaseUrl, "expected targetBaseUrl").toString()) throw new CertificationError("DEPLOYMENT_TARGET_MISMATCH", "Release subject target does not match LTM_PUBLIC_BASE_URL");
   if (typeof options.evidencePath !== "string" || options.evidencePath.trim() === "") {
     throw blocked("DEPLOYMENT_EVIDENCE_REQUIRED", "Signed production deployment evidence is required");
   }
   const evidenceFile = readStableFile(resolve(options.evidencePath), "deployment evidence", MAX_EVIDENCE_BYTES);
   const document = parseObject(evidenceFile.bytes.toString("utf8"), "deployment evidence");
+  exactObject(document, "deployment evidence", [
+    "schemaVersion", "environment", "deploymentId", "tenantId", "launchId", "commit",
+    "releaseManifestSha256", "releaseSubjectSha256", "targetBaseUrl", "issuedAt", "expiresAt",
+    "issuer", "provider", "keyId", "algorithm", "scope", "checks", "signature",
+  ]);
   const signature = text(document.signature, "deployment evidence signature", 256);
   const unsigned = { ...document };
   delete unsigned.signature;
@@ -69,7 +98,11 @@ export function verifyProductionDeploymentEvidence(options) {
   if (exactSha256(document.releaseManifestSha256, "deployment evidence releaseManifestSha256") !== releaseManifestSha256) {
     throw new CertificationError("DEPLOYMENT_EVIDENCE_MANIFEST_MISMATCH", "Deployment evidence is not bound to the verified B127 manifest");
   }
+  if (exactSha256(document.releaseSubjectSha256, "deployment evidence releaseSubjectSha256") !== releaseSubjectSha256) {
+    throw new CertificationError("DEPLOYMENT_RELEASE_SUBJECT_MISMATCH", "Deployment evidence is not bound to the verified release subject");
+  }
   const deploymentId = identifier(document.deploymentId, "deploymentId");
+  if (deploymentId !== releaseSubject.deploymentId) throw new CertificationError("DEPLOYMENT_ID_MISMATCH", "Deployment evidence deploymentId does not match the release subject");
   const issuer = identifier(document.issuer, "deployment evidence issuer");
   const provider = identifier(document.provider, "deployment evidence provider");
   const keyId = identifier(document.keyId, "deployment evidence keyId");
@@ -83,7 +116,7 @@ export function verifyProductionDeploymentEvidence(options) {
     throw new CertificationError("DEPLOYMENT_EVIDENCE_ALGORITHM_INVALID", "Deployment evidence must use Ed25519");
   }
   const targetBaseUrl = httpsUrl(document.targetBaseUrl, "deployment targetBaseUrl").toString();
-  if (options.expectedTargetBaseUrl !== undefined && targetBaseUrl !== httpsUrl(options.expectedTargetBaseUrl, "expected targetBaseUrl").toString()) {
+  if (targetBaseUrl !== releaseSubject.targetBaseUrl) {
     throw new CertificationError("DEPLOYMENT_TARGET_MISMATCH", "Deployment evidence target does not match LTM_PUBLIC_BASE_URL");
   }
   const issuedAt = canonicalTimestamp(document.issuedAt, "deployment evidence issuedAt");
@@ -103,6 +136,7 @@ export function verifyProductionDeploymentEvidence(options) {
     provider,
     commit: expectedCommit,
     releaseManifestSha256,
+    releaseSubjectSha256,
     targetBaseUrl,
   });
   if (document.scope !== expectedScope) {
@@ -135,6 +169,7 @@ export function verifyProductionDeploymentEvidence(options) {
   }
 
   const checks = plainObject(document.checks, "deployment evidence checks");
+  requireExactKeys(checks, REQUIRED_DEPLOYMENT_CHECKS, "deployment evidence checks");
   const artifacts = new Set();
   const verifiedChecks = {};
   for (const checkId of REQUIRED_DEPLOYMENT_CHECKS) {
@@ -142,6 +177,7 @@ export function verifyProductionDeploymentEvidence(options) {
       throw blocked("DEPLOYMENT_CHECK_MISSING", `Deployment evidence is missing ${checkId}`);
     }
     const check = plainObject(checks[checkId], `deployment check ${checkId}`);
+    exactObject(check, `deployment check ${checkId}`, ["status", "observedAt", "target", "artifact"]);
     if (check.status !== "passed") {
       throw blocked("DEPLOYMENT_CHECK_NOT_PASSED", `Deployment check ${checkId} is not passed`);
     }
@@ -153,6 +189,7 @@ export function verifyProductionDeploymentEvidence(options) {
       throw blocked("DEPLOYMENT_CHECK_STALE", `Deployment check ${checkId} is older than seven days`);
     }
     const artifact = plainObject(check.artifact, `${checkId}.artifact`);
+    exactObject(artifact, `${checkId}.artifact`, ["path", "sha256"]);
     const path = relativePath(artifact.path, `${checkId}.artifact.path`);
     const expectedSha256 = exactSha256(artifact.sha256, `${checkId}.artifact.sha256`);
     if (artifacts.has(path)) {
@@ -164,11 +201,34 @@ export function verifyProductionDeploymentEvidence(options) {
     if (actualSha256 !== expectedSha256) {
       throw new CertificationError("DEPLOYMENT_ARTIFACT_DIGEST_MISMATCH", `Deployment check ${checkId} artifact digest does not match`);
     }
+    let report;
+    try {
+      report = validateDeploymentCheckReport(artifactFile.bytes, {
+        checkId,
+        tenantId,
+        launchId,
+        deploymentId,
+        commit: expectedCommit,
+        releaseManifestSha256,
+        releaseSubject,
+        releaseSubjectSha256,
+        mediaAuthorityArtifactSha256,
+        targetBaseUrl,
+        observedAt: observedAt.toISOString(),
+        target: text(check.target, `${checkId}.target`, 2_048),
+      });
+    } catch (error) {
+      if (error instanceof EvidenceContractError) {
+        throw new CertificationError(error.code, error.message);
+      }
+      throw error;
+    }
     verifiedChecks[checkId] = {
       status: "PASS",
       observedAt: observedAt.toISOString(),
-      target: text(check.target, `${checkId}.target`, 2_048),
+      target: targetBaseUrl,
       artifact: { path: artifactFile.path, sha256: actualSha256 },
+      report,
     };
   }
   return {
@@ -180,6 +240,7 @@ export function verifyProductionDeploymentEvidence(options) {
     launchId,
     commit: expectedCommit,
     releaseManifestSha256,
+    releaseSubjectSha256,
     targetBaseUrl,
     issuer,
     provider,
@@ -220,6 +281,7 @@ export function deploymentEvidenceScope({
   provider,
   commit,
   releaseManifestSha256,
+  releaseSubjectSha256,
   targetBaseUrl,
 }) {
   const fields = [
@@ -230,6 +292,7 @@ export function deploymentEvidenceScope({
     provider,
     commit,
     releaseManifestSha256,
+    releaseSubjectSha256,
     targetBaseUrl,
   ];
   const canonical = fields.map((value) => `${Buffer.byteLength(value, "utf8")}:${value}`).join("|");
@@ -251,6 +314,20 @@ function plainObject(value, label) {
     throw new CertificationError("DEPLOYMENT_OBJECT_INVALID", `${label} must be a JSON object`);
   }
   return value;
+}
+
+function exactObject(value, label, fields) {
+  const result = plainObject(value, label);
+  requireExactKeys(result, fields, label);
+  return result;
+}
+
+function requireExactKeys(value, fields, label) {
+  const actual = Object.keys(value).sort();
+  const expected = [...fields].sort();
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new CertificationError("DEPLOYMENT_FIELDS_INVALID", `${label} fields do not match the closed contract`);
+  }
 }
 
 function identifier(value, label) {

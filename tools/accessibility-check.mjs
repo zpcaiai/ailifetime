@@ -19,17 +19,30 @@ check("document language and landmarks", () => {
 check("tabs expose names, controls, state, and keyboard focus", () => {
   assert.match(html, /role="tablist"/);
   const tabs = [...html.matchAll(/<button[^>]+role="tab"[^>]+>/g)].map((match) => match[0]);
-  assert.equal(tabs.length, 4);
+  assert.equal(tabs.length, 5);
   for (const tab of tabs) {
     assert.match(tab, /aria-controls="[^"]+"/);
     assert.match(tab, /aria-selected="(?:true|false)"/);
     assert.match(tab, /tabindex="(?:0|-1)"/);
   }
-  assert.equal((html.match(/role="tabpanel"/g) ?? []).length, 4);
+  assert.equal((html.match(/role="tabpanel"/g) ?? []).length, 5);
 });
 
 check("form controls have programmatic labels", () => {
-  for (const id of ["tenantId", "actorId", "currentAge", "consent", "capability-search", "locale"]) {
+  for (const id of [
+    "tenantId",
+    "actorId",
+    "currentAge",
+    "consent",
+    "capability-search",
+    "locale",
+    "rights-participant",
+    "rights-type",
+    "rights-purpose",
+    "rights-correction-fields",
+    "rights-correction-digest",
+    "rights-parent",
+  ]) {
     const labelled = new RegExp(`<label[^>]*>[\\s\\S]{0,180}(?:id="${id}"|for="${id}")`).test(html);
     assert.equal(labelled, true, `${id} is not labelled`);
   }

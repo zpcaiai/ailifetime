@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DomainError } from "@ltm/core";
-import type { JsonObject, RecordEnvelope, VerifiedBusinessEvent } from "@ltm/core";
 import {
+  DomainError,
+  EXTERNAL_COMMAND_CALLBACK_ROUTES,
+  EXTERNAL_COMMAND_TERMINAL_EVENT_TYPES,
+} from "@ltm/core";
+import type { ExternalCommandCallbackRoute, JsonObject, JsonValue, RecordEnvelope, VerifiedBusinessEvent } from "@ltm/core";
+import {
+  EXTERNAL_EVENT_REDUCER_TARGET_COLLECTIONS,
   externalBusinessEventReducerRegistry,
   listExternalBusinessEventReducerRoutes,
   reduceVerifiedBusinessEvent,
@@ -17,7 +22,7 @@ function event(overrides: Partial<VerifiedBusinessEvent> & Pick<VerifiedBusiness
     tenantId: "tenant-1",
     providerOccurredAt: "2026-08-20T01:02:03.000Z",
     sequence: 1,
-    correlationId: "correlation-1",
+    correlationId: overrides.correlationId ?? overrides.subjectId,
     artifactSha256: digest,
     evidenceId: "evidence-1",
     evidenceScope: `ltm-evidence:v1:${digest}`,
@@ -28,11 +33,40 @@ function event(overrides: Partial<VerifiedBusinessEvent> & Pick<VerifiedBusiness
   };
 }
 
+function callbackProvider(route: ExternalCommandCallbackRoute): { readonly provider: string; readonly recordData: JsonObject } {
+  const binding = route.providerBinding;
+  if (binding.kind === "exact") return { provider: binding.provider, recordData: {} };
+  if (binding.kind === "record-field") {
+    return { provider: `${binding.prefix}provider-1`, recordData: { [binding.field]: "provider-1" } };
+  }
+  return {
+    provider: `${binding.allowedTypes[0]}:provider-1`,
+    recordData: { [binding.typeField]: binding.allowedTypes[0] as string, [binding.idField]: "provider-1" },
+  };
+}
+
+function commandRecord(route: ExternalCommandCallbackRoute, id: string, data: JsonObject = {}): RecordEnvelope {
+  return record(route.collection, id, {
+    batchId: route.batchId,
+    operation: route.operation,
+    operationMode: "external-command",
+    externalCommandId: id,
+    ...data,
+  });
+}
+
+function callbackRoute(batchId: string): ExternalCommandCallbackRoute {
+  const route = EXTERNAL_COMMAND_CALLBACK_ROUTES.find((candidate) => candidate.batchId === batchId);
+  assert.ok(route);
+  return route;
+}
+
 function record(collection: string, id: string, data: JsonObject): RecordEnvelope {
   return {
     id,
     tenantId: "tenant-1",
     collection,
+    processingPurpose: "external_provider_delivery",
     ownerActorId: null,
     participantIds: [],
     containsMinor: false,
@@ -45,17 +79,114 @@ function record(collection: string, id: string, data: JsonObject): RecordEnvelop
 }
 
 test("external business registry covers every first-wave authoritative reducer exactly once", () => {
-  assert.deepEqual(listExternalBusinessEventReducerRoutes(), [
-    "B100:recordInventoryAdjustment",
-    "B101:createReturnOrClaim",
-    "B102:publishVendorScorecard",
+  assert.deepEqual([...EXTERNAL_EVENT_REDUCER_TARGET_COLLECTIONS].sort(), [
+    "commerce.store-entitlements",
+    "commerce.wechat-payments",
+    "supply.inventory-balances",
+    "supply.shipments",
+    "supply.vendor-scorecards",
+  ]);
+  const expected = [
+    ...EXTERNAL_COMMAND_CALLBACK_ROUTES.map((route) => `${route.batchId}:${route.operation}`),
     "B66:verifyStoreTransaction",
     "B71:recordWechatCommercialAction",
-    "B74:scheduleMultiChannelNotification",
-    "B89:requestTaxDocument",
-    "B98:createVendorProductionJob",
     "B99:recordShipment",
-  ]);
+    "B100:recordInventoryAdjustment",
+    "B102:publishVendorScorecard",
+  ].sort();
+  assert.deepEqual(listExternalBusinessEventReducerRoutes(), expected);
+});
+
+test("all 19 external command operations expose fixed signed terminal reducers and reject callback-authored authority", () => {
+  assert.equal(EXTERNAL_COMMAND_CALLBACK_ROUTES.length, 19);
+  const terminalCases = Object.entries(EXTERNAL_COMMAND_TERMINAL_EVENT_TYPES) as readonly [
+    "succeeded" | "failed" | "cancelled" | "compensated",
+    string,
+  ][];
+  for (const route of EXTERNAL_COMMAND_CALLBACK_ROUTES) {
+    const commandId = `${route.batchId.toLowerCase()}-command-1`;
+    const authority = callbackProvider(route);
+    const requiredData: Record<string, JsonValue> = { ...authority.recordData };
+    const requiredClaims: Record<string, JsonValue> = { providerOperationId: `${route.batchId.toLowerCase()}-provider-operation-1` };
+    for (const field of route.requiredClaimIdentifiers ?? []) {
+      const value = requiredData[field] ?? `${field}-1`;
+      requiredData[field] = value;
+      requiredClaims[field] = value;
+    }
+    for (const [terminalState, eventType] of terminalCases) {
+      const callback = event({
+        batchId: route.batchId,
+        operation: route.operation,
+        provider: authority.provider,
+        subjectType: route.subjectType,
+        subjectId: commandId,
+        eventType,
+        canonicalClaims: requiredClaims,
+      });
+      const current = commandRecord(route, commandId, {
+        ...requiredData,
+        ...(terminalState === "compensated" ? { providerState: "succeeded" } : {}),
+      });
+      const result = reduceVerifiedBusinessEvent(callback, { current, relatedRecords: {} });
+      assert.equal(result.target.collection, route.collection, route.batchId);
+      assert.equal(result.target.aggregateId, commandId, route.batchId);
+      assert.equal(result.reduction.stateField, "providerState", route.batchId);
+      assert.equal(result.reduction.commandTransition?.commandId, commandId, route.batchId);
+      assert.equal(result.reduction.commandTransition?.toState, terminalState, route.batchId);
+      assert.equal(result.reduction.patch.providerResultSha256, digest, route.batchId);
+    }
+
+    const valid = event({
+      batchId: route.batchId,
+      operation: route.operation,
+      provider: authority.provider,
+      subjectType: route.subjectType,
+      subjectId: commandId,
+      eventType: EXTERNAL_COMMAND_TERMINAL_EVENT_TYPES.succeeded,
+      canonicalClaims: requiredClaims,
+    });
+    const current = commandRecord(route, commandId, requiredData);
+    const wrongProvider = route.providerBinding.kind === "exact"
+      ? `${authority.provider}-other`
+      : `${authority.provider.slice(0, authority.provider.lastIndexOf(":") + 1)}other`;
+    assert.throws(
+      () => reduceVerifiedBusinessEvent({ ...valid, provider: wrongProvider }, { current, relatedRecords: {} }),
+      (error: unknown) => error instanceof DomainError &&
+        (error.code === "VALIDATION_FAILED" || error.code === "TENANT_SCOPE_MISMATCH"),
+      `${route.batchId} must reject a different provider`,
+    );
+    assertDomainCode(() => reduceVerifiedBusinessEvent({ ...valid, correlationId: "different-command" }, {
+      current,
+      relatedRecords: {},
+    }), "EVENT_FINGERPRINT_CONFLICT");
+    for (const forbiddenClaims of [
+      { collection: "attacker.records" },
+      { tenantId: "tenant-other" },
+      { patch: { commandState: "succeeded" } },
+      { terminal: true, succeeded: true },
+    ]) {
+      assertDomainCode(() => reduceVerifiedBusinessEvent({
+        ...valid,
+        canonicalClaims: { ...valid.canonicalClaims, ...forbiddenClaims },
+      }, { current, relatedRecords: {} }), "VALIDATION_FAILED");
+    }
+    assertDomainCode(() => reduceVerifiedBusinessEvent({
+      ...valid,
+      canonicalClaims: Object.fromEntries(
+        Object.entries(valid.canonicalClaims).filter(([field]) => field !== "providerOperationId"),
+      ),
+    }, { current, relatedRecords: {} }), "VALIDATION_FAILED");
+    for (const field of route.requiredClaimIdentifiers ?? []) {
+      assertDomainCode(() => reduceVerifiedBusinessEvent({
+        ...valid,
+        canonicalClaims: { ...valid.canonicalClaims, [field]: `${String(valid.canonicalClaims[field])}-other` },
+      }, { current, relatedRecords: {} }), "TENANT_SCOPE_MISMATCH");
+    }
+    assertDomainCode(() => reduceVerifiedBusinessEvent(valid, {
+      current: commandRecord(route, `${commandId}-other`, requiredData),
+      relatedRecords: {},
+    }), "EVENT_FINGERPRINT_CONFLICT");
+  }
 });
 
 test("shipment reducer exposes a fail-closed out-of-order state graph", () => {
@@ -203,9 +334,9 @@ test("command callback reducers select fixed command IDs and terminal transition
   });
   const reducer = externalBusinessEventReducerRegistry.resolve(callback);
   assert.ok(reducer);
-  const current = record("notification.delivery-commands", "notification-1", {
+  const current = commandRecord(callbackRoute("B74"), "notification-1", {
     providerId: "ses",
-    state: "acknowledged",
+    providerState: "acknowledged",
   });
   const result = reducer.reduce(callback, { current, relatedRecords: {} });
   assert.equal(result.nextState, "delivered");
@@ -239,7 +370,7 @@ test("store entitlement and WeChat payment reducers produce provider-bound state
   assertDomainCode(() => reduceVerifiedBusinessEvent({ ...entitlement, provider: "wechat-pay" }, {
     current: null,
     relatedRecords: {},
-  }), "VALIDATION_FAILED");
+    }), "VALIDATION_FAILED");
 
   const payment = event({
     batchId: "B71",
@@ -277,8 +408,8 @@ test("vendor production and return callbacks cannot cross command-provider owner
     eventType: "vendor-job.accepted",
     canonicalClaims: { providerOperationId: "provider-job-1", vendorId: "vendor-1" },
   });
-  const vendorCommand = record("supply.vendor-production-commands", "job-1", {
-    state: "requested",
+  const vendorCommand = commandRecord(callbackRoute("B98"), "job-1", {
+    providerState: "requested",
     vendorId: "vendor-1",
   });
   assert.equal(reduceVerifiedBusinessEvent(vendorCallback, {
@@ -303,8 +434,8 @@ test("vendor production and return callbacks cannot cross command-provider owner
     eventType: "return-claim.accepted",
     canonicalClaims: { providerOperationId: "ups-claim-1", vendorId: "vendor-1" },
   });
-  const claimCommand = record("supply.return-claim-commands", "claim-1", {
-    state: "requested",
+  const claimCommand = commandRecord(callbackRoute("B101"), "claim-1", {
+    providerState: "requested",
     providerType: "carrier",
     providerId: "ups",
     vendorId: "vendor-1",
@@ -354,8 +485,8 @@ test("notification and tax callbacks bind the provider selected by the requested
       eventType: routeCase.eventType,
       canonicalClaims: { providerOperationId: `${routeCase.batchId.toLowerCase()}-provider-1` },
     });
-    const current = record(routeCase.collection, callback.subjectId, {
-      state: "requested",
+    const current = commandRecord(callbackRoute(routeCase.batchId), callback.subjectId, {
+      providerState: "requested",
       providerId: routeCase.provider.split(":")[1] as string,
     });
     assert.equal(reduceVerifiedBusinessEvent(callback, { current, relatedRecords: {} }).reduction.nextState, "acknowledged");
@@ -376,8 +507,8 @@ test("tax reissue compensates only an issued command; rejected documents require
     eventType: "tax-document.reissue",
     canonicalClaims: { providerOperationId: "reissue-1" },
   });
-  const issued = record("finance.tax-document-commands", "invoice-1", {
-    state: "issued",
+  const issued = commandRecord(callbackRoute("B89"), "invoice-1", {
+    providerState: "issued",
     providerId: "avalara",
   });
   const reduction = reduceVerifiedBusinessEvent(callback, { current: issued, relatedRecords: {} }).reduction;

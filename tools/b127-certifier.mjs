@@ -21,6 +21,32 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { Pool } from "pg";
+import {
+  APPROVAL_AUTHORITY_ROLES,
+  CHANGE_APPROVER_AUTHORITY_ROLES,
+  CONTROL_ARTIFACT_AUTHORITY_ROLES,
+  EvidenceContractError,
+  REQUIRED_APPROVAL_NAMES,
+  REQUIRED_SCHEMA5_FORCE_RLS_TABLES,
+  REQUIRED_WORKLOAD_ROLES,
+  SUPPLY_CHAIN_AUTHORITY_ROLE,
+  productionReleaseSubjectSha256,
+  validateReleaseApprovalArtifact,
+  validateReleaseSbom,
+  validateProductionReleaseSubject,
+} from "./production-evidence-contracts.mjs";
+import {
+  B127ReleaseControlError,
+  CONTROL_ARTIFACT_ATTESTATION_SCHEMA_VERSION,
+  REQUIRED_B127_MONITORING_DOMAINS,
+  controlArtifactAttestationScope,
+  controlArtifactAttestationSigningBytes,
+  validateRolloutGuardrailPolicy,
+  validateRollbackForwardDrill,
+  validateRolloutWaveObservation,
+  waveObservationArtifactSetSha256,
+} from "./b127-release-controls.mjs";
+import { verifySupplyChainBundle } from "../security/supply-chain.mjs";
 
 const SHA256 = /^[a-f0-9]{64}$/;
 const GIT_COMMIT = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
@@ -30,6 +56,20 @@ const MAX_TRUST_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_SBOM_BYTES = 100 * 1024 * 1024;
 const MAX_APPROVAL_ARTIFACT_BYTES = 100 * 1024 * 1024;
 const MAX_RELEASE_CONTROL_ARTIFACT_BYTES = 100 * 1024 * 1024;
+const CHANGE_APPROVER_SCOPE_PREFIX = "ltm-change-approval:v1:";
+const PRODUCTION_CHANGE_EXECUTOR_ROLE = "production-change-executor";
+const CONTROL_ARTIFACT_PROVIDER_PREFIXES = Object.freeze({
+  monitoring_query: "monitoring-query",
+  monitoring_result: "monitoring-result",
+  pause_command: "rollout-controller",
+  pause_receipt: "rollout-actuator",
+});
+const CONTROL_ARTIFACT_STATES = Object.freeze({
+  monitoring_query: "query_defined",
+  monitoring_result: "result_complete",
+  pause_command: "pause_issued",
+  pause_receipt: "pause_acknowledged",
+});
 const CLOCK_SKEW_MS = 5 * 60 * 1_000;
 const EXPECTED_BATCH_IDS = Object.freeze(Array.from({ length: 128 }, (_, index) => `B${String(index).padStart(2, "0")}`));
 const REQUIRED_COMPONENT_VERSIONS = Object.freeze([
@@ -44,15 +84,12 @@ const REQUIRED_COMPONENT_VERSIONS = Object.freeze([
   "productionConfiguration",
 ]);
 const REQUIRED_RELEASE_GATES = Object.freeze(Array.from({ length: 12 }, (_, index) => `G${index}`));
-const REQUIRED_MONITORING_DOMAINS = Object.freeze([
-  "quality",
-  "payment",
-  "refund",
-  "support",
-  "ledger",
-  "supply",
-  "privacy",
-  "security",
+const REQUIRED_SCHEMA5_MIGRATIONS = Object.freeze([
+  Object.freeze({ id: "001", path: "001_core.sql" }),
+  Object.freeze({ id: "002", path: "002_external_evidence.sql" }),
+  Object.freeze({ id: "003", path: "003_runtime_compatibility.sql" }),
+  Object.freeze({ id: "004", path: "004_external_business_events.sql" }),
+  Object.freeze({ id: "005", path: "005_participant_authority_and_processing_purpose.sql" }),
 ]);
 const REQUIRED_APPROVALS = Object.freeze({
   independentPenetrationTest: "passed",
@@ -70,7 +107,7 @@ const B127_POSTGRES_TABLES = Object.freeze([
   "external_evidence",
   "evidence_consumptions",
 ]);
-const B127_POSTGRES_TENANT_TABLES = Object.freeze(B127_POSTGRES_TABLES.filter((name) => name !== "schema_metadata"));
+const B127_POSTGRES_TENANT_TABLES = REQUIRED_SCHEMA5_FORCE_RLS_TABLES;
 const B127_POSTGRES_COLUMNS = Object.freeze({
   schema_metadata: ["key:text:NO", "value:text:NO"],
   records: [
@@ -227,7 +264,7 @@ export class SqliteB127CertificationSource {
         sourceEvidence: {
           kind: this.kind,
           databasePath: realpathSync(databasePath),
-          schemaVersion: "3",
+          schemaVersion: "5",
         },
       };
     } catch (error) {
@@ -538,11 +575,11 @@ async function verifyPostgresCertificationContract(client, certificationProfile)
     "SELECT value FROM ltm.schema_metadata WHERE key='runtime_schema_version'",
   );
   const schemaVersion = metadata.rows[0]?.value;
-  if (metadata.rows.length !== 1 || !["3", "4"].includes(schemaVersion)) {
-    throw new CertificationError("B127_POSTGRES_SCHEMA_UNSUPPORTED", "B127 PostgreSQL runtime schema must be an explicitly supported version (3 or 4)");
+  if (metadata.rows.length !== 1 || !["3", "4", "5"].includes(schemaVersion)) {
+    throw new CertificationError("B127_POSTGRES_SCHEMA_UNSUPPORTED", "B127 PostgreSQL runtime schema must be an explicitly supported version (3, 4, or 5)");
   }
-  if (certificationProfile === "production" && schemaVersion !== "4") {
-    throw blocked("B127_POSTGRES_SCHEMA_OUTDATED", "Production B127 certification requires runtime schema version 4");
+  if (certificationProfile === "production" && schemaVersion !== "5") {
+    throw blocked("B127_POSTGRES_SCHEMA_OUTDATED", "Production B127 certification requires runtime schema version 5");
   }
   const columns = await client.query(
     `SELECT table_name,column_name,data_type,is_nullable
@@ -572,7 +609,7 @@ async function verifyPostgresCertificationContract(client, certificationProfile)
     rls.rows.length !== B127_POSTGRES_TENANT_TABLES.length ||
     rls.rows.some((table) => table.relrowsecurity !== true || table.relforcerowsecurity !== true)
   ) {
-    throw new CertificationError("B127_POSTGRES_RLS_NOT_FORCED", "All B127 PostgreSQL tenant tables must enable and force row-level security");
+    throw new CertificationError("B127_POSTGRES_RLS_NOT_FORCED", "All 17 schema-5 PostgreSQL tenant tables must enable and force row-level security");
   }
   const policies = await client.query(
     `SELECT tablename,policyname,permissive,cmd,roles::text AS roles,qual,with_check
@@ -592,7 +629,7 @@ async function verifyPostgresCertificationContract(client, certificationProfile)
       policy.with_check !== "(tenant_id = ltm.current_tenant())"
     )
   ) {
-    throw new CertificationError("B127_POSTGRES_RLS_POLICY_INVALID", "B127 PostgreSQL tenant isolation policies are missing, duplicated, or broader than ltm.current_tenant() equality");
+    throw new CertificationError("B127_POSTGRES_RLS_POLICY_INVALID", "Every schema-5 tenant table must have exactly one PERMISSIVE ALL PUBLIC tenant_isolation policy with exact ltm.current_tenant() USING and WITH CHECK expressions");
   }
   const triggers = await client.query(
     `SELECT c.relname,t.tgname,t.tgenabled
@@ -745,6 +782,7 @@ export async function verifyB127Certification(options) {
     expectedCommit,
     record,
     now,
+    trustedKeys,
   });
   const b126Record = validateB126Certificate(candidate.b126Record, validatedManifest.b126Certification, {
     tenantId,
@@ -779,7 +817,8 @@ export async function verifyB127Certification(options) {
     now,
     minimumIssuedAt: validatedManifest.generatedAt,
   });
-  validateApprovalEvidence(validatedManifest.approvals, evidence, record.approvalIds);
+  validateApprovalEvidence(validatedManifest.approvals, evidence, record.approvalIds, trustedKeys);
+  validateProductionChangeSignerSeparation(validatedManifest.approvals.productionChangeApproval, evidence, trustedKeys);
   const allEvidenceIds = [...b126Record.externalEvidenceIds, ...record.externalEvidenceIds];
   if (new Set(allEvidenceIds).size !== allEvidenceIds.length) {
     throw new CertificationError("B126_B127_EVIDENCE_REUSE", "B126 and B127 must consume distinct single-use evidence envelopes");
@@ -828,6 +867,23 @@ export async function verifyB127Certification(options) {
       artifact: validatedManifest.batchReports.artifact,
     },
     componentSetSha256: validatedManifest.componentSetSha256,
+    releaseSubject: validatedManifest.releaseSubject,
+    releaseSubjectSha256: productionReleaseSubjectSha256(validatedManifest.releaseSubject),
+    policyAuthority: validatedManifest.policyAuthority,
+    releaseControls: {
+      waveObservationSetSha256: validatedManifest.rollout.waveObservationSetSha256,
+      completedWaveObservations: validatedManifest.rollout.completedWaves.map((wave) => ({
+        wave: wave.wave,
+        reportId: wave.observation.reportId,
+        artifact: wave.observationArtifact,
+      })),
+      rollbackForwardDrill: {
+        reportId: validatedManifest.rollout.rollbackForwardDrill.reportId,
+        exerciseId: validatedManifest.rollout.rollbackForwardDrill.exerciseId,
+        scopeSetSha256: validatedManifest.rollout.rollbackForwardDrill.scopeSetSha256,
+        artifact: validatedManifest.rollout.rollbackForwardDrillArtifact,
+      },
+    },
     goLive: validatedManifest.goLive,
     operationsHandoff: validatedManifest.operationsHandoff,
     dataSource: candidate.sourceEvidence ?? { kind: source.kind ?? "custom" },
@@ -836,10 +892,21 @@ export async function verifyB127Certification(options) {
         approvalId: approval.approvalId,
         decision: approval.decision,
         authority: approval.authority,
+        authorityRole: approval.authorityRole,
         issuer: approval.issuer,
         evidenceId: approval.evidenceId,
         artifact: approval.artifact,
         approvedAt: approval.approvedAt,
+        ...(approval.approverSignatures === undefined ? {} : {
+          approvers: approval.approverSignatures.map((entry) => ({
+            evidenceId: entry.evidenceId,
+            approverId: entry.approverId,
+            issuer: entry.issuer,
+            keyId: entry.keyId,
+            authorityRole: entry.authorityRole,
+            artifact: entry.artifact,
+          })),
+        }),
       }]),
     ),
   };
@@ -916,9 +983,19 @@ function validateRecord(recordEnvelope, expected) {
   }
   const releaseGates = stringArray(data.releaseGates, "B127 releaseGates", 12, 64);
   requireMembers(releaseGates, REQUIRED_RELEASE_GATES, "B127 releaseGates");
-  const monitoringDomains = stringArray(data.monitoringDomains, "B127 monitoringDomains", 8, 64);
-  requireMembers(monitoringDomains, REQUIRED_MONITORING_DOMAINS, "B127 monitoringDomains");
+  const monitoringDomains = stringArray(
+    data.monitoringDomains,
+    "B127 monitoringDomains",
+    REQUIRED_B127_MONITORING_DOMAINS.length,
+    REQUIRED_B127_MONITORING_DOMAINS.length,
+  );
+  requireMembers(monitoringDomains, REQUIRED_B127_MONITORING_DOMAINS, "B127 monitoringDomains");
   const approvalIds = stringArray(data.approvalIds, "B127 approvalIds", Object.keys(REQUIRED_APPROVALS).length, 100);
+  const guardrailPolicySha256 = exactSha256(data.guardrailPolicySha256, "B127 guardrailPolicySha256");
+  const waveObservationSetSha256 = exactSha256(data.waveObservationSetSha256, "B127 waveObservationSetSha256");
+  const rollbackForwardDrillSha256 = exactSha256(data.rollbackForwardDrillSha256, "B127 rollbackForwardDrillSha256");
+  const changeApproverEvidenceIds = stringArray(data.changeApproverEvidenceIds, "B127 changeApproverEvidenceIds", 2, 2)
+    .map((id) => identifier(id, "B127 change approver evidenceId"));
   const externalEvidenceIds = stringArray(data.externalEvidenceIds, "B127 externalEvidenceIds", 5, 100).map((id) => identifier(id, "evidenceId"));
   if (!Number.isSafeInteger(data.activeGuardrailBreaches) || data.activeGuardrailBreaches !== 0) {
     throw blocked("ACTIVE_GUARDRAIL_BREACH", "B127 has an active production guardrail breach");
@@ -940,6 +1017,10 @@ function validateRecord(recordEnvelope, expected) {
     releaseGates,
     monitoringDomains,
     approvalIds,
+    guardrailPolicySha256,
+    waveObservationSetSha256,
+    rollbackForwardDrillSha256,
+    changeApproverEvidenceIds,
     externalEvidenceIds,
   };
 }
@@ -952,8 +1033,14 @@ function manifestB126CertificationId(manifest) {
   return identifier(reference.certificationId, "manifest b126Certification.certificationId");
 }
 
-function validateManifest(manifestValue, { root, tenantId, launchId, expectedCommit, record, now }) {
+function validateManifest(manifestValue, { root, tenantId, launchId, expectedCommit, record, now, trustedKeys }) {
   const manifest = plainObject(manifestValue, "release manifest");
+  requireExactObjectKeys(manifest, [
+    "schemaVersion", "generatedAt", "tenantId", "launchId", "environment", "deploymentScope",
+    "releaseControlProviderId", "repositoryCommit", "artifactCommit", "selectedProfile",
+    "componentVersions", "componentSetSha256", "batchReports", "b126Certification", "sbom",
+    "releaseSubject", "rollout", "approvals", "goLive", "operationsHandoff", "exceptions",
+  ], "release manifest");
   if (manifest.schemaVersion !== "ltm.production-release-manifest.v1") {
     throw new CertificationError("RELEASE_MANIFEST_SCHEMA_INVALID", "The release manifest schemaVersion is unsupported");
   }
@@ -1107,6 +1194,10 @@ function validateManifest(manifestValue, { root, tenantId, launchId, expectedCom
   };
 
   const rolloutValue = plainObject(manifest.rollout, "manifest rollout");
+  requireExactObjectKeys(rolloutValue, [
+    "wave", "rolloutPercent", "waveStartedAt", "rollbackExerciseId",
+    "automaticPausePolicyVersion", "guardrailPolicyArtifact", "completedWaves", "rollbackForwardDrillArtifact",
+  ], "manifest rollout");
   if (
     rolloutValue.wave !== record.wave ||
     rolloutValue.rolloutPercent !== record.rolloutPercent ||
@@ -1123,20 +1214,143 @@ function validateManifest(manifestValue, { root, tenantId, launchId, expectedCom
   if (waveStartedAt.getTime() > now.getTime() + CLOCK_SKEW_MS) {
     throw new CertificationError("GLOBAL_WAVE_FROM_FUTURE", "The global release wave has not started");
   }
+  const releaseSubjectRolloutBinding = plainObject(manifest.releaseSubject, "manifest releaseSubject");
+  const deploymentId = identifier(
+    releaseSubjectRolloutBinding.deploymentId,
+    "manifest releaseSubject.deploymentId",
+  );
+  const automaticPausePolicyVersion = releaseVersion(
+    rolloutValue.automaticPausePolicyVersion,
+    "manifest rollout.automaticPausePolicyVersion",
+  );
+  const guardrailPolicyArtifactResult = validateManifestArtifact(
+    root,
+    rolloutValue.guardrailPolicyArtifact,
+    "canonical rollout guardrail policy",
+    MAX_RELEASE_CONTROL_ARTIFACT_BYTES,
+    artifactPaths,
+    "GUARDRAIL_POLICY_ARTIFACT_DIGEST_MISMATCH",
+  );
+  const guardrailPolicy = mapReleaseControlValidation(() => validateRolloutGuardrailPolicy(
+    guardrailPolicyArtifactResult.file.bytes,
+    {
+      tenantId,
+      launchId,
+      deploymentId,
+      repositoryCommit,
+      componentSetSha256,
+      policyVersion: automaticPausePolicyVersion,
+    },
+  ));
   const completedWaves = validateCompletedWaves(
     rolloutValue.completedWaves,
-    { root, artifactPaths, globalWaveStartedAt: waveStartedAt, now },
+    {
+      root,
+      artifactPaths,
+      globalWaveStartedAt: waveStartedAt,
+      now,
+      tenantId,
+      launchId,
+      deploymentId,
+      repositoryCommit,
+      componentSetSha256,
+      automaticPausePolicyVersion,
+      guardrailPolicy,
+      guardrailPolicySha256: guardrailPolicyArtifactResult.artifact.sha256,
+      trustedKeys,
+    },
   );
+  const waveObservationSetSha256 = waveObservationArtifactSetSha256(
+    completedWaves.map((wave) => ({ wave: wave.wave, sha256: wave.observationArtifact.sha256 })),
+  );
+  const rollbackExerciseId = identifier(
+    rolloutValue.rollbackExerciseId,
+    "manifest rollout.rollbackExerciseId",
+  );
+  const rollbackForwardDrillArtifactResult = validateManifestArtifact(
+    root,
+    rolloutValue.rollbackForwardDrillArtifact,
+    "rollback-forward drill report",
+    MAX_RELEASE_CONTROL_ARTIFACT_BYTES,
+    artifactPaths,
+    "ROLLBACK_DRILL_ARTIFACT_DIGEST_MISMATCH",
+  );
+  const rollbackForwardDrill = mapReleaseControlValidation(() => validateRollbackForwardDrill(
+    rollbackForwardDrillArtifactResult.file.bytes,
+    {
+      exerciseId: rollbackExerciseId,
+      tenantId,
+      launchId,
+      deploymentId,
+      repositoryCommit,
+      componentSetSha256,
+      maximumCompletedAt: waveStartedAt.toISOString(),
+    },
+  ));
   const rollout = {
     wave: "global",
     rolloutPercent: 100,
     waveStartedAt: waveStartedAt.toISOString(),
-    rollbackExerciseId: identifier(rolloutValue.rollbackExerciseId, "manifest rollout.rollbackExerciseId"),
-    automaticPausePolicyVersion: releaseVersion(rolloutValue.automaticPausePolicyVersion, "manifest rollout.automaticPausePolicyVersion"),
+    rollbackExerciseId,
+    automaticPausePolicyVersion,
+    guardrailPolicyArtifact: guardrailPolicyArtifactResult.artifact,
+    guardrailPolicy,
     completedWaves,
+    waveObservationSetSha256,
+    rollbackForwardDrillArtifact: rollbackForwardDrillArtifactResult.artifact,
+    rollbackForwardDrill,
+  };
+  if (
+    record.guardrailPolicySha256 !== guardrailPolicyArtifactResult.artifact.sha256 ||
+    record.waveObservationSetSha256 !== waveObservationSetSha256 ||
+    record.rollbackForwardDrillSha256 !== rollbackForwardDrillArtifactResult.artifact.sha256
+  ) {
+    throw new CertificationError("B127_RELEASE_CONTROL_BINDING_MISMATCH", "The stored B127 record does not bind the exact guardrail policy, wave set, and rollback-forward drill artifacts");
+  }
+
+  const goLiveValue = plainObject(manifest.goLive, "manifest goLive");
+  requireExactObjectKeys(goLiveValue, ["windowStart", "windowEnd", "scheduledAt", "changeApprovalId"], "manifest goLive");
+  const windowStart = canonicalTimestamp(goLiveValue.windowStart, "manifest goLive.windowStart");
+  const windowEnd = canonicalTimestamp(goLiveValue.windowEnd, "manifest goLive.windowEnd");
+  const scheduledAt = canonicalTimestamp(goLiveValue.scheduledAt, "manifest goLive.scheduledAt");
+  if (
+    windowEnd <= windowStart ||
+    scheduledAt < windowStart || scheduledAt > windowEnd ||
+    scheduledAt < generatedAt ||
+    scheduledAt.toISOString() !== rollout.waveStartedAt ||
+    windowEnd.getTime() - windowStart.getTime() > 72 * 60 * 60_000
+  ) {
+    throw new CertificationError("GO_LIVE_WINDOW_INVALID", "The global wave must start inside a bounded approved go-live window after manifest generation");
+  }
+  const changeApprovalId = identifier(goLiveValue.changeApprovalId, "manifest goLive.changeApprovalId");
+  const goLive = {
+    windowStart: windowStart.toISOString(),
+    windowEnd: windowEnd.toISOString(),
+    scheduledAt: scheduledAt.toISOString(),
+    changeApprovalId,
   };
 
+  const releaseSubjectValidation = validateManifestReleaseSubject(manifest.releaseSubject, {
+    root,
+    generatedAt,
+    now,
+    expectedCommit,
+    selectedProfile,
+    componentVersions,
+    componentSetSha256,
+    sbom: { ...sbomResult, format: sbom.format },
+    goLive,
+    artifactPaths,
+    trustedKeys,
+    rollout,
+  });
+  const releaseSubject = releaseSubjectValidation.subject;
+
   const approvalsValue = plainObject(manifest.approvals, "manifest approvals");
+  for (const name of REQUIRED_APPROVAL_NAMES) {
+    if (!(name in approvalsValue)) throw blocked("EXTERNAL_APPROVAL_MISSING", `The release manifest is missing ${name}`);
+  }
+  requireExactObjectKeys(approvalsValue, REQUIRED_APPROVAL_NAMES, "manifest approvals");
   const approvals = {};
   const approvalArtifacts = new Map();
   for (const [name, requiredDecision] of Object.entries(REQUIRED_APPROVALS)) {
@@ -1190,11 +1404,39 @@ function validateManifest(manifestValue, { root, tenantId, launchId, expectedCom
         throw new CertificationError("APPROVAL_ARTIFACT_REUSE_INVALID", `${name} shared artifact requires a substantive justification`);
       }
     }
+    const approvalId = identifier(approval.approvalId, `${name}.approvalId`);
+    const authority = nonEmptyText(approval.authority, `${name}.authority`, 300);
+    const issuer = identifier(approval.issuer, `${name}.issuer`);
+    const evidenceId = identifier(approval.evidenceId, `${name}.evidenceId`);
+    let approvalContract;
+    try {
+      approvalContract = validateReleaseApprovalArtifact(artifactFile.bytes, {
+        approvalName: name,
+        approvalId,
+        authority,
+        issuer,
+        tenantId,
+        launchId,
+        repositoryCommit: expectedCommit,
+        sbomSha256: record.sbomDigest,
+        decision,
+        approvedAt: approvedAt.toISOString(),
+        expiresAt: expiresAt?.toISOString(),
+        releaseSubject,
+      });
+    } catch (error) {
+      if (error instanceof EvidenceContractError) {
+        throw new CertificationError(error.code, error.message);
+      }
+      throw error;
+    }
     approvals[name] = {
-      approvalId: identifier(approval.approvalId, `${name}.approvalId`),
-      authority: nonEmptyText(approval.authority, `${name}.authority`, 300),
-      issuer: identifier(approval.issuer, `${name}.issuer`),
-      evidenceId: identifier(approval.evidenceId, `${name}.evidenceId`),
+      approvalId,
+      authority,
+      issuer,
+      evidenceId,
+      authorityRole: approvalContract.authorityRole,
+      subject: approvalContract.subject,
       artifact: { path: artifactPath, resolvedPath: artifactFile.path, sha256: artifactSha256 },
       ...(artifactReuse === undefined ? {} : { artifactReuse }),
       decision,
@@ -1206,30 +1448,27 @@ function validateManifest(manifestValue, { root, tenantId, launchId, expectedCom
   if (new Set(approvalIds).size !== approvalIds.length) {
     throw new CertificationError("DUPLICATE_APPROVAL_ID", "Release approval IDs must be unique");
   }
-
-  const goLiveValue = plainObject(manifest.goLive, "manifest goLive");
-  const windowStart = canonicalTimestamp(goLiveValue.windowStart, "manifest goLive.windowStart");
-  const windowEnd = canonicalTimestamp(goLiveValue.windowEnd, "manifest goLive.windowEnd");
-  const scheduledAt = canonicalTimestamp(goLiveValue.scheduledAt, "manifest goLive.scheduledAt");
-  if (
-    windowEnd <= windowStart ||
-    scheduledAt < windowStart || scheduledAt > windowEnd ||
-    scheduledAt < generatedAt ||
-    scheduledAt.toISOString() !== rollout.waveStartedAt ||
-    windowEnd.getTime() - windowStart.getTime() > 72 * 60 * 60_000
-  ) {
-    throw new CertificationError("GO_LIVE_WINDOW_INVALID", "The global wave must start inside a bounded approved go-live window after manifest generation");
+  approvals.productionChangeApproval.approverSignatures = validateProductionChangeApproverEvidence({
+    root,
+    artifactPaths,
+    trustedKeys,
+    tenantId,
+    launchId,
+    repositoryCommit: expectedCommit,
+    releaseSubject,
+    approval: approvals.productionChangeApproval,
+    now,
+  });
+  if (!sameStringSet(
+    record.changeApproverEvidenceIds,
+    approvals.productionChangeApproval.approverSignatures.map((entry) => entry.evidenceId),
+  )) {
+    throw new CertificationError("B127_CHANGE_APPROVER_BINDING_MISMATCH", "The B127 record does not bind the exact independently signed change approver evidence IDs");
   }
-  const changeApprovalId = identifier(goLiveValue.changeApprovalId, "manifest goLive.changeApprovalId");
+
   if (changeApprovalId !== approvals.productionChangeApproval.approvalId) {
     throw new CertificationError("GO_LIVE_CHANGE_APPROVAL_MISMATCH", "The go-live window is not bound to the production change approval");
   }
-  const goLive = {
-    windowStart: windowStart.toISOString(),
-    windowEnd: windowEnd.toISOString(),
-    scheduledAt: scheduledAt.toISOString(),
-    changeApprovalId,
-  };
 
   const handoffValue = plainObject(manifest.operationsHandoff, "manifest operationsHandoff");
   if (handoffValue.status !== "accepted") {
@@ -1304,6 +1543,10 @@ function validateManifest(manifestValue, { root, tenantId, launchId, expectedCom
     selectedProfile,
     componentVersions,
     componentSetSha256,
+    releaseSubject,
+    policyAuthority: {
+      mediaAuthorityArtifact: releaseSubjectValidation.mediaAuthorityArtifact,
+    },
     batchReports,
     b126Certification,
     rollout,
@@ -1312,6 +1555,312 @@ function validateManifest(manifestValue, { root, tenantId, launchId, expectedCom
     operationsHandoff,
     exceptions,
   };
+}
+
+function validateManifestReleaseSubject(value, {
+  root,
+  generatedAt,
+  now,
+  expectedCommit,
+  selectedProfile,
+  componentVersions,
+  componentSetSha256,
+  sbom,
+  goLive,
+  artifactPaths,
+  trustedKeys,
+  rollout,
+}) {
+  const controlled = plainObject(value, "manifest releaseSubject");
+  requireExactObjectKeys(controlled, [
+    "schemaVersion", "deploymentId", "targetBaseUrl", "workloadImages", "requiredProviderIds",
+    "secretReferences", "forcedRlsTables", "databaseUrlReference", "consentPolicyCatalogSha256",
+    "mediaLifecycleCatalogSha256", "mediaSafetyPolicySha256", "guardrailPolicySha256", "waveObservationSetSha256",
+    "rollbackForwardDrillSha256", "mediaAuthorityArtifact", "legal", "accessibility",
+    "applications", "penetrationTest", "disasterRecovery", "supplyChain",
+  ], "manifest releaseSubject");
+  if (controlled.schemaVersion !== "ltm.production-release-subject-config.v1") {
+    throw new CertificationError("RELEASE_SUBJECT_SCHEMA_INVALID", "manifest releaseSubject schemaVersion is unsupported");
+  }
+
+  const lockfile = readRootRelativeFile(root, "pnpm-lock.yaml", "release lockfile", MAX_RELEASE_CONTROL_ARTIFACT_BYTES);
+  const lockfileSha256 = sha256Bytes(lockfile.bytes);
+  const migrationManifest = validateLocalMigrationManifest(root);
+
+  const workloadImagesValue = Array.isArray(controlled.workloadImages) ? controlled.workloadImages : [];
+  if (workloadImagesValue.length !== REQUIRED_WORKLOAD_ROLES.length) throw new CertificationError("RELEASE_WORKLOAD_IMAGES_INVALID", `releaseSubject requires exactly ${REQUIRED_WORKLOAD_ROLES.length} workload images`);
+  const workloadImages = workloadImagesValue.map((entryValue, index) => {
+    const entry = plainObject(entryValue, `manifest releaseSubject.workloadImages[${index}]`);
+    requireExactObjectKeys(entry, ["role", "digest"], `manifest releaseSubject.workloadImages[${index}]`);
+    const role = identifier(entry.role, `manifest releaseSubject.workloadImages[${index}].role`);
+    if (typeof entry.digest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(entry.digest)) throw new CertificationError("RELEASE_WORKLOAD_IMAGE_DIGEST_INVALID", `${role} image must use an immutable sha256 digest`);
+    return { role, digest: entry.digest };
+  }).sort((left, right) => left.role.localeCompare(right.role));
+
+  const requiredProviderIds = sortedIdentifiers(controlled.requiredProviderIds, "manifest releaseSubject.requiredProviderIds", 1, 100);
+  const secretReferences = sortedVisibleStrings(controlled.secretReferences, "manifest releaseSubject.secretReferences", 1, 200);
+  const forcedRlsTables = sortedIdentifiers(controlled.forcedRlsTables, "manifest releaseSubject.forcedRlsTables", 1, 200);
+  if (!sameStringSet(forcedRlsTables, REQUIRED_SCHEMA5_FORCE_RLS_TABLES)) {
+    throw new CertificationError("RELEASE_FORCE_RLS_TABLES_INVALID", "releaseSubject forcedRlsTables must exactly equal the schema 5 runtime tenant-table set");
+  }
+  const databaseUrlReference = nonEmptyText(controlled.databaseUrlReference, "manifest releaseSubject.databaseUrlReference", 512);
+  const consentPolicyCatalogSha256 = exactSha256(
+    controlled.consentPolicyCatalogSha256,
+    "manifest releaseSubject.consentPolicyCatalogSha256",
+  );
+  const mediaLifecycleCatalogSha256 = exactSha256(
+    controlled.mediaLifecycleCatalogSha256,
+    "manifest releaseSubject.mediaLifecycleCatalogSha256",
+  );
+  const mediaSafetyPolicySha256 = exactSha256(
+    controlled.mediaSafetyPolicySha256,
+    "manifest releaseSubject.mediaSafetyPolicySha256",
+  );
+  const guardrailPolicySha256 = exactSha256(
+    controlled.guardrailPolicySha256,
+    "manifest releaseSubject.guardrailPolicySha256",
+  );
+  const waveObservationSetSha256 = exactSha256(
+    controlled.waveObservationSetSha256,
+    "manifest releaseSubject.waveObservationSetSha256",
+  );
+  const rollbackForwardDrillSha256 = exactSha256(
+    controlled.rollbackForwardDrillSha256,
+    "manifest releaseSubject.rollbackForwardDrillSha256",
+  );
+  if (
+    guardrailPolicySha256 !== rollout.guardrailPolicyArtifact.sha256 ||
+    waveObservationSetSha256 !== rollout.waveObservationSetSha256 ||
+    rollbackForwardDrillSha256 !== rollout.rollbackForwardDrillArtifact.sha256
+  ) {
+    throw new CertificationError(
+      "RELEASE_CONTROL_ARTIFACT_BINDING_MISMATCH",
+      "Release subject does not bind the exact guardrail policy, wave-observation set, and rollback-forward drill artifacts",
+    );
+  }
+  const mediaAuthorityArtifact = validateManifestArtifact(
+    root,
+    controlled.mediaAuthorityArtifact,
+    "production media authority projection",
+    MAX_RELEASE_CONTROL_ARTIFACT_BYTES,
+    artifactPaths,
+    "MEDIA_AUTHORITY_ARTIFACT_DIGEST_MISMATCH",
+  );
+  validateMediaAuthorityArtifact(mediaAuthorityArtifact.file.bytes, {
+    mediaLifecycleCatalogSha256,
+    mediaSafetyPolicySha256,
+    guardrailPolicySha256,
+    generatedAt,
+    now,
+  });
+
+  const legalValue = plainObject(controlled.legal, "manifest releaseSubject.legal");
+  requireExactObjectKeys(legalValue, ["legalEntityId", "jurisdictions"], "manifest releaseSubject.legal");
+  const legal = {
+    legalEntityId: identifier(legalValue.legalEntityId, "manifest releaseSubject.legal.legalEntityId"),
+    jurisdictions: sortedIdentifiers(legalValue.jurisdictions, "manifest releaseSubject.legal.jurisdictions", 1, 100),
+  };
+
+  const accessibilityValue = plainObject(controlled.accessibility, "manifest releaseSubject.accessibility");
+  requireExactObjectKeys(accessibilityValue, ["standard", "platforms", "browsers", "assistiveTechnologies", "journeys"], "manifest releaseSubject.accessibility");
+  const accessibility = {
+    standard: nonEmptyText(accessibilityValue.standard, "manifest releaseSubject.accessibility.standard", 64),
+    platforms: sortedIdentifiers(accessibilityValue.platforms, "manifest releaseSubject.accessibility.platforms", 1, 20),
+    browsers: sortedIdentifiers(accessibilityValue.browsers, "manifest releaseSubject.accessibility.browsers", 1, 20),
+    assistiveTechnologies: sortedIdentifiers(accessibilityValue.assistiveTechnologies, "manifest releaseSubject.accessibility.assistiveTechnologies", 1, 20),
+    journeys: sortedIdentifiers(accessibilityValue.journeys, "manifest releaseSubject.accessibility.journeys", 1, 100),
+  };
+
+  const applicationsValue = plainObject(controlled.applications, "manifest releaseSubject.applications");
+  requireExactObjectKeys(applicationsValue, ["appleAppStoreDecision", "googlePlayDecision", "wechatMiniProgramDecision"], "manifest releaseSubject.applications");
+  const applicationComponents = {
+    appleAppStoreDecision: ["apple-app-store", "mobileIos"],
+    googlePlayDecision: ["google-play", "mobileAndroid"],
+    wechatMiniProgramDecision: ["wechat-mini-program", "wechatMiniProgram"],
+  };
+  const applications = Object.fromEntries(Object.entries(applicationComponents).map(([name, [store, componentName]]) => {
+    const entry = plainObject(applicationsValue[name], `manifest releaseSubject.applications.${name}`);
+    requireExactObjectKeys(entry, ["applicationId", "accountId"], `manifest releaseSubject.applications.${name}`);
+    return [name, {
+      store,
+      applicationId: nonEmptyText(entry.applicationId, `manifest releaseSubject.applications.${name}.applicationId`, 256),
+      accountId: nonEmptyText(entry.accountId, `manifest releaseSubject.applications.${name}.accountId`, 256),
+      version: componentVersions[componentName].version,
+      buildSha256: componentVersions[componentName].artifact.sha256,
+    }];
+  }));
+
+  const penetrationValue = plainObject(controlled.penetrationTest, "manifest releaseSubject.penetrationTest");
+  requireExactObjectKeys(penetrationValue, ["reportArtifact", "findingRegistryArtifact"], "manifest releaseSubject.penetrationTest");
+  const pentestReport = validateManifestArtifact(root, penetrationValue.reportArtifact, "independent pentest report", MAX_RELEASE_CONTROL_ARTIFACT_BYTES, artifactPaths, "PENTEST_REPORT_DIGEST_MISMATCH");
+  const findingRegistry = validateManifestArtifact(root, penetrationValue.findingRegistryArtifact, "pentest finding registry", MAX_RELEASE_CONTROL_ARTIFACT_BYTES, artifactPaths, "PENTEST_FINDING_REGISTRY_DIGEST_MISMATCH");
+
+  const drValue = plainObject(controlled.disasterRecovery, "manifest releaseSubject.disasterRecovery");
+  requireExactObjectKeys(drValue, ["reportArtifact", "sourceRegion", "failoverRegion", "schemaVersion", "targetRtoSeconds", "targetRpoSeconds"], "manifest releaseSubject.disasterRecovery");
+  const drReport = validateManifestArtifact(root, drValue.reportArtifact, "disaster recovery report", MAX_RELEASE_CONTROL_ARTIFACT_BYTES, artifactPaths, "DR_REPORT_DIGEST_MISMATCH");
+
+  const supplyValue = plainObject(controlled.supplyChain, "manifest releaseSubject.supplyChain");
+  requireExactObjectKeys(supplyValue, ["bundleArtifact", "trustedKeyId"], "manifest releaseSubject.supplyChain");
+  const bundleArtifact = validateManifestArtifact(root, supplyValue.bundleArtifact, "production supply-chain bundle", MAX_SBOM_BYTES, artifactPaths, "SUPPLY_CHAIN_BUNDLE_DIGEST_MISMATCH");
+  const trustedKeyId = identifier(supplyValue.trustedKeyId, "manifest releaseSubject.supplyChain.trustedKeyId");
+  const supplyKey = trustedKeys.find((candidate) => candidate.keyId === trustedKeyId && candidate.provider.startsWith("supply-chain:") && candidate.authorityRoles.includes(SUPPLY_CHAIN_AUTHORITY_ROLE) && scopeAllowed(candidate.allowedScopes, "ltm-supply-chain:production"));
+  if (supplyKey === undefined) throw blocked("SUPPLY_CHAIN_TRUST_KEY_MISSING", "Production supply-chain signer is not enrolled for the required authority role");
+  let bundle;
+  try {
+    bundle = parseJsonObject(bundleArtifact.file.bytes.toString("utf8"), "production supply-chain bundle");
+    verifySupplyChainBundle(bundle, {
+      requiredTrustTier: "production",
+      trustedKeyIds: [trustedKeyId],
+      publicKeyPem: supplyKey.publicKey.export({ type: "spki", format: "pem" }).toString(),
+    });
+  } catch (error) {
+    throw new CertificationError("SUPPLY_CHAIN_ATTESTATION_INVALID", `Production supply-chain attestation failed verification: ${error instanceof Error ? error.message : "invalid bundle"}`);
+  }
+  if (bundle.attestation?.claims?.sourceRevision !== expectedCommit || bundle.attestation?.claims?.lockfileSha256 !== lockfileSha256) {
+    throw new CertificationError("SUPPLY_CHAIN_RELEASE_BINDING_MISMATCH", "Supply-chain source revision or lockfile digest does not match the checked-out release");
+  }
+  const selectedSbom = sbom.format === "spdx-json" ? bundle.spdx : bundle.cycloneDx;
+  const manifestSbom = parseJsonObject(sbom.file.bytes.toString("utf8"), "release SBOM");
+  if (canonicalJson(selectedSbom) !== canonicalJson(manifestSbom)) throw new CertificationError("SBOM_SUPPLY_CHAIN_MISMATCH", "Release SBOM is not the document signed by the production supply-chain bundle");
+  const suppliedFiles = new Map((bundle.artifactManifest?.files ?? []).map((entry) => [entry.path, entry.sha256]));
+  for (const component of Object.values(componentVersions)) {
+    if (suppliedFiles.get(component.artifact.path) !== component.artifact.sha256) throw new CertificationError("SUPPLY_CHAIN_COMPONENT_SET_MISMATCH", "Supply-chain artifact manifest does not cover every exact B127 component artifact");
+  }
+  const provenanceSha256 = exactSha256(bundle.attestation.claims.documents?.provenance?.sha256, "supply-chain provenance sha256");
+
+  const candidate = {
+    schemaVersion: "ltm.production-release-subject.v1",
+    deploymentId: identifier(controlled.deploymentId, "manifest releaseSubject.deploymentId"),
+    targetBaseUrl: nonEmptyText(controlled.targetBaseUrl, "manifest releaseSubject.targetBaseUrl", 2_048),
+    repositoryCommit: expectedCommit,
+    profileVersion: selectedProfile.version,
+    componentSetSha256,
+    lockfileSha256,
+    migrationManifestSha256: migrationManifest.sha256,
+    consentPolicyCatalogSha256,
+    mediaLifecycleCatalogSha256,
+    mediaSafetyPolicySha256,
+    guardrailPolicySha256,
+    waveObservationSetSha256,
+    rollbackForwardDrillSha256,
+    workloadImages,
+    requiredProviderIds,
+    secretReferences,
+    forcedRlsTables,
+    databaseUrlReference,
+    legal,
+    accessibility,
+    applications,
+    penetrationTest: {
+      targetOrigin: controlled.targetBaseUrl,
+      reportArtifactSha256: pentestReport.artifact.sha256,
+      findingRegistrySha256: findingRegistry.artifact.sha256,
+    },
+    disasterRecovery: {
+      deploymentId: controlled.deploymentId,
+      reportArtifactSha256: drReport.artifact.sha256,
+      sourceRegion: identifier(drValue.sourceRegion, "manifest releaseSubject.disasterRecovery.sourceRegion"),
+      failoverRegion: identifier(drValue.failoverRegion, "manifest releaseSubject.disasterRecovery.failoverRegion"),
+      schemaVersion: nonEmptyText(drValue.schemaVersion, "manifest releaseSubject.disasterRecovery.schemaVersion", 32),
+      targetRtoSeconds: integerInRange(drValue.targetRtoSeconds, "manifest releaseSubject.disasterRecovery.targetRtoSeconds", 1, 604_800),
+      targetRpoSeconds: integerInRange(drValue.targetRpoSeconds, "manifest releaseSubject.disasterRecovery.targetRpoSeconds", 1, 604_800),
+    },
+    goLive: { windowStart: goLive.windowStart, windowEnd: goLive.windowEnd, scheduledAt: goLive.scheduledAt },
+    supplyChain: {
+      bundleSha256: bundleArtifact.artifact.sha256,
+      provenanceSha256,
+      trustKeyId: trustedKeyId,
+    },
+  };
+  try {
+    return {
+      subject: validateProductionReleaseSubject(candidate),
+      mediaAuthorityArtifact: mediaAuthorityArtifact.artifact,
+    };
+  } catch (error) {
+    if (error instanceof EvidenceContractError) throw new CertificationError(error.code, error.message);
+    throw error;
+  }
+}
+
+function validateMediaAuthorityArtifact(bytes, {
+  mediaLifecycleCatalogSha256,
+  mediaSafetyPolicySha256,
+  generatedAt,
+  now,
+}) {
+  let authority;
+  try {
+    authority = parseJsonObject(bytes.toString("utf8"), "production media authority projection");
+    requireExactObjectKeys(authority, [
+      "schemaVersion", "mediaLifecycleCatalogSha256", "mediaSafetyPolicySha256", "lifecycleIssuer",
+      "lifecycleEnvironment", "lifecycleExpiresAt", "scannerProvider", "scannerPolicyId",
+      "scannerModelVersion", "scannerKeyId", "scannerEnvironment",
+    ], "production media authority projection");
+  } catch (error) {
+    throw new CertificationError(
+      "MEDIA_AUTHORITY_ARTIFACT_INVALID",
+      `Production media authority projection is not a closed valid document: ${error instanceof Error ? error.message : "invalid artifact"}`,
+    );
+  }
+  if (authority.schemaVersion !== "ltm.media-authority.v1") {
+    throw new CertificationError("MEDIA_AUTHORITY_ARTIFACT_INVALID", "Production media authority projection schemaVersion is unsupported");
+  }
+  if (
+    exactSha256(authority.mediaLifecycleCatalogSha256, "media authority mediaLifecycleCatalogSha256") !== mediaLifecycleCatalogSha256 ||
+    exactSha256(authority.mediaSafetyPolicySha256, "media authority mediaSafetyPolicySha256") !== mediaSafetyPolicySha256
+  ) {
+    throw new CertificationError("MEDIA_AUTHORITY_BINDING_MISMATCH", "Production media authority projection does not match the controlled release policy digests");
+  }
+  identifier(authority.lifecycleIssuer, "media authority lifecycleIssuer");
+  identifier(authority.scannerProvider, "media authority scannerProvider");
+  identifier(authority.scannerPolicyId, "media authority scannerPolicyId");
+  releaseVersion(authority.scannerModelVersion, "media authority scannerModelVersion");
+  identifier(authority.scannerKeyId, "media authority scannerKeyId");
+  if (authority.lifecycleEnvironment !== "production" || authority.scannerEnvironment !== "production") {
+    throw new CertificationError("MEDIA_AUTHORITY_ENVIRONMENT_INVALID", "Production media authority projection must bind both authorities to production");
+  }
+  const expiresAt = canonicalTimestamp(authority.lifecycleExpiresAt, "media authority lifecycleExpiresAt");
+  if (expiresAt <= generatedAt || expiresAt <= now) {
+    throw blocked("MEDIA_AUTHORITY_EXPIRED", "Production media lifecycle authority is expired at manifest verification time");
+  }
+  return authority;
+}
+
+function validateLocalMigrationManifest(root) {
+  const relativeManifestPath = "infra/postgres/migrations/manifest.json";
+  const file = readRootRelativeFile(root, relativeManifestPath, "PostgreSQL migration manifest", MAX_RELEASE_CONTROL_ARTIFACT_BYTES);
+  const manifest = parseJsonObject(file.bytes.toString("utf8"), "PostgreSQL migration manifest");
+  requireExactObjectKeys(manifest, ["schemaVersion", "database", "runtimeSchemaVersion", "migrations"], "PostgreSQL migration manifest");
+  if (manifest.schemaVersion !== "ltm.postgres-migration-manifest.v1" || manifest.database !== "postgresql" || manifest.runtimeSchemaVersion !== "5" || !Array.isArray(manifest.migrations) || manifest.migrations.length !== REQUIRED_SCHEMA5_MIGRATIONS.length) {
+    throw new CertificationError("MIGRATION_MANIFEST_INVALID", "PostgreSQL migration manifest identity or migration set is invalid");
+  }
+  const ids = new Set();
+  const paths = new Set();
+  for (const [index, value] of manifest.migrations.entries()) {
+    const migration = plainObject(value, `PostgreSQL migration manifest.migrations[${index}]`);
+    requireExactObjectKeys(migration, ["id", "path", "sha256"], `PostgreSQL migration manifest.migrations[${index}]`);
+    const id = identifier(migration.id, `PostgreSQL migration manifest.migrations[${index}].id`);
+    const expected = REQUIRED_SCHEMA5_MIGRATIONS[index];
+    if (id !== expected.id || migration.path !== expected.path) {
+      throw new CertificationError("MIGRATION_MANIFEST_INVALID", "PostgreSQL schema 5 migration IDs and paths must exactly equal the controlled 001..005 sequence");
+    }
+    if (typeof migration.path !== "string" || !/^[0-9]{3}_[A-Za-z0-9._-]+\.sql$/.test(migration.path)) throw new CertificationError("MIGRATION_PATH_INVALID", `Migration ${id} path is invalid`);
+    const declared = exactSha256(migration.sha256, `PostgreSQL migration ${id} sha256`);
+    if (ids.has(id) || paths.has(migration.path)) throw new CertificationError("MIGRATION_MANIFEST_DUPLICATE", `Migration ${id} is duplicated`);
+    ids.add(id); paths.add(migration.path);
+    const migrationFile = readRootRelativeFile(root, `infra/postgres/migrations/${migration.path}`, `PostgreSQL migration ${id}`, MAX_RELEASE_CONTROL_ARTIFACT_BYTES);
+    if (sha256Bytes(migrationFile.bytes) !== declared) throw new CertificationError("MIGRATION_DRIFT_DETECTED", `Migration ${id} bytes do not match the local manifest`);
+  }
+  return { sha256: sha256Bytes(file.bytes), count: manifest.migrations.length };
+}
+
+function sortedIdentifiers(value, label, minimum, maximum) {
+  return stringArray(value, label, minimum, maximum).map((item) => identifier(item, label)).sort((left, right) => left.localeCompare(right));
+}
+
+function sortedVisibleStrings(value, label, minimum, maximum) {
+  return [...stringArray(value, label, minimum, maximum)].sort((left, right) => left.localeCompare(right));
 }
 
 function validateB126Certificate(recordEnvelope, manifestReference, { tenantId, manifestGeneratedAt }) {
@@ -1418,15 +1967,33 @@ function componentVersionsForDigest(components) {
   }]));
 }
 
-function validateCompletedWaves(value, { root, artifactPaths, globalWaveStartedAt, now }) {
+function validateCompletedWaves(value, {
+  root,
+  artifactPaths,
+  globalWaveStartedAt,
+  now,
+  tenantId,
+  launchId,
+  deploymentId,
+  repositoryCommit,
+  componentSetSha256,
+  automaticPausePolicyVersion,
+  guardrailPolicy,
+  guardrailPolicySha256,
+  trustedKeys,
+}) {
   const expectedWaves = ["internal", "pilot", "consumer_canary", "partner", "regional"];
   if (!Array.isArray(value) || value.length !== expectedWaves.length) {
     throw blocked("PRIOR_WAVE_EVIDENCE_INCOMPLETE", "The release manifest must contain every completed pre-global wave exactly once");
   }
   let priorCompletedAt;
   let priorPercent = 0;
-  return value.map((entryValue, index) => {
+  const completed = value.map((entryValue, index) => {
     const entry = plainObject(entryValue, `manifest rollout.completedWaves[${index}]`);
+    requireExactObjectKeys(entry, [
+      "wave", "status", "rolloutPercent", "startedAt", "completedAt",
+      "minimumObservationSeconds", "observedSeconds", "guardrailBreaches", "observationArtifact",
+    ], `manifest rollout.completedWaves[${index}]`);
     const expectedWave = expectedWaves[index];
     if (entry.wave !== expectedWave || entry.status !== "passed") {
       throw blocked("PRIOR_WAVE_NOT_PASSED", `Release wave ${expectedWave} is missing or not passed`);
@@ -1449,14 +2016,54 @@ function validateCompletedWaves(value, { root, artifactPaths, globalWaveStartedA
     ) {
       throw blocked("PRIOR_WAVE_OBSERVATION_FAILED", `Release wave ${expectedWave} lacks a complete zero-breach observation period`);
     }
-    const artifact = validateManifestArtifact(
+    const observationArtifactResult = validateManifestArtifact(
       root,
-      entry.artifact,
-      `${expectedWave} wave report`,
+      entry.observationArtifact,
+      `${expectedWave} typed wave observation`,
       MAX_RELEASE_CONTROL_ARTIFACT_BYTES,
       artifactPaths,
       "PRIOR_WAVE_ARTIFACT_DIGEST_MISMATCH",
-    ).artifact;
+    );
+    const observation = mapReleaseControlValidation(() => validateRolloutWaveObservation(
+      observationArtifactResult.file.bytes,
+      {
+        tenantId,
+        launchId,
+        deploymentId,
+        repositoryCommit,
+        componentSetSha256,
+        wave: expectedWave,
+        rolloutPercent,
+        startedAt: startedAt.toISOString(),
+        completedAt: completedAt.toISOString(),
+        minimumObservationSeconds,
+        observedSeconds,
+        automaticPausePolicyVersion,
+        guardrailPolicy,
+        guardrailPolicySha256,
+        readArtifact(reference, label) {
+          return validateManifestArtifact(
+            root,
+            reference,
+            `${expectedWave} ${label}`,
+            MAX_RELEASE_CONTROL_ARTIFACT_BYTES,
+            artifactPaths,
+            "WAVE_RAW_EVIDENCE_DIGEST_MISMATCH",
+          ).file.bytes;
+        },
+        verifyAttestation(reference, expectedClaims, label) {
+          return verifyControlArtifactAttestation({
+            root,
+            artifactPaths,
+            now,
+            trustedKeys,
+            reference,
+            expectedClaims,
+            label,
+          });
+        },
+      },
+    ));
     priorCompletedAt = completedAt;
     priorPercent = rolloutPercent;
     return {
@@ -1468,9 +2075,241 @@ function validateCompletedWaves(value, { root, artifactPaths, globalWaveStartedA
       minimumObservationSeconds,
       observedSeconds,
       guardrailBreaches: 0,
-      artifact,
+      observationArtifact: observationArtifactResult.artifact,
+      observation,
     };
   });
+  const evidenceBindings = completed.flatMap((wave) => wave.observation.evidenceBindings.map((binding) => ({
+    ...binding,
+    wave: wave.wave,
+    startedAt: wave.startedAt,
+    completedAt: wave.completedAt,
+  })));
+  for (const field of ["id", "sha256"]) {
+    const seen = new Map();
+    for (const binding of evidenceBindings) {
+      const prior = seen.get(binding[field]);
+      if (prior !== undefined) {
+        throw new CertificationError(
+          "WAVE_OBSERVATION_EVIDENCE_REUSED",
+          `Completed waves ${prior.wave} and ${binding.wave} reuse ${binding.kind} ${field} evidence`,
+        );
+      }
+      seen.set(binding[field], binding);
+    }
+  }
+  const attestedBindings = evidenceBindings.filter((binding) => binding.kind !== "pause_drill");
+  for (const field of ["attestationId", "nonce", "signature", "attestationSha256"]) {
+    const seen = new Map();
+    for (const binding of attestedBindings) {
+      if (typeof binding[field] !== "string" || binding[field].length === 0) {
+        throw new CertificationError(
+          "CONTROL_ARTIFACT_ATTESTATION_MISSING",
+          `Completed wave ${binding.wave} ${binding.kind} lacks verified ${field}`,
+        );
+      }
+      const prior = seen.get(binding[field]);
+      if (prior !== undefined) {
+        throw new CertificationError(
+          "CONTROL_ARTIFACT_ATTESTATION_REUSED",
+          `Completed waves ${prior.wave} and ${binding.wave} reuse ${binding.kind} ${field}`,
+        );
+      }
+      seen.set(binding[field], binding);
+    }
+  }
+  return completed;
+}
+
+function verifyControlArtifactAttestation({
+  root,
+  artifactPaths,
+  now,
+  trustedKeys,
+  reference,
+  expectedClaims,
+  label,
+}) {
+  const artifact = validateManifestArtifact(
+    root,
+    reference,
+    `${label} detached producer attestation`,
+    MAX_APPROVAL_ARTIFACT_BYTES,
+    artifactPaths,
+    "CONTROL_ARTIFACT_ATTESTATION_DIGEST_MISMATCH",
+  );
+  const document = parseJsonObject(
+    artifact.file.bytes.toString("utf8"),
+    `${label} detached producer attestation`,
+  );
+  requireExactObjectKeys(document, [
+    "schemaVersion", "attestationId", "nonce", "issuer", "provider", "environment",
+    "authorityRole", "algorithm", "keyId", "issuedAt", "expiresAt", "scope", "claims",
+    "signature",
+  ], `${label} detached producer attestation`);
+  if (
+    document.schemaVersion !== CONTROL_ARTIFACT_ATTESTATION_SCHEMA_VERSION ||
+    document.algorithm !== "Ed25519" ||
+    document.environment !== "production"
+  ) {
+    throw new CertificationError(
+      "CONTROL_ARTIFACT_ATTESTATION_CONTRACT_INVALID",
+      `${label} detached producer attestation has an unsupported schema, algorithm, or environment`,
+    );
+  }
+  const attestationId = identifier(document.attestationId, `${label} attestationId`);
+  const nonce = identifier(document.nonce, `${label} attestation nonce`);
+  const issuer = identifier(document.issuer, `${label} attestation issuer`);
+  const provider = identifier(document.provider, `${label} attestation provider`);
+  const keyId = identifier(document.keyId, `${label} attestation keyId`);
+  const authorityRole = identifier(document.authorityRole, `${label} attestation authorityRole`);
+  const claims = validateControlArtifactAttestationClaims(document.claims, label);
+  const expectedRole = CONTROL_ARTIFACT_AUTHORITY_ROLES[claims.artifactType];
+  const providerPrefix = CONTROL_ARTIFACT_PROVIDER_PREFIXES[claims.artifactType];
+  const expectedProvider = `${providerPrefix}:${expectedClaims.deploymentId}`;
+  if (
+    expectedRole === undefined ||
+    authorityRole !== expectedRole ||
+    provider !== expectedProvider ||
+    claims.state !== CONTROL_ARTIFACT_STATES[claims.artifactType]
+  ) {
+    throw new CertificationError(
+      "CONTROL_ARTIFACT_ATTESTATION_AUTHORITY_INVALID",
+      `${label} detached producer attestation is not issued by its exact production authority role and provider`,
+    );
+  }
+  const issuedAt = canonicalTimestamp(document.issuedAt, `${label} attestation issuedAt`);
+  const expiresAt = canonicalTimestamp(document.expiresAt, `${label} attestation expiresAt`);
+  const scope = nonEmptyText(document.scope, `${label} attestation scope`, 512);
+  const derivedScope = controlArtifactAttestationScope(claims);
+  if (scope !== derivedScope || document.issuedAt !== claims.eventAt) {
+    throw new CertificationError(
+      "CONTROL_ARTIFACT_ATTESTATION_SCOPE_INVALID",
+      `${label} detached producer attestation scope or issuance time is not derived from its exact claims`,
+    );
+  }
+  if (
+    issuedAt.getTime() > now.getTime() + CLOCK_SKEW_MS ||
+    expiresAt <= issuedAt ||
+    expiresAt <= now ||
+    expiresAt.getTime() - issuedAt.getTime() > 7 * 24 * 60 * 60_000
+  ) {
+    throw new CertificationError(
+      "CONTROL_ARTIFACT_ATTESTATION_TIME_INVALID",
+      `${label} detached producer attestation is future-dated, expired, or has an excessive validity window`,
+    );
+  }
+  const trustedKey = trustedKeys.find((candidate) =>
+    candidate.issuer === issuer && candidate.provider === provider && candidate.keyId === keyId,
+  );
+  if (
+    trustedKey === undefined ||
+    !sameStringSet(trustedKey.authorityRoles, [authorityRole]) ||
+    !sameStringSet(trustedKey.allowedEnvironments, ["production"]) ||
+    !trustedKey.allowedScopes.includes(scope) ||
+    trustedKey.allowedScopes.some((allowedScope) => allowedScope.includes("*")) ||
+    trustedKey.notBefore === undefined ||
+    trustedKey.notAfter === undefined
+  ) {
+    throw blocked(
+      "CONTROL_ARTIFACT_ATTESTATION_TRUST_MISSING",
+      `${label} producer key is not independently enrolled for its exact role, scope, and production environment`,
+    );
+  }
+  if (
+    (trustedKey.notBefore !== undefined && issuedAt.toISOString() < trustedKey.notBefore) ||
+    (trustedKey.notAfter !== undefined && expiresAt.toISOString() > trustedKey.notAfter)
+  ) {
+    throw new CertificationError(
+      "CONTROL_ARTIFACT_ATTESTATION_KEY_WINDOW_INVALID",
+      `${label} detached producer attestation is outside its enrolled key validity window`,
+    );
+  }
+  const unsigned = { ...document };
+  delete unsigned.signature;
+  if (!validBase64UrlSignature(document.signature) || !verifySignature(
+    null,
+    controlArtifactAttestationSigningBytes(unsigned),
+    trustedKey.publicKey,
+    Buffer.from(document.signature, "base64url"),
+  )) {
+    throw new CertificationError(
+      "CONTROL_ARTIFACT_ATTESTATION_SIGNATURE_INVALID",
+      `${label} detached producer attestation failed Ed25519 verification`,
+    );
+  }
+  if (canonicalJson(claims) !== canonicalJson(expectedClaims)) {
+    throw new CertificationError(
+      "CONTROL_ARTIFACT_ATTESTATION_BINDING_MISMATCH",
+      `${label} detached producer attestation is not bound to the exact raw artifact, release, wave, metric, window, value, and state`,
+    );
+  }
+  return {
+    attestationId,
+    nonce,
+    signature: document.signature,
+    attestationSha256: artifact.artifact.sha256,
+    issuer,
+    provider,
+    keyId,
+    authorityRole,
+    publicKeySha256: trustedKey.publicKeySha256,
+  };
+}
+
+function validateControlArtifactAttestationClaims(value, label) {
+  const claims = plainObject(value, `${label} attestation claims`);
+  requireExactObjectKeys(claims, [
+    "artifactType", "artifactId", "artifactSha256", "relatedArtifactSha256", "releaseId",
+    "tenantId", "launchId", "deploymentId", "repositoryCommit", "componentSetSha256",
+    "guardrailPolicySha256", "wave", "domain", "signalId", "unit", "windowStart",
+    "windowEnd", "eventAt", "threshold", "observedValue", "state",
+  ], `${label} attestation claims`);
+  if (!Object.prototype.hasOwnProperty.call(CONTROL_ARTIFACT_PROVIDER_PREFIXES, claims.artifactType)) {
+    throw new CertificationError("CONTROL_ARTIFACT_ATTESTATION_CLAIMS_INVALID", `${label} attestation artifactType is unsupported`);
+  }
+  identifier(claims.artifactId, `${label} attestation artifactId`);
+  exactSha256(claims.artifactSha256, `${label} attestation artifactSha256`);
+  if (claims.relatedArtifactSha256 !== null) exactSha256(claims.relatedArtifactSha256, `${label} attestation relatedArtifactSha256`);
+  for (const field of ["releaseId", "tenantId", "launchId", "deploymentId", "wave", "domain", "signalId", "unit", "state"]) {
+    identifier(claims[field], `${label} attestation ${field}`);
+  }
+  exactCommit(claims.repositoryCommit, `${label} attestation repositoryCommit`);
+  exactSha256(claims.componentSetSha256, `${label} attestation componentSetSha256`);
+  exactSha256(claims.guardrailPolicySha256, `${label} attestation guardrailPolicySha256`);
+  const windowStart = canonicalTimestamp(claims.windowStart, `${label} attestation windowStart`);
+  const windowEnd = canonicalTimestamp(claims.windowEnd, `${label} attestation windowEnd`);
+  const eventAt = canonicalTimestamp(claims.eventAt, `${label} attestation eventAt`);
+  if (windowEnd <= windowStart || eventAt < windowStart || eventAt > windowEnd) {
+    throw new CertificationError("CONTROL_ARTIFACT_ATTESTATION_TIME_INVALID", `${label} attestation event is outside its closed wave window`);
+  }
+  for (const [field, allowNull] of [["threshold", false], ["observedValue", claims.artifactType === "monitoring_query"]]) {
+    if (allowNull && claims[field] === null) continue;
+    if (typeof claims[field] !== "number" || !Number.isFinite(claims[field]) || claims[field] < 0) {
+      throw new CertificationError("CONTROL_ARTIFACT_ATTESTATION_CLAIMS_INVALID", `${label} attestation ${field} must be a finite non-negative number`);
+    }
+  }
+  if ((claims.artifactType === "monitoring_query") !== (claims.observedValue === null)) {
+    throw new CertificationError("CONTROL_ARTIFACT_ATTESTATION_CLAIMS_INVALID", `${label} attestation observedValue nullability does not match its artifact type`);
+  }
+  if (
+    (["monitoring_query", "pause_command"].includes(claims.artifactType) && claims.relatedArtifactSha256 !== null) ||
+    (["monitoring_result", "pause_receipt"].includes(claims.artifactType) && claims.relatedArtifactSha256 === null)
+  ) {
+    throw new CertificationError("CONTROL_ARTIFACT_ATTESTATION_CLAIMS_INVALID", `${label} attestation related-artifact digest does not match its producer boundary`);
+  }
+  return { ...claims };
+}
+
+function mapReleaseControlValidation(operation) {
+  try {
+    return operation();
+  } catch (error) {
+    if (error instanceof B127ReleaseControlError) {
+      throw new CertificationError(error.code, error.message, error.status);
+    }
+    throw error;
+  }
 }
 
 function validateEvidenceSet(rowsValue, expected) {
@@ -1599,7 +2438,11 @@ function validateEvidenceSet(rowsValue, expected) {
   return validated;
 }
 
-function validateApprovalEvidence(approvals, evidence, recordApprovalIds) {
+function validateApprovalEvidence(approvals, evidence, recordApprovalIds, trustedKeys) {
+  const manifestApprovalIds = Object.values(approvals).map((approval) => approval.approvalId);
+  if (!sameStringSet(recordApprovalIds, manifestApprovalIds) || recordApprovalIds.length !== manifestApprovalIds.length) {
+    throw new CertificationError("APPROVAL_RECORD_MISMATCH", "B127 approvalIds must exactly equal the required manifest approval IDs");
+  }
   const rowsById = new Map(evidence.map((row) => [row.id, row]));
   const usedEvidence = new Set();
   for (const [name, approval] of Object.entries(approvals)) {
@@ -1613,6 +2456,16 @@ function validateApprovalEvidence(approvals, evidence, recordApprovalIds) {
     if (row.issuer !== approval.issuer) {
       throw new CertificationError("APPROVAL_ISSUER_MISMATCH", `${name} issuer does not match its signed B127 evidence`);
     }
+    const key = trustedKeys.find((candidate) =>
+      candidate.issuer === row.issuer && candidate.provider === row.provider && candidate.keyId === row.key_id,
+    );
+    const requiredRole = APPROVAL_AUTHORITY_ROLES[name];
+    if (key === undefined || requiredRole === undefined || !key.authorityRoles.includes(requiredRole)) {
+      throw blocked(
+        "APPROVAL_AUTHORITY_ROLE_NOT_TRUSTED",
+        `${name} signer is not enrolled for the required ${requiredRole ?? "unknown"} authority role`,
+      );
+    }
     usedEvidence.add(row.id);
   }
   if (usedEvidence.size < 5) {
@@ -1625,6 +2478,153 @@ function validateApprovalEvidence(approvals, evidence, recordApprovalIds) {
   }
 }
 
+function validateProductionChangeSignerSeparation(approval, evidence, trustedKeys) {
+  const row = evidence.find((entry) => entry.id === approval.evidenceId);
+  const primaryKey = row === undefined ? undefined : trustedKeys.find((key) =>
+    key.issuer === row.issuer && key.provider === row.provider && key.keyId === row.key_id,
+  );
+  if (row === undefined || primaryKey === undefined) throw blocked("CHANGE_PRIMARY_SIGNER_MISSING", "Production change primary signer evidence is missing");
+  const primaryPublicKeySha256 = primaryKey.publicKeySha256;
+  const executor = approval.subject.executor;
+  const executorKey = trustedKeys.find((key) =>
+    key.issuer === executor.issuer && key.keyId === executor.keyId &&
+    key.authorityRoles.includes(PRODUCTION_CHANGE_EXECUTOR_ROLE),
+  );
+  if (executorKey === undefined) {
+    throw blocked("CHANGE_EXECUTOR_TRUST_MISSING", "The production change executor is not enrolled under a trusted executor key");
+  }
+  if (
+    row.issuer === executor.issuer || row.key_id === executor.keyId ||
+    primaryPublicKeySha256 === executorKey.publicKeySha256
+  ) {
+    throw new CertificationError("CHANGE_APPROVER_NOT_INDEPENDENT", "Production change primary signer is not independent from the executor");
+  }
+  for (const approver of approval.approverSignatures) {
+    if (approver.issuer === row.issuer || approver.keyId === row.key_id || approver.publicKeySha256 === primaryPublicKeySha256) {
+      throw new CertificationError("CHANGE_APPROVER_NOT_INDEPENDENT", "A production change approver reuses the primary change signer identity or public key");
+    }
+  }
+}
+
+function validateProductionChangeApproverEvidence({
+  root,
+  artifactPaths,
+  trustedKeys,
+  tenantId,
+  launchId,
+  repositoryCommit,
+  releaseSubject,
+  approval,
+  now,
+}) {
+  const subject = plainObject(approval.subject, "production change approval subject");
+  const executorValue = plainObject(subject.executor, "production change executor");
+  const executor = {
+    actorId: identifier(executorValue.actorId, "production change executor.actorId"),
+    issuer: identifier(executorValue.issuer, "production change executor.issuer"),
+    keyId: identifier(executorValue.keyId, "production change executor.keyId"),
+  };
+  const executorKey = trustedKeys.find((key) => key.issuer === executor.issuer && key.keyId === executor.keyId && key.authorityRoles.includes(PRODUCTION_CHANGE_EXECUTOR_ROLE));
+  if (executorKey === undefined) {
+    throw blocked("CHANGE_EXECUTOR_TRUST_MISSING", "The production change executor is not enrolled under a trusted executor key");
+  }
+  const expectedClaims = {
+    tenantId,
+    launchId,
+    changeId: subject.changeId,
+    deploymentId: releaseSubject.deploymentId,
+    repositoryCommit,
+    componentSetSha256: releaseSubject.componentSetSha256,
+    guardrailPolicySha256: releaseSubject.guardrailPolicySha256,
+    waveObservationSetSha256: releaseSubject.waveObservationSetSha256,
+    rollbackForwardDrillSha256: releaseSubject.rollbackForwardDrillSha256,
+    windowStart: releaseSubject.goLive.windowStart,
+    windowEnd: releaseSubject.goLive.windowEnd,
+    executor,
+    decision: "approved",
+  };
+  const references = Array.isArray(subject.approverEvidence) ? subject.approverEvidence : [];
+  const signatures = references.map((reference, index) => {
+    const artifact = validateManifestArtifact(
+      root,
+      reference,
+      `production change approver evidence ${index + 1}`,
+      MAX_APPROVAL_ARTIFACT_BYTES,
+      artifactPaths,
+      "CHANGE_APPROVER_ARTIFACT_DIGEST_MISMATCH",
+    );
+    const document = parseJsonObject(artifact.file.bytes.toString("utf8"), `production change approver evidence ${index + 1}`);
+    requireExactObjectKeys(document, [
+      "schemaVersion", "evidenceId", "approverId", "issuer", "keyId", "authorityRole",
+      "algorithm", "approvedAt", "claims", "signature",
+    ], `production change approver evidence ${index + 1}`);
+    if (document.schemaVersion !== "ltm.production-change-approver-evidence.v1" || document.algorithm !== "Ed25519") {
+      throw new CertificationError("CHANGE_APPROVER_CONTRACT_INVALID", "Production change approver evidence uses an unsupported schema or signature algorithm");
+    }
+    const evidenceId = identifier(document.evidenceId, `change approver ${index + 1}.evidenceId`);
+    const approverId = identifier(document.approverId, `change approver ${index + 1}.approverId`);
+    const issuer = identifier(document.issuer, `change approver ${index + 1}.issuer`);
+    const keyId = identifier(document.keyId, `change approver ${index + 1}.keyId`);
+    const authorityRole = nonEmptyText(document.authorityRole, `change approver ${index + 1}.authorityRole`, 128);
+    if (!CHANGE_APPROVER_AUTHORITY_ROLES.includes(authorityRole)) {
+      throw new CertificationError("CHANGE_APPROVER_ROLE_INVALID", "Production change approver evidence has an unsupported authority role");
+    }
+    const approvedAt = canonicalTimestamp(document.approvedAt, `change approver ${index + 1}.approvedAt`);
+    if (approvedAt.toISOString() !== approval.approvedAt || approvedAt.getTime() > now.getTime() + CLOCK_SKEW_MS) {
+      throw new CertificationError("CHANGE_APPROVER_TIME_INVALID", "Production change approver evidence is not bound to the approval time");
+    }
+    const claims = plainObject(document.claims, `change approver ${index + 1}.claims`);
+    if (canonicalJson(claims) !== canonicalJson(expectedClaims)) {
+      throw new CertificationError("CHANGE_APPROVER_BINDING_MISMATCH", "Production change approver evidence is not bound to this release, deployment, controls, executor, and window");
+    }
+    const trustedKey = trustedKeys.find((key) => key.issuer === issuer && key.keyId === keyId && key.provider === `change-approval:${subject.changeId}`);
+    const scope = `${CHANGE_APPROVER_SCOPE_PREFIX}${sha256Bytes(Buffer.from(canonicalJson(claims), "utf8"))}`;
+    if (trustedKey === undefined || !trustedKey.authorityRoles.includes(authorityRole) || !trustedKey.allowedEnvironments.includes("production") || !scopeAllowed(trustedKey.allowedScopes, scope)) {
+      throw blocked("CHANGE_APPROVER_TRUST_MISSING", "A production change approver key is not independently enrolled for its exact authority role and release scope");
+    }
+    if (
+      approverId === executor.actorId || issuer === executor.issuer || keyId === executor.keyId ||
+      issuer === approval.issuer || trustedKey.publicKeySha256 === executorKey.publicKeySha256
+    ) {
+      throw new CertificationError("CHANGE_APPROVER_NOT_INDEPENDENT", "A production change approver is not independent from the executor or primary change authority");
+    }
+    if (
+      (trustedKey.notBefore !== undefined && approvedAt.toISOString() < trustedKey.notBefore) ||
+      (trustedKey.notAfter !== undefined && approvedAt.toISOString() > trustedKey.notAfter)
+    ) {
+      throw new CertificationError("CHANGE_APPROVER_KEY_WINDOW_INVALID", "A production change approval was signed outside its trusted key validity window");
+    }
+    const unsigned = { ...document };
+    delete unsigned.signature;
+    if (!validBase64UrlSignature(document.signature) || !verifySignature(
+      null,
+      Buffer.from(canonicalJson(unsigned), "utf8"),
+      trustedKey.publicKey,
+      Buffer.from(document.signature, "base64url"),
+    )) {
+      throw new CertificationError("CHANGE_APPROVER_SIGNATURE_INVALID", "Production change approver evidence failed Ed25519 verification");
+    }
+    return {
+      evidenceId,
+      approverId,
+      issuer,
+      keyId,
+      authorityRole,
+      publicKeySha256: trustedKey.publicKeySha256,
+      artifact: artifact.artifact,
+    };
+  });
+  for (const field of ["evidenceId", "approverId", "issuer", "keyId", "publicKeySha256", "authorityRole"]) {
+    if (new Set(signatures.map((entry) => entry[field])).size !== signatures.length) {
+      throw new CertificationError("CHANGE_APPROVER_DIVERSITY_INSUFFICIENT", `Production change approvers must use distinct ${field} values`);
+    }
+  }
+  if (signatures.length < 2 || !CHANGE_APPROVER_AUTHORITY_ROLES.every((role) => signatures.some((entry) => entry.authorityRole === role))) {
+    throw blocked("CHANGE_APPROVER_DIVERSITY_INSUFFICIENT", "Production change approval requires distinct risk and operations approver signatures");
+  }
+  return signatures;
+}
+
 export function loadTrustedKeys(pathValue, now) {
   const path = requiredPath(pathValue, "trusted evidence keys path", "TRUSTED_EVIDENCE_KEYS_REQUIRED");
   if (!existsSync(path)) throw blocked("TRUSTED_EVIDENCE_KEYS_NOT_FOUND", "The trusted evidence keys file does not exist");
@@ -1634,6 +2634,8 @@ export function loadTrustedKeys(pathValue, now) {
     throw blocked("TRUSTED_EVIDENCE_KEYS_INCOMPLETE", "At least five trusted keys are required in ltm.trusted-evidence-keys.v1 format");
   }
   const identities = new Set();
+  const publicKeyIdentities = new Map();
+  const identityPublicKeys = new Map();
   return document.keys.map((value, index) => {
     const key = plainObject(value, `trusted key ${index}`);
     const issuer = identifier(key.issuer, `trusted key ${index} issuer`);
@@ -1655,6 +2657,19 @@ export function loadTrustedKeys(pathValue, now) {
     if (!allowedEnvironments.includes("production") || allowedEnvironments.some((environment) => !["test", "sandbox", "staging", "production"].includes(environment))) {
       throw new CertificationError("TRUST_KEY_ENVIRONMENT_INVALID", `Trusted key ${keyId} is not authorized for production`);
     }
+    const authorityRoles = key.authorityRoles === undefined
+      ? []
+      : stringArray(key.authorityRoles, `trusted key ${keyId} authorityRoles`, 1, Object.keys(APPROVAL_AUTHORITY_ROLES).length + CHANGE_APPROVER_AUTHORITY_ROLES.length + Object.keys(CONTROL_ARTIFACT_AUTHORITY_ROLES).length + 2);
+    const knownAuthorityRoles = new Set([
+      ...Object.values(APPROVAL_AUTHORITY_ROLES),
+      ...CHANGE_APPROVER_AUTHORITY_ROLES,
+      ...Object.values(CONTROL_ARTIFACT_AUTHORITY_ROLES),
+      PRODUCTION_CHANGE_EXECUTOR_ROLE,
+      SUPPLY_CHAIN_AUTHORITY_ROLE,
+    ]);
+    if (authorityRoles.some((role) => !knownAuthorityRoles.has(role))) {
+      throw new CertificationError("TRUST_KEY_AUTHORITY_ROLE_INVALID", `Trusted key ${keyId} declares an unknown authority role`);
+    }
     let publicKey;
     try {
       if (typeof key.publicKeyPem !== "string" || key.publicKeyPem.length === 0 || key.publicKeyPem.length > 16_384 || key.publicKeyPem.includes("\0")) {
@@ -1667,6 +2682,24 @@ export function loadTrustedKeys(pathValue, now) {
     if (publicKey.asymmetricKeyType !== "ed25519") {
       throw new CertificationError("TRUST_KEY_TYPE_INVALID", `Trusted key ${keyId} is not Ed25519`);
     }
+    const publicKeySha256 = sha256Bytes(publicKey.export({ type: "spki", format: "der" }));
+    const signerIdentity = `${issuer}\n${provider}\n${keyId}`;
+    const priorIdentity = publicKeyIdentities.get(publicKeySha256);
+    if (priorIdentity !== undefined && priorIdentity !== signerIdentity) {
+      throw new CertificationError(
+        "TRUST_KEY_PUBLIC_KEY_REUSED",
+        `Trusted key ${keyId} reuses Ed25519 public key material enrolled under a different signer identity`,
+      );
+    }
+    const priorPublicKey = identityPublicKeys.get(signerIdentity);
+    if (priorPublicKey !== undefined && priorPublicKey !== publicKeySha256) {
+      throw new CertificationError(
+        "TRUST_KEY_IDENTITY_KEY_MISMATCH",
+        `Trusted signer identity ${keyId} maps to inconsistent Ed25519 public keys`,
+      );
+    }
+    publicKeyIdentities.set(publicKeySha256, signerIdentity);
+    identityPublicKeys.set(signerIdentity, publicKeySha256);
     const notBefore = key.notBefore === undefined ? undefined : canonicalTimestamp(key.notBefore, `trusted key ${keyId} notBefore`).toISOString();
     const notAfter = key.notAfter === undefined ? undefined : canonicalTimestamp(key.notAfter, `trusted key ${keyId} notAfter`).toISOString();
     if (notBefore !== undefined && notAfter !== undefined && notAfter <= notBefore) {
@@ -1680,27 +2713,25 @@ export function loadTrustedKeys(pathValue, now) {
       throw new CertificationError("TRUST_KEY_DUPLICATE", `Trusted key identity ${keyId} is duplicated`);
     }
     identities.add(identity);
-    return { issuer, provider, keyId, allowedScopes, allowedEnvironments, publicKey, notBefore, notAfter };
+    return { issuer, provider, keyId, allowedScopes, allowedEnvironments, authorityRoles, publicKey, publicKeySha256, notBefore, notAfter };
   });
 }
 
 function validateSbom(bytes, format) {
-  const sbom = parseJsonObject(bytes.toString("utf8"), "SBOM");
-  if (format === "cyclonedx-json") {
-    if (sbom.bomFormat !== "CycloneDX" || typeof sbom.specVersion !== "string" || !Array.isArray(sbom.components)) {
-      throw new CertificationError("SBOM_CONTENT_INVALID", "CycloneDX SBOM is missing bomFormat, specVersion, or components");
+  try {
+    return validateReleaseSbom(bytes, format);
+  } catch (error) {
+    if (error instanceof EvidenceContractError) {
+      throw new CertificationError(error.code, error.message);
     }
-    return;
-  }
-  if (typeof sbom.spdxVersion !== "string" || !sbom.spdxVersion.startsWith("SPDX-") || !Array.isArray(sbom.packages)) {
-    throw new CertificationError("SBOM_CONTENT_INVALID", "SPDX SBOM is missing spdxVersion or packages");
+    throw error;
   }
 }
 
 function assertRequiredTables(database) {
   const schema = database.prepare("SELECT value FROM schema_metadata WHERE key = 'schema_version'").get();
-  if (schema?.value !== "3") {
-    throw new CertificationError("DATABASE_SCHEMA_UNSUPPORTED", "The B127 verifier requires runtime database schema version 3");
+  if (schema?.value !== "5") {
+    throw new CertificationError("DATABASE_SCHEMA_UNSUPPORTED", "The B127 verifier requires runtime database schema version 5");
   }
   const tables = database.prepare(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('records', 'external_evidence', 'evidence_consumptions')",

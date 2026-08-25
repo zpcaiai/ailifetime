@@ -15,6 +15,7 @@ import {
   ProductionIntegrationError,
   attestVerifiedBusinessEvent,
   assertProductionEndpoint,
+  externalCommandTerminalBusinessEventDraft,
   parseJsonObject,
   requiredString,
   sha256,
@@ -23,6 +24,7 @@ import {
   type EvidenceAttestor,
   type AttestedBusinessEvent,
   type BusinessEventDraft,
+  type ExternalCommandTerminalCallbackDraft,
   type HttpTransport,
   type ReplayStore,
   type SecretResolver,
@@ -50,6 +52,11 @@ export interface VerifyPartnerWebhookInput<Binding extends CapabilityEvidenceBin
   readonly nonce: string;
   readonly signature: string;
 }
+
+export type ExternalCommandTerminalCallbackResolver = (
+  payload: Readonly<Record<string, unknown>>,
+  binding: CapabilityEvidenceBinding,
+) => ExternalCommandTerminalCallbackDraft | Promise<ExternalCommandTerminalCallbackDraft>;
 
 /**
  * LTM Provider Webhook v1. This is an executable contract for custom tax,
@@ -86,6 +93,21 @@ export class SignedPartnerWebhookIntegration<Binding extends CapabilityEvidenceB
     event: BusinessEventDraft,
   ): Promise<AttestedBusinessEvent> {
     const verified = await this.#verify(input);
+    const attested = await attestVerifiedBusinessEvent(this.attestor, verified.binding, input.rawBody, event);
+    await this.#claim(verified);
+    return attested;
+  }
+
+  async verifyAndAttestExternalCommandTerminal(
+    input: VerifyPartnerWebhookInput<Binding>,
+    resolveCallback: ExternalCommandTerminalCallbackResolver,
+  ): Promise<AttestedBusinessEvent> {
+    const verified = await this.#verify(input);
+    // Native fields are interpreted only after exact-body signature and policy
+    // validation succeed. This prevents an integration caller from supplying a
+    // parallel, unsigned terminal projection.
+    const callback = await resolveCallback(verified.payload, verified.binding);
+    const event = externalCommandTerminalBusinessEventDraft(verified.binding, callback);
     const attested = await attestVerifiedBusinessEvent(this.attestor, verified.binding, input.rawBody, event);
     await this.#claim(verified);
     return attested;

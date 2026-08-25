@@ -1,0 +1,33 @@
+.authentication-actions {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+}
+
+.auth-button {
+  min-height: 44px;
+  border: 1px solid var(--green);
+  border-radius: 9px;
+  background: var(--paper);
+  color: var(--green);
+  padding: .55rem .85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}

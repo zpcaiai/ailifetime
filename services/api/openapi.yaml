@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: AI Life Time Machine Runtime API
   version: 1.0.0
-  description: Tenant-safe command, query, and B00-B127 capability dispatch API.
+  description: Tenant-safe command, query, and B00-B127 capability dispatch API. The 18 external-command batches resolve to 19 fixed signed callback contracts because B10 has distinct publishExport and revokeExport operations.
 servers:
   - url: http://127.0.0.1:8080
 paths:
@@ -47,6 +47,137 @@ paths:
                 type: string
         "401":
           $ref: "#/components/responses/Error"
+  /v1/auth/browser/config:
+    get:
+      operationId: getBrowserOidcConfiguration
+      description: Returns the closed, public Authorization Code + PKCE S256 configuration. It contains no client secret, token, trust key, or mutable provider discovery response.
+      responses:
+        "200":
+          description: Deployment-pinned public SPA OIDC configuration.
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrowserOidcConfiguration"
+        "503":
+          $ref: "#/components/responses/Error"
+  /v1/auth/wechat/session:
+    post:
+      operationId: exchangeWechatLoginCode
+      description: Exchanges a single-use wx.login code through the configured HTTPS identity broker; roles and tenant are server-resolved.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WechatSessionRequest"
+      responses:
+        "200":
+          description: Short-lived in-memory client session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientSessionResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/auth/session/refresh:
+    post:
+      operationId: refreshClientSession
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        "200":
+          description: Rotated short-lived session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientSessionResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/auth/session/logout:
+    post:
+      operationId: revokeClientSession
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        "200":
+          description: Session revocation accepted by the identity broker.
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/session:
+    get:
+      operationId: getAuthenticatedSession
+      description: Returns only the server-verified principal projection. Bearer credentials are never reflected.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+      responses:
+        "200":
+          description: Authenticated browser or API session projection.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthenticatedSessionResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/consent-policy/authority:
+    get:
+      operationId: getConsentPolicyAuthority
+      description: Returns only metadata from the server-verified signed consent-policy catalog. Production deployment probes authenticate with workload identity and bind this projection to the release subject.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+      responses:
+        "200":
+          description: Active production consent-policy catalog authority metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsentPolicyAuthorityResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/capabilities/visible:
+    get:
+      operationId: listVisibleCapabilities
+      description: Returns the intersection of the server portal manifest, verified roles, and executable permissions.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+      responses:
+        "200":
+          description: Server-authorized capability and portal projection.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VisibleCapabilityCatalog"
+        default:
+          $ref: "#/components/responses/Error"
   /v1/capabilities:
     get:
       operationId: listCapabilities
@@ -71,6 +202,7 @@ paths:
                     type: string
     post:
       operationId: executeCapabilityEnvelope
+      description: For B05 the public input is the closed `{assetId, reason}` contract. Classification, retention and deletion targets are resolved only by the broker's signed production policy catalog; success includes the complete per-target receipt set.
       security:
         - bearerAuth: []
       parameters:
@@ -92,6 +224,115 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/DispatchResult"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/uploads:
+    post:
+      operationId: createResumableUpload
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadCreateRequest"
+      responses:
+        "201":
+          description: Durable upload session created by the media broker.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadSession"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/uploads/{uploadId}/chunks:
+    parameters:
+      - $ref: "#/components/parameters/UploadId"
+    post:
+      operationId: appendResumableUploadChunk
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: Content-Range
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^bytes (0|[1-9]\d*)-(0|[1-9]\d*)/(0|[1-9]\d*)$'
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: byte
+              maxLength: 6990508
+      responses:
+        "200":
+          description: Chunk durably accepted at the exact offset.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [nextOffset]
+                properties:
+                  nextOffset:
+                    type: integer
+                    minimum: 1
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/uploads/{uploadId}/complete:
+    parameters:
+      - $ref: "#/components/parameters/UploadId"
+    post:
+      operationId: completeResumableUpload
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadDigest"
+      responses:
+        "200":
+          description: Media verified and available through its opaque reference.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompletedUpload"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/uploads/{uploadId}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/UploadId"
+    post:
+      operationId: cancelResumableUpload
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        "200":
+          description: Upload cancellation accepted.
         default:
           $ref: "#/components/responses/Error"
   /v1/capabilities/{batchId}:
@@ -120,6 +361,7 @@ paths:
           $ref: "#/components/responses/Error"
     post:
       operationId: executeCapability
+      description: For B05 the public input is the closed `{assetId, reason}` contract. Caller-supplied policy or deletion-target fields are rejected and no success is returned until every signed or storage-verified target receipt is present.
       security:
         - bearerAuth: []
       parameters:
@@ -195,13 +437,23 @@ components:
         type: string
         minLength: 1
         maxLength: 200
+    UploadId:
+      name: uploadId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 256
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$'
   schemas:
     BatchId:
       type: string
       pattern: '^B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])$'
     Capability:
       type: object
-      required: [batchId, skill, operation, requirements, requiresExternalEvidence]
+      additionalProperties: false
+      required: [batchId, skill, operation, permission, portalId, mode, requirements, requiresExternalEvidence]
       properties:
         batchId:
           $ref: "#/components/schemas/BatchId"
@@ -209,6 +461,14 @@ components:
           type: string
         operation:
           type: string
+        permission:
+          type: string
+          minLength: 1
+          maxLength: 160
+        portalId:
+          $ref: "#/components/schemas/CapabilityPortalId"
+        mode:
+          enum: [resource, state-transition, consent-write, ledger-post, partner-settlement-ledger, inbox-event, external-command, attestation]
         requirements:
           type: array
           minItems: 5
@@ -217,16 +477,294 @@ components:
             type: string
         requiresExternalEvidence:
           type: boolean
+    CapabilityPortalId:
+      enum: [consumer, family, partner, studio, operations, support, developer]
+    Role:
+      enum: [consumer, household_admin, guardian, partner_employee, partner_admin, studio_operator, support_agent, moderator, privacy_officer, finance_operator, platform_admin, auditor, service_account]
+    BrowserOidcConfiguration:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, issuer, authorizationEndpoint, tokenEndpoint, clientId, redirectUri, scopes, audience]
+      properties:
+        schemaVersion:
+          const: ltm.browser-oidc-config.v1
+        issuer:
+          type: string
+          format: uri
+          pattern: '^https://'
+          maxLength: 1024
+        authorizationEndpoint:
+          type: string
+          format: uri
+          pattern: '^https://'
+          maxLength: 1024
+        tokenEndpoint:
+          type: string
+          format: uri
+          pattern: '^https://'
+          maxLength: 1024
+        clientId:
+          type: string
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._~:-]{0,255}$'
+        redirectUri:
+          type: string
+          format: uri
+          pattern: '^https://'
+          maxLength: 1024
+        scopes:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          contains:
+            const: openid
+          items:
+            type: string
+            pattern: '^[A-Za-z0-9][A-Za-z0-9._~:/-]{0,127}$'
+        audience:
+          type: string
+          minLength: 1
+          maxLength: 512
+    AuthenticatedSession:
+      type: object
+      additionalProperties: false
+      required: [actorId, tenantId, roles, purpose, stepUp, guardianVerified, authenticationState]
+      properties:
+        actorId:
+          type: string
+        tenantId:
+          type: string
+        roles:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/Role"
+        purpose:
+          type: string
+        stepUp:
+          type: boolean
+        guardianVerified:
+          type: boolean
+        authenticationState:
+          const: server_verified
+    AuthenticatedSessionResponse:
+      type: object
+      additionalProperties: false
+      required: [session, requestId]
+      properties:
+        session:
+          $ref: "#/components/schemas/AuthenticatedSession"
+        requestId:
+          type: string
+    ConsentPolicyAuthorityResponse:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, catalogId, issuer, environment, catalogSha256, issuedAt, expiresAt, jurisdiction, locale, policyVersions, requestId]
+      properties:
+        schemaVersion:
+          const: ltm.consent-policy-catalog-metadata.v1
+        catalogId:
+          $ref: "#/components/schemas/Identifier"
+        issuer:
+          $ref: "#/components/schemas/Identifier"
+        environment:
+          enum: [development, staging, production]
+        catalogSha256:
+          $ref: "#/components/schemas/Sha256"
+        issuedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        jurisdiction:
+          type: string
+          minLength: 1
+          maxLength: 64
+        locale:
+          type: string
+          minLength: 1
+          maxLength: 64
+        policyVersions:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 512
+        requestId:
+          type: string
+    ClientSession:
+      type: object
+      additionalProperties: false
+      required: [accessToken, expiresAt, tenantId, actorId, roles, purpose]
+      properties:
+        accessToken:
+          type: string
+          minLength: 20
+          maxLength: 8192
+          readOnly: true
+        expiresAt:
+          type: string
+          format: date-time
+        tenantId:
+          $ref: "#/components/schemas/Identifier"
+        actorId:
+          $ref: "#/components/schemas/Identifier"
+        roles:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/Role"
+        purpose:
+          type: string
+          minLength: 1
+          maxLength: 120
+    ClientSessionResponse:
+      type: object
+      additionalProperties: false
+      required: [session]
+      properties:
+        session:
+          $ref: "#/components/schemas/ClientSession"
+    WechatSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [code, consentVersion, clientRequestId]
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 512
+        consentVersion:
+          type: string
+          minLength: 1
+          maxLength: 128
+        clientRequestId:
+          $ref: "#/components/schemas/Identifier"
+    UploadDigest:
+      type: object
+      additionalProperties: false
+      required: [fileDigest, digestAlgorithm]
+      properties:
+        fileDigest:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+        digestAlgorithm:
+          const: sha256
+    UploadCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [fileDigest, digestAlgorithm, fileSize, contentType, clientRequestId]
+      properties:
+        fileDigest:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+        digestAlgorithm:
+          const: sha256
+        fileSize:
+          type: integer
+          minimum: 1
+          maximum: 26214400
+        contentType:
+          const: image/jpeg
+        clientRequestId:
+          $ref: "#/components/schemas/Identifier"
+    UploadSession:
+      type: object
+      additionalProperties: false
+      required: [uploadId, nextOffset, expiresAt]
+      properties:
+        uploadId:
+          type: string
+          minLength: 1
+          maxLength: 256
+        nextOffset:
+          type: integer
+          minimum: 0
+        expiresAt:
+          type: string
+          format: date-time
+    CompletedUpload:
+      type: object
+      additionalProperties: false
+      required: [uploadId, assetId, state]
+      properties:
+        uploadId:
+          type: string
+        assetId:
+          $ref: "#/components/schemas/Identifier"
+        state:
+          const: available
+    VisibleCapabilityPortal:
+      type: object
+      additionalProperties: false
+      required: [id, skills, capabilityCount]
+      properties:
+        id:
+          $ref: "#/components/schemas/CapabilityPortalId"
+        skills:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+        capabilityCount:
+          type: integer
+          minimum: 1
+    VisibleCapabilityCatalog:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, capabilities, portals, count, requestId]
+      properties:
+        schemaVersion:
+          const: ltm.visible-capability-manifest.v1
+        capabilities:
+          type: array
+          maxItems: 128
+          items:
+            $ref: "#/components/schemas/Capability"
+        portals:
+          type: array
+          maxItems: 7
+          items:
+            $ref: "#/components/schemas/VisibleCapabilityPortal"
+        count:
+          type: integer
+          minimum: 0
+          maximum: 128
+        requestId:
+          type: string
     CommandEnvelope:
       oneOf:
+        - $ref: "#/components/schemas/ConsentGrantEnvelope"
+        - $ref: "#/components/schemas/ParticipantRegisterEnvelope"
+        - $ref: "#/components/schemas/ParticipantRevokeEnvelope"
+        - $ref: "#/components/schemas/ParticipantAuthorityGrantEnvelope"
+        - $ref: "#/components/schemas/ParticipantAuthorityRevokeEnvelope"
         - $ref: "#/components/schemas/ExternalEventApplyEnvelope"
         - $ref: "#/components/schemas/ExternalCommandTransitionEnvelope"
+        - $ref: "#/components/schemas/RightsRequestSubmitEnvelope"
+        - $ref: "#/components/schemas/RightsTaskReceiptEnvelope"
+        - $ref: "#/components/schemas/RightsReviewEnvelope"
+        - $ref: "#/components/schemas/RightsEscalateEnvelope"
+        - $ref: "#/components/schemas/ShareGrantRevokeEnvelope"
         - $ref: "#/components/schemas/GenericCommandEnvelope"
       discriminator:
         propertyName: command
     QueryEnvelope:
       oneOf:
+        - $ref: "#/components/schemas/ConsentRequireEnvelope"
         - $ref: "#/components/schemas/ExternalCommandGetEnvelope"
+        - $ref: "#/components/schemas/RightsRequestGetEnvelope"
+        - $ref: "#/components/schemas/RightsRequestListEnvelope"
+        - $ref: "#/components/schemas/ShareGrantGetEnvelope"
+        - $ref: "#/components/schemas/ShareGrantListEnvelope"
         - $ref: "#/components/schemas/GenericQueryEnvelope"
       discriminator:
         propertyName: query
@@ -240,7 +778,6 @@ components:
             - record.create
             - record.update
             - record.delete
-            - consent.grant
             - consent.withdraw
             - ledger.post
             - inbox.receive
@@ -257,7 +794,6 @@ components:
           enum:
             - record.get
             - record.list
-            - consent.require
             - consent.list
             - ledger.get
             - ledger.balance
@@ -270,6 +806,201 @@ components:
             - evidence.list
         input:
           type: object
+    ConsentScope:
+      type: object
+      additionalProperties: false
+      required: [resource, actions]
+      properties:
+        resource:
+          type: string
+          minLength: 3
+          maxLength: 256
+          pattern: '^[a-z][a-z0-9_.-]{0,63}:[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$'
+        actions:
+          type: array
+          minItems: 1
+          maxItems: 32
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 80
+            pattern: '^[a-z][a-z0-9_.:-]{0,79}$'
+    ConsentRequirementScope:
+      type: object
+      additionalProperties: false
+      required: [resource, action]
+      properties:
+        resource:
+          type: string
+          minLength: 3
+          maxLength: 256
+          pattern: '^[a-z][a-z0-9_.-]{0,63}:[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$'
+        action:
+          type: string
+          minLength: 1
+          maxLength: 80
+          pattern: '^[a-z][a-z0-9_.:-]{0,79}$'
+    ConsentGrantEnvelope:
+      type: object
+      additionalProperties: false
+      required: [command, input]
+      properties:
+        command:
+          const: consent.grant
+        input:
+          type: object
+          additionalProperties: false
+          required: [participantId, grantorCapacity, purpose, scope, policyVersion]
+          properties:
+            id:
+              $ref: "#/components/schemas/Identifier"
+            participantId:
+              $ref: "#/components/schemas/Identifier"
+            grantorCapacity:
+              enum: [self, guardian, authorized_agent]
+            purpose:
+              type: string
+              minLength: 1
+              maxLength: 120
+            scope:
+              $ref: "#/components/schemas/ConsentScope"
+            policyVersion:
+              $ref: "#/components/schemas/Identifier"
+            evidenceHash:
+              $ref: "#/components/schemas/Sha256"
+            expiresAt:
+              oneOf:
+                - $ref: "#/components/schemas/CanonicalTimestamp"
+                - type: "null"
+    ConsentRequireEnvelope:
+      type: object
+      additionalProperties: false
+      required: [query, input]
+      properties:
+        query:
+          const: consent.require
+        input:
+          type: object
+          additionalProperties: false
+          required: [participantIds, scope]
+          properties:
+            participantIds:
+              type: array
+              minItems: 1
+              maxItems: 100
+              uniqueItems: true
+              items:
+                $ref: "#/components/schemas/Identifier"
+            purpose:
+              type: string
+              minLength: 1
+              maxLength: 120
+            scope:
+              $ref: "#/components/schemas/ConsentRequirementScope"
+            at:
+              $ref: "#/components/schemas/CanonicalTimestamp"
+    ParticipantRegisterEnvelope:
+      type: object
+      additionalProperties: false
+      required: [command, input]
+      properties:
+        command:
+          const: participant.register
+        input:
+          type: object
+          additionalProperties: false
+          required: [participantId, ownerActorId, minorStatus, expiresAt, expectedVersion, evidenceId]
+          properties:
+            participantId:
+              $ref: "#/components/schemas/Identifier"
+            ownerActorId:
+              $ref: "#/components/schemas/Identifier"
+            minorStatus:
+              enum: [adult, minor]
+            expiresAt:
+              $ref: "#/components/schemas/CanonicalTimestamp"
+            expectedVersion:
+              oneOf:
+                - type: integer
+                  minimum: 1
+                - type: "null"
+            evidenceId:
+              $ref: "#/components/schemas/Identifier"
+    ParticipantRevokeEnvelope:
+      type: object
+      additionalProperties: false
+      required: [command, input]
+      properties:
+        command:
+          const: participant.revoke
+        input:
+          type: object
+          additionalProperties: false
+          required: [participantId, expectedVersion, reason, evidenceId]
+          properties:
+            participantId:
+              $ref: "#/components/schemas/Identifier"
+            expectedVersion:
+              type: integer
+              minimum: 1
+            reason:
+              type: string
+              minLength: 1
+              maxLength: 500
+            evidenceId:
+              $ref: "#/components/schemas/Identifier"
+    ParticipantAuthorityGrantEnvelope:
+      type: object
+      additionalProperties: false
+      required: [command, input]
+      properties:
+        command:
+          const: participant-authority.grant
+        input:
+          type: object
+          additionalProperties: false
+          required: [authorizationId, authorizedActorId, participantId, capacity, scope, expiresAt, evidenceId]
+          properties:
+            authorizationId:
+              $ref: "#/components/schemas/Identifier"
+            authorizedActorId:
+              $ref: "#/components/schemas/Identifier"
+            participantId:
+              $ref: "#/components/schemas/Identifier"
+            capacity:
+              enum: [guardian, authorized_agent]
+            scope:
+              $ref: "#/components/schemas/ConsentScope"
+            expiresAt:
+              $ref: "#/components/schemas/CanonicalTimestamp"
+            evidenceId:
+              $ref: "#/components/schemas/Identifier"
+    ParticipantAuthorityRevokeEnvelope:
+      type: object
+      additionalProperties: false
+      required: [command, input]
+      properties:
+        command:
+          const: participant-authority.revoke
+        input:
+          type: object
+          additionalProperties: false
+          required: [authorizationId, capacity, expectedVersion, reason, evidenceId]
+          properties:
+            authorizationId:
+              $ref: "#/components/schemas/Identifier"
+            capacity:
+              enum: [guardian, authorized_agent]
+            expectedVersion:
+              type: integer
+              minimum: 1
+            reason:
+              type: string
+              minLength: 1
+              maxLength: 500
+            evidenceId:
+              $ref: "#/components/schemas/Identifier"
     ExternalEventApplyEnvelope:
       type: object
       additionalProperties: false
@@ -339,6 +1070,320 @@ components:
           properties:
             commandId:
               $ref: "#/components/schemas/Identifier"
+    RightsRequestSubmitEnvelope:
+      type: object
+      additionalProperties: false
+      required: [command, input]
+      properties:
+        command:
+          const: rights-request.submit
+        input:
+          type: object
+          additionalProperties: false
+          required: [participantId, requestType, requestedProcessingPurpose]
+          properties:
+            requestId:
+              $ref: "#/components/schemas/Identifier"
+            participantId:
+              $ref: "#/components/schemas/Identifier"
+            requestType:
+              $ref: "#/components/schemas/RightsRequestType"
+            requestedProcessingPurpose:
+              type: string
+              minLength: 1
+              maxLength: 120
+              pattern: '^(all|[a-z][a-z0-9_:-]{0,119})$'
+            correctionFields:
+              type: array
+              maxItems: 50
+              uniqueItems: true
+              items:
+                type: string
+                pattern: '^[a-z][a-z0-9_.-]{0,79}$'
+            correctionPayloadSha256:
+              $ref: "#/components/schemas/Sha256"
+            parentRequestId:
+              $ref: "#/components/schemas/Identifier"
+    RightsTaskReceiptEnvelope:
+      type: object
+      additionalProperties: false
+      required: [command, input]
+      properties:
+        command:
+          const: rights-request.task-receipt
+        input:
+          type: object
+          additionalProperties: false
+          required: [requestId, taskId, outcome, resultSha256, providerOccurredAt, evidenceId]
+          properties:
+            requestId:
+              $ref: "#/components/schemas/Identifier"
+            taskId:
+              $ref: "#/components/schemas/Identifier"
+            outcome:
+              enum: [succeeded, blocked, failed]
+            resultSha256:
+              $ref: "#/components/schemas/Sha256"
+            providerOccurredAt:
+              $ref: "#/components/schemas/CanonicalTimestamp"
+            evidenceId:
+              $ref: "#/components/schemas/Identifier"
+            errorCode:
+              type: string
+              pattern: '^[A-Z][A-Z0-9_]{1,79}$'
+    RightsReviewEnvelope:
+      type: object
+      additionalProperties: false
+      required: [command, input]
+      properties:
+        command:
+          const: rights-request.review
+        input:
+          type: object
+          additionalProperties: false
+          required: [requestId, decision, reasonCode, caseReference]
+          properties:
+            requestId:
+              $ref: "#/components/schemas/Identifier"
+            decision:
+              enum: [approve, deny]
+            reasonCode:
+              type: string
+              pattern: '^[A-Z][A-Z0-9_]{1,79}$'
+            caseReference:
+              $ref: "#/components/schemas/Identifier"
+    RightsEscalateEnvelope:
+      type: object
+      additionalProperties: false
+      required: [command, input]
+      properties:
+        command:
+          const: rights-request.escalate
+        input:
+          type: object
+          additionalProperties: false
+          required: [requestId, reasonCode]
+          properties:
+            requestId:
+              $ref: "#/components/schemas/Identifier"
+            reasonCode:
+              enum: [sla_due, dependency_blocked, receipt_failed, review_disagreement]
+    RightsRequestGetEnvelope:
+      type: object
+      additionalProperties: false
+      required: [query, input]
+      properties:
+        query:
+          const: rights-request.get
+        input:
+          type: object
+          additionalProperties: false
+          required: [requestId]
+          properties:
+            requestId:
+              $ref: "#/components/schemas/Identifier"
+    RightsRequestListEnvelope:
+      type: object
+      additionalProperties: false
+      required: [query, input]
+      properties:
+        query:
+          const: rights-request.list
+        input:
+          type: object
+          additionalProperties: false
+          properties:
+            limit:
+              type: integer
+              minimum: 1
+              maximum: 200
+            cursor:
+              $ref: "#/components/schemas/Identifier"
+    RightsRequestType:
+      enum: [access, correction, export, withdraw, delete, restrict_processing, appeal]
+    RightsRequestProjection:
+      type: object
+      additionalProperties: false
+      required:
+        - requestId
+        - requestType
+        - subjectReference
+        - requestedProcessingPurpose
+        - status
+        - policyVersion
+        - submittedAt
+        - dueAt
+        - overdue
+        - completedAt
+        - parentRequestId
+        - progress
+        - tasks
+        - review
+        - explanationCode
+      properties:
+        requestId:
+          $ref: "#/components/schemas/Identifier"
+        requestType:
+          $ref: "#/components/schemas/RightsRequestType"
+        subjectReference:
+          type: string
+          pattern: '^subject_[a-f0-9]{16}$'
+        requestedProcessingPurpose:
+          type: string
+          maxLength: 120
+        status:
+          enum: [propagation_pending, review_pending, awaiting_second_review, escalated, completed, denied]
+        policyVersion:
+          const: ltm.product-rights-sla.v1
+        submittedAt:
+          $ref: "#/components/schemas/CanonicalTimestamp"
+        dueAt:
+          $ref: "#/components/schemas/CanonicalTimestamp"
+        overdue:
+          type: boolean
+        completedAt:
+          oneOf:
+            - $ref: "#/components/schemas/CanonicalTimestamp"
+            - type: "null"
+        parentRequestId:
+          oneOf:
+            - $ref: "#/components/schemas/Identifier"
+            - type: "null"
+        progress:
+          type: object
+          additionalProperties: false
+          required: [total, succeeded, pending, blocked, failed]
+          properties:
+            total: { type: integer, minimum: 0 }
+            succeeded: { type: integer, minimum: 0 }
+            pending: { type: integer, minimum: 0 }
+            blocked: { type: integer, minimum: 0 }
+            failed: { type: integer, minimum: 0 }
+        tasks:
+          type: array
+          maxItems: 20008
+          items:
+            type: object
+            additionalProperties: false
+            required: [taskId, target, assetReference, state, attempts]
+            properties:
+              taskId:
+                $ref: "#/components/schemas/Identifier"
+              target:
+                enum: [primary_record_store, object_storage, cache, derived_artifacts, search_index, processing_queue, log_references, downstream_processors]
+              assetReference:
+                oneOf:
+                  - type: string
+                    pattern: '^asset_[a-f0-9]{16}$'
+                  - type: "null"
+              state:
+                enum: [pending, succeeded, blocked, failed]
+              attempts:
+                type: integer
+                minimum: 0
+        review:
+          type: object
+          additionalProperties: false
+          required: [approvals, denials, requiredDistinctReviewers]
+          properties:
+            approvals: { type: integer, minimum: 0, maximum: 2 }
+            denials: { type: integer, minimum: 0, maximum: 2 }
+            requiredDistinctReviewers: { const: 2 }
+        explanationCode:
+          enum: [PROPAGATION_PENDING, DEPENDENCY_ATTENTION_REQUIRED, REVIEW_PENDING, SECOND_REVIEW_REQUIRED, COMPLETED, DENIED]
+    ShareGrantRevokeEnvelope:
+      type: object
+      additionalProperties: false
+      required: [command, input]
+      properties:
+        command:
+          const: share-grant.revoke
+        input:
+          type: object
+          additionalProperties: false
+          required: [exportCommandId, reason]
+          properties:
+            exportCommandId:
+              $ref: "#/components/schemas/Identifier"
+            reason:
+              type: string
+              minLength: 1
+              maxLength: 500
+    ShareGrantGetEnvelope:
+      type: object
+      additionalProperties: false
+      required: [query, input]
+      properties:
+        query:
+          const: share-grant.get
+        input:
+          type: object
+          additionalProperties: false
+          required: [exportCommandId]
+          properties:
+            exportCommandId:
+              $ref: "#/components/schemas/Identifier"
+    ShareGrantListEnvelope:
+      type: object
+      additionalProperties: false
+      required: [query, input]
+      properties:
+        query:
+          const: share-grant.list
+        input:
+          type: object
+          additionalProperties: false
+          properties:
+            limit:
+              type: integer
+              minimum: 1
+              maximum: 200
+            cursor:
+              $ref: "#/components/schemas/Identifier"
+    ShareGrantProjection:
+      type: object
+      additionalProperties: false
+      required:
+        - grantId
+        - exportCommandId
+        - exportRecordId
+        - workId
+        - expiresAt
+        - state
+        - providerOperationId
+        - exportCommandState
+        - revokeCommandId
+        - revokeCommandState
+        - updatedAt
+      properties:
+        grantId:
+          $ref: "#/components/schemas/Identifier"
+        exportCommandId:
+          $ref: "#/components/schemas/Identifier"
+        exportRecordId:
+          $ref: "#/components/schemas/Identifier"
+        workId:
+          $ref: "#/components/schemas/Identifier"
+        expiresAt:
+          $ref: "#/components/schemas/CanonicalTimestamp"
+        state:
+          enum: [publication_pending, active, expired, revocation_requested, revocation_failed, revoked, unavailable, reconciliation_required]
+        providerOperationId:
+          oneOf:
+            - $ref: "#/components/schemas/Identifier"
+            - type: "null"
+        exportCommandState:
+          enum: [requested, dispatched, acknowledged, succeeded, failed, cancelled, compensated]
+        revokeCommandId:
+          oneOf:
+            - $ref: "#/components/schemas/Identifier"
+            - type: "null"
+        revokeCommandState:
+          oneOf:
+            - enum: [requested, dispatched, acknowledged, succeeded, failed, cancelled, compensated]
+            - type: "null"
+        updatedAt:
+          $ref: "#/components/schemas/CanonicalTimestamp"
     Identifier:
       type: string
       minLength: 1
@@ -543,6 +1588,124 @@ components:
             - type: "null"
         details:
           type: object
+    B05CapabilityInput:
+      type: object
+      additionalProperties: false
+      required: [assetId, reason]
+      properties:
+        assetId:
+          $ref: "#/components/schemas/Identifier"
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    MediaDeletionTargetReceipt:
+      type: object
+      description: S3 receipts require deletedVersions, deletedMarkers, and verifiedAbsent=true and forbid providerReceiptId; HTTPS receipts require providerReceiptId and forbid S3 proof fields. Every receipt in one projection binds the same canonical media digest.
+      additionalProperties: false
+      required:
+        - schemaVersion
+        - targetId
+        - targetKind
+        - deletionRequestId
+        - tenantId
+        - mediaReference
+        - canonicalSha256
+        - policySha256
+        - state
+        - completedAt
+        - evidenceSha256
+      properties:
+        schemaVersion:
+          const: ltm.media-deletion-target-receipt.v1
+        targetId:
+          $ref: "#/components/schemas/Identifier"
+        targetKind:
+          enum: [s3-object, s3-prefix, https]
+        deletionRequestId:
+          $ref: "#/components/schemas/Identifier"
+        tenantId:
+          $ref: "#/components/schemas/Identifier"
+        mediaReference:
+          $ref: "#/components/schemas/Identifier"
+        canonicalSha256:
+          $ref: "#/components/schemas/Sha256"
+        policySha256:
+          $ref: "#/components/schemas/Sha256"
+        state:
+          const: deleted
+        completedAt:
+          $ref: "#/components/schemas/CanonicalTimestamp"
+        evidenceSha256:
+          $ref: "#/components/schemas/Sha256"
+        providerReceiptId:
+          $ref: "#/components/schemas/Identifier"
+        deletedVersions:
+          type: integer
+          minimum: 0
+        deletedMarkers:
+          type: integer
+          minimum: 0
+        verifiedAbsent:
+          const: true
+    MediaDeletionProjection:
+      type: object
+      additionalProperties: false
+      required:
+        - mediaReference
+        - state
+        - auditId
+        - deletionRequestId
+        - requestedAt
+        - deletedAt
+        - policyId
+        - policySha256
+        - classification
+        - retentionDays
+        - retentionExpiresAt
+        - encrypted
+        - deletionTargets
+        - targetReceipts
+      properties:
+        mediaReference:
+          $ref: "#/components/schemas/Identifier"
+        state:
+          const: deleted
+        auditId:
+          $ref: "#/components/schemas/Identifier"
+        deletionRequestId:
+          $ref: "#/components/schemas/Identifier"
+        requestedAt:
+          $ref: "#/components/schemas/CanonicalTimestamp"
+        deletedAt:
+          $ref: "#/components/schemas/CanonicalTimestamp"
+        policyId:
+          $ref: "#/components/schemas/Identifier"
+        policySha256:
+          $ref: "#/components/schemas/Sha256"
+        classification:
+          enum: [raw, intermediate, derived, share, print, backup]
+        retentionDays:
+          type: integer
+          minimum: 0
+          maximum: 36500
+        retentionExpiresAt:
+          $ref: "#/components/schemas/CanonicalTimestamp"
+        encrypted:
+          const: true
+        deletionTargets:
+          type: array
+          minItems: 1
+          maxItems: 64
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/Identifier"
+        targetReceipts:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items:
+            $ref: "#/components/schemas/MediaDeletionTargetReceipt"
     Health:
       type: object
       required: [status, requestId]
@@ -553,7 +1716,7 @@ components:
           type: string
     Readiness:
       type: object
-      required: [ready, database, auditChain, evidenceTrust, requestId]
+      required: [ready, database, auditChain, evidenceTrust, integrations, requestId]
       properties:
         ready:
           type: boolean
@@ -563,6 +1726,18 @@ components:
           enum: [ok, error]
         evidenceTrust:
           enum: [ok, disabled, error]
+        integrations:
+          type: array
+          maxItems: 2
+          items:
+            type: object
+            additionalProperties: false
+            required: [ready, dependency]
+            properties:
+              ready:
+                type: boolean
+              dependency:
+                enum: [wechat-identity, resumable-upload]
         requestId:
           type: string
     Error:

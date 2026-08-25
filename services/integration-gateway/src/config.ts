@@ -119,6 +119,9 @@ export function loadIntegrationGatewayConfiguration(environment: NodeJS.ProcessE
   const apple = appleEnabled ? appleConfiguration(environment, appEnvironment) : undefined;
   const google = googleEnabled ? googleConfiguration(environment) : undefined;
   const wechat = wechatEnabled ? wechatConfiguration(environment) : undefined;
+  if (appEnvironment === "production" && partnerPoliciesReference === undefined) {
+    throw configError("production gateway requires the complete managed external-command partner policy inventory");
+  }
   return {
     appEnvironment,
     evidenceEnvironment: appEnvironment,

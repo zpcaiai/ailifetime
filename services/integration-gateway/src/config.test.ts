@@ -53,6 +53,25 @@ test("production gateway rejects non-production issuer, plaintext Redis, and inl
   }
 });
 
+test("production gateway requires the managed 19-route external-command policy inventory", () => {
+  const environment = baseEnvironment();
+  environment.APP_ENV = "production";
+  environment.LTM_EVIDENCE_ISSUER = "prod:integration-gateway";
+  environment.LTM_REDIS_URL = "rediss://redis.example.test:6380";
+  delete environment.LTM_PARTNER_WEBHOOK_POLICIES_REFERENCE;
+  Object.assign(environment, {
+    LTM_GOOGLE_CALLBACKS_ENABLED: "true",
+    LTM_GOOGLE_PLAY_PACKAGE_NAME: "com.example.ailifetime",
+    LTM_GOOGLE_PUBSUB_AUDIENCE: "https://gateway.example.test/v1/callbacks/google-play",
+    LTM_GOOGLE_PUBSUB_SERVICE_ACCOUNT_EMAIL: "push@project.iam.gserviceaccount.com",
+    LTM_GOOGLE_PUBSUB_SUBSCRIPTION: "projects/project/subscriptions/google-play",
+  });
+  assert.throws(
+    () => loadIntegrationGatewayConfiguration(environment),
+    /complete managed external-command partner policy inventory/,
+  );
+});
+
 test("gateway rejects implicit managed Google key and incomplete Apple production trust", () => {
   const google = baseEnvironment();
   delete google.LTM_PARTNER_WEBHOOK_POLICIES_REFERENCE;

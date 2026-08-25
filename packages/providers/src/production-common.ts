@@ -5,7 +5,10 @@ import { isIP } from "node:net";
 import {
   canonicalBusinessClaimsSha256,
   canonicalBusinessEventSha256,
+  EXTERNAL_COMMAND_TERMINAL_EVENT_TYPES,
+  resolveExternalCommandCallbackRoute,
   signExternalEvidence,
+  type ExternalCommandTerminalState,
   type JsonObject,
   type UnsignedExternalEvidence,
   type VerifiedBusinessEvent,
@@ -101,6 +104,55 @@ export interface AttestedBusinessEvent<Binding extends CapabilityEvidenceBinding
     readonly businessEventSha256: string;
   };
   readonly event: VerifiedBusinessEvent;
+}
+
+export interface ExternalCommandTerminalCallbackDraft {
+  readonly eventId: string;
+  readonly terminalState: ExternalCommandTerminalState;
+  readonly providerOccurredAt: string;
+  readonly sequence: number | null;
+  readonly providerOperationId: string;
+  /** Route-owned provider identifiers extracted only from the verified body. */
+  readonly requiredClaims?: JsonObject;
+}
+
+/**
+ * Derive a terminal callback solely from the server-owned evidence binding and
+ * a verified native result. Tenant, route, provider, subject/correlation,
+ * collection, patch and state-transition shapes are never callback inputs.
+ */
+export function externalCommandTerminalBusinessEventDraft(
+  binding: CapabilityEvidenceBinding,
+  callback: ExternalCommandTerminalCallbackDraft,
+): BusinessEventDraft {
+  const route = resolveExternalCommandCallbackRoute(binding.batchId, binding.operation);
+  if (route === undefined || route.evidenceKind !== binding.kind) {
+    throw new ProductionIntegrationError("CONFIGURATION_INVALID", "evidence binding is not an external-command callback route");
+  }
+  identifier(callback.providerOperationId, "providerOperationId");
+  const expectedClaims = route.requiredClaimIdentifiers ?? [];
+  const suppliedClaims = callback.requiredClaims ?? {};
+  if (Object.keys(suppliedClaims).length !== expectedClaims.length ||
+      Object.keys(suppliedClaims).some((field) => !expectedClaims.includes(field))) {
+    throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", "terminal callback required claims do not match the fixed route contract");
+  }
+  const requiredClaims = Object.fromEntries(expectedClaims.map((field) => {
+    const value = suppliedClaims[field];
+    if (typeof value !== "string") {
+      throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", `terminal callback ${field} must be an identifier`);
+    }
+    return [field, identifier(value, field)];
+  }));
+  return {
+    eventId: callback.eventId,
+    subjectType: route.subjectType,
+    subjectId: binding.subjectId,
+    eventType: EXTERNAL_COMMAND_TERMINAL_EVENT_TYPES[callback.terminalState],
+    providerOccurredAt: callback.providerOccurredAt,
+    sequence: callback.sequence,
+    correlationId: binding.subjectId,
+    canonicalClaims: { providerOperationId: callback.providerOperationId, ...requiredClaims },
+  };
 }
 
 export interface EvidenceEnvelopeStore {

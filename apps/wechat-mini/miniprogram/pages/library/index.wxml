@@ -1,0 +1,15 @@
+<view class="page">
+  <view class="card">
+    <view class="title">私密作品库</view>
+    <view class="muted">预览使用短期签名 URL，页面隐藏后立即从客户端状态清除。分享前会重新向服务端校验每位参与者授权。</view>
+    <button class="button secondary" bindtap="load">刷新</button>
+  </view>
+  <view class="card" wx:for="{{items}}" wx:key="id">
+    <image class="preview" wx:if="{{item.previewUrl}}" src="{{item.previewUrl}}" mode="aspectFit" />
+    <view>{{item.id}}</view><view class="muted">{{item.state}}</view>
+    <button class="button secondary" data-id="{{item.id}}" bindtap="prepareShare">生成可撤销分享授权</button>
+    <button class="button" wx:if="{{item.shareReady}}" open-type="share" data-id="{{item.id}}">分享带 AI 标识的卡片</button>
+    <button class="button danger" wx:if="{{item.shareReady}}" data-id="{{item.id}}" bindtap="revoke">撤回分享</button>
+  </view>
+  <view class="status error" wx:if="{{error}}">{{error}}</view>
+</view>

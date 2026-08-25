@@ -1,5 +1,7 @@
 export * from "./auth.js";
 export * from "./config.js";
+export * from "./client-integrations.js";
 export * from "./dispatch.js";
 export * from "./oidc-auth.js";
+export * from "./browser-oidc.js";
 export * from "./server.js";

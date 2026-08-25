@@ -146,7 +146,7 @@ function commercialCertification(input: JsonObject, invocation: CapabilityInvoca
 }
 
 function stagedLaunch(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
-  rejectClientAssertions(input, ["rollbackTested", "automaticPauseEnabled"]);
+  rejectClientAssertions(input, ["rollbackTested", "automaticPauseEnabled", "separationOfDuties", "approverIds"]);
   assertActorTenant(input, invocation);
   if (invocation.actor.stepUp !== true) throw new DomainError("AUTH_FORBIDDEN", "production rollout requires step-up authentication");
   const launchId = requiredString(input, "launchId");
@@ -164,10 +164,15 @@ function stagedLaunch(input: JsonObject, invocation: CapabilityInvocation): Json
   const rolloutPercent = requiredNumber(input, "rolloutPercent", 0);
   const waveStartedAt = assertISODate(requiredString(input, "waveStartedAt"), "waveStartedAt");
   const releaseGates = stringList(input, "releaseGates", { min: 12, unique: true });
-  const monitoringDomains = stringList(input, "monitoringDomains", { min: 8, unique: true });
+  const monitoringDomains = stringList(input, "monitoringDomains", { min: 11, unique: true });
   const approvalIds = stringList(input, "approvalIds", { min: 2, unique: true });
   const rollbackExerciseId = requiredString(input, "rollbackExerciseId");
   const automaticPausePolicyVersion = requiredString(input, "automaticPausePolicyVersion");
+  const guardrailPolicySha256 = sha256(input, "guardrailPolicySha256");
+  const waveObservationSetSha256 = sha256(input, "waveObservationSetSha256");
+  const rollbackForwardDrillSha256 = sha256(input, "rollbackForwardDrillSha256");
+  const changeApproverEvidenceIds = stringList(input, "changeApproverEvidenceIds", { min: 2, unique: true });
+  if (changeApproverEvidenceIds.length !== 2) throw new DomainError("VALIDATION_FAILED", "changeApproverEvidenceIds must contain the exact risk and operations signer evidence IDs");
   const activeGuardrailBreaches = requireInteger(
     requiredNumber(input, "activeGuardrailBreaches", 0),
     "activeGuardrailBreaches",
@@ -180,8 +185,14 @@ function stagedLaunch(input: JsonObject, invocation: CapabilityInvocation): Json
   for (let gate = 0; gate <= 11; gate += 1) {
     if (!releaseGates.includes(`G${gate}`)) throw new DomainError("VALIDATION_FAILED", `releaseGates must include G${gate}`);
   }
-  for (const domain of ["quality", "payment", "refund", "support", "ledger", "supply", "privacy", "security"]) {
+  for (const domain of [
+    "quality", "payment", "refund", "message", "support", "ledger",
+    "supply", "privacy", "security", "cost", "slo",
+  ]) {
     if (!monitoringDomains.includes(domain)) throw new DomainError("VALIDATION_FAILED", `monitoringDomains must include ${domain}`);
+  }
+  if (monitoringDomains.length !== 11) {
+    throw new DomainError("VALIDATION_FAILED", "monitoringDomains must contain exactly the eleven B127 production domains");
   }
   const evidenceScope = capabilityEvidenceScope({
     tenantId: invocation.actor.tenantId,
@@ -209,6 +220,10 @@ function stagedLaunch(input: JsonObject, invocation: CapabilityInvocation): Json
     approvalIds,
     rollbackExerciseId,
     automaticPausePolicyVersion,
+    guardrailPolicySha256,
+    waveObservationSetSha256,
+    rollbackForwardDrillSha256,
+    changeApproverEvidenceIds,
     activeGuardrailBreaches,
     externalEvidenceIds,
     evidenceScope,

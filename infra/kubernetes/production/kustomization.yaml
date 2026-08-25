@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ltm-production
+resources:
+  - namespace-serviceaccounts.yaml
+  - configmap.yaml
+  - api.yaml
+  - workers.yaml
+  - integration-gateway.yaml
+  - client-integration-broker.yaml
+  - migration-job.yaml
+  - availability.yaml
+  - networking.yaml
+  - ingress.yaml
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: ai-life-time-machine
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: false

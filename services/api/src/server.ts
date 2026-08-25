@@ -12,6 +12,8 @@ import {
   type LifeTimeMachineRuntimePort,
 } from "@ltm/core";
 import type { RequestAuthenticator } from "./auth.js";
+import type { BrowserOidcPublicConfiguration } from "./browser-oidc.js";
+import type { ClientIntegrationPorts, MediaDeletionProjection } from "./client-integrations.js";
 import {
   COMMANDS,
   QUERIES,
@@ -19,8 +21,11 @@ import {
   dispatchCapability,
   dispatchCommand,
   dispatchQuery,
+  normalizeCapabilityBatchId,
   object,
   parseDispatchEnvelope,
+  visibleCapabilityCatalog,
+  visibleCapabilityPortals,
 } from "./dispatch.js";
 
 export interface ApiLogEntry {
@@ -45,6 +50,8 @@ export interface ApiServerOptions {
   readonly appEnvironment?: string;
   /** SHA-256 of a bearer token protecting /metrics. Required in production. */
   readonly metricsTokenSha256?: string;
+  readonly clientIntegrations?: ClientIntegrationPorts;
+  readonly browserOidcConfiguration?: BrowserOidcPublicConfiguration;
   readonly logger?: (entry: ApiLogEntry) => void;
 }
 
@@ -140,7 +147,7 @@ async function handleRequest(
 ): Promise<void> {
   const requestId = requestIdFor(request);
   response.setHeader("x-request-id", requestId);
-  applySecurityHeaders(response);
+  applySecurityHeaders(response, options.browserOidcConfiguration);
   const method = request.method ?? "GET";
   let path = "/";
   const startedAt = performance.now();
@@ -179,12 +186,99 @@ async function handleRequest(
     }
     if (method === "GET" && path === "/health/ready") {
       const readiness = await options.runtime.readiness();
-      sendJson(response, readiness.ready ? 200 : 503, { ...readiness, requestId });
+      const integrations = await clientIntegrationReadiness(options.clientIntegrations);
+      const ready = readiness.ready && integrations.every((item) => item.ready);
+      sendJson(response, ready ? 200 : 503, { ...readiness, ready, integrations, requestId });
       return;
     }
     if (method === "GET" && path === "/metrics") {
       authorizeMetrics(request, options.metricsTokenSha256);
       sendText(response, 200, renderMetrics(metrics), "text/plain; version=0.0.4; charset=utf-8");
+      return;
+    }
+
+    if (method === "GET" && path === "/v1/auth/browser/config") {
+      if (options.browserOidcConfiguration === undefined) {
+        throw new DomainError("DEPENDENCY_UNAVAILABLE", "Browser OIDC is not configured", { httpStatus: 503 });
+      }
+      sendJson(response, 200, options.browserOidcConfiguration);
+      return;
+    }
+
+    if (method === "POST" && path === "/v1/auth/wechat/session") {
+      const identity = requireWechatIdentity(options.clientIntegrations);
+      const body = object(await readJsonBody(request, bodyLimit), "request body");
+      assertExactKeys(body, ["code", "consentVersion", "clientRequestId"], "request body");
+      const session = await identity.createSession({
+        code: requestString(body.code, "code", 512),
+        consentVersion: requestString(body.consentVersion, "consentVersion", 128),
+        clientRequestId: requestIdentifier(body.clientRequestId, "clientRequestId"),
+        idempotencyKey: requireIdempotencyKey(request),
+        requestId,
+      });
+      sendJson(response, 200, session);
+      return;
+    }
+
+    if (method === "POST" && path === "/v1/auth/session/refresh") {
+      const identity = requireWechatIdentity(options.clientIntegrations);
+      assertEmptyObject(await readJsonBody(request, bodyLimit), "request body");
+      const session = await identity.refreshSession({
+        accessToken: requireBearerToken(request),
+        idempotencyKey: requireIdempotencyKey(request),
+        requestId,
+      });
+      sendJson(response, 200, session);
+      return;
+    }
+
+    if (method === "POST" && path === "/v1/auth/session/logout") {
+      const identity = requireWechatIdentity(options.clientIntegrations);
+      assertEmptyObject(await readJsonBody(request, bodyLimit), "request body");
+      await identity.revokeSession({
+        accessToken: requireBearerToken(request),
+        idempotencyKey: requireIdempotencyKey(request),
+        requestId,
+      });
+      sendJson(response, 200, { revoked: true, requestId });
+      return;
+    }
+
+    if (method === "GET" && path === "/v1/session") {
+      const context = await authenticate(options, request, requestId);
+      sendJson(response, 200, {
+        session: {
+          actorId: context.actorId,
+          tenantId: context.tenantId,
+          roles: context.roles,
+          purpose: context.purpose,
+          stepUp: context.stepUp ?? false,
+          guardianVerified: context.guardianVerified ?? false,
+          authenticationState: "server_verified",
+        },
+        requestId,
+      });
+      return;
+    }
+
+    if (method === "GET" && path === "/v1/consent-policy/authority") {
+      const context = await authenticate(options, request, requestId);
+      const metadata = await options.runtime.getConsentPolicyCatalogMetadata(context);
+      sendJson(response, 200, { ...metadata, requestId });
+      return;
+    }
+
+    if (method === "GET" && path === "/v1/capabilities/visible") {
+      const context = await authenticate(options, request, requestId);
+      const capabilities = visibleCapabilityCatalog(options.capabilityRegistry, context);
+      const portals = visibleCapabilityPortals(context, capabilities);
+      sendJson(response, 200, {
+        schemaVersion: "ltm.visible-capability-manifest.v1",
+        capabilities,
+        portals,
+        count: capabilities.length,
+        requestId,
+      });
       return;
     }
 
@@ -208,6 +302,73 @@ async function handleRequest(
         batches: catalog.filter((entry) => entry.skill === skill).map((entry) => entry.batchId),
       }));
       sendJson(response, 200, { skills, count: skills.length, requestId });
+      return;
+    }
+
+    if (method === "POST" && path === "/v1/uploads") {
+      const uploads = requireUploads(options.clientIntegrations);
+      const context = await authenticate(options, request, requestId);
+      const body = object(await readJsonBody(request, bodyLimit), "request body");
+      assertExactKeys(body, ["fileSize", "fileDigest", "digestAlgorithm", "contentType", "clientRequestId"], "request body");
+      const fileSize = requestInteger(body.fileSize, "fileSize", 1, 25 * 1024 * 1024);
+      const fileDigest = requestSha256Digest(body.fileDigest, "fileDigest");
+      if (body.digestAlgorithm !== "sha256") throw new DomainError("VALIDATION_FAILED", "digestAlgorithm must be sha256");
+      if (body.contentType !== "image/jpeg") throw new DomainError("VALIDATION_FAILED", "contentType must be image/jpeg");
+      const created = await uploads.create(context, {
+        fileSize,
+        fileDigest,
+        digestAlgorithm: "sha256",
+        contentType: "image/jpeg",
+        clientRequestId: requestIdentifier(body.clientRequestId, "clientRequestId"),
+        idempotencyKey: requireIdempotencyKey(request),
+      });
+      sendJson(response, 201, created);
+      return;
+    }
+
+    const uploadMatch = /^\/v1\/uploads\/([A-Za-z0-9][A-Za-z0-9._:-]{0,255})\/(chunks|complete|cancel)$/.exec(path);
+    if (method === "POST" && uploadMatch?.[2] === "chunks") {
+      const uploads = requireUploads(options.clientIntegrations);
+      const context = await authenticate(options, request, requestId);
+      const range = requireContentRange(request);
+      const encoded = (await readBody(request, 8 * 1024 * 1024, "application/octet-stream")).toString("ascii");
+      if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
+        throw new DomainError("VALIDATION_FAILED", "Upload chunk must be canonical base64");
+      }
+      const bytes = Buffer.from(encoded, "base64");
+      if (bytes.byteLength !== range.end - range.start + 1 || bytes.byteLength < 1 || bytes.byteLength > 5 * 1024 * 1024) {
+        throw new DomainError("VALIDATION_FAILED", "Upload chunk does not match Content-Range");
+      }
+      const result = await uploads.append(context, {
+        uploadId: uploadMatch[1] ?? "",
+        bytes,
+        ...range,
+        idempotencyKey: requireIdempotencyKey(request),
+      });
+      sendJson(response, 200, result);
+      return;
+    }
+    if (method === "POST" && uploadMatch?.[2] === "complete") {
+      const uploads = requireUploads(options.clientIntegrations);
+      const context = await authenticate(options, request, requestId);
+      const body = object(await readJsonBody(request, bodyLimit), "request body");
+      assertExactKeys(body, ["fileDigest", "digestAlgorithm"], "request body");
+      if (body.digestAlgorithm !== "sha256") throw new DomainError("VALIDATION_FAILED", "digestAlgorithm must be sha256");
+      const result = await uploads.complete(context, {
+        uploadId: uploadMatch[1] ?? "",
+        fileDigest: requestSha256Digest(body.fileDigest, "fileDigest"),
+        digestAlgorithm: "sha256",
+        idempotencyKey: requireIdempotencyKey(request),
+      });
+      sendJson(response, 200, result);
+      return;
+    }
+    if (method === "POST" && uploadMatch?.[2] === "cancel") {
+      const uploads = requireUploads(options.clientIntegrations);
+      const context = await authenticate(options, request, requestId);
+      assertEmptyObject(await readJsonBody(request, bodyLimit), "request body");
+      await uploads.cancel(context, { uploadId: uploadMatch[1] ?? "", idempotencyKey: requireIdempotencyKey(request) });
+      sendJson(response, 200, { cancelled: true, requestId });
       return;
     }
     const capabilityMatch = /^\/v1\/capabilities\/(B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7]))$/.exec(path);
@@ -247,12 +408,29 @@ async function handleRequest(
       const authenticated = await authenticate(options, request, requestId);
       const key = requireIdempotencyKey(request);
       const body = object(await readJsonBody(request, bodyLimit), "request body");
-      const batchId = capabilityMatch?.[1] ?? body.batchId;
+      const batchId = normalizeCapabilityBatchId(capabilityMatch?.[1] ?? body.batchId);
       const input = body.input ?? (capabilityMatch?.[1] === undefined ? undefined : body);
-      const operationName = typeof batchId === "string" ? batchId : "invalid";
-      const context = operationContext(authenticated, `capability:${operationName}`, key);
-      const data = await dispatchCapability(options.runtime, options.capabilityRegistry, context, batchId, input, key);
-      sendJson(response, 200, { data, meta: { requestId, batchId } });
+      const context = operationContext(authenticated, `capability:${batchId}`, key);
+      const secured = await secureMediaCapabilityInput(
+        options.runtime,
+        options.clientIntegrations,
+        context,
+        batchId,
+        input,
+        key,
+      );
+      const data = await dispatchCapability(
+        options.runtime,
+        options.capabilityRegistry,
+        secured.authorizedContext ?? context,
+        batchId,
+        secured.input,
+        key,
+      );
+      const controlledData = secured.mediaDeletion === undefined
+        ? data
+        : controlledMediaDeletionResult(data, secured.mediaDeletion);
+      sendJson(response, 200, { data: controlledData, meta: { requestId, batchId } });
       return;
     }
 
@@ -296,6 +474,194 @@ async function authenticate(
     requestId,
     ...(sandboxStepUp === "true" ? { stepUp: true } : {}),
   };
+}
+
+async function clientIntegrationReadiness(
+  ports: ClientIntegrationPorts | undefined,
+): Promise<readonly { readonly ready: boolean; readonly dependency: string }[]> {
+  const checks: Array<Promise<{ readonly ready: boolean; readonly dependency: string }>> = [];
+  if (ports?.wechatIdentity !== undefined) checks.push(ports.wechatIdentity.readiness());
+  if (ports?.resumableUploads !== undefined) checks.push(ports.resumableUploads.readiness());
+  return Promise.all(checks);
+}
+
+function requireWechatIdentity(ports: ClientIntegrationPorts | undefined) {
+  if (ports?.wechatIdentity === undefined) {
+    throw new DomainError("EXTERNAL_ADAPTER_UNAVAILABLE", "WeChat identity integration is not configured");
+  }
+  return ports.wechatIdentity;
+}
+
+function requireUploads(ports: ClientIntegrationPorts | undefined) {
+  if (ports?.resumableUploads === undefined) {
+    throw new DomainError("EXTERNAL_ADAPTER_UNAVAILABLE", "Resumable upload integration is not configured");
+  }
+  return ports.resumableUploads;
+}
+
+async function secureMediaCapabilityInput(
+  runtime: LifeTimeMachineRuntimePort,
+  ports: ClientIntegrationPorts | undefined,
+  context: ActorContext,
+  batchId: unknown,
+  input: unknown,
+  idempotencyKey: string,
+): Promise<{
+  readonly input: unknown;
+  readonly mediaDeletion?: MediaDeletionProjection;
+  readonly authorizedContext?: ActorContext;
+}> {
+  if (batchId === "B05") {
+    const request = object(input, "B05 request body");
+    assertExactKeys(request, ["assetId", "reason"], "B05 request body");
+    const assetId = requestIdentifier(request.assetId, "assetId");
+    const reason = requestString(request.reason, "reason", 500);
+    const roles = new Set(context.roles);
+    const privileged = roles.has("platform_admin") || roles.has("privacy_officer");
+    const dataSubject = roles.has("consumer") || roles.has("guardian") || roles.has("household_admin");
+    const purposeAllowed = privileged
+      ? ["product_operation", "privacy_compliance", "data_deletion"].includes(context.purpose)
+      : ["data_deletion", "privacy_request", "product_operation"].includes(context.purpose);
+    if (context.stepUp !== true || (!privileged && !dataSubject) || !purposeAllowed) {
+      throw new DomainError("AUTH_FORBIDDEN", "B05 deletion requires step-up data-subject or privacy authority");
+    }
+    const authorizedContext: ActorContext = {
+      ...context,
+      permissions: [...new Set([...(context.permissions ?? []), "media.lifecycle.manage"])],
+    };
+    // This local authority decision is complete before the irreversible broker
+    // side effect. The broker independently proves ownership/privacy role and
+    // derives every lifecycle policy field and target from its signed registry.
+    runtime.authorize(authorizedContext, "media.lifecycle.manage", { tenantId: context.tenantId, sensitive: true });
+    const mediaDeletion = await requireUploads(ports).deleteAsset(context, {
+      assetId,
+      reason,
+      idempotencyKey,
+    });
+    return {
+      input: {
+        assetId,
+        classification: mediaDeletion.classification,
+        retentionDays: mediaDeletion.retentionDays,
+        encrypted: true,
+        deletionTargets: mediaDeletion.deletionTargets,
+      },
+      mediaDeletion,
+      authorizedContext,
+    };
+  }
+  if (batchId !== "B07") return { input };
+  const request = object(input, "B07 request body");
+  assertExactKeys(request, ["assetId", "participantIds"], "B07 request body");
+  if (!Array.isArray(request.participantIds) || request.participantIds.length < 1 || request.participantIds.length > 20 ||
+      request.participantIds.some((value) => typeof value !== "string") || new Set(request.participantIds).size !== request.participantIds.length) {
+    throw new DomainError("VALIDATION_FAILED", "B07 participantIds must be a bounded unique identifier list");
+  }
+  const participantIds = request.participantIds.map((value) => requestIdentifier(value, "participantId"));
+  const assetId = requestIdentifier(request.assetId, "assetId");
+  await runtime.assertConsent(context, {
+    participantIds,
+    purpose: "age_transformation",
+    scope: { resource: `media.asset:${assetId}`, action: "ingest" },
+  });
+  const intake = await requireUploads(ports).resolveIntake(context, {
+    assetId,
+    participantIds,
+    idempotencyKey,
+  });
+  return {
+    input: {
+      assetId: intake.assetId,
+      participantIds,
+      mimeType: intake.mimeType,
+      byteLength: intake.byteLength,
+      faceCount: intake.faceCount,
+      magicVerified: true,
+      malwareState: "clean",
+      metadataStripped: intake.metadataStripped,
+      sourceSha256: intake.sourceSha256,
+      canonicalSha256: intake.canonicalSha256,
+      lineageSha256: intake.lineageSha256,
+      scanEvidenceId: intake.scanEvidenceId,
+      scannerProvider: intake.scannerProvider,
+      scanAssessedAt: intake.scanAssessedAt,
+      participantMappingEvidenceId: intake.participantMappingEvidenceId,
+      participantMappingProvider: intake.participantMappingProvider,
+      participantMappingAssessedAt: intake.participantMappingAssessedAt,
+      participantMapComplete: intake.participantMapComplete,
+      qualityDimensions: { width: intake.width, height: intake.height },
+    },
+  };
+}
+
+function controlledMediaDeletionResult(data: unknown, deletion: MediaDeletionProjection): Record<string, unknown> {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    throw new DomainError("EXTERNAL_ADAPTER_UNAVAILABLE", "B05 returned an invalid controlled result");
+  }
+  return { ...(data as Record<string, unknown>), mediaDeletion: deletion };
+}
+
+function requireBearerToken(request: IncomingMessage): string {
+  const match = /^Bearer ([^\s]+)$/i.exec(headerValue(request, "authorization") ?? "");
+  if (match?.[1] === undefined || match[1].length < 20 || match[1].length > 8_192) {
+    throw new DomainError("AUTH_UNAUTHENTICATED", "A valid bearer token is required");
+  }
+  return match[1];
+}
+
+function requestString(value: unknown, label: string, maximum: number): string {
+  if (typeof value !== "string" || value.length < 1 || value.length > maximum || /[\u0000-\u001f\u007f]/.test(value)) {
+    throw new DomainError("VALIDATION_FAILED", `${label} is invalid`);
+  }
+  return value;
+}
+
+function requestIdentifier(value: unknown, label: string): string {
+  const result = requestString(value, label, 256);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(result)) {
+    throw new DomainError("VALIDATION_FAILED", `${label} is invalid`);
+  }
+  return result;
+}
+
+function requestInteger(value: unknown, label: string, minimum: number, maximum: number): number {
+  if (!Number.isSafeInteger(value) || (value as number) < minimum || (value as number) > maximum) {
+    throw new DomainError("VALIDATION_FAILED", `${label} must be an integer between ${minimum} and ${maximum}`);
+  }
+  return value as number;
+}
+
+function requestSha256Digest(value: unknown, label: string): string {
+  if (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value)) {
+    throw new DomainError("VALIDATION_FAILED", `${label} must be a lowercase sha256 digest`);
+  }
+  return value;
+}
+
+function assertExactKeys(value: Record<string, unknown>, expected: readonly string[], label: string): void {
+  const fields = Object.keys(value);
+  if (fields.length !== expected.length || fields.some((field) => !expected.includes(field))) {
+    throw new DomainError("VALIDATION_FAILED", `${label} contains unsupported or missing fields`);
+  }
+}
+
+function assertEmptyObject(value: unknown, label: string): void {
+  const body = object(value, label);
+  if (Object.keys(body).length !== 0) throw new DomainError("VALIDATION_FAILED", `${label} must be empty`);
+}
+
+function requireContentRange(request: IncomingMessage): { readonly start: number; readonly end: number; readonly total: number } {
+  const match = /^bytes (0|[1-9]\d*)-(0|[1-9]\d*)\/(0|[1-9]\d*)$/.exec(headerValue(request, "content-range") ?? "");
+  if (match?.[1] === undefined || match[2] === undefined || match[3] === undefined) {
+    throw new DomainError("VALIDATION_FAILED", "A valid Content-Range header is required");
+  }
+  const start = Number(match[1]);
+  const end = Number(match[2]);
+  const total = Number(match[3]);
+  if (![start, end, total].every(Number.isSafeInteger) || start > end || end >= total || total > 25 * 1024 * 1024) {
+    throw new DomainError("VALIDATION_FAILED", "Content-Range is outside upload bounds");
+  }
+  return { start, end, total };
 }
 
 function requireIdempotencyKey(request: IncomingMessage): string {
@@ -350,9 +716,18 @@ function renderMetrics(metrics: ApiMetrics): string {
 }
 
 async function readJsonBody(request: IncomingMessage, limit: number): Promise<unknown> {
+  const bytes = await readBody(request, limit, "application/json");
+  try {
+    return JSON.parse(bytes.toString("utf8")) as unknown;
+  } catch {
+    throw new DomainError("VALIDATION_FAILED", "Request body contains invalid JSON", { httpStatus: 400 });
+  }
+}
+
+async function readBody(request: IncomingMessage, limit: number, requiredContentType: string): Promise<Buffer> {
   const contentType = headerValue(request, "content-type")?.split(";", 1)[0]?.trim().toLowerCase();
-  if (contentType !== "application/json") {
-    throw new DomainError("VALIDATION_FAILED", "Content-Type must be application/json", { httpStatus: 415 });
+  if (contentType !== requiredContentType) {
+    throw new DomainError("VALIDATION_FAILED", `Content-Type must be ${requiredContentType}`, { httpStatus: 415 });
   }
   const contentLength = headerValue(request, "content-length");
   if (contentLength !== undefined) {
@@ -378,11 +753,7 @@ async function readJsonBody(request: IncomingMessage, limit: number): Promise<un
   if (size === 0) {
     throw new DomainError("VALIDATION_FAILED", "A JSON request body is required", { httpStatus: 400 });
   }
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
-  } catch {
-    throw new DomainError("VALIDATION_FAILED", "Request body contains invalid JSON", { httpStatus: 400 });
-  }
+  return Buffer.concat(chunks);
 }
 
 function requestIdFor(request: IncomingMessage): string {
@@ -395,8 +766,9 @@ function headerValue(request: IncomingMessage, name: string): string | undefined
   return Array.isArray(value) ? value[0] : value;
 }
 
-function applySecurityHeaders(response: ServerResponse): void {
-  response.setHeader("content-security-policy", "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
+function applySecurityHeaders(response: ServerResponse, browserOidc?: BrowserOidcPublicConfiguration): void {
+  const tokenOrigin = browserOidc === undefined ? "" : ` ${new URL(browserOidc.tokenEndpoint).origin}`;
+  response.setHeader("content-security-policy", `default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self'${tokenOrigin}; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`);
   response.setHeader("cross-origin-opener-policy", "same-origin");
   response.setHeader("cross-origin-resource-policy", "same-origin");
   response.setHeader("permissions-policy", "camera=(), microphone=(), geolocation=(), payment=()");

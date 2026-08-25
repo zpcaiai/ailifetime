@@ -1,3 +1,13 @@
+import type { SignedConsentPolicyCatalog, TrustedConsentPolicyKey } from "./consent-policy.js";
+import type {
+  EscalateRightsRequestInput,
+  ListRightsRequestsInput,
+  ReviewRightsRequestInput,
+  RightsRequestProjection,
+  RightsTaskReceiptInput,
+  SubmitRightsRequestInput,
+} from "./rights-requests.js";
+
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
 export type JsonObject = { readonly [key: string]: JsonValue };
@@ -41,6 +51,8 @@ export interface RecordEnvelope<T extends JsonObject = JsonObject> {
   readonly id: string;
   readonly tenantId: string;
   readonly collection: string;
+  /** Immutable purpose under which participant consent must be evaluated. */
+  readonly processingPurpose: string;
   readonly ownerActorId: string | null;
   readonly participantIds: readonly string[];
   readonly containsMinor: boolean;
@@ -55,6 +67,12 @@ export interface CreateRecordInput<T extends JsonObject = JsonObject> {
   readonly collection: string;
   readonly id?: string;
   readonly data: T;
+  /**
+   * Required by caller-facing generic record creation. Trusted capability
+   * wiring may omit it, in which case the authenticated request purpose is
+   * persisted. A supplied value must exactly match that request purpose.
+   */
+  readonly processingPurpose?: string;
   readonly ownerActorId?: string | null;
   readonly participantIds?: readonly string[];
   readonly containsMinor?: boolean;
@@ -94,6 +112,18 @@ export interface IdempotentResult<T> {
 export type ConsentStatus = "active" | "expired" | "withdrawn" | "disputed" | "superseded";
 export type GrantorCapacity = "self" | "guardian" | "authorized_agent";
 
+/** Closed, exact and canonical scope persisted on a consent or delegated authority. */
+export interface ConsentScope {
+  readonly resource: string;
+  readonly actions: readonly string[];
+}
+
+/** One exact resource/action decision evaluated at the point of processing. */
+export interface ConsentRequirementScope {
+  readonly resource: string;
+  readonly action: string;
+}
+
 export interface ConsentRecord {
   readonly id: string;
   readonly tenantId: string;
@@ -101,8 +131,14 @@ export interface ConsentRecord {
   readonly grantorActorId: string;
   readonly grantorCapacity: GrantorCapacity;
   readonly purpose: string;
-  readonly scope: JsonObject;
+  readonly scope: ConsentScope;
   readonly policyVersion: string;
+  /** Signed catalog digest used by the server to resolve this exact grant. Null only in explicit legacy-test mode. */
+  readonly policyCatalogSha256: string | null;
+  /** Server-configured policy jurisdiction. Null only in explicit legacy-test mode. */
+  readonly jurisdiction: string | null;
+  /** Server-configured disclosure locale. Null only in explicit legacy-test mode. */
+  readonly locale: string | null;
   readonly status: ConsentStatus;
   readonly evidenceHash: string;
   readonly isMinor: boolean;
@@ -119,10 +155,25 @@ export interface GrantConsentInput {
   readonly purpose: string;
   readonly scope: JsonObject;
   readonly policyVersion: string;
-  readonly evidenceHash: string;
+  /** Optional client acknowledgement. When supplied it must exactly equal the server-resolved disclosure digest. */
+  readonly evidenceHash?: string;
+  /** Deprecated caller assertion; the runtime rejects a mismatch and always persists registry-derived status. */
   readonly isMinor?: boolean;
   readonly expiresAt?: string | null;
   readonly idempotencyKey: string;
+}
+
+export interface ConsentPolicyCatalogMetadata {
+  readonly schemaVersion: "ltm.consent-policy-catalog-metadata.v1";
+  readonly catalogId: string;
+  readonly issuer: string;
+  readonly environment: Exclude<EvidenceEnvironment, "test">;
+  readonly catalogSha256: string;
+  readonly issuedAt: string;
+  readonly expiresAt: string;
+  readonly jurisdiction: string;
+  readonly locale: string;
+  readonly policyVersions: readonly string[];
 }
 
 export interface WithdrawConsentInput {
@@ -135,7 +186,89 @@ export interface WithdrawConsentInput {
 export interface ConsentRequirement {
   readonly participantIds: readonly string[];
   readonly purpose?: string;
+  readonly scope: ConsentRequirementScope;
   readonly at?: string;
+}
+
+export type ParticipantMinorStatus = "adult" | "minor";
+export type ParticipantStatus = "active" | "revoked";
+
+export interface ParticipantRecord {
+  readonly tenantId: string;
+  readonly participantId: string;
+  readonly ownerActorId: string;
+  readonly minorStatus: ParticipantMinorStatus;
+  readonly status: ParticipantStatus;
+  readonly evidenceId: string;
+  readonly evidenceScope: string;
+  readonly registeredAt: string;
+  readonly expiresAt: string;
+  readonly revokedAt: string | null;
+  readonly revocationReason: string | null;
+  readonly revocationEvidenceId: string | null;
+  readonly revocationEvidenceScope: string | null;
+  readonly version: number;
+}
+
+export interface RegisterParticipantInput {
+  readonly participantId: string;
+  readonly ownerActorId: string;
+  readonly minorStatus: ParticipantMinorStatus;
+  readonly expiresAt: string;
+  /** Null creates a new registry entry; an integer is required for any update/reactivation. */
+  readonly expectedVersion: number | null;
+  readonly evidenceId: string;
+  readonly idempotencyKey: string;
+}
+
+export interface RevokeParticipantInput {
+  readonly participantId: string;
+  readonly expectedVersion: number;
+  readonly reason: string;
+  readonly evidenceId: string;
+  readonly idempotencyKey: string;
+}
+
+export type ParticipantAuthorityCapacity = "guardian" | "authorized_agent";
+export type ParticipantAuthorityStatus = "active" | "revoked" | "superseded";
+
+export interface ParticipantAuthorityRecord {
+  readonly tenantId: string;
+  readonly authorizationId: string;
+  readonly authorizedActorId: string;
+  readonly participantId: string;
+  readonly capacity: ParticipantAuthorityCapacity;
+  readonly status: ParticipantAuthorityStatus;
+  readonly scope: ConsentScope;
+  readonly evidenceId: string;
+  readonly evidenceScope: string;
+  readonly grantedAt: string;
+  readonly expiresAt: string;
+  readonly revokedAt: string | null;
+  readonly revocationReason: string | null;
+  readonly revocationEvidenceId: string | null;
+  readonly revocationEvidenceScope: string | null;
+  readonly version: number;
+}
+
+export interface GrantParticipantAuthorityInput {
+  readonly authorizationId: string;
+  readonly authorizedActorId: string;
+  readonly participantId: string;
+  readonly capacity: ParticipantAuthorityCapacity;
+  readonly scope: JsonObject;
+  readonly expiresAt: string;
+  readonly evidenceId: string;
+  readonly idempotencyKey: string;
+}
+
+export interface RevokeParticipantAuthorityInput {
+  readonly authorizationId: string;
+  readonly capacity: ParticipantAuthorityCapacity;
+  readonly expectedVersion: number;
+  readonly reason: string;
+  readonly evidenceId: string;
+  readonly idempotencyKey: string;
 }
 
 export type LedgerDirection = "debit" | "credit";
@@ -392,6 +525,16 @@ export interface TransitionExternalCommandInput {
   readonly idempotencyKey: string;
 }
 
+/**
+ * Atomically dead-letters a leased provider command and freezes its business
+ * projection when provider acceptance cannot be determined after retries.
+ */
+export interface DeadLetterExternalCommandInput {
+  readonly eventId: string;
+  readonly workerId: string;
+  readonly error: string;
+}
+
 export interface CreateExternalCommandInput<T extends JsonObject = JsonObject> {
   readonly record: Omit<CreateRecordInput<T>, "idempotencyKey">;
   readonly commandId?: string;
@@ -405,6 +548,82 @@ export interface CreatedExternalCommand<T extends JsonObject = JsonObject> {
   readonly record: RecordEnvelope<T>;
   readonly command: ExternalCommandRecord;
 }
+
+export interface EvidenceGatedCapabilityAudit {
+  readonly action: string;
+  readonly replayAction?: string;
+  readonly details?: JsonObject;
+}
+
+export interface EvidenceGatedRecordTransitionInput {
+  readonly collection: string;
+  readonly id: string;
+  readonly data: JsonObject;
+  /** Immutable purpose for a newly initialized aggregate; exact-match only. */
+  readonly processingPurpose?: string;
+  readonly ownerActorId?: string | null;
+  readonly participantIds?: readonly string[];
+  readonly containsMinor?: boolean;
+  readonly stateField: string;
+  readonly fromState: string;
+  readonly toState: string;
+  readonly initialFromStates: readonly string[];
+}
+
+export type EvidenceGatedMutation =
+  | {
+      readonly kind: "record.create";
+      readonly input: Omit<CreateRecordInput, "idempotencyKey">;
+    }
+  | {
+      readonly kind: "record.transition";
+      readonly input: EvidenceGatedRecordTransitionInput;
+    }
+  | {
+      readonly kind: "external-command.create";
+      readonly input: Omit<CreateExternalCommandInput, "idempotencyKey">;
+    }
+  | {
+      readonly kind: "ledger.post";
+      readonly input: Omit<PostLedgerInput, "idempotencyKey">;
+    };
+
+/**
+ * A declarative unit of work keeps callbacks and network effects outside the
+ * storage transaction while binding evidence consumption to the durable
+ * mutation, its audit records, and its outbox events.
+ */
+export interface ExecuteEvidenceGatedMutationInput {
+  readonly scope: string;
+  readonly evidenceIds: readonly string[];
+  readonly idempotencyKey: string;
+  readonly mutation: EvidenceGatedMutation;
+  readonly audit: EvidenceGatedCapabilityAudit;
+}
+
+export type EvidenceGatedMutationResult =
+  | {
+      readonly kind: "record.create";
+      readonly value: RecordEnvelope;
+      readonly replayed: boolean;
+    }
+  | {
+      readonly kind: "record.transition";
+      readonly value: RecordEnvelope;
+      readonly previousState: string;
+      readonly state: string;
+      readonly replayed: boolean;
+    }
+  | {
+      readonly kind: "external-command.create";
+      readonly value: CreatedExternalCommand;
+      readonly replayed: boolean;
+    }
+  | {
+      readonly kind: "ledger.post";
+      readonly value: LedgerTransaction;
+      readonly replayed: boolean;
+    };
 
 export interface ExternalBusinessAggregateTarget {
   readonly collection: string;
@@ -495,6 +714,14 @@ export interface RuntimeOptions {
   readonly evidenceEnvironment?: EvidenceEnvironment;
   readonly evidenceClockSkewMs?: number;
   readonly maxEvidenceLifetimeMs?: number;
+  /** Signed closed catalog. The runtime verifies it against trustedConsentPolicyKeys at startup. */
+  readonly consentPolicyCatalog?: SignedConsentPolicyCatalog;
+  readonly trustedConsentPolicyKeys?: readonly TrustedConsentPolicyKey[];
+  /** Server-derived deployment location; never accepted from an API caller. */
+  readonly consentPolicyJurisdiction?: string;
+  readonly consentPolicyLocale?: string;
+  /** Explicit non-production compatibility switch for tests and legacy fixtures only. */
+  readonly allowLegacyConsentPolicy?: boolean;
 }
 
 export interface PostgresRuntimeOptions {
@@ -511,6 +738,11 @@ export interface PostgresRuntimeOptions {
   readonly evidenceEnvironment?: EvidenceEnvironment;
   readonly evidenceClockSkewMs?: number;
   readonly maxEvidenceLifetimeMs?: number;
+  readonly consentPolicyCatalog?: SignedConsentPolicyCatalog;
+  readonly trustedConsentPolicyKeys?: readonly TrustedConsentPolicyKey[];
+  readonly consentPolicyJurisdiction?: string;
+  readonly consentPolicyLocale?: string;
+  readonly allowLegacyConsentPolicy?: boolean;
 }
 
 export interface ReadinessResult {
@@ -518,10 +750,26 @@ export interface ReadinessResult {
   readonly database: "ok" | "error";
   readonly auditChain: "ok" | "error";
   readonly evidenceTrust: "ok" | "disabled" | "error";
+  readonly consentPolicy: "ok" | "legacy_test_only" | "error";
 }
 
 export type RuntimeBackend = "sqlite" | "postgresql";
 export type MaybePromise<T> = T | Promise<T>;
+
+export type ShareGrantCommandAccess = "read" | "revoke";
+
+/** Internal owner-safe B10 view; API callers receive only ShareGrantProjection. */
+export interface ShareGrantCommandBinding {
+  readonly command: ExternalCommandRecord;
+  readonly record: RecordEnvelope;
+  /** Current exact-purpose consent over the stored export participants. */
+  readonly sharingConsentActive: boolean;
+}
+
+export interface ListShareGrantCommandBindingsInput {
+  readonly limit?: number;
+  readonly cursor?: string;
+}
 
 /**
  * Storage-independent runtime contract. PostgreSQL implementations are
@@ -529,10 +777,13 @@ export type MaybePromise<T> = T | Promise<T>;
  */
 export interface LifeTimeMachineRuntimePort {
   readonly backend: RuntimeBackend;
+  /** Returns the runtime's authoritative clock, including deterministic test clocks. */
+  currentTime(): Date;
   close(): MaybePromise<void>;
   createVerifiedBackup(destinationPathValue: string): Promise<BackupVerification>;
   readiness(): MaybePromise<ReadinessResult>;
   authorize(context: ActorContext, action: string, resource?: AuthorizationResource): void;
+  getConsentPolicyCatalogMetadata(context: ActorContext): MaybePromise<ConsentPolicyCatalogMetadata>;
   registerExternalEvidence(
     context: ActorContext,
     input: RegisterExternalEvidenceInput,
@@ -542,6 +793,10 @@ export interface LifeTimeMachineRuntimePort {
     scopeValue: string,
     evidenceIds: readonly string[],
   ): MaybePromise<readonly RegisteredExternalEvidence[]>;
+  executeEvidenceGatedMutation(
+    context: ActorContext,
+    input: ExecuteEvidenceGatedMutationInput,
+  ): MaybePromise<EvidenceGatedMutationResult>;
   getExternalEvidence(context: ActorContext, evidenceIdValue: string): MaybePromise<RegisteredExternalEvidence>;
   listExternalEvidence(
     context: ActorContext,
@@ -559,7 +814,20 @@ export interface LifeTimeMachineRuntimePort {
     context: ActorContext,
     input: TransitionExternalCommandInput,
   ): MaybePromise<IdempotentResult<ExternalCommandRecord>>;
+  deadLetterExternalCommand(
+    context: ActorContext,
+    input: DeadLetterExternalCommandInput,
+  ): MaybePromise<OutboxEvent>;
   getExternalCommand(context: ActorContext, commandIdValue: string): MaybePromise<ExternalCommandRecord>;
+  getShareGrantCommandBinding(
+    context: ActorContext,
+    commandIdValue: string,
+    access: ShareGrantCommandAccess,
+  ): MaybePromise<ShareGrantCommandBinding>;
+  listShareGrantCommandBindings(
+    context: ActorContext,
+    input?: ListShareGrantCommandBindingsInput,
+  ): MaybePromise<readonly ShareGrantCommandBinding[]>;
   createExternalCommand<T extends JsonObject>(
     context: ActorContext,
     input: CreateExternalCommandInput<T>,
@@ -582,10 +850,49 @@ export interface LifeTimeMachineRuntimePort {
     input: UpdateRecordInput<T>,
   ): MaybePromise<IdempotentResult<RecordEnvelope<T>>>;
   deleteRecord(context: ActorContext, input: DeleteRecordInput): MaybePromise<IdempotentResult<RecordEnvelope>>;
+  registerParticipant(
+    context: ActorContext,
+    input: RegisterParticipantInput,
+  ): MaybePromise<IdempotentResult<ParticipantRecord>>;
+  revokeParticipant(
+    context: ActorContext,
+    input: RevokeParticipantInput,
+  ): MaybePromise<IdempotentResult<ParticipantRecord>>;
+  grantParticipantAuthority(
+    context: ActorContext,
+    input: GrantParticipantAuthorityInput,
+  ): MaybePromise<IdempotentResult<ParticipantAuthorityRecord>>;
+  revokeParticipantAuthority(
+    context: ActorContext,
+    input: RevokeParticipantAuthorityInput,
+  ): MaybePromise<IdempotentResult<ParticipantAuthorityRecord>>;
   grantConsent(context: ActorContext, input: GrantConsentInput): MaybePromise<IdempotentResult<ConsentRecord>>;
   withdrawConsent(context: ActorContext, input: WithdrawConsentInput): MaybePromise<IdempotentResult<ConsentRecord>>;
+  /** Internal decision-only gate used by capabilities; it never returns consent receipts. */
+  assertConsent(context: ActorContext, requirement: ConsentRequirement): MaybePromise<void>;
   requireConsent(context: ActorContext, requirement: ConsentRequirement): MaybePromise<readonly ConsentRecord[]>;
   listConsents(context: ActorContext, participantIdValue?: string): MaybePromise<readonly ConsentRecord[]>;
+  submitRightsRequest(
+    context: ActorContext,
+    input: SubmitRightsRequestInput,
+  ): MaybePromise<IdempotentResult<RightsRequestProjection>>;
+  recordRightsTaskReceipt(
+    context: ActorContext,
+    input: RightsTaskReceiptInput,
+  ): MaybePromise<IdempotentResult<RightsRequestProjection>>;
+  reviewRightsRequest(
+    context: ActorContext,
+    input: ReviewRightsRequestInput,
+  ): MaybePromise<IdempotentResult<RightsRequestProjection>>;
+  escalateRightsRequest(
+    context: ActorContext,
+    input: EscalateRightsRequestInput,
+  ): MaybePromise<IdempotentResult<RightsRequestProjection>>;
+  getRightsRequest(context: ActorContext, requestIdValue: string): MaybePromise<RightsRequestProjection>;
+  listRightsRequests(
+    context: ActorContext,
+    input?: ListRightsRequestsInput,
+  ): MaybePromise<readonly RightsRequestProjection[]>;
   postLedgerTransaction(
     context: ActorContext,
     input: PostLedgerInput,

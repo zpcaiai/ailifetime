@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-life-time-machine.example/contracts/rollback-forward-drill.v1.schema.json",
+  "title": "Digest-bound B127 rollback and forward drill",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "reportId", "exerciseId", "releaseId", "tenantId", "launchId",
+    "deploymentId", "repositoryCommit", "componentSetSha256", "startedAt", "completedAt",
+    "scopes", "scopeSetSha256", "conclusion", "producer"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "ltm.rollback-forward-drill.v1" },
+    "reportId": { "$ref": "#/$defs/identifier" },
+    "exerciseId": { "$ref": "#/$defs/identifier" },
+    "releaseId": { "$ref": "#/$defs/identifier" },
+    "tenantId": { "$ref": "#/$defs/identifier" },
+    "launchId": { "$ref": "#/$defs/identifier" },
+    "deploymentId": { "$ref": "#/$defs/identifier" },
+    "repositoryCommit": { "type": "string", "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$" },
+    "componentSetSha256": { "$ref": "#/$defs/sha256" },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "completedAt": { "type": "string", "format": "date-time" },
+    "scopes": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scope", "targetId", "fromVersion", "rollbackVersion", "forwardVersion", "baselineStateSha256",
+          "rollback", "forward", "verifications", "conclusion"
+        ],
+        "properties": {
+          "scope": { "$ref": "#/$defs/rollbackScope" },
+          "targetId": { "$ref": "#/$defs/identifier" },
+          "fromVersion": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "rollbackVersion": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "forwardVersion": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "baselineStateSha256": { "$ref": "#/$defs/sha256" },
+          "rollback": { "$ref": "#/$defs/drillStep" },
+          "forward": { "$ref": "#/$defs/drillStep" },
+          "verifications": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 4,
+            "items": { "$ref": "#/$defs/verification" }
+          },
+          "conclusion": { "const": "passed" }
+        }
+      }
+    },
+    "scopeSetSha256": { "$ref": "#/$defs/sha256" },
+    "conclusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "decision", "failedScopes", "dataLossEvents"],
+      "properties": {
+        "status": { "const": "passed" },
+        "decision": { "const": "release_compatible" },
+        "failedScopes": { "type": "array", "maxItems": 0 },
+        "dataLossEvents": { "const": 0 }
+      }
+    },
+    "producer": { "$ref": "#/$defs/producer" }
+  },
+  "$defs": {
+    "identifier": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "rollbackScope": {
+      "enum": ["application", "configuration", "model", "workflow", "database", "mobile", "wechat_mini_program", "vendor_routing"]
+    },
+    "drillStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "startedAt", "completedAt", "result", "stateSha256", "evidenceSha256"],
+      "properties": {
+        "operationId": { "$ref": "#/$defs/identifier" },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "result": { "const": "passed" },
+        "stateSha256": { "$ref": "#/$defs/sha256" },
+        "evidenceSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checkId", "expectedSha256", "observedSha256", "evidenceSha256", "conclusion"],
+      "properties": {
+        "checkId": { "$ref": "#/$defs/identifier" },
+        "expectedSha256": { "$ref": "#/$defs/sha256" },
+        "observedSha256": { "$ref": "#/$defs/sha256" },
+        "evidenceSha256": { "$ref": "#/$defs/sha256" },
+        "conclusion": { "const": "passed" }
+      }
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "invocationId"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "version": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "invocationId": { "$ref": "#/$defs/identifier" }
+      }
+    }
+  },
+  "$comment": "The executable B127 validator additionally enforces the exact per-scope verification sets, sequential rollback/forward windows, distinct raw evidence digests, restored baseline state, and scopeSetSha256."
+}

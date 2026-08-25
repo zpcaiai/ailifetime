@@ -638,9 +638,22 @@ test("signed partner webhook performs domain validation and cannot be replayed",
     nonce,
     signature,
   };
-  const evidence = await integration.verifyAndAttest(input);
-  assert.equal(evidence.artifactSha256, sha256(rawBody));
-  await assert.rejects(integration.verifyAndAttest(input), /already been processed/);
+  const terminalCallback = {
+    eventId: "tax-terminal-event-1",
+    terminalState: "succeeded",
+    providerOccurredAt: NOW.toISOString(),
+    sequence: 1,
+    providerOperationId: "tax-provider-operation-1",
+  } as const;
+  const attested = await integration.verifyAndAttestExternalCommandTerminal(input, () => terminalCallback);
+  assert.equal(attested.evidence.artifactSha256, sha256(rawBody));
+  assert.equal(attested.event.subjectId, input.binding.subjectId);
+  assert.equal(attested.event.correlationId, input.binding.subjectId);
+  assert.equal(attested.event.eventType, "external-command.succeeded");
+  await assert.rejects(
+    integration.verifyAndAttestExternalCommandTerminal(input, () => terminalCallback),
+    /already been processed/,
+  );
 });
 
 test("standalone partner verification does not consume replay state before durable processing succeeds", async () => {

@@ -1,6 +1,7 @@
 export * from "./registry.js";
 export * from "./validation.js";
 export * from "./external-business-event-reducers.js";
+export * from "./portal-manifest.js";
 
 import { CapabilityRegistry } from "./registry.js";
 import { registerBootstrappingLifeTimeMachinePlatformCapabilities } from "./domains/bootstrapping-life-time-machine-platform.js";

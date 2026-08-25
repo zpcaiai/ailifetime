@@ -26,6 +26,12 @@ test("scans every required surface and emits a clean high-severity gate plus SAR
   assert.equal(toSarif(report).version, "2.1.0");
 });
 
+test("default container evidence coverage requires every one of the five production workloads", () => {
+  const report = scanRepository({ root: safeFixture() });
+  assert.equal(report.coverage.container.status, "not_run");
+  assert.match(report.coverage.container.reason, /5 images required, 0 supplied/);
+});
+
 test("blocks exploitable source, insecure IaC, client token storage, and high dependency findings", () => {
   const root = safeFixture();
   write(root, "packages/example/vulnerable.ts", "const result = eval(userInput);\n");

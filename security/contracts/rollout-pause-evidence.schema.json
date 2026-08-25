@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-life-time-machine.example/contracts/rollout-pause-evidence.v1.schema.json",
+  "title": "B127 raw automatic-pause command or receipt",
+  "oneOf": [
+    { "$ref": "#/$defs/command" },
+    { "$ref": "#/$defs/receipt" }
+  ],
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "common": {
+      "type": "object",
+      "properties": {
+        "releaseId": { "$ref": "#/$defs/id" }, "tenantId": { "$ref": "#/$defs/id" }, "launchId": { "$ref": "#/$defs/id" }, "deploymentId": { "$ref": "#/$defs/id" }, "repositoryCommit": { "type": "string", "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$" }, "componentSetSha256": { "$ref": "#/$defs/sha256" }, "guardrailPolicySha256": { "$ref": "#/$defs/sha256" }, "wave": { "$ref": "#/$defs/id" }, "drillId": { "$ref": "#/$defs/id" }, "domain": { "$ref": "#/$defs/id" }, "signalId": { "$ref": "#/$defs/id" }, "threshold": { "type": "number", "minimum": 0, "maximum": 1000000000000 }, "observedValue": { "type": "number", "minimum": 0, "maximum": 1000000000000 }
+      }
+    },
+    "command": {
+      "allOf": [
+        { "$ref": "#/$defs/common" },
+        { "type": "object", "additionalProperties": false, "required": ["schemaVersion", "commandId", "releaseId", "tenantId", "launchId", "deploymentId", "repositoryCommit", "componentSetSha256", "guardrailPolicySha256", "wave", "drillId", "domain", "signalId", "threshold", "observedValue", "action", "issuedAt", "status"], "properties": { "schemaVersion": { "const": "ltm.rollout-pause-command.v1" }, "commandId": { "$ref": "#/$defs/id" }, "releaseId": true, "tenantId": true, "launchId": true, "deploymentId": true, "repositoryCommit": true, "componentSetSha256": true, "guardrailPolicySha256": true, "wave": true, "drillId": true, "domain": true, "signalId": true, "threshold": true, "observedValue": true, "action": { "const": "pause_wave" }, "issuedAt": { "type": "string", "format": "date-time" }, "status": { "const": "issued" } } }
+      ]
+    },
+    "receipt": {
+      "allOf": [
+        { "$ref": "#/$defs/common" },
+        { "type": "object", "additionalProperties": false, "required": ["schemaVersion", "receiptId", "commandId", "commandArtifactSha256", "releaseId", "tenantId", "launchId", "deploymentId", "repositoryCommit", "componentSetSha256", "guardrailPolicySha256", "wave", "drillId", "domain", "signalId", "threshold", "observedValue", "acknowledgedAt", "resultingState"], "properties": { "schemaVersion": { "const": "ltm.rollout-pause-receipt.v1" }, "receiptId": { "$ref": "#/$defs/id" }, "commandId": { "$ref": "#/$defs/id" }, "commandArtifactSha256": { "$ref": "#/$defs/sha256" }, "releaseId": true, "tenantId": true, "launchId": true, "deploymentId": true, "repositoryCommit": true, "componentSetSha256": true, "guardrailPolicySha256": true, "wave": true, "drillId": true, "domain": true, "signalId": true, "threshold": true, "observedValue": true, "acknowledgedAt": { "type": "string", "format": "date-time" }, "resultingState": { "const": "paused" } } }
+      ]
+    }
+  }
+}

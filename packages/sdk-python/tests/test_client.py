@@ -11,11 +11,74 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from ailifetime_sdk import ApiError, ClientSession, LifeTimeMachineClient, TransportError
+from ailifetime_sdk import (
+    ApiError,
+    ClientSession,
+    ConsentGrantRequest,
+    ConsentScope,
+    LifeTimeMachineClient,
+    RightsRequestSubmission,
+    RightsReviewRequest,
+    TransportError,
+)
 
 
 class _ContractHandler(BaseHTTPRequestHandler):
     requests: list[dict[str, Any]] = []
+
+    def do_GET(self) -> None:
+        self.requests.append({"path": self.path, "headers": dict(self.headers.items()), "body": None})
+        if self.path == "/v1/session":
+            self._json({
+                "session": {
+                    "actorId": "actor-1",
+                    "tenantId": "tenant-1",
+                    "roles": ["consumer"],
+                    "purpose": "product_operation",
+                    "stepUp": False,
+                    "guardianVerified": False,
+                    "authenticationState": "server_verified",
+                },
+                "requestId": "req-session-1",
+            })
+        elif self.path == "/v1/capabilities/visible":
+            self._json({
+                "schemaVersion": "ltm.visible-capability-manifest.v1",
+                "capabilities": [{
+                    "batchId": "B14",
+                    "skill": "building-age-media-pipeline",
+                    "operation": "createTimeline",
+                    "permission": "record:create",
+                    "portalId": "consumer",
+                    "mode": "external-command",
+                    "requirements": ["B14-R01", "B14-R02", "B14-R03", "B14-R04", "B14-R05"],
+                    "requiresExternalEvidence": False,
+                }],
+                "portals": [{
+                    "id": "consumer",
+                    "skills": ["building-age-media-pipeline"],
+                    "capabilityCount": 1,
+                }],
+                "count": 1,
+                "requestId": "req-visible-1",
+            })
+        elif self.path == "/v1/capabilities":
+            self._json({
+                "capabilities": [{
+                    "batchId": "B14",
+                    "skill": "building-age-media-pipeline",
+                    "operation": "createTimeline",
+                    "permission": "record:create",
+                    "portalId": "consumer",
+                    "mode": "external-command",
+                    "requirements": ["B14-R01", "B14-R02", "B14-R03", "B14-R04", "B14-R05"],
+                    "requiresExternalEvidence": False,
+                }],
+                "count": 1,
+                "requestId": "req-catalog-1",
+            })
+        else:
+            self._json({"error": {"code": "NOT_FOUND", "message": "missing", "retryable": False, "details": {}}, "requestId": "req-404"}, status=404)
 
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
@@ -24,7 +87,8 @@ class _ContractHandler(BaseHTTPRequestHandler):
         if self.path == "/v1/capabilities/B14":
             self._json({"data": {"id": "timeline-1"}, "meta": {"requestId": "req-execute", "batchId": "B14"}}, "req-execute")
         elif self.path == "/v1/commands":
-            self._json({"data": {"id": "record-1"}, "meta": {"requestId": "req-command", "command": "record.create"}})
+            command = body["command"]
+            self._json({"data": {"id": "record-1"}, "meta": {"requestId": "req-command", "command": command}})
         elif self.path == "/v1/queries":
             self._json({"data": [{"id": "record-1"}], "meta": {"requestId": "req-query", "query": "record.list"}})
         else:
@@ -47,6 +111,86 @@ class _ContractHandler(BaseHTTPRequestHandler):
 class ClientTests(unittest.TestCase):
     def setUp(self) -> None:
         self.session = ClientSession("synthetic-access-token", "product_operation")
+
+    def test_typed_session_and_visible_manifest_validate_server_projection(self) -> None:
+        _ContractHandler.requests = []
+        server, base_url = self._server(_ContractHandler)
+        try:
+            client = LifeTimeMachineClient(base_url, self.session)
+            authenticated = client.get_session()
+            manifest = client.get_visible_capability_manifest()
+            catalog = client.list_capabilities()
+            self.assertEqual(authenticated.session.authentication_state, "server_verified")
+            self.assertEqual(authenticated.session.roles, ("consumer",))
+            self.assertEqual(manifest.schema_version, "ltm.visible-capability-manifest.v1")
+            self.assertEqual(manifest.capabilities[0].operation, "createTimeline")
+            self.assertEqual(manifest.portals[0].capability_count, 1)
+            self.assertEqual(catalog[0].operation, "createTimeline")
+            self.assertNotIsInstance(catalog[0], dict)
+            self.assertEqual(
+                [request["path"] for request in _ContractHandler.requests],
+                ["/v1/session", "/v1/capabilities/visible", "/v1/capabilities"],
+            )
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_session_purpose_and_visible_manifest_cross_references_fail_closed(self) -> None:
+        wrong_purpose = json.dumps({
+            "session": {
+                "actorId": "actor-1", "tenantId": "tenant-1", "roles": ["consumer"], "purpose": "wrong",
+                "stepUp": False, "guardianVerified": False, "authenticationState": "server_verified",
+            },
+            "requestId": "req-session-bad",
+        }).encode()
+        client = LifeTimeMachineClient(
+            "http://127.0.0.1:8080", self.session, max_retries=0,
+            transport=lambda _request, _timeout, _maximum: (200, {}, wrong_purpose),
+        )
+        with self.assertRaises(ApiError) as caught:
+            client.get_session()
+        self.assertEqual(caught.exception.code, "INVALID_RESPONSE")
+
+    def test_catalog_is_typed_counted_and_closed(self) -> None:
+        base = {
+            "capabilities": [{
+                "batchId": "B14", "skill": "building-age-media-pipeline", "operation": "createTimeline",
+                "permission": "record:create", "portalId": "consumer", "mode": "external-command",
+                "requirements": ["B14-R01", "B14-R02", "B14-R03", "B14-R04", "B14-R05"],
+                "requiresExternalEvidence": False,
+            }],
+            "count": 1,
+            "requestId": "req-catalog",
+        }
+        for mutation in ({"count": 2}, {"authority": "caller"}):
+            body = json.dumps({**base, **mutation}).encode()
+            client = LifeTimeMachineClient(
+                "http://127.0.0.1:8080", self.session, max_retries=0,
+                transport=lambda _request, _timeout, _maximum, body=body: (200, {}, body),
+            )
+            with self.assertRaises(ApiError) as caught:
+                client.list_capabilities()
+            self.assertEqual(caught.exception.code, "INVALID_RESPONSE")
+
+        invalid_manifest = json.dumps({
+            "schemaVersion": "ltm.visible-capability-manifest.v1",
+            "capabilities": [{
+                "batchId": "B14", "skill": "building-age-media-pipeline", "operation": "createTimeline",
+                "permission": "record:create", "portalId": "consumer", "mode": "external-command",
+                "requirements": ["B14-R01", "B14-R02", "B14-R03", "B14-R04", "B14-R05"],
+                "requiresExternalEvidence": False,
+            }],
+            "portals": [{"id": "consumer", "skills": ["building-age-media-pipeline"], "capabilityCount": 2}],
+            "count": 1,
+            "requestId": "req-visible-bad",
+        }).encode()
+        client = LifeTimeMachineClient(
+            "http://127.0.0.1:8080", self.session, max_retries=0,
+            transport=lambda _request, _timeout, _maximum: (200, {}, invalid_manifest),
+        )
+        with self.assertRaises(ApiError) as caught:
+            client.get_visible_capability_manifest()
+        self.assertEqual(caught.exception.code, "INVALID_RESPONSE")
 
     def test_real_http_contract_sends_exact_envelopes_and_unwraps_data(self) -> None:
         _ContractHandler.requests = []
@@ -74,6 +218,80 @@ class ClientTests(unittest.TestCase):
                 self.assertNotIn("x-permissions", normalized)
             self.assertEqual({key.lower(): value for key, value in requests[0]["headers"].items()}["idempotency-key"], "idem-execute-1")
             self.assertNotIn("idempotency-key", {key.lower(): value for key, value in requests[2]["headers"].items()})
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_typed_consent_grant_omits_client_location_and_optional_evidence(self) -> None:
+        _ContractHandler.requests = []
+        server, base_url = self._server(_ContractHandler)
+        try:
+            client = LifeTimeMachineClient(base_url, self.session)
+            client.grant_consent(
+                ConsentGrantRequest(
+                    participant_id="participant-1",
+                    grantor_capacity="self",
+                    purpose="sharing",
+                    scope=ConsentScope(resource="work:work-1", actions=("share",)),
+                    policy_version="sharing-v1",
+                ),
+                "idem-consent-1",
+            )
+            request = _ContractHandler.requests[0]
+            self.assertEqual(request["path"], "/v1/commands")
+            self.assertEqual(request["body"], {
+                "command": "consent.grant",
+                "input": {
+                    "participantId": "participant-1",
+                    "grantorCapacity": "self",
+                    "purpose": "sharing",
+                    "scope": {"resource": "work:work-1", "actions": ["share"]},
+                    "policyVersion": "sharing-v1",
+                    "expiresAt": None,
+                },
+            })
+            self.assertNotIn("jurisdiction", request["body"]["input"])
+            self.assertNotIn("locale", request["body"]["input"])
+            self.assertNotIn("evidenceHash", request["body"]["input"])
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_typed_rights_requests_emit_closed_subject_and_review_inputs(self) -> None:
+        _ContractHandler.requests = []
+        server, base_url = self._server(_ContractHandler)
+        try:
+            client = LifeTimeMachineClient(base_url, ClientSession("synthetic-access-token", "privacy_rights"))
+            client.submit_rights_request(
+                RightsRequestSubmission(
+                    participant_id="participant-1",
+                    request_type="correction",
+                    requested_processing_purpose="profile",
+                    request_id="rights-1",
+                    correction_fields=("profile.display_name",),
+                    correction_payload_sha256="a" * 64,
+                ),
+                "rights-submit-1",
+            )
+            client.review_rights_request(
+                RightsReviewRequest(
+                    request_id="rights-1",
+                    decision="approve",
+                    reason_code="VERIFIED_COMPLETE",
+                    case_reference="privacy-case-1",
+                ),
+                "rights-review-1",
+            )
+            inputs = [request["body"] for request in _ContractHandler.requests]
+            self.assertEqual([value["command"] for value in inputs], [
+                "rights-request.submit", "rights-request.review",
+            ])
+            self.assertEqual(set(inputs[0]["input"]), {
+                "participantId", "requestType", "requestedProcessingPurpose", "requestId",
+                "correctionFields", "correctionPayloadSha256",
+            })
+            self.assertNotIn("ownerActorId", inputs[0]["input"])
+            self.assertNotIn("participantIds", inputs[0]["input"])
         finally:
             server.shutdown()
             server.server_close()

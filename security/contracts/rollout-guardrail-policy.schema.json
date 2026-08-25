@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-life-time-machine.example/contracts/rollout-guardrail-policy.v1.schema.json",
+  "title": "Canonical B127 rollout guardrail policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "policyId", "policyVersion", "releaseId", "tenantId", "launchId", "deploymentId", "repositoryCommit", "componentSetSha256", "controls", "controlSetSha256", "producer"],
+  "properties": {
+    "schemaVersion": { "const": "ltm.rollout-guardrail-policy.v1" },
+    "policyId": { "$ref": "#/$defs/id" },
+    "policyVersion": { "$ref": "#/$defs/id" },
+    "releaseId": { "$ref": "#/$defs/id" },
+    "tenantId": { "$ref": "#/$defs/id" },
+    "launchId": { "$ref": "#/$defs/id" },
+    "deploymentId": { "$ref": "#/$defs/id" },
+    "repositoryCommit": { "type": "string", "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$" },
+    "componentSetSha256": { "$ref": "#/$defs/sha256" },
+    "controls": { "type": "array", "minItems": 11, "maxItems": 11, "items": { "$ref": "#/$defs/control" } },
+    "controlSetSha256": { "$ref": "#/$defs/sha256" },
+    "producer": { "$ref": "#/$defs/producer" }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "domain": { "enum": ["quality", "payment", "refund", "message", "support", "ledger", "supply", "privacy", "security", "cost", "slo"] },
+    "control": {
+      "type": "object", "additionalProperties": false,
+      "required": ["domain", "signalId", "unit", "comparator", "threshold"],
+      "properties": {
+        "domain": { "$ref": "#/$defs/domain" }, "signalId": { "$ref": "#/$defs/id" },
+        "unit": { "enum": ["ratio", "count", "minor_currency"] }, "comparator": { "const": "lte" },
+        "threshold": { "type": "number", "minimum": 0, "maximum": 1000000000000 }
+      }
+    },
+    "producer": {
+      "type": "object", "additionalProperties": false, "required": ["name", "version", "invocationId"],
+      "properties": { "name": { "type": "string", "minLength": 1, "maxLength": 128 }, "version": { "type": "string", "minLength": 1, "maxLength": 100 }, "invocationId": { "$ref": "#/$defs/id" } }
+    }
+  },
+  "$comment": "The executable validator enforces exact domain/signal/unit tuples and unit-specific numeric bounds: ratio 0..1, non-negative safe integer counts, and bounded integer minor currency."
+}

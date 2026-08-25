@@ -1,0 +1,140 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-public-ingress
+spec:
+  podSelector:
+    matchExpressions:
+      - key: ltm.openai.com/network-role
+        operator: In
+        values: ["api", "integration-gateway"]
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: "__LTM_INGRESS_NAMESPACE__"
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8081
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-https-egress
+spec:
+  podSelector:
+    matchExpressions:
+      - key: ltm.openai.com/network-role
+        operator: In
+        values: ["api", "workers", "integration-gateway", "client-integration-broker"]
+  policyTypes: ["Egress"]
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres-egress
+spec:
+  podSelector:
+    matchExpressions:
+      - key: ltm.openai.com/network-role
+        operator: In
+        values: ["api", "workers", "postgres-migrator"]
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: "__LTM_POSTGRES_CIDR__"
+      ports:
+        - protocol: TCP
+          port: __LTM_POSTGRES_PORT__
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-redis-egress
+spec:
+  podSelector:
+    matchExpressions:
+      - key: ltm.openai.com/network-role
+        operator: In
+        values: ["integration-gateway", "client-integration-broker"]
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: "__LTM_REDIS_CIDR__"
+      ports:
+        - protocol: TCP
+          port: __LTM_REDIS_PORT__
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-client-broker-ingress
+spec:
+  podSelector:
+    matchLabels:
+      ltm.openai.com/network-role: client-integration-broker
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              ltm.openai.com/network-role: api
+      ports:
+        - protocol: TCP
+          port: 8443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-client-broker-egress
+spec:
+  podSelector:
+    matchLabels:
+      ltm.openai.com/network-role: api
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              ltm.openai.com/network-role: client-integration-broker
+      ports:
+        - protocol: TCP
+          port: 8443

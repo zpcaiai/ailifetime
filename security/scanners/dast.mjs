@@ -40,7 +40,12 @@ export async function runDast(options) {
   await execute("cross-tenant direct object reference fails closed", "tenant_idor", async () => {
     const create = await request(base, "/v1/commands", {
       method: "POST", token: primaryToken, purpose: "security_test", idempotencyKey: `create-${recordId}`,
-      json: command("record.create", { collection: "security.dast", id: recordId, data: { marker } }),
+      json: command("record.create", {
+        collection: "security.dast",
+        id: recordId,
+        processingPurpose: "security_test",
+        data: { marker },
+      }),
     });
     expectStatus(create, [200]);
     const attack = await request(base, "/v1/queries", {

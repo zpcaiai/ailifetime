@@ -18,7 +18,13 @@ async function target(vulnerableSsrf = false) {
     if (bearer === undefined || bearer.endsWith("-invalid")) { fail(401, "AUTH_UNAUTHENTICATED"); return; }
     if (request.headers["x-tenant-id"] !== undefined) { fail(403, "AUTH_FORBIDDEN"); return; }
     if (path === "/v1/queries" && bearer === "secondary-token-synthetic") { fail(404, "RESOURCE_NOT_FOUND"); return; }
-    if (path === "/v1/commands") { response.statusCode = 200; response.end(JSON.stringify({ data: { ok: true } })); return; }
+    if (path === "/v1/commands") {
+      if (body.command === "record.create" && body.input?.processingPurpose !== "security_test") {
+        fail(422, "VALIDATION_FAILED");
+        return;
+      }
+      response.statusCode = 200; response.end(JSON.stringify({ data: { ok: true } })); return;
+    }
     if (path === "/v1/capabilities/B123" && bearer === "secondary-token-synthetic") { fail(403, "AUTH_FORBIDDEN"); return; }
     if (path === "/v1/capabilities/B106" && vulnerableSsrf && String(body.endpointUrl ?? "").startsWith("https://")) { response.statusCode = 200; response.end(JSON.stringify({ data: { accepted: true } })); return; }
     if (path.startsWith("/v1/capabilities/")) { fail(400, "VALIDATION_FAILED"); return; }

@@ -2,6 +2,60 @@
 
 The TypeScript, Python, and Java SDKs implement the dispatch contract in `services/api/openapi.yaml`. They accept a bearer access token plus a declared purpose. Tenant, actor, role, permissions, guardian verification, and step-up state are resolved by the server and are never sent as client assertions.
 
+## Authenticated discovery contract
+
+Every SDK exposes typed `GET /v1/session`, `GET /v1/capabilities/visible`, and `GET /v1/capabilities` operations before dispatch. Session responses must be `server_verified` and use the exact requested purpose. Visible manifests must use `ltm.visible-capability-manifest.v1`; roles, seven portal identifiers, capability modes, five-item requirement lists, counts, unique identifiers, and portal-to-capability references are validated fail-closed. Catalog envelopes are closed to exactly `capabilities`, `count`, and `requestId`, and every entry is parsed into a typed `CapabilitySummary` rather than returned as raw JSON.
+
+TypeScript:
+
+```ts
+import type { CapabilitySummary } from "@ltm/sdk";
+
+const authenticated = await client.getSession();
+const visible = await client.getVisibleCapabilityManifest();
+const catalog: readonly CapabilitySummary[] = await client.listCapabilities();
+console.log(authenticated.session.roles, visible.portals, catalog[0]?.operation);
+```
+
+Python:
+
+```python
+from ailifetime_sdk import CapabilitySummary
+
+authenticated = client.get_session()
+visible = client.get_visible_capability_manifest()
+catalog: tuple[CapabilitySummary, ...] = client.list_capabilities()
+print(authenticated.session.roles, visible.portals, catalog[0].operation)
+```
+
+Java 17+:
+
+```java
+import com.ailifetime.sdk.CapabilitySummary;
+import java.util.List;
+
+AuthenticatedSessionResponse authenticated = client.getSession();
+VisibleCapabilityManifest visible = client.getVisibleCapabilityManifest();
+List<CapabilitySummary> catalog = client.listCapabilities();
+System.out.println(authenticated.session().roles() + " " + catalog.get(0).operation());
+```
+
+These operations return immutable/readonly typed projections. They do not infer identity or client-side permissions, and they reject unknown fields, unsupported schema versions, count drift, duplicate capability identifiers, or internally inconsistent visibility data.
+
+## Signed consent policy contract
+
+All three SDKs expose a typed consent-grant helper (`grantConsent` in TypeScript/Java and `grant_consent` in Python). The caller supplies only the participant, grantor capacity, exact resource/actions scope, purpose, policy version, optional expiry, and an optional disclosure acknowledgement digest. Jurisdiction, locale, minor status, disclosure content, and policy-catalog digest are server authority and are never accepted as SDK request fields. In production the API resolves the exact signed catalog rule and persists its server-derived disclosure digest and catalog/location binding.
+
+```ts
+await client.grantConsent({
+  participantId: "participant-1",
+  grantorCapacity: "self",
+  purpose: "sharing",
+  scope: { resource: "work:work-1", actions: ["share"] },
+  policyVersion: "sharing-v1",
+}, "consent-idempotency-key");
+```
+
 ## Dispatch result contract
 
 Commands, queries, and capability execution use the same response envelope on the wire:
@@ -51,6 +105,8 @@ const records = await client.query<readonly { id: string }[]>("record.list", { c
 const correlated = await client.queryEnvelope("record.list", { collection: "projects" });
 console.log(correlated.meta.requestId);
 ```
+
+TypeScript validates every `execute`, `command`, and `query` input at runtime as a plain JSON object before networking. Top-level arrays/null values, non-plain prototypes, unsafe `__proto__`/`prototype`/`constructor` keys, accessors, cycles, sparse arrays, and non-finite numbers are rejected.
 
 ## Python
 

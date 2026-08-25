@@ -7,6 +7,7 @@
     <title>AI 人生时光机 · 产品控制台</title>
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/assets/styles.css?v=20260820-production4" />
+    <link rel="stylesheet" href="/assets/auth.css?v=20260826-pkce1" />
   </head>
   <body>
     <a class="skip-link" href="#main" data-i18n="skipMain">跳到主要内容</a>
@@ -16,6 +17,11 @@
         <div><strong>AI 人生时光机</strong><small data-i18n="appSubtitle">本地商业能力控制台</small></div>
       </div>
       <div class="topbar-actions">
+        <div class="authentication-actions" aria-live="polite">
+          <span id="authentication-output" class="visually-hidden"></span>
+          <button id="login-button" class="auth-button" type="button" data-i18n="signIn" disabled>登录</button>
+          <button id="logout-button" class="auth-button" type="button" data-i18n="signOut" hidden>退出</button>
+        </div>
         <label class="locale-picker"><span data-i18n="language">界面语言</span><select id="locale" aria-label="界面语言" data-i18n-aria-label="language"><option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文</option><option value="en">English</option></select></label>
         <div id="connection" class="status" role="status"><span></span><span class="status-copy" data-i18n="connecting">正在连接</span></div>
       </div>
@@ -43,6 +49,7 @@
         <button id="tab-journey" class="tab active" role="tab" data-panel="journey" aria-controls="journey" aria-selected="true" tabindex="0" data-i18n="tabJourney">核心旅程</button>
         <button id="tab-workspaces" class="tab" role="tab" data-panel="workspaces" aria-controls="workspaces" aria-selected="false" tabindex="-1" data-i18n="tabWorkspaces">业务工作台</button>
         <button id="tab-capabilities" class="tab" role="tab" data-panel="capabilities" aria-controls="capabilities" aria-selected="false" tabindex="-1" data-i18n="tabCapabilities">128 项能力</button>
+        <button id="tab-rights" class="tab" role="tab" data-panel="rights" aria-controls="rights" aria-selected="false" tabindex="-1">隐私权请求</button>
         <button id="tab-operations" class="tab" role="tab" data-panel="operations" aria-controls="operations" aria-selected="false" tabindex="-1" data-i18n="tabOperations">运行状态</button>
       </nav>
 
@@ -50,8 +57,8 @@
         <div class="section-heading"><div><p class="eyebrow">SAFE BY DEFAULT</p><h2 id="journey-title" data-i18n="journeyTitle">合成数据核心旅程</h2></div><span class="pill" data-i18n="syntheticOnly">不会上传真实照片</span></div>
         <div class="journey-grid">
           <form id="journey-form" class="card form-card">
-            <label><span data-i18n="tenant">租户标识</span><input id="tenantId" name="tenantId" value="tenant-local" autocomplete="off" readonly /></label>
-            <label><span data-i18n="actor">操作者标识</span><input id="actorId" name="actorId" value="user-synthetic" autocomplete="off" readonly /></label>
+            <label><span data-i18n="tenant">租户标识</span><input id="tenantId" name="tenantId" value="" autocomplete="off" readonly /></label>
+            <label><span data-i18n="actor">操作者标识</span><input id="actorId" name="actorId" value="" autocomplete="off" readonly /></label>
             <label><span data-i18n="age">当前年龄</span><input id="currentAge" name="currentAge" type="number" min="0" max="100" value="32" /></label>
             <fieldset><legend data-i18n="ageNodes">示意性节点</legend><div class="age-picks">
               <label><input type="checkbox" name="ages" value="18" checked />18</label>
@@ -85,6 +92,30 @@
         <div id="capability-list" class="capability-list" aria-live="polite"></div>
       </section>
 
+      <section id="rights" class="panel" role="tabpanel" tabindex="0" aria-labelledby="tab-rights" hidden>
+        <div class="section-heading"><div><p class="eyebrow">B04 · DATA SUBJECT RIGHTS</p><h2>隐私权请求</h2></div><span class="pill">服务端主体权限最终裁决</span></div>
+        <p class="section-copy">请求会进入可审计的传播与双人复核流程。删除、撤回和限制处理只有在全部下游回执完成后才可能完成。</p>
+        <div class="journey-grid">
+          <form id="rights-form" class="card form-card">
+            <label><span>已登记参与者标识</span><input id="rights-participant" name="participantId" autocomplete="off" required /></label>
+            <label><span>权利类型</span><select id="rights-type" name="requestType">
+              <option value="access">访问</option><option value="correction">更正</option><option value="export">导出</option>
+              <option value="withdraw">撤回授权</option><option value="delete">删除</option>
+              <option value="restrict_processing">限制处理</option><option value="appeal">申诉</option>
+            </select></label>
+            <label><span>处理用途（all 或精确用途）</span><input id="rights-purpose" name="requestedProcessingPurpose" value="all" autocomplete="off" /></label>
+            <label><span>更正字段（逗号分隔，仅更正请求）</span><input id="rights-correction-fields" autocomplete="off" /></label>
+            <label><span>更正安全载荷 SHA-256（仅更正请求）</span><input id="rights-correction-digest" autocomplete="off" /></label>
+            <label><span>原请求标识（仅申诉）</span><input id="rights-parent" autocomplete="off" /></label>
+            <button class="primary" type="submit">提交权利请求</button>
+            <button id="rights-refresh" class="capability-open" type="button">刷新我的请求</button>
+          </form>
+          <div class="card result-card">
+            <div id="rights-output" class="empty-state" aria-live="polite"><strong>尚未查询</strong><p>输出仅显示服务端脱敏投影，不显示主体原始标识、证据或供应商引用。</p></div>
+          </div>
+        </div>
+      </section>
+
       <section id="operations" class="panel" role="tabpanel" tabindex="0" aria-labelledby="tab-operations" hidden>
         <div class="section-heading"><div><p class="eyebrow">EVIDENCE, NOT ASSERTION</p><h2 id="ops-title" data-i18n="operationsTitle">运行与认证边界</h2></div></div>
         <div class="ops-grid">
@@ -92,6 +123,7 @@
           <article class="card"><span class="metric amber" data-i18n="local">本地</span><h3 data-i18n="localEnvironment">当前环境</h3><p data-i18n="localEnvironmentDescription">只允许合成数据和沙箱提供商。</p></article>
           <article class="card"><span class="metric muted" data-i18n="uncertified">未认证</span><h3 data-i18n="productionRelease">生产发布</h3><p data-i18n="productionReleaseDescription">真实支付、商店、税务、供应链和外部审查仍需独立证据。</p></article>
         </div>
+        <pre id="session-output" class="console" aria-label="服务器验证会话">尚未建立服务器验证会话。</pre>
         <pre id="health-output" class="console" aria-label="健康检查结果">正在读取健康状态…</pre>
       </section>
     </main>

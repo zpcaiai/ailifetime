@@ -1,6 +1,6 @@
 ---
 name: orchestrating-life-time-machine
-description: Orchestrate the complete AI Life Time Machine build in Claude Code or Codex: inspect an existing repository, select ready batches, isolate worktrees, enforce evidence, and drive the product from baseline through certified release.
+description: Orchestrate the complete AI Life Time Machine build in Claude Code or Codex: inspect an existing repository, select ready batches, isolate worktrees, enforce code evidence, and keep local workflow attestation separate from production certification.
 metadata:
   package: ai-life-time-machine-commercial-project-factory
   version: "2.0.0"

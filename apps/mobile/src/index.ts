@@ -1,3 +1,7 @@
+import { MobileApplicationError, MobileHttpApiError } from "./application.js";
+
+export * from "./application.js";
+
 export interface CapabilityExecutor {
   execute<T>(batchId: string, payload: Record<string, unknown>, idempotencyKey: string): Promise<T>;
 }
@@ -21,24 +25,59 @@ export interface OfflineCommand {
 export class MobileOfflineQueue {
   readonly #allowedBatches: ReadonlySet<string>;
   readonly #maxAttempts: number;
+  readonly #maxTtlMs: number;
+  readonly #now: () => Date;
+  readonly #authorizationKey: string;
+  #authorizationBinding: string | undefined = undefined;
 
   constructor(
     private readonly storage: SecureStorage,
     private readonly storageKey = "ltm.offline.commands",
-    options: { readonly allowedBatches?: readonly string[]; readonly maxAttempts?: number } = {},
+    options: {
+      readonly allowedBatches?: readonly string[];
+      readonly maxAttempts?: number;
+      readonly maxTtlMs?: number;
+      readonly now?: () => Date;
+    } = {},
   ) {
     this.#allowedBatches = new Set(options.allowedBatches ?? ["B64", "B65"]);
     this.#maxAttempts = options.maxAttempts ?? 5;
-    if (this.#allowedBatches.size === 0 || [...this.#allowedBatches].some((batchId) => !/^B\d{2,3}$/.test(batchId))) {
+    this.#maxTtlMs = options.maxTtlMs ?? 24 * 60 * 60 * 1_000;
+    this.#now = options.now ?? (() => new Date());
+    this.#authorizationKey = `${storageKey}.authorization`;
+    if (this.#allowedBatches.size === 0 || [...this.#allowedBatches].some((batchId) => !/^B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])$/.test(batchId))) {
       throw new Error("offline capability allowlist is invalid");
     }
     if (!Number.isSafeInteger(this.#maxAttempts) || this.#maxAttempts < 1 || this.#maxAttempts > 10) {
       throw new Error("offline maximum attempts is invalid");
     }
+    if (!Number.isSafeInteger(this.#maxTtlMs) || this.#maxTtlMs < 60_000 || this.#maxTtlMs > 7 * 24 * 60 * 60 * 1_000) {
+      throw new Error("offline maximum TTL must be from one minute through seven days");
+    }
+    if (typeof this.#now !== "function") throw new Error("offline clock is invalid");
+  }
+
+  /** Binds persisted work to the server-verified tenant and actor before any queue access. */
+  async activate(binding: { readonly tenantId: string; readonly actorId: string }): Promise<void> {
+    const normalized = JSON.stringify({
+      tenantId: boundedIdentifier(binding.tenantId, "tenantId"),
+      actorId: boundedIdentifier(binding.actorId, "actorId"),
+    });
+    const stored = await this.storage.get(this.#authorizationKey);
+    if (stored !== normalized) {
+      // Legacy, corrupt, or different-account commands are not replayed under the current principal.
+      await this.storage.delete(this.storageKey);
+      await this.storage.set(this.#authorizationKey, normalized);
+    }
+    this.#authorizationBinding = normalized;
   }
 
   async enqueue(command: OfflineCommand): Promise<void> {
-    validateCommand(command);
+    await this.assertAuthorizedBinding();
+    const now = validNow(this.#now());
+    validateCommand(command, this.#maxTtlMs);
+    assertCommandLiveAt(command, now);
+    if ((command.attempts ?? 0) !== 0) throw new Error("new offline command attempts must be zero");
     if (!this.#allowedBatches.has(command.batchId)) throw new Error("capability is not permitted in the offline queue");
     assertOfflineSafePayload(command.payload);
     const commands = await this.read();
@@ -49,14 +88,17 @@ export class MobileOfflineQueue {
 
   async flush(
     client: CapabilityExecutor,
-    now = new Date(),
+    now = this.#now(),
   ): Promise<{ sent: string[]; retained: string[]; dropped: Array<{ id: string; reason: "expired" | "permanent" | "attempts_exhausted" }> }> {
+    await this.assertAuthorizedBinding();
+    const nowMs = validNow(now);
     const commands = await this.read();
     const retained: OfflineCommand[] = [];
     const sent: string[] = [];
     const dropped: Array<{ id: string; reason: "expired" | "permanent" | "attempts_exhausted" }> = [];
     for (const command of commands) {
-      if (new Date(command.expiresAt).getTime() <= now.getTime()) {
+      if (Date.parse(command.createdAt) > nowMs) throw new Error("offline queue contains a future-created command");
+      if (Date.parse(command.expiresAt) <= nowMs) {
         dropped.push({ id: command.id, reason: "expired" });
         continue;
       }
@@ -65,7 +107,7 @@ export class MobileOfflineQueue {
         sent.push(command.id);
       } catch (error) {
         const attempts = (command.attempts ?? 0) + 1;
-        if (error instanceof MobileCapabilityError && !error.retryable) {
+        if (isExplicitlyPermanent(error)) {
           dropped.push({ id: command.id, reason: "permanent" });
         } else if (attempts >= this.#maxAttempts) {
           dropped.push({ id: command.id, reason: "attempts_exhausted" });
@@ -80,7 +122,8 @@ export class MobileOfflineQueue {
   }
 
   async purge(): Promise<void> {
-    await this.storage.delete(this.storageKey);
+    this.#authorizationBinding = undefined;
+    await Promise.all([this.storage.delete(this.storageKey), this.storage.delete(this.#authorizationKey)]);
   }
 
   private async read(): Promise<OfflineCommand[]> {
@@ -89,9 +132,17 @@ export class MobileOfflineQueue {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) throw new Error("offline queue is corrupted");
     return parsed.map((entry) => {
-      validateCommand(entry);
+      validateCommand(entry, this.#maxTtlMs);
+      assertOfflineSafePayload(entry.payload);
       return entry;
     });
+  }
+
+  private async assertAuthorizedBinding(): Promise<void> {
+    if (this.#authorizationBinding === undefined) throw new Error("offline queue requires a server-verified authorization binding");
+    if (await this.storage.get(this.#authorizationKey) !== this.#authorizationBinding) {
+      throw new Error("offline queue authorization binding is missing or changed");
+    }
   }
 }
 
@@ -211,41 +262,118 @@ export function preflightMobileCapture(input: { mimeType: string; byteLength: nu
   return { accepted: true, warnings };
 }
 
-function validateCommand(value: unknown): asserts value is OfflineCommand {
-  if (!value || typeof value !== "object") throw new Error("offline command must be an object");
+function validateCommand(value: unknown, maxTtlMs: number): asserts value is OfflineCommand {
+  if (!isPlainRecord(value)) throw new Error("offline command must be a plain object");
+  const allowed = new Set(["id", "batchId", "idempotencyKey", "payload", "createdAt", "expiresAt", "attempts"]);
+  if (Object.keys(value).some((key) => !allowed.has(key))) throw new Error("offline command contains an unknown field");
+  assertDataProperties(value, "offline command");
   const command = value as Partial<OfflineCommand>;
-  if (!command.id || !command.idempotencyKey || !command.batchId || !/^B\d{2,3}$/.test(command.batchId) || !command.payload || !command.createdAt || !command.expiresAt) {
+  if (typeof command.id !== "string" || typeof command.idempotencyKey !== "string" || typeof command.batchId !== "string"
+    || !/^B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])$/.test(command.batchId)
+    || !isPlainRecord(command.payload) || typeof command.createdAt !== "string" || typeof command.expiresAt !== "string") {
     throw new Error("offline command is incomplete");
   }
-  if (!Number.isFinite(Date.parse(command.createdAt)) || !Number.isFinite(Date.parse(command.expiresAt))) {
-    throw new Error("offline command timestamps are invalid");
-  }
+  boundedIdentifier(command.id, "offline command id");
+  boundedIdentifier(command.idempotencyKey, "offline command idempotencyKey");
+  const createdAt = parseOfflineInstant(command.createdAt, "createdAt");
+  const expiresAt = parseOfflineInstant(command.expiresAt, "expiresAt");
+  if (expiresAt <= createdAt || expiresAt - createdAt > maxTtlMs) throw new Error("offline command TTL is invalid");
   if (command.attempts !== undefined && (!Number.isSafeInteger(command.attempts) || command.attempts < 0 || command.attempts > 10)) {
     throw new Error("offline command attempts are invalid");
   }
 }
 
 function assertOfflineSafePayload(payload: Record<string, unknown>): void {
-  const serialized = JSON.stringify(payload);
-  if (new TextEncoder().encode(serialized).byteLength > 64 * 1_024) throw new Error("offline payload is too large");
+  if (!isPlainRecord(payload)) throw new Error("offline payload must be a plain object");
   const forbidden = /(?:access.?token|refresh.?token|signed.?transaction|purchase.?token|payment.?credential|raw.?media|face.?embedding|private.?dialogue)/i;
-  const visit = (value: unknown, path: string): void => {
-    if (value === null || typeof value === "boolean" || typeof value === "number") return;
+  const seen = new Set<object>();
+  let nodes = 0;
+  const visit = (value: unknown, path: string, depth: number): void => {
+    nodes += 1;
+    if (nodes > 10_000 || depth > 32) throw new Error("offline payload exceeds structural limits");
+    if (value === null || typeof value === "boolean") return;
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) throw new Error(`offline payload value at ${path} is not a finite number`);
+      return;
+    }
     if (typeof value === "string") {
       if (value.length > 8_192) throw new Error(`offline payload value at ${path} is too large`);
       return;
     }
+    if (typeof value !== "object") throw new Error(`offline payload value at ${path} is invalid`);
+    if (seen.has(value)) throw new Error("offline payload must not contain cycles");
+    seen.add(value);
+    try {
     if (Array.isArray(value)) {
-      value.forEach((entry, index) => visit(entry, `${path}[${index}]`));
+      if (Object.getPrototypeOf(value) !== Array.prototype || Object.getOwnPropertySymbols(value).length > 0
+        || Object.keys(value).length !== value.length) throw new Error(`offline payload array at ${path} is not plain`);
+      for (let index = 0; index < value.length; index += 1) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+        if (descriptor === undefined || !("value" in descriptor)) throw new Error(`offline payload array at ${path} contains an accessor`);
+        visit(descriptor.value, `${path}[${index}]`, depth + 1);
+      }
       return;
     }
-    if (typeof value !== "object") throw new Error(`offline payload value at ${path} is invalid`);
+    if (!isPlainRecord(value)) throw new Error(`offline payload value at ${path} is invalid`);
+    assertDataProperties(value, `offline payload value at ${path}`);
     for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (key === "__proto__" || key === "prototype" || key === "constructor") {
+        throw new Error(`offline payload contains unsafe field ${key}`);
+      }
       if (forbidden.test(key)) throw new Error(`offline payload contains prohibited field ${key}`);
-      visit(entry, `${path}.${key}`);
+      visit(entry, `${path}.${key}`, depth + 1);
+    }
+    } finally {
+      seen.delete(value);
     }
   };
-  visit(payload, "payload");
+  visit(payload, "payload", 0);
+  let serialized: string;
+  try { serialized = JSON.stringify(payload); } catch (error) {
+    throw new Error("offline payload is not valid JSON", { cause: error });
+  }
+  if (new TextEncoder().encode(serialized).byteLength > 64 * 1_024) throw new Error("offline payload is too large");
+}
+
+function assertCommandLiveAt(command: OfflineCommand, nowMs: number): void {
+  if (Date.parse(command.createdAt) > nowMs || Date.parse(command.expiresAt) <= nowMs) {
+    throw new Error("offline command must satisfy createdAt <= now < expiresAt");
+  }
+}
+
+function parseOfflineInstant(value: string, field: string): number {
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,3}))?Z$/.exec(value);
+  if (match === null) {
+    throw new Error(`offline command ${field} must be an RFC 3339 UTC instant`);
+  }
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) throw new Error(`offline command ${field} is invalid`);
+  const canonical = `${match[1]}.${(match[2] ?? "").padEnd(3, "0")}Z`;
+  if (new Date(parsed).toISOString() !== canonical) throw new Error(`offline command ${field} is invalid`);
+  return parsed;
+}
+
+function validNow(value: Date): number {
+  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) throw new Error("offline clock returned an invalid instant");
+  return value.getTime();
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function assertDataProperties(value: Record<string, unknown>, label: string): void {
+  if (Object.getOwnPropertySymbols(value).length > 0) throw new Error(`${label} contains symbol fields`);
+  for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(value))) {
+    if (descriptor.get !== undefined || descriptor.set !== undefined) throw new Error(`${label} contains an accessor field`);
+  }
+}
+
+function isExplicitlyPermanent(error: unknown): boolean {
+  return (error instanceof MobileCapabilityError || error instanceof MobileHttpApiError || error instanceof MobileApplicationError)
+    && !error.retryable;
 }
 
 function validateNativePurchase(value: NativeStorePurchase): NativeStorePurchase {

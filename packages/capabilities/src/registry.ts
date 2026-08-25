@@ -24,6 +24,8 @@ export interface CapabilityDefinition {
   batchId: `B${string}`;
   skill: string;
   operation: string;
+  /** The exact permission enforced by the executable handler. */
+  permission: string;
   mode: CapabilityMode;
   requirements: readonly [`${string}-R01`, `${string}-R02`, `${string}-R03`, `${string}-R04`, `${string}-R05`];
   requiresExternalEvidence?: boolean;

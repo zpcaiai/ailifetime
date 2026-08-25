@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { createCapabilityRegistry } from "./index.js";
+import { CAPABILITY_PORTAL_MANIFEST, capabilityPortalForSkill, createCapabilityRegistry } from "./index.js";
 
 interface ManifestBatch {
   id: string;
@@ -22,8 +22,18 @@ test("registry exactly covers the full-commercial B00 through B127 manifest", ()
     assert.equal(definition.skill, manifest.skill, `${definition.batchId} skill mismatch`);
     assert.deepEqual([...definition.requirements], manifest.requirement_ids, `${definition.batchId} requirement mismatch`);
     assert.match(definition.operation, /^[a-z][A-Za-z0-9]+$/);
+    assert.match(definition.permission, /^(?:\*|[a-z][a-z0-9._:-]*\*?)$/);
+    assert.notEqual(capabilityPortalForSkill(definition.skill), undefined, `${definition.batchId} portal mismatch`);
   }
   assert.equal(new Set(definitions.map((item) => item.skill)).size, 22);
+});
+
+test("server portal manifest covers all 22 domains exactly once", () => {
+  const skills = CAPABILITY_PORTAL_MANIFEST.flatMap((portal) => portal.skills);
+  assert.equal(CAPABILITY_PORTAL_MANIFEST.length, 7);
+  assert.equal(skills.length, 22);
+  assert.equal(new Set(skills).size, 22);
+  assert.equal(new Set(CAPABILITY_PORTAL_MANIFEST.flatMap((portal) => portal.roles)).has("platform_admin"), true);
 });
 
 test("production launch capabilities retain explicit external evidence gates", () => {
@@ -31,6 +41,12 @@ test("production launch capabilities retain explicit external evidence gates", (
   for (const batchId of ["B48", "B49", "B69", "B72", "B123", "B124", "B125", "B126", "B127"]) {
     assert.equal(definitions.find((item) => item.batchId === batchId)?.requiresExternalEvidence, true, `${batchId} must remain externally gated`);
   }
+});
+
+test("platform bootstrap controls use dedicated permissions", () => {
+  const registry = createCapabilityRegistry();
+  assert.equal(registry.get("B01")?.permission, "platform.architecture.manage");
+  assert.equal(registry.get("B02")?.permission, "platform.contract.publish");
 });
 
 test("all capability execution modes and external gates remain explicit", () => {

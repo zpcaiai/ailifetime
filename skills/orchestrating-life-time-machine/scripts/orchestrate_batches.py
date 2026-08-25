@@ -13,12 +13,21 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 
-PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+def package_root() -> Path:
+    script = Path(__file__).resolve()
+    for ancestor in script.parents:
+        for candidate in (ancestor, ancestor / ".ai-life-time-machine/skill-package"):
+            if (candidate / "manifest.json").is_file() and (candidate / "manifests/batches.json").is_file():
+                return candidate
+    raise RuntimeError("AI Life Time Machine skill package could not be located from this repository")
+
+
+PACKAGE_ROOT = package_root()
 PACKAGE_MANIFEST = json.loads((PACKAGE_ROOT / "manifest.json").read_text(encoding="utf-8"))
 BATCHES = json.loads((PACKAGE_ROOT / "manifests/batches.json").read_text(encoding="utf-8"))
 BY_ID = {item["id"]: item for item in BATCHES}
 TOPO = json.loads((PACKAGE_ROOT / "manifests/topological-order.json").read_text(encoding="utf-8"))
-DONE_STATES = {"merged", "certified"}
+DONE_STATES = {"merged", "factory_attested"}
 
 
 def now() -> str:
@@ -68,6 +77,8 @@ def load_state(path: Path) -> dict:
 def refresh_ready(state: dict) -> None:
     for batch_id in TOPO:
         record = state["batches"][batch_id]
+        if record["state"] == "certified":
+            record["state"] = "factory_attested"
         if record["state"] not in {"planned", "ready"}:
             continue
         deps = BY_ID[batch_id]["depends_on"]
@@ -100,9 +111,10 @@ def print_rows(state: dict, only_ready: bool = False, as_json: bool = False) -> 
     if as_json:
         print(json.dumps(rows, ensure_ascii=False, indent=2))
         return
-    print(f"{'ID':<4} {'STATE':<10} {'PHASE':<18} TITLE")
+    print("Scope: CODE_IMPLEMENTATION_WORKFLOW_ONLY; production certification is separate and evidence-gated")
+    print(f"{'ID':<4} {'STATE':<18} {'PHASE':<18} TITLE")
     for row in rows:
-        print(f"{row['id']:<4} {row['state']:<10} {row['phase']:<18} {row['title']}")
+        print(f"{row['id']:<4} {row['state']:<18} {row['phase']:<18} {row['title']}")
 
 
 def resolve_report(repo: Path, value: str) -> Path:
@@ -244,9 +256,15 @@ def main() -> int:
                     raise RuntimeError(f"{batch_id} is {record['state']}, not review/merged")
                 certificate = resolve_report(repo, args.certificate)
                 if not certificate.is_file():
-                    raise RuntimeError(f"Certificate not found: {certificate}")
-                record["state"] = "certified"
-                record["notes"] = f"certificate={certificate}"
+                    raise RuntimeError(f"Factory attestation not found: {certificate}")
+                attestation = json.loads(certificate.read_text(encoding="utf-8"))
+                if (attestation.get("status") != "factory_attested" or
+                        attestation.get("scope") != "code_implementation_only" or
+                        attestation.get("productionReleaseApproved") is not False or
+                        attestation.get("externalCertification") != "NOT_CERTIFIED"):
+                    raise RuntimeError("File is not a fail-closed code-only factory attestation")
+                record["state"] = "factory_attested"
+                record["notes"] = f"factory_attestation={certificate};production=NOT_CERTIFIED"
                 record["lease_owner"] = None
                 record["lease_expires_at"] = None
             elif args.command == "block":

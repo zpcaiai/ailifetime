@@ -2,17 +2,86 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import test from "node:test";
 import {
+  EXTERNAL_COMMAND_CALLBACK_ROUTES,
+  EXTERNAL_COMMAND_TERMINAL_EVENT_TYPES,
+} from "@ltm/core";
+import {
   assertArtifactDigest,
+  assertCapabilityEvidenceBinding,
   assertSignedCapabilityEvidence,
   capabilityEvidenceScope,
   ExternalEvidenceAdapterUnavailableError,
   FailClosedExternalEvidenceAdapterPorts,
   FailClosedProviderPorts,
+  externalCommandTerminalBusinessEventDraft,
   ProviderUnavailableError,
   SandboxProviderPorts,
   sha256Artifact,
+  type ExternalCommandCallbackEvidenceBinding,
   type StoreTransactionEvidenceBinding,
 } from "./index.js";
+
+test("all 19 external-command callback evidence tuples bind exact routes, commands, providers, and result digests", () => {
+  assert.equal(EXTERNAL_COMMAND_CALLBACK_ROUTES.length, 19);
+  for (const route of EXTERNAL_COMMAND_CALLBACK_ROUTES) {
+    const provider = route.providerBinding.kind === "exact"
+      ? route.providerBinding.provider
+      : route.providerBinding.kind === "record-field"
+        ? `${route.providerBinding.prefix}provider-1`
+        : `${route.providerBinding.allowedTypes[0]}:provider-1`;
+    const artifactSha256 = sha256Artifact(Buffer.from(`${route.batchId}:signed-native-result`));
+    const binding = {
+      tenantId: "tenant-1",
+      batchId: route.batchId,
+      operation: route.operation,
+      kind: route.evidenceKind,
+      provider,
+      artifactSha256,
+      environment: "sandbox",
+      subjectId: `${route.batchId.toLowerCase()}-command-1`,
+    } as ExternalCommandCallbackEvidenceBinding;
+    assert.doesNotThrow(() => assertCapabilityEvidenceBinding(binding), route.batchId);
+    const scope = capabilityEvidenceScope(binding);
+    assert.notEqual(scope, capabilityEvidenceScope({ ...binding, subjectId: `${binding.subjectId}-other` }), route.batchId);
+    assert.notEqual(scope, capabilityEvidenceScope({ ...binding, artifactSha256: "f".repeat(64) }), route.batchId);
+
+    const draft = externalCommandTerminalBusinessEventDraft(binding, {
+      eventId: `${route.batchId.toLowerCase()}-event-1`,
+      terminalState: "succeeded",
+      providerOccurredAt: "2026-08-20T00:00:00.000Z",
+      sequence: 1,
+      providerOperationId: `${route.batchId.toLowerCase()}-provider-operation-1`,
+      requiredClaims: Object.fromEntries(
+        (route.requiredClaimIdentifiers ?? []).map((field) => [field, `${field}-1`]),
+      ),
+    });
+    assert.equal(draft.subjectType, route.subjectType, route.batchId);
+    assert.equal(draft.subjectId, binding.subjectId, route.batchId);
+    assert.equal(draft.correlationId, binding.subjectId, route.batchId);
+    assert.equal(draft.eventType, EXTERNAL_COMMAND_TERMINAL_EVENT_TYPES.succeeded, route.batchId);
+    assert.deepEqual(
+      Object.keys(draft.canonicalClaims),
+      ["providerOperationId", ...(route.requiredClaimIdentifiers ?? [])],
+      route.batchId,
+    );
+    assert.equal("tenantId" in draft, false, route.batchId);
+    assert.equal("collection" in draft, false, route.batchId);
+    assert.equal("patch" in draft, false, route.batchId);
+
+    assert.throws(() => assertCapabilityEvidenceBinding({
+      ...binding,
+      operation: `${route.operation}Other`,
+    } as unknown as ExternalCommandCallbackEvidenceBinding), /not a permitted tuple/, route.batchId);
+    assert.throws(() => assertCapabilityEvidenceBinding({
+      ...binding,
+      kind: `${route.evidenceKind}-other`,
+    } as unknown as ExternalCommandCallbackEvidenceBinding), /not a permitted tuple/, route.batchId);
+    assert.throws(() => assertCapabilityEvidenceBinding({
+      ...binding,
+      provider: "attacker-provider",
+    } as unknown as ExternalCommandCallbackEvidenceBinding), /not a permitted tuple/, route.batchId);
+  }
+});
 
 test("unconfigured providers fail closed", async () => {
   const providers = new FailClosedProviderPorts();

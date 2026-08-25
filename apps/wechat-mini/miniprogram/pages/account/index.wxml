@@ -1,0 +1,11 @@
+<view class="page">
+  <view class="card" wx:if="{{authenticated}}">
+    <view class="title">账户与隐私</view>
+    <view>主体 {{actorId}}</view><view class="muted">租户 {{tenantId}} · 权限 {{roles}}</view>
+    <button class="button secondary" bindtap="support">联系受控人工支持</button>
+    <button class="button secondary" bindtap="refresh">刷新会话与权限</button>
+    <button class="button danger" bindtap="logout">退出并清除本机临时数据</button>
+  </view>
+  <view class="card" wx:else><button class="button" bindtap="login">登录</button></view>
+  <view class="status error" wx:if="{{error}}">{{error}}</view>
+</view>

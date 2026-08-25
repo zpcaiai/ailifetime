@@ -1,4 +1,4 @@
-.PHONY: install build lint typecheck test check dev start smoke factory-status factory-ready factory-prompt factory-validate
+.PHONY: install build lint typecheck test test-infra check dev start smoke factory-status factory-ready factory-prompt factory-validate
 install:
 	pnpm install --frozen-lockfile
 build:
@@ -9,6 +9,8 @@ typecheck:
 	pnpm run typecheck
 test:
 	pnpm run test
+test-infra:
+	pnpm run test:infra
 check:
 	pnpm run check
 dev:
@@ -18,9 +20,9 @@ start:
 smoke:
 	pnpm run smoke
 factory-status:
-	python3 .ai-life-time-machine/skill-package/scripts/projectctl.py --repo . status
+	pnpm run factory:status
 factory-ready:
-	python3 .ai-life-time-machine/skill-package/scripts/projectctl.py --repo . ready
+	pnpm run factory:ready
 factory-prompt:
 	@test -n "$(BATCH)" || (echo "Usage: make factory-prompt BATCH=B00" && exit 2)
 	node tools/generate-batch-prompt.mjs --batch $(BATCH)

@@ -1,0 +1,62 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ltm-postgres-migrate-__LTM_RELEASE_ID__
+  labels:
+    app.kubernetes.io/name: ltm-postgres-migrator
+    ltm.openai.com/release-id: "__LTM_RELEASE_ID__"
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ltm-postgres-migrator
+        ltm.openai.com/network-role: postgres-migrator
+    spec:
+      restartPolicy: Never
+      serviceAccountName: ltm-postgres-migrator
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrator
+          image: __LTM_MIGRATOR_IMAGE__
+          imagePullPolicy: IfNotPresent
+          args:
+            - --profile=production
+            - --manifest=/workspace/infra/postgres/migrations/manifest.json
+            - --output=/tmp/ltm-postgres-migration-report.json
+          env:
+            - name: LTM_MIGRATOR_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ltm-production-database
+                  key: migrator-url
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 32Mi

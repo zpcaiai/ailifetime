@@ -212,6 +212,11 @@ function addProductionChecks() {
       : "A PostgreSQL DATABASE_URL is required for the distributed production profile",
   });
   checks.push({
+    id: "runtime-policy-authority",
+    status: "BLOCKED_EXTERNAL",
+    evidence: "Signed deployment evidence must prove the production API consent catalog and authenticated media-broker authority projection over HTTPS workload identity, bound to all three release policy digests",
+  });
+  checks.push({
     id: "production-backup-restore-drill",
     status: "BLOCKED_EXTERNAL",
     evidence: "A signed restore drill against the production persistence backend is required",
@@ -294,7 +299,9 @@ function deploymentCertificationCheck(b127Result) {
     launchId: b127Result.launchId,
     expectedCommit: b127Result.commit,
     releaseManifestSha256: b127Result.manifest?.sha256,
-    ...(configured("LTM_PUBLIC_BASE_URL") ? { expectedTargetBaseUrl: process.env.LTM_PUBLIC_BASE_URL } : {}),
+    expectedMediaAuthorityArtifactSha256: b127Result.policyAuthority?.mediaAuthorityArtifact?.sha256,
+    expectedTargetBaseUrl: configured("LTM_PUBLIC_BASE_URL") ? process.env.LTM_PUBLIC_BASE_URL : undefined,
+    expectedReleaseSubject: b127Result.releaseSubject,
   });
   return {
     result,

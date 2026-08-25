@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { LifeTimeMachineRuntime, type ActorContext, type OutboxEvent } from "@ltm/core";
+import {
+  DomainError,
+  EXTERNAL_COMMAND_CALLBACK_ROUTES,
+  LifeTimeMachineRuntime,
+  type ActorContext,
+  type OutboxEvent,
+} from "@ltm/core";
 import { loadWorkerConfiguration } from "./config.js";
 import { createWorkerHealthServer, WorkerMetrics } from "./health.js";
 import { DurableOutboxWorker, ProductionExternalCommandPublisher, ProductionRoutePublisher, routeOutboxEvent } from "./index.js";
@@ -68,7 +74,7 @@ test("production external-command publisher durably dispatches and survives a lo
   testContext.after(() => runtime.close());
   const created = runtime.createExternalCommand(actor, {
     record: {
-      collection: "capability.building-physical-supply-network",
+      collection: "supply.vendor-production-commands",
       id: "vendor-job-1",
       data: {
         batchId: "B98",
@@ -138,6 +144,172 @@ test("production external-command publisher durably dispatches and survives a lo
 
   await publisher.publish(requestedEvent as OutboxEvent);
   assert.equal(deliveries, 2);
+});
+
+test("the B10 batch adapter dispatches the distinct fixed revokeExport route with its server binding", async (testContext) => {
+  const runtime = new LifeTimeMachineRuntime({ databasePath: ":memory:" });
+  testContext.after(() => runtime.close());
+  const commandId = "B10-revoke:worker-test-1";
+  runtime.createExternalCommand(actor, {
+    record: {
+      collection: "sharing.export-revoke-commands",
+      id: commandId,
+      data: {
+        batchId: "B10",
+        operation: "revokeExport",
+        operationMode: "external-command",
+        exportCommandId: "B10:export-worker-test-1",
+        exportRecordId: "B10:export-worker-test-1",
+        targetProviderOperationId: "provider-share-grant-worker-1",
+        workId: "work-worker-1",
+        requestedByActorId: actor.actorId,
+      },
+    },
+    commandId,
+    batchId: "B10",
+    operation: "revokeExport",
+    idempotencyKey: "create-share-revoke-worker-1",
+  });
+  const request = runtime.listOutbox(actor).find((event) => event.eventType === "external_command.requested");
+  assert.ok(request);
+  let sends = 0;
+  const publisher = new ProductionExternalCommandPublisher(runtime, actor, {
+    B10: {
+      async send(input) {
+        sends += 1;
+        assert.equal(input.operation, "revokeExport");
+        assert.equal(input.payload.exportCommandId, "B10:export-worker-test-1");
+        assert.equal(input.payload.targetProviderOperationId, "provider-share-grant-worker-1");
+        return {
+          providerRequestId: "provider-share-revoke-request-1",
+          state: "accepted",
+          artifact: Buffer.from("accepted revoke request"),
+          artifactSha256: "c".repeat(64),
+        };
+      },
+    },
+  });
+  await publisher.publish(request);
+  assert.equal(sends, 1);
+  assert.equal(runtime.getExternalCommand(actor, commandId).state, "acknowledged");
+  assert.equal(runtime.getExternalCommand(actor, commandId).providerOperationId, "provider-share-revoke-request-1");
+});
+
+test("ten failed command deliveries atomically dead-letter and freeze the command for reconciliation", async (testContext) => {
+  const runtime = new LifeTimeMachineRuntime({ databasePath: ":memory:" });
+  testContext.after(() => runtime.close());
+  const created = runtime.createExternalCommand(actor, {
+    record: {
+      collection: "supply.vendor-production-commands",
+      id: "vendor-job-dead-letter-1",
+      data: {
+        batchId: "B98",
+        operation: "createVendorProductionJob",
+        operationMode: "external-command",
+      },
+    },
+    commandId: "vendor-job-dead-letter-1",
+    batchId: "B98",
+    operation: "createVendorProductionJob",
+    idempotencyKey: "create-vendor-job-dead-letter-1",
+  }).value;
+  runtime.transitionExternalCommand(actor, {
+    commandId: created.command.commandId,
+    batchId: created.command.batchId,
+    operation: created.command.operation,
+    aggregateCollection: created.command.aggregateCollection,
+    aggregateId: created.command.aggregateId,
+    toState: "dispatched",
+    idempotencyKey: "dispatch-vendor-job-dead-letter-1",
+  });
+  const requestId = runtime.listOutbox(actor)
+    .find((event) => event.eventType === "external_command.requested")?.id;
+  assert.notEqual(requestId, undefined);
+
+  for (let attempt = 1; attempt <= 9; attempt += 1) {
+    const leased = runtime.claimOutbox(actor, "dead-letter-preload", 200, 30_000);
+    const request = leased.find((event) => event.id === requestId);
+    assert.notEqual(request, undefined);
+    if (attempt === 1) {
+      assert.throws(
+        () => runtime.markOutboxFailed(
+          actor,
+          requestId as string,
+          "dead-letter-preload",
+          "unsafe generic dead letter",
+          { dead: true },
+        ),
+        (error: unknown) => error instanceof DomainError && error.code === "VALIDATION_FAILED",
+      );
+      assert.throws(
+        () => runtime.deadLetterExternalCommand(actor, {
+          eventId: requestId as string,
+          workerId: "dead-letter-preload",
+          error: "too early",
+        }),
+        (error: unknown) => error instanceof DomainError && error.code === "VERSION_CONFLICT",
+      );
+    }
+    for (const event of leased) {
+      if (event.id === requestId) {
+        runtime.markOutboxFailed(actor, event.id, "dead-letter-preload", "provider response unavailable", {
+          retryAt: "2020-01-01T00:00:00.000Z",
+        });
+      } else {
+        runtime.markOutboxPublished(actor, event.id, "dead-letter-preload");
+      }
+    }
+  }
+
+  let sends = 0;
+  const publisher = new ProductionExternalCommandPublisher(runtime, actor, {
+    B98: {
+      async send() {
+        sends += 1;
+        throw new Error("provider acceptance is unknown");
+      },
+    },
+  });
+  const worker = new DurableOutboxWorker(runtime, actor, { fulfillment: publisher }, {
+    workerId: "dead-letter-worker",
+    batchSize: 1,
+  });
+  assert.deepEqual(await worker.runOnce(), { published: 0, failed: 1 });
+  assert.equal(sends, 1);
+
+  const command = runtime.getExternalCommand(actor, created.command.commandId);
+  assert.equal(command.state, "dispatched");
+  assert.equal(command.decisionState, "frozen");
+  assert.equal(command.reconciliationState, "reconciliation_required");
+  assert.equal(command.details.deliveryAttempts, 10);
+  const aggregate = runtime.getRecord(actor, created.record.collection, created.record.id);
+  assert.equal(aggregate.data.executionState, "reconciliation_required");
+  assert.equal(aggregate.data._externalDecisionState, "frozen");
+  assert.equal(aggregate.data._externalReconciliationState, "reconciliation_required");
+  assert.equal(runtime.listOutbox(actor, { status: "dead" }).some((event) => event.id === requestId), true);
+  const reconciliationEvent = runtime.listOutbox(actor, { status: "pending" })
+    .find((event) => event.eventType === "external_command.reconciliation_required");
+  assert.notEqual(reconciliationEvent, undefined);
+  assert.equal(
+    runtime.listAudit(actor).some((entry) => entry.action === "external_command.reconciliation_required"),
+    true,
+  );
+  let alerts = 0;
+  const alertPublisher = new ProductionRoutePublisher(runtime, actor, {}, {
+    async send(input) {
+      alerts += 1;
+      assert.equal(input.batchId, "B98");
+      assert.equal(input.operation, "external_command.reconciliation_required");
+      return {
+        providerRequestId: "reconciliation-alert-1",
+        state: "accepted",
+        artifact: Buffer.from("accepted"),
+        artifactSha256: "e".repeat(64),
+      };
+    },
+  });
+  await alertPublisher.publish(reconciliationEvent as OutboxEvent);
+  assert.equal(alerts, 1);
 });
 
 test("external command projection events cannot trigger a second provider delivery", async (testContext) => {
@@ -226,6 +398,12 @@ test("production route publisher signs and delivers ordinary capability events",
 });
 
 test("production worker configuration requires all routes, batches, and managed secret references", () => {
+  assert.equal(EXTERNAL_COMMAND_CALLBACK_ROUTES.length, 19);
+  assert.equal(new Set(EXTERNAL_COMMAND_CALLBACK_ROUTES.map((route) => route.batchId)).size, 18);
+  assert.deepEqual(
+    EXTERNAL_COMMAND_CALLBACK_ROUTES.filter((route) => route.batchId === "B10").map((route) => route.operation),
+    ["publishExport", "revokeExport"],
+  );
   assert.throws(() => loadWorkerConfiguration({
     APP_ENV: "production",
     LTM_WORKER_TENANT_ID: "tenant-production",
@@ -256,6 +434,7 @@ test("production worker configuration requires all routes, batches, and managed 
   assert.equal(Object.keys(configuration.routeAdapters).length, 5);
   assert.deepEqual(configuration.actor.roles, ["service_account"]);
   assert.equal(configuration.actor.permissions?.includes("outbox:publish"), true);
+  assert.equal(configuration.actor.permissions?.includes("record:purpose:cross"), true);
   assert.equal(configuration.deploymentProfile, "distributed");
   assert.equal(configuration.postgresRuntimeOptions?.applicationName, "ltm-worker");
 

@@ -28,15 +28,15 @@ This directory is the product Git repository. The versioned factory directory th
 - Generated state and runtime output stay in `.ai-life-time-machine/state`, `.data`, and `.artifacts`; they do not belong in application or skill source directories.
 - Docker build contexts exclude the skill catalog and factory snapshot because runtime images need compiled application closures, not authoring instructions.
 
-The installed factory manifest still records its package-owned files through `.agents/skills/...`; the compatibility link keeps those paths valid. A forced factory reinstall is therefore allowed to replace the canonical catalog, and the factory uninstaller removes that catalog by design. Do not use either operation as a general-purpose cleanup command for hand-authored or third-party skills.
+The installed factory manifest still records its package-owned files through `.agents/skills/...`; the compatibility link keeps those paths valid. Treat reinstall and uninstall commands as package-maintenance operations, not general-purpose cleanup. Review their target inventory before use so a vendor operation cannot silently replace product-owned canonical adaptations.
 
 ## Integrity checks
 
-The top-level catalog must contain exactly 22 `SKILL.md` files and remain byte-identical to the installed factory snapshot until a deliberate skill-package upgrade is performed. Validate both the canonical and compatibility paths with:
+The top-level catalog must contain exactly 22 `SKILL.md` files. The vendor 2.0.0 snapshot remains byte-for-byte bound by its 317-entry checksum ledger; the canonical catalog may differ only through reviewed product-owned relocation and fail-closed certification adapters. Validate the vendor identity, canonical count, compatibility link, and executable adapters with:
 
 ```bash
 test "$(find skills -mindepth 2 -maxdepth 2 -name SKILL.md | wc -l | tr -d ' ')" = 22
 test -L .agents/skills
-diff -qr skills .ai-life-time-machine/skill-package/skills
 pnpm factory:validate
+node --test tools/factory-status.test.mjs
 ```

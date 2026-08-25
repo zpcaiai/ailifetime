@@ -2,6 +2,7 @@ import type {
   AssuranceEvidenceBinding,
   BusinessSystemEvidenceBinding,
   FoundationAssuranceEvidenceBinding,
+  ExternalCommandCallbackEvidenceBinding,
   PaymentOperationsEvidenceBinding,
   NotificationEvidenceBinding,
   PublicationEvidenceBinding,
@@ -42,6 +43,9 @@ export interface EvidenceVerificationRequest<Binding> {
 }
 
 export interface ExternalEvidenceAdapterPorts {
+  verifyExternalCommandCallback(
+    request: EvidenceVerificationRequest<ExternalCommandCallbackEvidenceBinding>,
+  ): Promise<SignedCapabilityEvidence<ExternalCommandCallbackEvidenceBinding>>;
   verifyPublicationEvidence(
     request: EvidenceVerificationRequest<PublicationEvidenceBinding>,
   ): Promise<SignedCapabilityEvidence<PublicationEvidenceBinding>>;
@@ -85,6 +89,12 @@ export class ExternalEvidenceAdapterUnavailableError extends Error {
 
 /** Production-safe default. It never fabricates or accepts third-party receipts. */
 export class FailClosedExternalEvidenceAdapterPorts implements ExternalEvidenceAdapterPorts {
+  async verifyExternalCommandCallback(
+    _request: EvidenceVerificationRequest<ExternalCommandCallbackEvidenceBinding>,
+  ): Promise<SignedCapabilityEvidence<ExternalCommandCallbackEvidenceBinding>> {
+    throw new ExternalEvidenceAdapterUnavailableError("external-command-callback");
+  }
+
   async verifyPublicationEvidence(
     _request: EvidenceVerificationRequest<PublicationEvidenceBinding>,
   ): Promise<SignedCapabilityEvidence<PublicationEvidenceBinding>> {

@@ -10,6 +10,8 @@ import {
   canonicalBusinessEventSha256,
   DomainError,
   LifeTimeMachineRuntime,
+  participantEvidenceScope,
+  signConsentPolicyCatalog,
   signExternalEvidence,
   verifyDatabaseBackup,
 } from "../dist/index.js";
@@ -47,9 +49,51 @@ function expectDomainError(fn, code) {
   assert.throws(fn, (error) => error instanceof DomainError && error.code === code);
 }
 
+function identityFixture() {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const trustedKey = {
+    issuer: "identity-verifier",
+    provider: "identity-registry",
+    keyId: "identity-key-1",
+    algorithm: "Ed25519",
+    publicKeyPem: publicKey.export({ type: "spki", format: "pem" }).toString(),
+    allowedScopes: ["identity.*"],
+    allowedEnvironments: ["sandbox"],
+  };
+  return {
+    trustedKey,
+    privateKeyPem: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+  };
+}
+
+function registerIdentityEvidence(runtime, service, privateKeyPem, evidenceId, mutation, expiresAt) {
+  const scope = participantEvidenceScope(mutation);
+  const evidence = signExternalEvidence({
+    version: "ltm.external-evidence.v1",
+    evidenceId,
+    tenantId: service.tenantId,
+    issuer: "identity-verifier",
+    provider: "identity-registry",
+    environment: "sandbox",
+    scope,
+    artifactSha256: "f".repeat(64),
+    issuedAt: new Date(Date.now() - 60_000).toISOString(),
+    expiresAt,
+    nonce: `nonce-${evidenceId}`,
+    replayPolicy: "single_use",
+    algorithm: "Ed25519",
+    keyId: "identity-key-1",
+  }, privateKeyPem);
+  runtime.registerExternalEvidence(
+    { ...service, operationId: `evidence-register:${evidenceId}` },
+    { evidence, idempotencyKey: `evidence-register:${evidenceId}` },
+  );
+  return scope;
+}
+
 test("tenant CRUD is durable, optimistic, audited, and idempotent", () => {
   const path = databasePath();
-  const runtime = new LifeTimeMachineRuntime({ databasePath: path });
+  const runtime = new LifeTimeMachineRuntime({ databasePath: path, allowLegacyConsentPolicy: true });
   const context = actor();
   const input = {
     collection: "projects",
@@ -116,37 +160,129 @@ test("tenant CRUD is durable, optimistic, audited, and idempotent", () => {
   assert.equal(runtime.verifyAuditChain(context).valid, true);
   runtime.close();
 
-  const reopened = new LifeTimeMachineRuntime({ databasePath: path });
+  const reopened = new LifeTimeMachineRuntime({ databasePath: path, allowLegacyConsentPolicy: true });
   assert.equal(reopened.getRecord(context, "projects", created.value.id).version, 2);
   assert.equal(reopened.readiness().ready, true);
   reopened.close();
 });
 
-test("purpose consent and verified-guardian safeguards fail closed", () => {
-  const runtime = new LifeTimeMachineRuntime({ databasePath: databasePath() });
+test("durable participant ownership and exact guardian authority govern consent", () => {
+  const identity = identityFixture();
+  const policyKeys = generateKeyPairSync("ed25519");
+  const policyIssuedAt = new Date(Date.now() - 60_000).toISOString();
+  const policyExpiresAt = new Date(Date.now() + 24 * 60 * 60_000).toISOString();
+  const consentPolicyCatalog = signConsentPolicyCatalog({
+    schemaVersion: "ltm.consent-policy-catalog.v1",
+    catalogId: "age-transformation-policy-1",
+    issuer: "privacy-policy-authority",
+    environment: "sandbox",
+    issuedAt: policyIssuedAt,
+    expiresAt: policyExpiresAt,
+    algorithm: "Ed25519",
+    keyId: "age-policy-key-1",
+    policies: [{
+      policyVersion: "v1",
+      purpose: "age_transformation",
+      locale: "zh-CN",
+      jurisdictions: ["CN"],
+      resourceKinds: ["media.asset", "projects"],
+      allowedActions: ["process", "transform"],
+      grantorCapacities: ["authorized_agent", "guardian", "self"],
+      minorApplicability: "all",
+      disclosureSha256: "a".repeat(64),
+      effectiveFrom: policyIssuedAt,
+      effectiveUntil: policyExpiresAt,
+      maxConsentLifetimeSeconds: 3_600,
+    }],
+  }, policyKeys.privateKey.export({ type: "pkcs8", format: "pem" }).toString());
+  const runtime = new LifeTimeMachineRuntime({
+    databasePath: databasePath(),
+    evidencePolicy: "development",
+    evidenceEnvironment: "sandbox",
+    trustedEvidenceKeys: [identity.trustedKey],
+    consentPolicyCatalog,
+    trustedConsentPolicyKeys: [{
+      keyId: "age-policy-key-1",
+      issuer: "privacy-policy-authority",
+      algorithm: "Ed25519",
+      publicKeyPem: policyKeys.publicKey.export({ type: "spki", format: "pem" }).toString(),
+      allowedEnvironments: ["sandbox"],
+      notBefore: policyIssuedAt,
+      notAfter: policyExpiresAt,
+    }],
+    consentPolicyJurisdiction: "CN",
+    consentPolicyLocale: "zh-CN",
+  });
+  const expiresAt = new Date(Date.now() + 3_600_000).toISOString();
+  const service = actor({
+    actorId: "identity-service",
+    roles: ["service_account", "platform_admin"],
+    purpose: "age_transformation",
+    requestId: "identity-service-request",
+  });
+  const registerParticipant = ({ participantId, ownerActorId, minorStatus, evidenceId }) => {
+    const mutation = {
+      operation: "participant.register",
+      tenantId: service.tenantId,
+      participantId,
+      ownerActorId,
+      minorStatus,
+      expiresAt,
+      expectedVersion: null,
+    };
+    registerIdentityEvidence(runtime, service, identity.privateKeyPem, evidenceId, mutation, expiresAt);
+    return runtime.registerParticipant(
+      { ...service, operationId: `participant-register:${participantId}` },
+      { ...mutation, evidenceId, idempotencyKey: `participant-register:${participantId}` },
+    ).value;
+  };
+  registerParticipant({
+    participantId: "participant-1",
+    ownerActorId: "person-1",
+    minorStatus: "adult",
+    evidenceId: "identity-adult-1",
+  });
+  registerParticipant({
+    participantId: "child-1",
+    ownerActorId: "child-owner-1",
+    minorStatus: "minor",
+    evidenceId: "identity-child-1",
+  });
+
   const consumer = actor({
     actorId: "person-1",
     roles: ["consumer"],
     purpose: "age_transformation",
     stepUp: false,
   });
-  runtime.createRecord(consumer, {
-    collection: "participants",
-    id: "participant-1",
-    data: { alias: "P1" },
-    idempotencyKey: "participant-create-1",
-  });
+  const projectScope = { resource: "projects:project-with-consent", actions: ["process"] };
   const consent = runtime.grantConsent(consumer, {
     participantId: "participant-1",
     grantorCapacity: "self",
     purpose: "age_transformation",
-    scope: { media: true },
+    scope: projectScope,
     policyVersion: "v1",
     evidenceHash: "a".repeat(64),
     idempotencyKey: "consent-grant-1",
   });
   assert.equal(consent.value.status, "active");
-  assert.equal(runtime.requireConsent(consumer, { participantIds: ["participant-1"] }).length, 1);
+  assert.equal(consent.value.evidenceHash, "a".repeat(64));
+  assert.equal(consent.value.policyCatalogSha256, runtime.getConsentPolicyCatalogMetadata(actor({
+    roles: ["platform_admin"],
+  })).catalogSha256);
+  assert.equal(consent.value.jurisdiction, "CN");
+  assert.equal(consent.value.locale, "zh-CN");
+  assert.equal(runtime.requireConsent(consumer, {
+    participantIds: ["participant-1"],
+    scope: { resource: projectScope.resource, action: "process" },
+  }).length, 1);
+  expectDomainError(
+    () => runtime.requireConsent(consumer, {
+      participantIds: ["participant-1"],
+      scope: { resource: projectScope.resource, action: "delete" },
+    }),
+    "CONSENT_REQUIRED",
+  );
 
   runtime.createRecord(consumer, {
     collection: "projects",
@@ -157,32 +293,52 @@ test("purpose consent and verified-guardian safeguards fail closed", () => {
   });
   const marketing = { ...consumer, purpose: "marketing", requestId: "marketing-request" };
   expectDomainError(
-    () =>
-      runtime.createRecord(marketing, {
-        collection: "projects",
-        id: "project-without-marketing-consent",
-        data: { state: "draft" },
-        participantIds: ["participant-1"],
-        idempotencyKey: "project-marketing-1",
-      }),
+    () => runtime.createRecord(marketing, {
+      collection: "projects",
+      id: "project-without-marketing-consent",
+      data: { state: "draft" },
+      participantIds: ["participant-1"],
+      idempotencyKey: "project-marketing-1",
+    }),
     "CONSENT_REQUIRED",
   );
 
+  const childScope = { resource: "media.asset:child-portrait", actions: ["transform"] };
   expectDomainError(
-    () =>
-      runtime.grantConsent(consumer, {
-        participantId: "child-1",
-        grantorCapacity: "guardian",
-        purpose: "age_transformation",
-        scope: { media: true },
-        policyVersion: "v1",
-        evidenceHash: "b".repeat(64),
-        isMinor: true,
-        idempotencyKey: "minor-consent-invalid",
-      }),
+    () => runtime.grantConsent(consumer, {
+      participantId: "child-1",
+      grantorCapacity: "guardian",
+      purpose: "age_transformation",
+      scope: childScope,
+      policyVersion: "v1",
+      evidenceHash: "b".repeat(64),
+      idempotencyKey: "minor-consent-invalid",
+    }),
     "GUARDIAN_VERIFICATION_REQUIRED",
   );
 
+  const authorityMutation = {
+    operation: "participant-authority.grant",
+    tenantId: service.tenantId,
+    authorizationId: "guardian-authority-1",
+    authorizedActorId: "guardian-1",
+    participantId: "child-1",
+    capacity: "guardian",
+    scope: childScope,
+    expiresAt,
+  };
+  registerIdentityEvidence(
+    runtime,
+    service,
+    identity.privateKeyPem,
+    "identity-guardian-1",
+    authorityMutation,
+    expiresAt,
+  );
+  runtime.grantParticipantAuthority(
+    { ...service, operationId: "participant-authority:guardian-1" },
+    { ...authorityMutation, evidenceId: "identity-guardian-1", idempotencyKey: "guardian-authority-grant-1" },
+  );
   const guardian = actor({
     actorId: "guardian-1",
     roles: ["guardian"],
@@ -193,13 +349,156 @@ test("purpose consent and verified-guardian safeguards fail closed", () => {
     participantId: "child-1",
     grantorCapacity: "guardian",
     purpose: "age_transformation",
-    scope: { media: true, publicShare: false },
+    scope: childScope,
     policyVersion: "v1",
-    evidenceHash: "c".repeat(64),
-    isMinor: true,
     idempotencyKey: "minor-consent-valid",
   });
   assert.equal(minorConsent.value.isMinor, true);
+  assert.equal(runtime.requireConsent(guardian, {
+    participantIds: ["child-1"],
+    scope: { resource: childScope.resource, action: "transform" },
+  })[0].id, minorConsent.value.id);
+  const unrelated = actor({ actorId: "privacy-1", roles: ["privacy_officer"], purpose: "age_transformation" });
+  expectDomainError(
+    () => runtime.withdrawConsent(unrelated, {
+      consentId: minorConsent.value.id,
+      expectedVersion: 1,
+      reason: "unrelated actor cannot withdraw",
+      idempotencyKey: "minor-withdraw-unrelated",
+    }),
+    "AUTH_FORBIDDEN",
+  );
+  assert.equal(runtime.withdrawConsent(guardian, {
+    consentId: minorConsent.value.id,
+    expectedVersion: 1,
+    reason: "guardian withdrawal",
+    idempotencyKey: "minor-withdraw-guardian",
+  }).value.status, "withdrawn");
+
+  const agentScope = { resource: "media.asset:adult-portrait", actions: ["transform"] };
+  const agent = actor({
+    actorId: "agent-1",
+    roles: ["support_agent"],
+    permissions: ["consent:grant:agent", "consent:read:agent", "consent:withdraw:agent"],
+    purpose: "age_transformation",
+  });
+  expectDomainError(
+    () => runtime.grantConsent(agent, {
+      participantId: "participant-1",
+      grantorCapacity: "authorized_agent",
+      purpose: "age_transformation",
+      scope: agentScope,
+      policyVersion: "v1",
+      evidenceHash: "d".repeat(64),
+      idempotencyKey: "agent-consent-without-authority",
+    }),
+    "AUTH_FORBIDDEN",
+  );
+  const agentAuthorityMutation = {
+    operation: "participant-authority.grant",
+    tenantId: service.tenantId,
+    authorizationId: "agent-authority-1",
+    authorizedActorId: "agent-1",
+    participantId: "participant-1",
+    capacity: "authorized_agent",
+    scope: agentScope,
+    expiresAt,
+  };
+  registerIdentityEvidence(
+    runtime,
+    service,
+    identity.privateKeyPem,
+    "identity-agent-1",
+    agentAuthorityMutation,
+    expiresAt,
+  );
+  const agentAuthority = runtime.grantParticipantAuthority(
+    { ...service, operationId: "participant-authority:agent-1" },
+    { ...agentAuthorityMutation, evidenceId: "identity-agent-1", idempotencyKey: "agent-authority-grant-1" },
+  ).value;
+  const agentConsent = runtime.grantConsent(agent, {
+    participantId: "participant-1",
+    grantorCapacity: "authorized_agent",
+    purpose: "age_transformation",
+    scope: agentScope,
+    policyVersion: "v1",
+    idempotencyKey: "agent-consent-with-authority",
+  }).value;
+  assert.equal(runtime.listConsents(agent, "participant-1").some((entry) => entry.id === agentConsent.id), true);
+  const revokeMutation = {
+    operation: "participant-authority.revoke",
+    tenantId: service.tenantId,
+    authorizationId: agentAuthority.authorizationId,
+    capacity: "authorized_agent",
+    expectedVersion: agentAuthority.version,
+    reason: "agency ended",
+  };
+  registerIdentityEvidence(
+    runtime,
+    service,
+    identity.privateKeyPem,
+    "identity-agent-revoke-1",
+    revokeMutation,
+    expiresAt,
+  );
+  runtime.revokeParticipantAuthority(
+    { ...service, operationId: "participant-authority:agent-revoke-1" },
+    {
+      ...revokeMutation,
+      evidenceId: "identity-agent-revoke-1",
+      idempotencyKey: "agent-authority-revoke-1",
+    },
+  );
+  assert.equal(runtime.listConsents(agent, "participant-1").length, 0);
+  expectDomainError(
+    () => runtime.assertConsent(agent, {
+      participantIds: ["participant-1"],
+      purpose: "age_transformation",
+      scope: { resource: agentScope.resource, action: "transform" },
+    }),
+    "CONSENT_WITHDRAWN",
+  );
+  expectDomainError(
+    () => runtime.withdrawConsent(agent, {
+      consentId: agentConsent.id,
+      expectedVersion: agentConsent.version,
+      reason: "authority is no longer active",
+      idempotencyKey: "agent-withdraw-after-revoke",
+    }),
+    "AUTH_FORBIDDEN",
+  );
+  const participantRevokeMutation = {
+    operation: "participant.revoke",
+    tenantId: service.tenantId,
+    participantId: "participant-1",
+    expectedVersion: 1,
+    reason: "subject registry closed",
+  };
+  registerIdentityEvidence(
+    runtime,
+    service,
+    identity.privateKeyPem,
+    "identity-participant-revoke-1",
+    participantRevokeMutation,
+    expiresAt,
+  );
+  runtime.revokeParticipant(
+    { ...service, operationId: "participant-revoke:participant-1" },
+    {
+      ...participantRevokeMutation,
+      evidenceId: "identity-participant-revoke-1",
+      idempotencyKey: "participant-revoke-1",
+    },
+  );
+  expectDomainError(
+    () => runtime.withdrawConsent(consumer, {
+      consentId: consent.value.id,
+      expectedVersion: consent.value.version,
+      reason: "data subject confirms withdrawal after registry closure",
+      idempotencyKey: "self-withdraw-after-participant-revoke",
+    }),
+    "CONSENT_WITHDRAWN",
+  );
   runtime.close();
 });
 
@@ -319,6 +618,46 @@ test("external evidence is signed, tenant/scope bound, durable, and replay resis
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const publicKeyPem = publicKey.export({ type: "spki", format: "pem" }).toString();
   const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const policyIssuedAt = new Date(Date.now() - 60_000).toISOString();
+  const policyExpiresAt = new Date(Date.now() + 24 * 60 * 60_000).toISOString();
+  const consentPolicyCatalog = signConsentPolicyCatalog({
+    schemaVersion: "ltm.consent-policy-catalog.v1",
+    catalogId: "production-consent-policy-1",
+    issuer: "privacy-policy-authority",
+    environment: "production",
+    issuedAt: policyIssuedAt,
+    expiresAt: policyExpiresAt,
+    algorithm: "Ed25519",
+    keyId: "consent-policy-key-1",
+    policies: [{
+      policyVersion: "privacy-production-v1",
+      purpose: "product_operation",
+      locale: "zh-CN",
+      jurisdictions: ["CN"],
+      resourceKinds: ["record"],
+      allowedActions: ["read"],
+      grantorCapacities: ["self"],
+      minorApplicability: "adult",
+      disclosureSha256: "c".repeat(64),
+      effectiveFrom: policyIssuedAt,
+      effectiveUntil: policyExpiresAt,
+      maxConsentLifetimeSeconds: 3_600,
+    }],
+  }, privateKeyPem);
+  const consentPolicyOptions = {
+    consentPolicyCatalog,
+    trustedConsentPolicyKeys: [{
+      keyId: "consent-policy-key-1",
+      issuer: "privacy-policy-authority",
+      algorithm: "Ed25519",
+      publicKeyPem,
+      allowedEnvironments: ["production"],
+      notBefore: policyIssuedAt,
+      notAfter: policyExpiresAt,
+    }],
+    consentPolicyJurisdiction: "CN",
+    consentPolicyLocale: "zh-CN",
+  };
   const trustedEvidenceKeys = [{
     issuer: "release-auditor",
     provider: "assurance-provider",
@@ -337,12 +676,21 @@ test("external evidence is signed, tenant/scope bound, durable, and replay resis
     }),
     "CONFIGURATION_INVALID",
   );
+  expectDomainError(
+    () => new LifeTimeMachineRuntime({
+      databasePath: databasePath(),
+      evidencePolicy: "disabled",
+      evidenceEnvironment: "production",
+    }),
+    "CONFIGURATION_INVALID",
+  );
   const path = databasePath();
   const runtime = new LifeTimeMachineRuntime({
     databasePath: path,
     evidencePolicy: "production",
     evidenceEnvironment: "production",
     trustedEvidenceKeys,
+    ...consentPolicyOptions,
   });
   const unsigned = {
     version: "ltm.external-evidence.v1",
@@ -435,6 +783,7 @@ test("external evidence is signed, tenant/scope bound, durable, and replay resis
     evidencePolicy: "production",
     evidenceEnvironment: "production",
     trustedEvidenceKeys,
+    ...consentPolicyOptions,
   });
   assert.equal(reopened.getExternalEvidence(context, "evidence-1").consumedAt !== null, true);
   assert.equal(reopened.listExternalEvidence(context, { scope: unsigned.scope }).length, 2);
@@ -454,6 +803,180 @@ test("external evidence is signed, tenant/scope bound, durable, and replay resis
     /only transition once/,
   );
   raw.close();
+});
+
+test("evidence-gated mutations consume evidence atomically with records, transitions, commands, ledgers, audit, and outbox", () => {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const trustedKey = {
+    issuer: "atomic-assurance-issuer",
+    provider: "atomic-assurance-provider",
+    keyId: "atomic-key-1",
+    algorithm: "Ed25519",
+    publicKeyPem: publicKey.export({ type: "spki", format: "pem" }).toString(),
+    allowedScopes: ["B127:*"],
+    allowedEnvironments: ["sandbox"],
+  };
+  const runtime = new LifeTimeMachineRuntime({
+    databasePath: databasePath(),
+    trustedEvidenceKeys: [trustedKey],
+    evidencePolicy: "development",
+    evidenceEnvironment: "sandbox",
+  });
+  const context = actor({ operationId: "atomic-capability-operation" });
+  const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const register = (suffix) => {
+    const scope = `B127:atomic:${suffix}`;
+    const evidence = signExternalEvidence({
+      version: "ltm.external-evidence.v1",
+      evidenceId: `atomic-evidence-${suffix}`,
+      tenantId: context.tenantId,
+      issuer: trustedKey.issuer,
+      provider: trustedKey.provider,
+      environment: "sandbox",
+      scope,
+      artifactSha256: "d".repeat(64),
+      issuedAt: new Date(Date.now() - 60_000).toISOString(),
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      nonce: `atomic-evidence-nonce-${suffix}-2026`,
+      replayPolicy: "single_use",
+      algorithm: "Ed25519",
+      keyId: trustedKey.keyId,
+    }, privateKeyPem);
+    runtime.registerExternalEvidence(context, {
+      evidence,
+      idempotencyKey: `register-atomic-${suffix}`,
+    });
+    return { scope, evidenceId: evidence.evidenceId };
+  };
+
+  runtime.createRecord(context, {
+    collection: "atomic.capabilities",
+    id: "record-conflict",
+    data: { existing: true },
+    idempotencyKey: "atomic-record-conflict-fixture",
+  });
+  const recordEvidence = register("record");
+  const outboxBeforeFailure = runtime.listOutbox(context).length;
+  const conflictingMutation = {
+    scope: recordEvidence.scope,
+    evidenceIds: [recordEvidence.evidenceId],
+    idempotencyKey: "atomic-record-conflicting-write",
+    mutation: {
+      kind: "record.create",
+      input: {
+        collection: "atomic.capabilities",
+        id: "record-conflict",
+        data: { state: "evidence_persisted" },
+      },
+    },
+    audit: { action: "capability.B127.execute", details: { operation: "atomicRecord" } },
+  };
+  expectDomainError(() => runtime.executeEvidenceGatedMutation(context, conflictingMutation), "VERSION_CONFLICT");
+  assert.equal(runtime.getExternalEvidence(context, recordEvidence.evidenceId).consumedAt, null);
+  assert.equal(runtime.listOutbox(context).length, outboxBeforeFailure);
+
+  const recordMutation = {
+    ...conflictingMutation,
+    idempotencyKey: "atomic-record-write",
+    mutation: {
+      ...conflictingMutation.mutation,
+      input: { ...conflictingMutation.mutation.input, id: "record-success" },
+    },
+  };
+  const recordResult = runtime.executeEvidenceGatedMutation(context, recordMutation);
+  assert.equal(recordResult.kind, "record.create");
+  assert.equal(recordResult.replayed, false);
+  assert.equal(recordResult.value.id, "record-success");
+  assert.notEqual(runtime.getExternalEvidence(context, recordEvidence.evidenceId).consumedAt, null);
+  assert.equal(runtime.executeEvidenceGatedMutation(context, recordMutation).replayed, true);
+  expectDomainError(
+    () => runtime.executeEvidenceGatedMutation(
+      { ...context, operationId: "competing-atomic-operation", requestId: "competing-atomic-request" },
+      recordMutation,
+    ),
+    "EVIDENCE_REPLAY_DETECTED",
+  );
+
+  const transitionEvidence = register("transition");
+  const transitionResult = runtime.executeEvidenceGatedMutation(context, {
+    scope: transitionEvidence.scope,
+    evidenceIds: [transitionEvidence.evidenceId],
+    idempotencyKey: "atomic-transition-write",
+    mutation: {
+      kind: "record.transition",
+      input: {
+        collection: "atomic.transitions",
+        id: "release-atomic",
+        data: { batchId: "B127", operationMode: "state-transition" },
+        stateField: "environment",
+        fromState: "preview",
+        toState: "staging",
+        initialFromStates: ["preview"],
+      },
+    },
+    audit: {
+      action: "capability.B127.transition",
+      replayAction: "capability.B127.transition-replayed",
+      details: { operation: "promoteRelease" },
+    },
+  });
+  assert.equal(transitionResult.kind, "record.transition");
+  assert.equal(transitionResult.value.data.environment, "staging");
+
+  const commandEvidence = register("command");
+  const commandResult = runtime.executeEvidenceGatedMutation(context, {
+    scope: commandEvidence.scope,
+    evidenceIds: [commandEvidence.evidenceId],
+    idempotencyKey: "atomic-command-write",
+    mutation: {
+      kind: "external-command.create",
+      input: {
+        record: {
+          collection: "atomic.commands",
+          id: "atomic-command-record",
+          data: { operationMode: "external-command" },
+        },
+        commandId: "atomic-command-1",
+        batchId: "B127",
+        operation: "atomicCommand",
+      },
+    },
+    audit: { action: "capability.B127.execute", details: { operation: "atomicCommand" } },
+  });
+  assert.equal(commandResult.kind, "external-command.create");
+  assert.equal(commandResult.value.command.state, "requested");
+
+  const ledgerEvidence = register("ledger");
+  const ledgerResult = runtime.executeEvidenceGatedMutation(context, {
+    scope: ledgerEvidence.scope,
+    evidenceIds: [ledgerEvidence.evidenceId],
+    idempotencyKey: "atomic-ledger-write",
+    mutation: {
+      kind: "ledger.post",
+      input: {
+        transactionId: "atomic-ledger-1",
+        sourceType: "atomic_capability",
+        sourceId: "atomic-source-1",
+        description: "Atomic evidence-gated ledger post",
+        lines: [
+          { accountCode: "cash", direction: "debit", amountMinor: 500, currency: "USD" },
+          { accountCode: "revenue", direction: "credit", amountMinor: 500, currency: "USD" },
+        ],
+      },
+    },
+    audit: { action: "capability.B127.execute", details: { operation: "atomicLedger" } },
+  });
+  assert.equal(ledgerResult.kind, "ledger.post");
+  assert.equal(ledgerResult.value.lines.length, 2);
+
+  const audit = runtime.listAudit(context, 200);
+  assert.ok(audit.some((entry) => entry.action === "capability.B127.transition"));
+  assert.ok(audit.filter((entry) => entry.action === "capability.B127.execute").length >= 3);
+  const outbox = runtime.listOutbox(context, { limit: 200 });
+  assert.ok(outbox.some((event) => event.eventType === "external_command.requested"));
+  assert.ok(outbox.some((event) => event.eventType === "ledger.transaction.posted"));
+  assert.equal(runtime.verifyAuditChain(context).valid, true);
+  runtime.close();
 });
 
 test("external business events atomically drive commands, reject tampering and order violations, and freeze on revocation", () => {
@@ -480,7 +1003,7 @@ test("external business events atomically drive commands, reject tampering and o
     requestId: "external-business-request-1",
   });
   const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
-  const makeBundle = ({ eventId, evidenceId, sequence, scope = "B71:pay:payment-1", claims }) => {
+  const makeBundle = ({ eventId, evidenceId, sequence, scope = "B71:pay:payment-1", correlationId = "payment-1", claims }) => {
     const canonicalClaimsSha256 = canonicalBusinessClaimsSha256(claims);
     const unsignedEvent = {
       version: "ltm.external-business-event.v1",
@@ -494,7 +1017,7 @@ test("external business events atomically drive commands, reject tampering and o
       eventType: "payment.succeeded",
       providerOccurredAt: new Date(now.getTime() - 1_000 + sequence).toISOString(),
       sequence,
-      correlationId: "payment-1",
+      correlationId,
       artifactSha256: "c".repeat(64),
       evidenceId,
       evidenceScope: scope,
@@ -536,7 +1059,7 @@ test("external business events atomically drive commands, reject tampering and o
       decisionType: "payment_settlement",
       decisionId: event.eventId,
       commandTransition: {
-        commandId: "command-payment-1",
+        commandId: "payment-1",
         toState: "succeeded",
         providerOperationId: "wechat-operation-1",
       },
@@ -549,7 +1072,7 @@ test("external business events atomically drive commands, reject tampering and o
       collection: "commerce.wechat-payments",
       data: { state: "requested", amountMinor: 500 },
     },
-    commandId: "command-payment-1",
+    commandId: "payment-1",
     batchId: "B71",
     operation: "createWeChatPayment",
     details: { channel: "wechat" },
@@ -558,7 +1081,7 @@ test("external business events atomically drive commands, reject tampering and o
   assert.equal(created.value.command.state, "requested");
   assert.equal(created.value.record.data.executionState, "requested");
   expectDomainError(() => runtime.transitionExternalCommand(context, {
-    commandId: "command-payment-1",
+    commandId: "payment-1",
     batchId: "B71",
     operation: "createWeChatPayment",
     aggregateCollection: "commerce.wechat-payments",
@@ -567,7 +1090,7 @@ test("external business events atomically drive commands, reject tampering and o
     idempotencyKey: "illegal-ack-1",
   }), "VERSION_CONFLICT");
   const dispatchedInput = {
-    commandId: "command-payment-1",
+    commandId: "payment-1",
     batchId: "B71",
     operation: "createWeChatPayment",
     aggregateCollection: "commerce.wechat-payments",
@@ -578,11 +1101,6 @@ test("external business events atomically drive commands, reject tampering and o
   };
   assert.equal(runtime.transitionExternalCommand(context, dispatchedInput).value.state, "dispatched");
   assert.equal(runtime.transitionExternalCommand(context, dispatchedInput).replayed, true);
-  assert.equal(runtime.transitionExternalCommand(context, {
-    ...dispatchedInput,
-    toState: "acknowledged",
-    idempotencyKey: "ack-payment-1",
-  }).value.state, "acknowledged");
   expectDomainError(() => runtime.transitionExternalCommand(context, {
     ...dispatchedInput,
     toState: "succeeded",
@@ -595,6 +1113,22 @@ test("external business events atomically drive commands, reject tampering and o
     sequence: 10,
     claims: { status: "SUCCESS", amountMinor: 500 },
   });
+  const wrongCommandCorrelation = makeBundle({
+    eventId: "wechat-event-wrong-command",
+    evidenceId: "wechat-evidence-wrong-command",
+    sequence: 5,
+    correlationId: "payment-other",
+    claims: { status: "SUCCESS", amountMinor: 500 },
+  });
+  expectDomainError(() => runtime.applyExternalBusinessEvent(context, {
+    ...wrongCommandCorrelation,
+    reducer,
+    idempotencyKey: "wrong-command-correlation-1",
+  }), "EVENT_FINGERPRINT_CONFLICT");
+  expectDomainError(
+    () => runtime.getExternalEvidence(context, wrongCommandCorrelation.evidence.evidenceId),
+    "RESOURCE_NOT_FOUND",
+  );
   const tampered = {
     ...bundle.event,
     canonicalClaims: { status: "SUCCESS", amountMinor: 1 },
@@ -657,7 +1191,7 @@ test("external business events atomically drive commands, reject tampering and o
   const frozen = runtime.getRecord(context, "commerce.wechat-payments", "payment-1");
   assert.equal(frozen.data._externalDecisionState, "frozen");
   assert.equal(frozen.data._externalReconciliationState, "reconciliation_required");
-  assert.equal(runtime.getExternalCommand(context, "command-payment-1").decisionState, "frozen");
+  assert.equal(runtime.getExternalCommand(context, "payment-1").decisionState, "frozen");
   runtime.close();
 });
 
@@ -750,12 +1284,15 @@ test("schema v2 evidence stores migrate to an explicit sandbox environment", () 
   const raw = new DatabaseSync(path);
   const columns = raw.prepare("PRAGMA table_info(external_evidence)").all();
   assert.equal(columns.some((column) => column.name === "environment"), true);
-  assert.equal(raw.prepare("SELECT value FROM schema_metadata WHERE key = 'schema_version'").get().value, "4");
+  assert.equal(raw.prepare("SELECT value FROM schema_metadata WHERE key = 'schema_version'").get().value, "5");
   for (const table of [
     "external_commands",
     "external_command_transitions",
     "evidence_decisions",
     "external_business_events",
+    "participants",
+    "guardian_authorizations",
+    "authorized_agent_authorizations",
   ]) {
     assert.equal(
       raw.prepare("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?").get(table)?.present,

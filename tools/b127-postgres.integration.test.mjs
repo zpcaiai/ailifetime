@@ -10,6 +10,11 @@ import {
   PostgresB127CertificationSource,
   verifyB127Certification,
 } from "./b127-certifier.mjs";
+import { APPROVAL_AUTHORITY_ROLES, CHANGE_APPROVER_AUTHORITY_ROLES } from "./production-evidence-contracts.mjs";
+import {
+  createB127ReleaseControlFixtures,
+  createB127ReleaseSubjectFixture,
+} from "./b127-release-fixture.mjs";
 
 const TEST_POSTGRES_URL = process.env.LTM_TEST_POSTGRES_URL;
 const TEST_POSTGRES_ADMIN_URL = process.env.LTM_TEST_POSTGRES_ADMIN_URL;
@@ -33,6 +38,14 @@ test("production PostgreSQL source rejects a non-TLS connection before opening i
     }),
     (error) => error instanceof CertificationError && error.code === "B127_POSTGRES_TLS_CONFIG_INVALID",
   );
+});
+
+test("live PostgreSQL fixture uses the shared canonical release-subject and production supply-chain builder", (testContext) => {
+  const fixture = createFileFixture(testContext);
+  assert.equal(fixture.releaseSubject.schemaVersion, "ltm.production-release-subject.v1");
+  assert.equal(fixture.releaseSubject.workloadImages.length, 5);
+  assert.equal(fixture.releaseSubject.supplyChain.trustKeyId.startsWith("ed25519:"), true);
+  assert.equal(fixture.manifest.releaseSubject.schemaVersion, "ltm.production-release-subject-config.v1");
 });
 
 test("PostgreSQL 17 B127 source proves SELECT-only FORCE-RLS evidence and rejects privileged roles", {
@@ -79,7 +92,7 @@ test("PostgreSQL 17 B127 source proves SELECT-only FORCE-RLS evidence and reject
   assert.ok(Number(result.dataSource.serverVersion) >= 170000);
 
   const schemaVersion = await admin.query("SELECT value FROM ltm.schema_metadata WHERE key='runtime_schema_version'");
-  await admin.query("UPDATE ltm.schema_metadata SET value='5' WHERE key='runtime_schema_version'");
+  await admin.query("UPDATE ltm.schema_metadata SET value='999' WHERE key='runtime_schema_version'");
   try {
     await assert.rejects(
       () => new PostgresB127CertificationSource(readerUrl, {
@@ -94,6 +107,23 @@ test("PostgreSQL 17 B127 source proves SELECT-only FORCE-RLS evidence and reject
     );
   } finally {
     await admin.query("UPDATE ltm.schema_metadata SET value=$1 WHERE key='runtime_schema_version'", [schemaVersion.rows[0].value]);
+  }
+
+  await admin.query("ALTER POLICY tenant_isolation ON ltm.participants USING (true) WITH CHECK (tenant_id = ltm.current_tenant())");
+  try {
+    await assert.rejects(
+      () => new PostgresB127CertificationSource(readerUrl, {
+        certificationProfile: "test",
+        allowInsecureTestConnection: true,
+      }).load({
+        tenantId: fixture.tenantId,
+        launchId: fixture.launchId,
+        b126CertificationId: fixture.b126Record.certificationId,
+      }),
+      (error) => error instanceof CertificationError && error.code === "B127_POSTGRES_RLS_POLICY_INVALID",
+    );
+  } finally {
+    await admin.query("ALTER POLICY tenant_isolation ON ltm.participants USING (tenant_id = ltm.current_tenant()) WITH CHECK (tenant_id = ltm.current_tenant())");
   }
 
   await assert.rejects(
@@ -134,11 +164,6 @@ function createFileFixture(testContext) {
   const manifestPath = join(root, "release-manifest.json");
   const trustedKeysPath = join(root, "trusted-keys.json");
   const artifact = (relativePath, value) => writePgArtifact(root, relativePath, value);
-  const sbom = artifact("release.sbom.json", {
-    bomFormat: "CycloneDX",
-    specVersion: "1.6",
-    components: [{ name: "ltm-postgres-release", version: "1.0.0" }],
-  });
   const selectedProfile = {
     name: "full-commercial",
     version: "2.0.0",
@@ -153,6 +178,51 @@ function createFileFixture(testContext) {
     artifact: artifact(`release/components/${name}.json`, { component: name, version: "2.0.0", commit: COMMIT }).reference,
   }]));
   const componentSetSha256 = sha256(Buffer.from(canonicalJson(componentVersions)));
+  const waveStartedAt = new Date(now.getTime() - 30_000).toISOString();
+  const goLive = {
+    windowStart: new Date(new Date(waveStartedAt).getTime() - 60_000).toISOString(),
+    windowEnd: new Date(new Date(waveStartedAt).getTime() + 10 * 60_000).toISOString(),
+    scheduledAt: waveStartedAt,
+  };
+  const deploymentId = `pg-deployment-${suffixId(tenantId)}`;
+  const automaticPausePolicyVersion = "pause-policy-pg-v1";
+  const rollbackExerciseId = `pg-rollback-forward-${suffixId(tenantId)}`;
+  const priorWaveNames = ["internal", "pilot", "consumer_canary", "partner", "regional"];
+  const priorWavePercents = [1, 2, 5, 10, 25];
+  const releaseControlWaves = priorWaveNames.map((wave, index) => ({
+    wave,
+    rolloutPercent: priorWavePercents[index],
+    startedAt: new Date(new Date(waveStartedAt).getTime() - (priorWaveNames.length - index) * 60 * 60_000).toISOString(),
+    completedAt: new Date(new Date(waveStartedAt).getTime() - (priorWaveNames.length - index - 1) * 60 * 60_000).toISOString(),
+  }));
+  const releaseControls = createB127ReleaseControlFixtures({
+    artifact,
+    tenantId,
+    launchId,
+    deploymentId,
+    repositoryCommit: COMMIT,
+    componentSetSha256,
+    automaticPausePolicyVersion,
+    rollbackExerciseId,
+    waves: releaseControlWaves,
+    idPrefix: `pg${suffixId(tenantId)}`,
+  });
+  const releaseFixture = createB127ReleaseSubjectFixture({
+    root,
+    artifact,
+    componentVersions,
+    componentSetSha256,
+    selectedProfile,
+    repositoryCommit: COMMIT,
+    targetBaseUrl: "https://pg-release.ailifetime.ai/",
+    deploymentId,
+    goLive,
+    guardrailPolicySha256: releaseControls.guardrailPolicyArtifact.reference.sha256,
+    waveObservationSetSha256: releaseControls.waveObservationSetSha256,
+    rollbackForwardDrillSha256: releaseControls.rollbackForwardDrillArtifact.reference.sha256,
+    idPrefix: `pg${suffixId(tenantId)}`,
+  });
+  const { sbom, releaseSubject, releaseSubjectConfig, supplyChainTrustedKey } = releaseFixture;
   const reportHashes = Object.fromEntries(Array.from({ length: 128 }, (_, index) => {
     const batchId = `B${String(index).padStart(2, "0")}`;
     return [batchId, sha256(Buffer.from(`postgres-production-report:${batchId}:${COMMIT}`))];
@@ -199,6 +269,15 @@ function createFileFixture(testContext) {
       publicKeyPem: pair.publicKey.export({ type: "spki", format: "pem" }).toString(),
     };
   });
+  const b126Keys = Array.from({ length: 5 }, (_, index) => {
+    const pair = generateKeyPairSync("ed25519");
+    return {
+      issuer: `production-pg-e2e-authority-${suffixId(tenantId)}-${index + 1}`,
+      keyId: `pg-e2e-key-${suffixId(tenantId)}-${index + 1}`,
+      privateKey: pair.privateKey,
+      publicKeyPem: pair.publicKey.export({ type: "spki", format: "pem" }).toString(),
+    };
+  });
   const evidenceIds = keys.map((_, index) => `pg-release-evidence-${suffixId(tenantId)}-${index + 1}`);
   const b126EvidenceIds = keys.map((_, index) => `pg-b126-evidence-${suffixId(tenantId)}-${index + 1}`);
   const b126ScopeValue = b126Scope({
@@ -207,13 +286,77 @@ function createFileFixture(testContext) {
     artifactSha256: b126Artifact.reference.sha256,
     certificationId: b126CertificationId,
   });
+  const executorPair = generateKeyPairSync("ed25519");
+  const executorKey = {
+    issuer: `production-pg-executor-${suffixId(tenantId)}`,
+    keyId: `pg-executor-key-${suffixId(tenantId)}`,
+    privateKey: executorPair.privateKey,
+    publicKeyPem: executorPair.publicKey.export({ type: "spki", format: "pem" }).toString(),
+  };
+  const changeId = `pg-change-${suffixId(tenantId)}`;
+  const executor = { actorId: `pg-deployer-${suffixId(tenantId)}`, issuer: executorKey.issuer, keyId: executorKey.keyId };
+  const changeClaims = {
+    tenantId,
+    launchId,
+    changeId,
+    deploymentId: releaseSubject.deploymentId,
+    repositoryCommit: COMMIT,
+    componentSetSha256: releaseSubject.componentSetSha256,
+    guardrailPolicySha256: releaseSubject.guardrailPolicySha256,
+    waveObservationSetSha256: releaseSubject.waveObservationSetSha256,
+    rollbackForwardDrillSha256: releaseSubject.rollbackForwardDrillSha256,
+    windowStart: releaseSubject.goLive.windowStart,
+    windowEnd: releaseSubject.goLive.windowEnd,
+    executor,
+    decision: "approved",
+  };
+  const changeApproverKeys = CHANGE_APPROVER_AUTHORITY_ROLES.map((authorityRole, index) => {
+    const pair = generateKeyPairSync("ed25519");
+    const key = {
+      issuer: `production-pg-change-approver-${suffixId(tenantId)}-${index + 1}`,
+      keyId: `pg-change-approver-key-${suffixId(tenantId)}-${index + 1}`,
+      privateKey: pair.privateKey,
+      publicKeyPem: pair.publicKey.export({ type: "spki", format: "pem" }).toString(),
+      authorityRole,
+    };
+    const unsigned = {
+      schemaVersion: "ltm.production-change-approver-evidence.v1",
+      evidenceId: `pg-change-approver-evidence-${suffixId(tenantId)}-${index + 1}`,
+      approverId: `pg-change-approver-${suffixId(tenantId)}-${index + 1}`,
+      issuer: key.issuer,
+      keyId: key.keyId,
+      authorityRole,
+      algorithm: "Ed25519",
+      approvedAt,
+      claims: changeClaims,
+    };
+    const document = { ...unsigned, signature: sign(null, Buffer.from(canonicalJson(unsigned)), key.privateKey).toString("base64url") };
+    const evidenceArtifact = artifact(`approvals/production-change-approver-${index + 1}.json`, document);
+    return { ...key, evidenceArtifact };
+  });
+  const changeApprovalControls = { executor, approverEvidence: changeApproverKeys.map((key) => key.evidenceArtifact.reference) };
   const approvalNames = Object.keys(APPROVAL_DECISIONS);
   const approvals = Object.fromEntries(approvalNames.map((name, index) => {
-    const approvalArtifact = artifact(`approvals/${name}.json`, { name, decision: APPROVAL_DECISIONS[name], tenantId, launchId });
+    const approvalId = `pg-approval-${suffixId(tenantId)}-${index + 1}`;
+    const authority = `PostgreSQL Production Authority ${(index % keys.length) + 1}`;
+    const issuer = keys[index % keys.length].issuer;
+    const approvalArtifact = artifact(`approvals/${name}.json`, pgReleaseApprovalArtifact(name, {
+      approvalId,
+      authority,
+      issuer,
+      tenantId,
+      launchId,
+      sbomSha256: sbom.reference.sha256,
+      approvedAt,
+      expiresAt,
+      componentSetSha256,
+      releaseSubject,
+      changeApprovalControls,
+    }));
     return [name, {
-      approvalId: `pg-approval-${suffixId(tenantId)}-${index + 1}`,
-      authority: `PostgreSQL Production Authority ${(index % keys.length) + 1}`,
-      issuer: keys[index % keys.length].issuer,
+      approvalId,
+      authority,
+      issuer,
       evidenceId: evidenceIds[index % keys.length],
       artifact: approvalArtifact.reference,
       decision: APPROVAL_DECISIONS[name],
@@ -221,25 +364,7 @@ function createFileFixture(testContext) {
       expiresAt,
     }];
   }));
-  const rollbackExerciseId = approvals.disasterRecoveryDrill.approvalId;
-  const waveStartedAt = new Date(now.getTime() - 30_000).toISOString();
-  const priorWaveNames = ["internal", "pilot", "consumer_canary", "partner", "regional"];
-  const priorWavePercents = [1, 2, 5, 10, 25];
-  const completedWaves = priorWaveNames.map((wave, index) => {
-    const startedAt = new Date(new Date(waveStartedAt).getTime() - (priorWaveNames.length - index) * 60 * 60_000).toISOString();
-    const completedAt = new Date(new Date(waveStartedAt).getTime() - (priorWaveNames.length - index - 1) * 60 * 60_000).toISOString();
-    return {
-      wave,
-      status: "passed",
-      rolloutPercent: priorWavePercents[index],
-      startedAt,
-      completedAt,
-      minimumObservationSeconds: 3_600,
-      observedSeconds: 3_600,
-      guardrailBreaches: 0,
-      artifact: artifact(`release/waves/${wave}.json`, { wave, status: "passed", tenantId, guardrailBreaches: 0 }).reference,
-    };
-  });
+  const completedWaves = releaseControls.completedWaves;
   const operationsHandoff = artifact("release/operations-handoff.json", {
     handoffId: `pg-operations-${suffixId(tenantId)}`,
     status: "accepted",
@@ -266,19 +391,20 @@ function createFileFixture(testContext) {
       artifact: b126Artifact.reference,
     },
     sbom: { ...sbom.reference, format: "cyclonedx-json" },
+    releaseSubject: releaseSubjectConfig,
     rollout: {
       wave: "global",
       rolloutPercent: 100,
       waveStartedAt,
       rollbackExerciseId,
-      automaticPausePolicyVersion: "pause-policy-pg-v1",
+      automaticPausePolicyVersion,
+      guardrailPolicyArtifact: releaseControls.guardrailPolicyArtifact.reference,
       completedWaves,
+      rollbackForwardDrillArtifact: releaseControls.rollbackForwardDrillArtifact.reference,
     },
     approvals,
     goLive: {
-      windowStart: new Date(new Date(waveStartedAt).getTime() - 60_000).toISOString(),
-      windowEnd: new Date(new Date(waveStartedAt).getTime() + 10 * 60_000).toISOString(),
-      scheduledAt: waveStartedAt,
+      ...goLive,
       changeApprovalId: approvals.productionChangeApproval.approvalId,
     },
     operationsHandoff: {
@@ -299,10 +425,22 @@ function createFileFixture(testContext) {
   const scope = b127Scope({ tenantId, launchId, manifestSha256 });
   writeFileSync(trustedKeysPath, `${JSON.stringify({
     schemaVersion: "ltm.trusted-evidence-keys.v1",
-    keys: keys.flatMap((key) => [
-      pgTrustedKey(key, `release-control:${RELEASE_PROVIDER_ID}`, scope, now),
-      pgTrustedKey(key, `e2e-auditor:${b126ProviderId}`, b126ScopeValue, now),
-    ]),
+    keys: [...keys.map((key) =>
+      pgTrustedKey(key, `release-control:${RELEASE_PROVIDER_ID}`, scope, now, approvalNames
+        .filter((_, approvalIndex) => approvalIndex % keys.length === keys.indexOf(key))
+        .map((approvalName) => APPROVAL_AUTHORITY_ROLES[approvalName])),
+    ),
+    ...b126Keys.map((key) => pgTrustedKey(key, `e2e-auditor:${b126ProviderId}`, b126ScopeValue, now)),
+    ...changeApproverKeys.map((key) => pgTrustedKey(
+      key,
+      `change-approval:${changeId}`,
+      `ltm-change-approval:v1:${sha256(Buffer.from(canonicalJson(changeClaims)))}`,
+      now,
+      [key.authorityRole],
+    )),
+    pgTrustedKey(executorKey, "change-executor:production", "ltm-change-executor:production", now, ["production-change-executor"]),
+    pgTrustedKey(supplyChainTrustedKey, supplyChainTrustedKey.provider, supplyChainTrustedKey.scope, now, supplyChainTrustedKey.authorityRoles),
+    ...releaseControls.controlArtifactTrustedKeys],
   }, null, 2)}\n`, { mode: 0o600 });
   const evidence = keys.map((key, index) => {
     const envelope = {
@@ -332,7 +470,7 @@ function createFileFixture(testContext) {
   const b126VerifiedAt = new Date(now.getTime() - 8 * 60 * 60_000 + 60_000).toISOString();
   const b126ConsumedAt = new Date(now.getTime() - 7 * 60 * 60_000).toISOString();
   const b126CreatedAt = new Date(now.getTime() - 6 * 60 * 60_000).toISOString();
-  const b126Evidence = keys.map((key, index) => {
+  const b126Evidence = b126Keys.map((key, index) => {
     const envelope = {
       version: "ltm.external-evidence.v1",
       evidenceId: b126EvidenceIds[index],
@@ -394,16 +532,22 @@ function createFileFixture(testContext) {
     rolloutPercent: 100,
     waveStartedAt,
     releaseGates: Array.from({ length: 12 }, (_, index) => `G${index}`),
-    monitoringDomains: ["quality", "payment", "refund", "support", "ledger", "supply", "privacy", "security"],
+    monitoringDomains: ["quality", "payment", "refund", "message", "support", "ledger", "supply", "privacy", "security", "cost", "slo"],
     approvalIds: Object.values(approvals).map((approval) => approval.approvalId),
     rollbackExerciseId,
-    automaticPausePolicyVersion: "pause-policy-pg-v1",
+    automaticPausePolicyVersion,
+    guardrailPolicySha256: releaseControls.guardrailPolicyArtifact.reference.sha256,
+    waveObservationSetSha256: releaseControls.waveObservationSetSha256,
+    rollbackForwardDrillSha256: releaseControls.rollbackForwardDrillArtifact.reference.sha256,
+    changeApproverEvidenceIds: changeApproverKeys.map((_, index) => `pg-change-approver-evidence-${suffixId(tenantId)}-${index + 1}`),
     activeGuardrailBreaches: 0,
     externalEvidenceIds: evidenceIds,
     evidenceScope: scope,
   };
   return {
     root,
+    manifest,
+    releaseSubject,
     tenantId,
     launchId,
     b126RecordId,
@@ -430,14 +574,14 @@ async function seedRelease(admin, fixture) {
     await client.query("BEGIN");
     await client.query(
       `INSERT INTO ltm.records(
-         tenant_id,collection,id,owner_actor_id,participant_ids,contains_minor,data,version,created_at,updated_at,deleted_at
-       ) VALUES ($1,'capability.launching-complete-commercial-product',$2,NULL,'{}',false,$3::jsonb,1,$4,$4,NULL)`,
+         tenant_id,collection,id,processing_purpose,owner_actor_id,participant_ids,contains_minor,data,version,created_at,updated_at,deleted_at
+       ) VALUES ($1,'capability.launching-complete-commercial-product',$2,'release_certification',NULL,'{}',false,$3::jsonb,1,$4,$4,NULL)`,
       [fixture.tenantId, fixture.b126RecordId, JSON.stringify(fixture.b126Record), fixture.b126CreatedAt],
     );
     await client.query(
       `INSERT INTO ltm.records(
-         tenant_id,collection,id,owner_actor_id,participant_ids,contains_minor,data,version,created_at,updated_at,deleted_at
-       ) VALUES ($1,'capability.launching-complete-commercial-product',$2,NULL,'{}',false,$3::jsonb,1,clock_timestamp(),clock_timestamp(),NULL)`,
+         tenant_id,collection,id,processing_purpose,owner_actor_id,participant_ids,contains_minor,data,version,created_at,updated_at,deleted_at
+       ) VALUES ($1,'capability.launching-complete-commercial-product',$2,'release_certification',NULL,'{}',false,$3::jsonb,1,clock_timestamp(),clock_timestamp(),NULL)`,
       [fixture.tenantId, `b127-${suffixId(fixture.tenantId)}`, JSON.stringify(fixture.record)],
     );
     for (const item of [...fixture.b126Evidence, ...fixture.evidence]) {
@@ -478,7 +622,41 @@ function writePgArtifact(root, relativePath, value) {
   return { path, reference: { path: relativePath, sha256: sha256(bytes) } };
 }
 
-function pgTrustedKey(key, provider, scope, now) {
+function pgReleaseApprovalArtifact(name, input) {
+  return {
+    schemaVersion: "ltm.release-approval-artifact.v1",
+    approvalType: name,
+    approvalId: input.approvalId,
+    authorityRole: APPROVAL_AUTHORITY_ROLES[name],
+    authority: input.authority,
+    issuer: input.issuer,
+    tenantId: input.tenantId,
+    launchId: input.launchId,
+    environment: "production",
+    repositoryCommit: COMMIT,
+    sbomSha256: input.sbomSha256,
+    decision: APPROVAL_DECISIONS[name],
+    approvedAt: input.approvedAt,
+    expiresAt: input.expiresAt,
+    subject: pgApprovalSubject(name, input),
+  };
+}
+
+function pgApprovalSubject(name, input) {
+  const release = input.releaseSubject;
+  if (name === "independentPenetrationTest") return { engagementId: `pg-pentest-${suffixId(input.tenantId)}`, providerId: "pg-independent-security-labs", targetOrigin: release.penetrationTest.targetOrigin, reportArtifactSha256: release.penetrationTest.reportArtifactSha256, findingRegistrySha256: release.penetrationTest.findingRegistrySha256, scopeCategories: ["authentication", "tenant_isolation", "idor", "upload", "signed_url", "webhook", "payment", "ssrf", "xss", "csrf", "admin_operations"], independentThirdParty: true, conflictsDisclosed: true, unresolvedCritical: 0, unresolvedHigh: 0, retestPassed: true };
+  if (name === "legalRegulatoryReview") return { reviewId: `pg-legal-${suffixId(input.tenantId)}`, legalEntityId: release.legal.legalEntityId, jurisdictions: release.legal.jurisdictions, productVersion: release.profileVersion, scopes: ["privacy", "ai", "minors", "commerce", "payments", "tax", "consumer_terms"], unresolvedRestrictions: [], signingAuthorityVerified: true };
+  if (name === "manualAccessibilityReview") return { auditId: `pg-a11y-${suffixId(input.tenantId)}`, ...release.accessibility, unresolvedCritical: 0, unresolvedHigh: 0, manualTesting: true, retestPassed: true };
+  if (["appleAppStoreDecision", "googlePlayDecision", "wechatMiniProgramDecision"].includes(name)) {
+    const application = release.applications[name];
+    return { ...application, decisionId: `${application.store}-${suffixId(input.tenantId)}`, reviewEnvironment: "production", reviewedAt: input.approvedAt, nativeReceiptVerificationPassed: true };
+  }
+  if (name === "disasterRecoveryDrill") return { exerciseId: `pg-dr-${suffixId(input.tenantId)}`, deploymentId: release.deploymentId, reportArtifactSha256: release.disasterRecovery.reportArtifactSha256, backupId: `pg-backup-${suffixId(input.tenantId)}`, sourceRegion: release.disasterRecovery.sourceRegion, failoverRegion: release.disasterRecovery.failoverRegion, restoreTargetId: `pg-restore-${suffixId(input.tenantId)}`, schemaVersion: release.disasterRecovery.schemaVersion, targetRtoSeconds: release.disasterRecovery.targetRtoSeconds, observedRtoSeconds: 600, targetRpoSeconds: release.disasterRecovery.targetRpoSeconds, observedRpoSeconds: 120, failoverVerified: true, failbackVerified: true, forcedRlsVerified: true, auditChainVerified: true, ledgerBalanced: true, deletionNonResurrection: true, duplicateSideEffectsPrevented: true };
+  if (name === "productionChangeApproval") return { changeId: `pg-change-${suffixId(input.tenantId)}`, ticketUrl: `https://changes.ailifetime.ai/tickets/${suffixId(input.tenantId)}`, deploymentId: release.deploymentId, componentSetSha256: release.componentSetSha256, guardrailPolicySha256: release.guardrailPolicySha256, waveObservationSetSha256: release.waveObservationSetSha256, rollbackForwardDrillSha256: release.rollbackForwardDrillSha256, executor: input.changeApprovalControls.executor, approverEvidence: input.changeApprovalControls.approverEvidence, windowStart: release.goLive.windowStart, windowEnd: release.goLive.windowEnd };
+  throw new Error(`unknown approval ${name}`);
+}
+
+function pgTrustedKey(key, provider, scope, now, authorityRoles = []) {
   return {
     issuer: key.issuer,
     provider,
@@ -487,6 +665,7 @@ function pgTrustedKey(key, provider, scope, now) {
     publicKeyPem: key.publicKeyPem,
     allowedScopes: [scope],
     allowedEnvironments: ["production"],
+    ...(authorityRoles.length === 0 ? {} : { authorityRoles }),
     notBefore: new Date(now.getTime() - 24 * 60 * 60_000).toISOString(),
     notAfter: new Date(now.getTime() + 24 * 60 * 60_000).toISOString(),
   };

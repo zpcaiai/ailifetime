@@ -16,7 +16,7 @@ export function main(argv = process.argv.slice(2)) {
     trivyImageReports: values(options["trivy-image"]).map(readJson),
     expectedImageNames: values(options["expected-image"]),
     ...(one(options["dast-report"]) === undefined ? {} : { dastReport: readJson(one(options["dast-report"])) }),
-    expectedImageCount: Number(one(options["expected-image-count"]) ?? 3),
+    expectedImageCount: Number(one(options["expected-image-count"]) ?? 5),
   });
   if (one(options.output) !== undefined) write(one(options.output), stableJson(report));
   if (one(options.sarif) !== undefined) write(one(options.sarif), stableJson(toSarif(report)));

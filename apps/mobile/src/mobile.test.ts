@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   authorizeMobileDeepLink,
   MobileCapabilityError,
+  MobileHttpApiClient,
   MobileOfflineQueue,
   MobileStorePurchaseCoordinator,
   preflightMobileCapture,
@@ -10,10 +11,24 @@ import {
 } from "./index.js";
 
 class MemoryStorage implements SecureStorage {
-  value: string | null = null;
-  async get(): Promise<string | null> { return this.value; }
-  async set(_key: string, value: string): Promise<void> { this.value = value; }
-  async delete(): Promise<void> { this.value = null; }
+  readonly values = new Map<string, string>();
+  async get(key: string): Promise<string | null> { return this.values.get(key) ?? null; }
+  async set(key: string, value: string): Promise<void> { this.values.set(key, value); }
+  async delete(key: string): Promise<void> { this.values.delete(key); }
+}
+
+const OFFLINE_NOW = new Date("2026-02-01T00:00:00.000Z");
+const offlineOptions = { now: () => new Date(OFFLINE_NOW) } as const;
+
+function offlineCommand(id: string) {
+  return {
+    id,
+    batchId: "B64",
+    idempotencyKey: `idem-${id}`,
+    payload: {},
+    createdAt: "2026-02-01T00:00:00.000Z",
+    expiresAt: "2026-02-02T00:00:00.000Z",
+  };
 }
 
 test("deep links reject authority and policy assertions", () => {
@@ -24,34 +39,124 @@ test("deep links reject authority and policy assertions", () => {
 
 test("offline queue deduplicates and preserves failed commands", async () => {
   const storage = new MemoryStorage();
-  const queue = new MobileOfflineQueue(storage);
-  const command = { id: "one", batchId: "B64", idempotencyKey: "idem-one", payload: {}, createdAt: "2026-01-01T00:00:00Z", expiresAt: "2027-01-01T00:00:00Z" };
+  const queue = new MobileOfflineQueue(storage, undefined, offlineOptions);
+  await queue.activate({ tenantId: "tenant-1", actorId: "actor-1" });
+  const command = offlineCommand("one");
   await queue.enqueue(command);
   await queue.enqueue(command);
-  const outcome = await queue.flush({ execute: async () => { throw new Error("offline"); } } as never, new Date("2026-02-01T00:00:00Z"));
+  const outcome = await queue.flush({ execute: async () => { throw new Error("offline"); } } as never, OFFLINE_NOW);
   assert.deepEqual(outcome, { sent: [], retained: ["one"], dropped: [] });
 });
 
 test("offline queue refuses sensitive or non-allowlisted work and drops permanent failures", async () => {
   const storage = new MemoryStorage();
-  const queue = new MobileOfflineQueue(storage);
+  const queue = new MobileOfflineQueue(storage, undefined, offlineOptions);
+  await queue.activate({ tenantId: "tenant-1", actorId: "actor-1" });
   await assert.rejects(queue.enqueue({
     id: "pay", batchId: "B66", idempotencyKey: "idem-pay", payload: {},
-    createdAt: "2026-01-01T00:00:00Z", expiresAt: "2027-01-01T00:00:00Z",
+    createdAt: "2026-02-01T00:00:00.000Z", expiresAt: "2026-02-02T00:00:00.000Z",
   }), /not permitted/);
   await assert.rejects(queue.enqueue({
     id: "media", batchId: "B64", idempotencyKey: "idem-media", payload: { rawMedia: "secret" },
-    createdAt: "2026-01-01T00:00:00Z", expiresAt: "2027-01-01T00:00:00Z",
+    createdAt: "2026-02-01T00:00:00.000Z", expiresAt: "2026-02-02T00:00:00.000Z",
   }), /prohibited/);
   await queue.enqueue({
     id: "safe", batchId: "B64", idempotencyKey: "idem-safe", payload: { uploadSessionId: "upload-1" },
-    createdAt: "2026-01-01T00:00:00Z", expiresAt: "2027-01-01T00:00:00Z",
+    createdAt: "2026-02-01T00:00:00.000Z", expiresAt: "2026-02-02T00:00:00.000Z",
   });
   assert.deepEqual(await queue.flush({ execute: async () => {
     throw new MobileCapabilityError("AUTH_FORBIDDEN", "denied", false);
-  } }, new Date("2026-02-01T00:00:00Z")), {
+  } }, OFFLINE_NOW), {
     sent: [], retained: [], dropped: [{ id: "safe", reason: "permanent" }],
   });
+});
+
+test("offline queue fails closed across account changes and missing server authorization", async () => {
+  const storage = new MemoryStorage();
+  const queue = new MobileOfflineQueue(storage, undefined, offlineOptions);
+  await assert.rejects(queue.enqueue({
+    id: "unbound", batchId: "B64", idempotencyKey: "idem-unbound", payload: {},
+    createdAt: "2026-02-01T00:00:00.000Z", expiresAt: "2026-02-02T00:00:00.000Z",
+  }), /server-verified authorization binding/);
+  await queue.activate({ tenantId: "tenant-1", actorId: "actor-1" });
+  await queue.enqueue({
+    id: "first-account", batchId: "B64", idempotencyKey: "idem-first-account", payload: {},
+    createdAt: "2026-02-01T00:00:00.000Z", expiresAt: "2026-02-02T00:00:00.000Z",
+  });
+  await queue.activate({ tenantId: "tenant-1", actorId: "actor-2" });
+  let executions = 0;
+  assert.deepEqual(await queue.flush({ execute: async () => { executions += 1; } } as never, OFFLINE_NOW), {
+    sent: [], retained: [], dropped: [],
+  });
+  assert.equal(executions, 0);
+});
+
+test("offline queue enforces closed command keys and exact time boundaries", async () => {
+  const storage = new MemoryStorage();
+  const queue = new MobileOfflineQueue(storage, undefined, offlineOptions);
+  await queue.activate({ tenantId: "tenant-1", actorId: "actor-1" });
+
+  await assert.doesNotReject(queue.enqueue(offlineCommand("boundary-valid")));
+  await assert.rejects(queue.enqueue({
+    ...offlineCommand("future"),
+    createdAt: "2026-02-01T00:00:00.001Z",
+  }), /createdAt <= now < expiresAt/);
+  await assert.rejects(queue.enqueue({
+    ...offlineCommand("expired"),
+    expiresAt: "2026-02-01T00:00:00.000Z",
+  }), /TTL|createdAt <= now < expiresAt/);
+  await assert.rejects(queue.enqueue({
+    ...offlineCommand("excessive-ttl"),
+    expiresAt: "2026-02-02T00:00:00.001Z",
+  }), /TTL/);
+  await assert.rejects(queue.enqueue({
+    ...offlineCommand("unknown-field"),
+    tenantId: "caller-asserted-tenant",
+  } as never), /unknown field/);
+});
+
+test("real HTTP adapter makes 4xx terminal while retaining retryable 5xx and network failures", async () => {
+  const context = { accessToken: "ephemeral-mobile-access-token", purpose: "product_operation" } as const;
+  const cases = [
+    {
+      id: "client-error",
+      fetch: async () => Response.json({
+        error: { code: "CONFLICT", message: "stale version", retryable: true, details: {} },
+        requestId: "req-409",
+      }, { status: 409 }),
+      expected: { sent: [], retained: [], dropped: [{ id: "client-error", reason: "permanent" }] },
+    },
+    {
+      id: "server-error",
+      fetch: async () => Response.json({
+        error: { code: "UNAVAILABLE", message: "try later", retryable: true, details: {} },
+        requestId: "req-503",
+      }, { status: 503 }),
+      expected: { sent: [], retained: ["server-error"], dropped: [] },
+    },
+    {
+      id: "network-error",
+      fetch: async () => { throw new TypeError("connection reset"); },
+      expected: { sent: [], retained: ["network-error"], dropped: [] },
+    },
+  ] as const;
+  for (const scenario of cases) {
+    const storage = new MemoryStorage();
+    const queue = new MobileOfflineQueue(storage, undefined, offlineOptions);
+    await queue.activate({ tenantId: "tenant-1", actorId: "actor-1" });
+    await queue.enqueue(offlineCommand(scenario.id));
+    const http = new MobileHttpApiClient({
+      baseUrl: "https://api.product.com",
+      allowedOrigins: ["https://api.product.com"],
+      fetch: scenario.fetch,
+    });
+    const result = await queue.flush({
+      execute: <T>(batchId: string, payload: Record<string, unknown>, idempotencyKey: string) => (
+        http.executeCapability(context, batchId, payload, idempotencyKey) as Promise<T>
+      ),
+    }, OFFLINE_NOW);
+    assert.deepEqual(result, scenario.expected);
+  }
 });
 
 test("native store result stays pending until a matching server entitlement projection exists", async () => {

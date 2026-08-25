@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-life-time-machine.example/contracts/production-deployment-check-report.v1.schema.json",
+  "title": "Production deployment check report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "checkId", "status", "environment", "tenantId", "launchId",
+    "deploymentId", "commit", "releaseManifestSha256", "releaseSubjectSha256", "targetBaseUrl", "observedAt",
+    "producer", "assertions"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "ltm.production-deployment-check-report.v1" },
+    "checkId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "status": { "const": "passed" },
+    "environment": { "const": "production" },
+    "tenantId": { "$ref": "#/$defs/identifier" },
+    "launchId": { "$ref": "#/$defs/identifier" },
+    "deploymentId": { "$ref": "#/$defs/identifier" },
+    "commit": { "type": "string", "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$" },
+    "releaseManifestSha256": { "$ref": "#/$defs/sha256" },
+    "releaseSubjectSha256": { "$ref": "#/$defs/sha256" },
+    "targetBaseUrl": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "observedAt": { "type": "string", "format": "date-time" },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "invocationId"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "version": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "invocationId": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "assertions": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "checkId": { "const": "runtime-policy-authority" } },
+        "required": ["checkId"]
+      },
+      "then": {
+        "properties": {
+          "assertions": { "$ref": "#/$defs/runtimePolicyAuthorityAssertions" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "identifier": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "readyProbe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endpoint", "statusCode", "ready", "responseSha256"],
+      "properties": {
+        "endpoint": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "statusCode": { "const": 200 },
+        "ready": { "const": true },
+        "responseSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "consentAuthorityProbe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "endpoint", "statusCode", "responseSha256", "schemaVersion", "catalogId", "issuer",
+        "environment", "catalogSha256", "issuedAt", "expiresAt", "jurisdiction", "locale",
+        "policyVersions"
+      ],
+      "properties": {
+        "endpoint": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "statusCode": { "const": 200 },
+        "responseSha256": { "$ref": "#/$defs/sha256" },
+        "schemaVersion": { "const": "ltm.consent-policy-catalog-metadata.v1" },
+        "catalogId": { "$ref": "#/$defs/identifier" },
+        "issuer": { "$ref": "#/$defs/identifier" },
+        "environment": { "const": "production" },
+        "catalogSha256": { "$ref": "#/$defs/sha256" },
+        "issuedAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "jurisdiction": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "locale": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "policyVersions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1000,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 512 }
+        }
+      }
+    },
+    "mediaAuthorityProbe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "endpoint", "statusCode", "responseSha256", "schemaVersion", "mediaLifecycleCatalogSha256",
+        "mediaSafetyPolicySha256", "lifecycleIssuer", "lifecycleEnvironment", "lifecycleExpiresAt",
+        "scannerProvider", "scannerPolicyId", "scannerModelVersion", "scannerKeyId", "scannerEnvironment"
+      ],
+      "properties": {
+        "endpoint": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "statusCode": { "const": 200 },
+        "responseSha256": { "$ref": "#/$defs/sha256" },
+        "schemaVersion": { "const": "ltm.media-authority.v1" },
+        "mediaLifecycleCatalogSha256": { "$ref": "#/$defs/sha256" },
+        "mediaSafetyPolicySha256": { "$ref": "#/$defs/sha256" },
+        "lifecycleIssuer": { "$ref": "#/$defs/identifier" },
+        "lifecycleEnvironment": { "const": "production" },
+        "lifecycleExpiresAt": { "type": "string", "format": "date-time" },
+        "scannerProvider": { "$ref": "#/$defs/identifier" },
+        "scannerPolicyId": { "$ref": "#/$defs/identifier" },
+        "scannerModelVersion": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "scannerKeyId": { "$ref": "#/$defs/identifier" },
+        "scannerEnvironment": { "const": "production" }
+      }
+    },
+    "runtimePolicyAuthorityAssertions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tool", "toolVersion", "workloadIdentitySubject", "workloadIdentityVerified",
+        "mutualTlsVerified", "apiReady", "apiConsentMetadata", "mediaBrokerReady",
+        "mediaAuthority", "exitCode"
+      ],
+      "properties": {
+        "tool": { "const": "ltm-runtime-policy-authority-probe" },
+        "toolVersion": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "workloadIdentitySubject": { "$ref": "#/$defs/identifier" },
+        "workloadIdentityVerified": { "const": true },
+        "mutualTlsVerified": { "const": true },
+        "apiReady": { "$ref": "#/$defs/readyProbe" },
+        "apiConsentMetadata": { "$ref": "#/$defs/consentAuthorityProbe" },
+        "mediaBrokerReady": { "$ref": "#/$defs/readyProbe" },
+        "mediaAuthority": { "$ref": "#/$defs/mediaAuthorityProbe" },
+        "exitCode": { "const": 0 }
+      }
+    }
+  },
+  "$comment": "The executable validator closes assertions per checkId; this envelope schema is intentionally supplemented by tools/production-evidence-contracts.mjs."
+}

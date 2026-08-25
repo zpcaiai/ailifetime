@@ -9,6 +9,134 @@ import {
 
 const session = { accessToken: "synthetic-access-token", purpose: "product_operation" } as const;
 
+const visibleCapability = {
+  batchId: "B14",
+  skill: "building-age-media-pipeline",
+  operation: "createTimeline",
+  permission: "record:create",
+  portalId: "consumer",
+  mode: "external-command",
+  requirements: ["B14-R01", "B14-R02", "B14-R03", "B14-R04", "B14-R05"],
+  requiresExternalEvidence: false,
+} as const;
+
+test("typed session and visible-manifest operations validate the server projection", async () => {
+  const requests: Array<{ path: string; headers: Headers }> = [];
+  const client = new LifeTimeMachineClient({
+    baseUrl: "https://api.example.test",
+    session,
+    fetch: async (input, init) => {
+      const url = new URL(String(input));
+      requests.push({ path: url.pathname, headers: new Headers(init?.headers) });
+      if (url.pathname === "/v1/session") {
+        return Response.json({
+          session: {
+            actorId: "actor-1",
+            tenantId: "tenant-1",
+            roles: ["consumer"],
+            purpose: "product_operation",
+            stepUp: false,
+            guardianVerified: false,
+            authenticationState: "server_verified",
+          },
+          requestId: "req-session-1",
+        });
+      }
+      return Response.json({
+        schemaVersion: "ltm.visible-capability-manifest.v1",
+        capabilities: [visibleCapability],
+        portals: [{ id: "consumer", skills: ["building-age-media-pipeline"], capabilityCount: 1 }],
+        count: 1,
+        requestId: "req-visible-1",
+      });
+    },
+  });
+  const authenticated = await client.getSession();
+  const manifest = await client.getVisibleCapabilityManifest();
+  assert.equal(authenticated.session.authenticationState, "server_verified");
+  assert.deepEqual(authenticated.session.roles, ["consumer"]);
+  assert.equal(manifest.capabilities[0]?.operation, "createTimeline");
+  assert.equal(manifest.portals[0]?.capabilityCount, 1);
+  assert.deepEqual(requests.map((request) => request.path), ["/v1/session", "/v1/capabilities/visible"]);
+  for (const request of requests) {
+    assert.equal(request.headers.get("authorization"), "Bearer synthetic-access-token");
+    assert.equal(request.headers.get("x-purpose"), "product_operation");
+  }
+});
+
+test("session purpose and visible manifest schema or cross references fail closed", async () => {
+  const wrongPurpose = new LifeTimeMachineClient({
+    baseUrl: "https://api.example.test",
+    session,
+    maxRetries: 0,
+    fetch: async () => Response.json({
+      session: {
+        actorId: "actor-1", tenantId: "tenant-1", roles: ["consumer"], purpose: "different-purpose",
+        stepUp: false, guardianVerified: false, authenticationState: "server_verified",
+      },
+      requestId: "req-session-bad",
+    }),
+  });
+  await assert.rejects(wrongPurpose.getSession(), (error: unknown) => (
+    error instanceof LifeTimeMachineApiError && error.code === "INVALID_RESPONSE"
+  ));
+
+  for (const response of [
+    {
+      schemaVersion: "ltm.visible-capability-manifest.v2",
+      capabilities: [visibleCapability],
+      portals: [{ id: "consumer", skills: [visibleCapability.skill], capabilityCount: 1 }],
+      count: 1,
+      requestId: "req-visible-version",
+    },
+    {
+      schemaVersion: "ltm.visible-capability-manifest.v1",
+      capabilities: [visibleCapability],
+      portals: [{ id: "consumer", skills: [visibleCapability.skill], capabilityCount: 2 }],
+      count: 1,
+      requestId: "req-visible-count",
+    },
+  ]) {
+    const client = new LifeTimeMachineClient({
+      baseUrl: "https://api.example.test",
+      session,
+      maxRetries: 0,
+      fetch: async () => Response.json(response),
+    });
+    await assert.rejects(client.getVisibleCapabilityManifest(), (error: unknown) => (
+      error instanceof LifeTimeMachineApiError && error.code === "INVALID_RESPONSE"
+    ));
+  }
+});
+
+test("capability catalog is closed, counted, and returned as typed summaries", async () => {
+  const valid = new LifeTimeMachineClient({
+    baseUrl: "https://api.example.test",
+    session,
+    maxRetries: 0,
+    fetch: async () => Response.json({ capabilities: [visibleCapability], count: 1, requestId: "req-catalog-1" }),
+  });
+  const catalog = await valid.listCapabilities();
+  assert.equal(catalog[0]?.operation, "createTimeline");
+  assert.ok(Object.isFrozen(catalog));
+
+  for (const response of [
+    { capabilities: [visibleCapability], count: 2, requestId: "req-catalog-count" },
+    { capabilities: [visibleCapability], count: 1, requestId: "req-catalog-extra", authority: "caller" },
+    { capabilities: [{ ...visibleCapability, unexpected: true }], count: 1, requestId: "req-catalog-entry" },
+  ]) {
+    const client = new LifeTimeMachineClient({
+      baseUrl: "https://api.example.test",
+      session,
+      maxRetries: 0,
+      fetch: async () => Response.json(response),
+    });
+    await assert.rejects(client.listCapabilities(), (error: unknown) => (
+      error instanceof LifeTimeMachineApiError && error.code === "INVALID_RESPONSE"
+    ));
+  }
+});
+
 test("real HTTP contract sends exact envelopes and consistently unwraps data", async () => {
   const requests: Array<{ path: string; headers: IncomingMessage["headers"]; body: unknown }> = [];
   const server = createServer(async (request, response) => {
@@ -51,6 +179,110 @@ test("real HTTP contract sends exact envelopes and consistently unwraps data", a
   } finally {
     await close(server);
   }
+});
+
+test("typed consent grant leaves disclosure and location authority with the server", async () => {
+  let requestBody: Record<string, unknown> | undefined;
+  const client = new LifeTimeMachineClient({
+    baseUrl: "https://api.example.test",
+    session,
+    maxRetries: 0,
+    fetch: async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json({
+        data: { id: "consent-1" },
+        meta: { requestId: "req-consent-1", command: "consent.grant" },
+      });
+    },
+  });
+  await client.grantConsent({
+    participantId: "participant-1",
+    grantorCapacity: "self",
+    purpose: "sharing",
+    scope: { resource: "work:work-1", actions: ["share"] },
+    policyVersion: "sharing-v1",
+  }, "idem-consent-1");
+  assert.deepEqual(requestBody, {
+    command: "consent.grant",
+    input: {
+      participantId: "participant-1",
+      grantorCapacity: "self",
+      purpose: "sharing",
+      scope: { resource: "work:work-1", actions: ["share"] },
+      policyVersion: "sharing-v1",
+    },
+  });
+  const input = requestBody?.input as Record<string, unknown>;
+  assert.equal("evidenceHash" in input, false);
+  assert.equal("jurisdiction" in input, false);
+  assert.equal("locale" in input, false);
+});
+
+test("typed rights methods emit only the closed rights workflow inputs", async () => {
+  const requests: Array<{ command?: string; query?: string; input: Record<string, unknown> }> = [];
+  const client = new LifeTimeMachineClient({
+    baseUrl: "https://api.example.test",
+    session: { accessToken: session.accessToken, purpose: "privacy_rights" },
+    maxRetries: 0,
+    fetch: async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as { command?: string; query?: string; input: Record<string, unknown> };
+      requests.push(body);
+      return Response.json({
+        data: body.query === "rights-request.list" ? [] : { requestId: "rights-1" },
+        meta: {
+          requestId: `req-rights-${requests.length}`,
+          ...(body.command === undefined ? {} : { command: body.command }),
+          ...(body.query === undefined ? {} : { query: body.query }),
+        },
+      });
+    },
+  });
+  await client.submitRightsRequest({
+    requestId: "rights-1",
+    participantId: "participant-1",
+    requestType: "correction",
+    requestedProcessingPurpose: "profile",
+    correctionFields: ["profile.display_name"],
+    correctionPayloadSha256: "a".repeat(64),
+  }, "rights-submit-1");
+  await client.recordRightsTaskReceipt({
+    requestId: "rights-1",
+    taskId: "rights-task-1",
+    outcome: "failed",
+    resultSha256: "b".repeat(64),
+    providerOccurredAt: "2026-08-24T08:00:00.000Z",
+    evidenceId: "rights-evidence-1",
+    errorCode: "DEPENDENCY_UNAVAILABLE",
+  }, "rights-receipt-1");
+  await client.reviewRightsRequest({
+    requestId: "rights-1",
+    decision: "approve",
+    reasonCode: "VERIFIED_COMPLETE",
+    caseReference: "privacy-case-1",
+  }, "rights-review-1");
+  await client.escalateRightsRequest("rights-1", "receipt_failed", "rights-escalate-1");
+  await client.getRightsRequest("rights-1");
+  await client.listRightsRequests({ limit: 75, cursor: "rights-0" });
+
+  assert.deepEqual(requests.map(({ command, query }) => command ?? query), [
+    "rights-request.submit",
+    "rights-request.task-receipt",
+    "rights-request.review",
+    "rights-request.escalate",
+    "rights-request.get",
+    "rights-request.list",
+  ]);
+  assert.deepEqual(Object.keys(requests[0]?.input ?? {}).sort(), [
+    "correctionFields",
+    "correctionPayloadSha256",
+    "participantId",
+    "requestId",
+    "requestType",
+    "requestedProcessingPurpose",
+  ]);
+  assert.equal("ownerActorId" in (requests[0]?.input ?? {}), false);
+  assert.equal("participantIds" in (requests[0]?.input ?? {}), false);
+  assert.deepEqual(requests.at(-1)?.input, { limit: 75, cursor: "rights-0" });
 });
 
 test("base URL rejects credential leakage and cleartext non-loopback origins", () => {
@@ -188,6 +420,25 @@ test("non-idempotent dispatch cannot reach the network without a valid key", asy
   });
   await assert.rejects(client.command("record.create", {}, ""), /idempotency key/);
   await assert.rejects(client.execute("B14", {}, "x".repeat(201)), /idempotency key/);
+  assert.equal(attempts, 0);
+});
+
+test("execute, command, and query reject non-plain and prototype-pollution inputs before networking", async () => {
+  let attempts = 0;
+  const client = new LifeTimeMachineClient({
+    baseUrl: "http://127.0.0.1:8080",
+    session,
+    fetch: async () => {
+      attempts += 1;
+      return Response.json({});
+    },
+  });
+  const polluted = JSON.parse('{"nested":{"__proto__":{"platformAdmin":true}}}') as Record<string, unknown>;
+  const inherited = Object.create({ platformAdmin: true }) as Record<string, unknown>;
+  await assert.rejects(client.execute("B14", [] as never, "idem-array-1"), /plain JSON object/);
+  await assert.rejects(client.command("record.create", null as never, "idem-null-1"), /plain JSON object/);
+  await assert.rejects(client.query("record.list", polluted), /unsafe property/);
+  await assert.rejects(client.query("record.list", inherited), /plain JSON object/);
   assert.equal(attempts, 0);
 });
 

@@ -1,4 +1,9 @@
 import { createHash } from "node:crypto";
+import {
+  externalCommandCallbackProviderAllowed,
+  resolveExternalCommandCallbackRoute,
+  type ExternalCommandCallbackRouteDefinition,
+} from "@ltm/core";
 
 export type EvidenceEnvironment = "test" | "sandbox" | "staging" | "production";
 
@@ -94,6 +99,26 @@ export type OperationalReportEvidenceBinding =
   | EvidenceBinding<"B121", "approveCapacityGate", "capacity-test-report", `load-test:${string}`>
   | EvidenceBinding<"B122", "recordResilienceExercise", "resilience-exercise-report", `resilience-auditor:${string}`>;
 
+type CallbackProvider<Route extends ExternalCommandCallbackRouteDefinition> =
+  Route["providerBinding"] extends { readonly kind: "exact"; readonly provider: infer Provider extends string }
+    ? Provider
+    : Route["providerBinding"] extends { readonly kind: "record-field"; readonly prefix: infer Prefix extends string }
+      ? `${Prefix}${string}`
+      : Route["providerBinding"] extends {
+          readonly kind: "record-provider-pair";
+          readonly allowedTypes: readonly (infer ProviderType extends string)[];
+        }
+        ? `${ProviderType}:${string}`
+        : never;
+
+type CallbackEvidenceBinding<Route extends ExternalCommandCallbackRouteDefinition> =
+  Route extends ExternalCommandCallbackRouteDefinition
+    ? EvidenceBinding<Route["batchId"], Route["operation"], Route["evidenceKind"], CallbackProvider<Route>>
+    : never;
+
+/** Every terminal external-command callback tuple accepted by the provider boundary. */
+export type ExternalCommandCallbackEvidenceBinding = CallbackEvidenceBinding<ExternalCommandCallbackRouteDefinition>;
+
 export type CapabilityEvidenceBinding =
   | FoundationAssuranceEvidenceBinding
   | StoreTransactionEvidenceBinding
@@ -106,7 +131,8 @@ export type CapabilityEvidenceBinding =
   | SupplyEvidenceBinding
   | BusinessSystemEvidenceBinding
   | AssuranceEvidenceBinding
-  | OperationalReportEvidenceBinding;
+  | OperationalReportEvidenceBinding
+  | ExternalCommandCallbackEvidenceBinding;
 
 /** Signature on the LTM attestation envelope, not the provider's native receipt. */
 export type EvidenceAlgorithm = "Ed25519";
@@ -254,6 +280,11 @@ export function toRuntimeExternalEvidence(evidence: SignedCapabilityEvidence): {
 }
 
 function assertBindingTuple(binding: CapabilityEvidenceBinding): void {
+  const commandRoute = resolveExternalCommandCallbackRoute(binding.batchId, binding.operation);
+  if (commandRoute !== undefined && binding.kind === commandRoute.evidenceKind &&
+      externalCommandCallbackProviderAllowed(commandRoute, binding.provider)) {
+    return;
+  }
   switch (binding.batchId) {
     case "B37":
       if (binding.operation !== "configureEducationExperience" || binding.kind !== "education-assurance" || !binding.provider.startsWith("education-assurance:")) break;

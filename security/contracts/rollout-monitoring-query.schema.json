@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-life-time-machine.example/contracts/rollout-monitoring-query.v1.schema.json",
+  "title": "B127 raw monitoring query",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "queryId", "releaseId", "tenantId", "launchId", "deploymentId", "repositoryCommit", "componentSetSha256", "guardrailPolicySha256", "wave", "domain", "signalId", "unit", "windowStart", "windowEnd", "queryLanguage", "queryText"],
+  "properties": {
+    "schemaVersion": { "const": "ltm.rollout-monitoring-query.v1" },
+    "queryId": { "$ref": "#/$defs/id" }, "releaseId": { "$ref": "#/$defs/id" }, "tenantId": { "$ref": "#/$defs/id" }, "launchId": { "$ref": "#/$defs/id" }, "deploymentId": { "$ref": "#/$defs/id" },
+    "repositoryCommit": { "type": "string", "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$" }, "componentSetSha256": { "$ref": "#/$defs/sha256" }, "guardrailPolicySha256": { "$ref": "#/$defs/sha256" },
+    "wave": { "$ref": "#/$defs/id" }, "domain": { "$ref": "#/$defs/id" }, "signalId": { "$ref": "#/$defs/id" }, "unit": { "enum": ["ratio", "count", "minor_currency"] },
+    "windowStart": { "type": "string", "format": "date-time" }, "windowEnd": { "type": "string", "format": "date-time" }, "queryLanguage": { "enum": ["promql", "sql", "vendor_api"] }, "queryText": { "type": "string", "minLength": 1, "maxLength": 8192 }
+  },
+  "$defs": { "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" }, "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" } }
+}

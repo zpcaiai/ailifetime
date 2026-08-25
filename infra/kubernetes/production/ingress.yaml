@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ltm-public
+  annotations:
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: 10m
+spec:
+  ingressClassName: "__LTM_INGRESS_CLASS__"
+  tls:
+    - hosts: ["__LTM_HOST__"]
+      secretName: ltm-production-tls
+  rules:
+    - host: "__LTM_HOST__"
+      http:
+        paths:
+          - path: /v1/callbacks
+            pathType: Prefix
+            backend:
+              service:
+                name: ltm-integration-gateway
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ltm-api
+                port:
+                  name: http

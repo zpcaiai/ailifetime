@@ -1,0 +1,15 @@
+<view class="page">
+  <view class="card">
+    <view class="title">授权并选择照片</view>
+    <view class="muted">用途：生成带 AI 标识的年龄主题作品；保留：上传会话最多 24 小时；请确保照片中每个人都已明确同意。压缩重编码会移除非必要位置与 EXIF 元数据。</view>
+    <checkbox-group bindchange="consentChanged">
+      <label class="row"><checkbox value="accepted" checked="{{accepted}}" />我确认人物授权及上述用途</label>
+    </checkbox-group>
+    <button class="button secondary" disabled="{{!accepted || busy}}" bindtap="choose">从相机或相册选择</button>
+    <image class="preview" wx:if="{{preview}}" src="{{preview}}" mode="aspectFit" />
+    <view class="muted" wx:if="{{details}}">{{details}}</view>
+    <button class="button" wx:if="{{preview}}" disabled="{{busy}}" bindtap="upload">{{busy ? '上传 ' + progress + '%' : '安全上传并继续'}}</button>
+    <button class="button danger" wx:if="{{busy}}" bindtap="cancel">取消上传</button>
+    <view class="status error" wx:if="{{error}}">{{error}}</view>
+  </view>
+</view>

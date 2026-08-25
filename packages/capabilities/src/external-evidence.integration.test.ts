@@ -4,6 +4,7 @@ import test, { type TestContext } from "node:test";
 import {
   DomainError,
   LifeTimeMachineRuntime,
+  signConsentPolicyCatalog,
   signExternalEvidence,
   type ActorContext,
   type EvidenceEnvironment,
@@ -441,9 +442,12 @@ const cases: readonly EvidenceCase[] = [
       releaseManifestDigest: DIGEST_A, repositoryCommit: "commit-127", artifactCommit: "commit-127", sbomDigest: DIGEST_B,
       wave: "internal", rolloutPercent: 1, waveStartedAt: "2026-08-20T00:00:00.000Z",
       releaseGates: Array.from({ length: 12 }, (_, index) => `G${index}`),
-      monitoringDomains: ["quality", "payment", "refund", "support", "ledger", "supply", "privacy", "security"],
+      monitoringDomains: ["quality", "payment", "refund", "message", "support", "ledger", "supply", "privacy", "security", "cost", "slo"],
       approvalIds: ["approval-127-a", "approval-127-b"], rollbackExerciseId: "rollback-127",
       automaticPausePolicyVersion: "pause-v1", activeGuardrailBreaches: 0,
+      guardrailPolicySha256: DIGEST_A, waveObservationSetSha256: DIGEST_B,
+      rollbackForwardDrillSha256: DIGEST_C,
+      changeApproverEvidenceIds: ["change-risk-evidence", "change-operations-evidence"],
       externalEvidenceIds: evidenceIds("B127", 5),
     },
   },
@@ -577,12 +581,68 @@ test("B56 approval requires an independent step-up auditor rather than a client 
   }), "AUTH_FORBIDDEN");
 });
 
+test("B47 rolls back single-use evidence when the capability transition fails", async (testContext) => {
+  const evidenceCase = cases.find((item) => item.batchId === "B47");
+  assert.ok(evidenceCase);
+  const context = admin("B47", "atomic-rollback");
+  const runtime = runtimeFor(testContext, evidenceCase.binding.provider);
+  const ids = evidenceCase.input.externalEvidenceIds as string[];
+  registerSandboxEvidence(runtime, context, evidenceCase.binding, ids);
+  runtime.createRecord(context, {
+    collection: "release.promotions",
+    id: "release-47",
+    data: { environment: "production" },
+    idempotencyKey: "b47-stale-transition-fixture",
+  });
+
+  await rejectsDomainCode(createCapabilityRegistry().execute(runtime, "B47", {
+    actor: context,
+    idempotencyKey: "b47-atomic-rollback",
+    input: evidenceCase.input,
+  }), "VERSION_CONFLICT");
+
+  for (const evidenceId of ids) {
+    assert.equal(runtime.getExternalEvidence(context, evidenceId).consumedAt, null);
+  }
+  assert.equal(runtime.getRecord(context, "release.promotions", "release-47").data.environment, "production");
+  assert.equal(
+    runtime.listAudit(context, 200).filter((entry) => entry.action === "capability.B47.transition").length,
+    0,
+  );
+});
+
 test("production evidence runtime rejects a signed sandbox operational-report fixture", (testContext) => {
   const evidenceCase = cases.find((item) => item.batchId === "B119");
   assert.ok(evidenceCase);
   const context = admin("production-reject");
   const productionIssuer = "capability-adapter-fixture";
   const productionKeyId = "ed25519-2026";
+  const policyIssuedAt = new Date(Date.now() - 60_000).toISOString();
+  const policyExpiresAt = new Date(Date.now() + 24 * 60 * 60_000).toISOString();
+  const consentPolicyCatalog = signConsentPolicyCatalog({
+    schemaVersion: "ltm.consent-policy-catalog.v1",
+    catalogId: "capability-production-policy-1",
+    issuer: "privacy-policy-authority",
+    environment: "production",
+    issuedAt: policyIssuedAt,
+    expiresAt: policyExpiresAt,
+    algorithm: "Ed25519",
+    keyId: "capability-consent-key-1",
+    policies: [{
+      policyVersion: "capability-policy-v1",
+      purpose: "sandbox_commercial_validation",
+      locale: "zh-CN",
+      jurisdictions: ["CN"],
+      resourceKinds: ["record"],
+      allowedActions: ["read"],
+      grantorCapacities: ["self"],
+      minorApplicability: "adult",
+      disclosureSha256: DIGEST_C,
+      effectiveFrom: policyIssuedAt,
+      effectiveUntil: policyExpiresAt,
+      maxConsentLifetimeSeconds: 3_600,
+    }],
+  }, PRIVATE_KEY_PEM);
   const runtime = new LifeTimeMachineRuntime({
     databasePath: ":memory:",
     evidencePolicy: "production",
@@ -596,6 +656,18 @@ test("production evidence runtime rejects a signed sandbox operational-report fi
       allowedScopes: ["ltm-evidence:v1:*"],
       allowedEnvironments: ["production"],
     }],
+    consentPolicyCatalog,
+    trustedConsentPolicyKeys: [{
+      keyId: "capability-consent-key-1",
+      issuer: "privacy-policy-authority",
+      algorithm: "Ed25519",
+      publicKeyPem: PUBLIC_KEY_PEM,
+      allowedEnvironments: ["production"],
+      notBefore: policyIssuedAt,
+      notAfter: policyExpiresAt,
+    }],
+    consentPolicyJurisdiction: "CN",
+    consentPolicyLocale: "zh-CN",
   });
   testContext.after(() => runtime.close());
   const scope = capabilityEvidenceScope(evidenceCase.binding);

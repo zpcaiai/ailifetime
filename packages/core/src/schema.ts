@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const SCHEMA_SQL = `
 PRAGMA foreign_keys = ON;
@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS records (
   tenant_id TEXT NOT NULL,
   collection TEXT NOT NULL,
   id TEXT NOT NULL,
+  processing_purpose TEXT NOT NULL DEFAULT '__legacy_unmapped__',
   owner_actor_id TEXT,
   participant_ids_json TEXT NOT NULL DEFAULT '[]',
   contains_minor INTEGER NOT NULL DEFAULT 0 CHECK (contains_minor IN (0, 1)),
@@ -32,6 +33,12 @@ CREATE TRIGGER IF NOT EXISTS records_tenant_immutable
 BEFORE UPDATE OF tenant_id, collection, id ON records
 BEGIN
   SELECT RAISE(ABORT, 'record identity is immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS records_processing_purpose_immutable
+BEFORE UPDATE OF processing_purpose ON records
+BEGIN
+  SELECT RAISE(ABORT, 'record processing purpose is immutable');
 END;
 
 CREATE TABLE IF NOT EXISTS idempotency_records (
@@ -59,6 +66,9 @@ CREATE TABLE IF NOT EXISTS consents (
   purpose TEXT NOT NULL,
   scope_json TEXT NOT NULL CHECK (json_valid(scope_json)),
   policy_version TEXT NOT NULL,
+  policy_catalog_sha256 TEXT CHECK (policy_catalog_sha256 IS NULL OR length(policy_catalog_sha256) = 64),
+  jurisdiction TEXT,
+  locale TEXT,
   status TEXT NOT NULL CHECK (status IN ('active', 'expired', 'withdrawn', 'disputed', 'superseded')),
   evidence_hash TEXT NOT NULL CHECK (length(evidence_hash) = 64),
   is_minor INTEGER NOT NULL CHECK (is_minor IN (0, 1)),
@@ -66,7 +76,13 @@ CREATE TABLE IF NOT EXISTS consents (
   expires_at TEXT,
   withdrawn_at TEXT,
   version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
-  PRIMARY KEY (tenant_id, id)
+  PRIMARY KEY (tenant_id, id),
+  CHECK (
+    (policy_catalog_sha256 IS NULL AND jurisdiction IS NULL AND locale IS NULL)
+    OR
+    (policy_catalog_sha256 IS NOT NULL AND jurisdiction IS NOT NULL AND length(jurisdiction) > 0
+      AND locale IS NOT NULL AND length(locale) > 0)
+  )
 ) STRICT;
 CREATE INDEX IF NOT EXISTS consents_active_lookup
   ON consents(tenant_id, participant_id, purpose, status, expires_at);
@@ -255,6 +271,141 @@ BEFORE UPDATE ON evidence_consumptions BEGIN SELECT RAISE(ABORT, 'evidence consu
 CREATE TRIGGER IF NOT EXISTS evidence_consumptions_no_delete
 BEFORE DELETE ON evidence_consumptions BEGIN SELECT RAISE(ABORT, 'evidence consumption is immutable'); END;
 
+CREATE TABLE IF NOT EXISTS participants (
+  tenant_id TEXT NOT NULL,
+  participant_id TEXT NOT NULL,
+  owner_actor_id TEXT NOT NULL,
+  minor_status TEXT NOT NULL CHECK (minor_status IN ('adult', 'minor')),
+  status TEXT NOT NULL CHECK (status IN ('active', 'revoked')),
+  evidence_id TEXT NOT NULL,
+  evidence_scope TEXT NOT NULL,
+  registered_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  revoked_at TEXT,
+  revocation_reason TEXT,
+  revocation_evidence_id TEXT,
+  revocation_evidence_scope TEXT,
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
+  PRIMARY KEY (tenant_id, participant_id),
+  FOREIGN KEY (tenant_id, evidence_id) REFERENCES external_evidence(tenant_id, id),
+  FOREIGN KEY (tenant_id, revocation_evidence_id) REFERENCES external_evidence(tenant_id, id),
+  CHECK (
+    (status = 'active' AND revoked_at IS NULL AND revocation_reason IS NULL
+      AND revocation_evidence_id IS NULL AND revocation_evidence_scope IS NULL)
+    OR
+    (status = 'revoked' AND revoked_at IS NOT NULL AND length(revocation_reason) > 0
+      AND revocation_evidence_id IS NOT NULL AND revocation_evidence_scope IS NOT NULL)
+  )
+) STRICT;
+CREATE INDEX IF NOT EXISTS participants_owner_lookup
+  ON participants(tenant_id, owner_actor_id, status, expires_at);
+CREATE TRIGGER IF NOT EXISTS participants_update_guard
+BEFORE UPDATE ON participants
+WHEN NEW.tenant_id IS NOT OLD.tenant_id
+  OR NEW.participant_id IS NOT OLD.participant_id
+  OR NEW.version <> OLD.version + 1
+  OR (OLD.status = 'revoked' AND NEW.status <> 'active')
+  OR (OLD.status = 'active' AND NEW.status NOT IN ('active', 'revoked'))
+BEGIN SELECT RAISE(ABORT, 'invalid participant registry transition'); END;
+CREATE TRIGGER IF NOT EXISTS participants_no_delete
+BEFORE DELETE ON participants BEGIN SELECT RAISE(ABORT, 'participant registry entries are durable'); END;
+
+CREATE TABLE IF NOT EXISTS guardian_authorizations (
+  tenant_id TEXT NOT NULL,
+  authorization_id TEXT NOT NULL,
+  guardian_actor_id TEXT NOT NULL,
+  participant_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('active', 'revoked', 'superseded')),
+  scope_json TEXT NOT NULL CHECK (json_valid(scope_json)),
+  evidence_id TEXT NOT NULL,
+  evidence_scope TEXT NOT NULL,
+  granted_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  revoked_at TEXT,
+  revocation_reason TEXT,
+  revocation_evidence_id TEXT,
+  revocation_evidence_scope TEXT,
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
+  PRIMARY KEY (tenant_id, authorization_id),
+  FOREIGN KEY (tenant_id, participant_id) REFERENCES participants(tenant_id, participant_id),
+  FOREIGN KEY (tenant_id, evidence_id) REFERENCES external_evidence(tenant_id, id),
+  FOREIGN KEY (tenant_id, revocation_evidence_id) REFERENCES external_evidence(tenant_id, id),
+  CHECK (
+    (status IN ('active', 'superseded') AND revoked_at IS NULL AND revocation_reason IS NULL
+      AND revocation_evidence_id IS NULL AND revocation_evidence_scope IS NULL)
+    OR
+    (status = 'revoked' AND revoked_at IS NOT NULL AND length(revocation_reason) > 0
+      AND revocation_evidence_id IS NOT NULL AND revocation_evidence_scope IS NOT NULL)
+  )
+) STRICT;
+CREATE INDEX IF NOT EXISTS guardian_authorizations_active_lookup
+  ON guardian_authorizations(tenant_id, guardian_actor_id, participant_id, status, expires_at);
+CREATE TRIGGER IF NOT EXISTS guardian_authorizations_update_guard
+BEFORE UPDATE ON guardian_authorizations
+WHEN OLD.status <> 'active'
+  OR NEW.status NOT IN ('revoked', 'superseded')
+  OR NEW.version <> OLD.version + 1
+  OR NEW.tenant_id IS NOT OLD.tenant_id
+  OR NEW.authorization_id IS NOT OLD.authorization_id
+  OR NEW.guardian_actor_id IS NOT OLD.guardian_actor_id
+  OR NEW.participant_id IS NOT OLD.participant_id
+  OR NEW.scope_json IS NOT OLD.scope_json
+  OR NEW.evidence_id IS NOT OLD.evidence_id
+  OR NEW.evidence_scope IS NOT OLD.evidence_scope
+  OR NEW.granted_at IS NOT OLD.granted_at
+  OR NEW.expires_at IS NOT OLD.expires_at
+BEGIN SELECT RAISE(ABORT, 'invalid guardian authorization transition'); END;
+CREATE TRIGGER IF NOT EXISTS guardian_authorizations_no_delete
+BEFORE DELETE ON guardian_authorizations BEGIN SELECT RAISE(ABORT, 'guardian authorizations are durable'); END;
+
+CREATE TABLE IF NOT EXISTS authorized_agent_authorizations (
+  tenant_id TEXT NOT NULL,
+  authorization_id TEXT NOT NULL,
+  agent_actor_id TEXT NOT NULL,
+  participant_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('active', 'revoked', 'superseded')),
+  scope_json TEXT NOT NULL CHECK (json_valid(scope_json)),
+  evidence_id TEXT NOT NULL,
+  evidence_scope TEXT NOT NULL,
+  granted_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  revoked_at TEXT,
+  revocation_reason TEXT,
+  revocation_evidence_id TEXT,
+  revocation_evidence_scope TEXT,
+  version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
+  PRIMARY KEY (tenant_id, authorization_id),
+  FOREIGN KEY (tenant_id, participant_id) REFERENCES participants(tenant_id, participant_id),
+  FOREIGN KEY (tenant_id, evidence_id) REFERENCES external_evidence(tenant_id, id),
+  FOREIGN KEY (tenant_id, revocation_evidence_id) REFERENCES external_evidence(tenant_id, id),
+  CHECK (
+    (status IN ('active', 'superseded') AND revoked_at IS NULL AND revocation_reason IS NULL
+      AND revocation_evidence_id IS NULL AND revocation_evidence_scope IS NULL)
+    OR
+    (status = 'revoked' AND revoked_at IS NOT NULL AND length(revocation_reason) > 0
+      AND revocation_evidence_id IS NOT NULL AND revocation_evidence_scope IS NOT NULL)
+  )
+) STRICT;
+CREATE INDEX IF NOT EXISTS authorized_agent_authorizations_active_lookup
+  ON authorized_agent_authorizations(tenant_id, agent_actor_id, participant_id, status, expires_at);
+CREATE TRIGGER IF NOT EXISTS authorized_agent_authorizations_update_guard
+BEFORE UPDATE ON authorized_agent_authorizations
+WHEN OLD.status <> 'active'
+  OR NEW.status NOT IN ('revoked', 'superseded')
+  OR NEW.version <> OLD.version + 1
+  OR NEW.tenant_id IS NOT OLD.tenant_id
+  OR NEW.authorization_id IS NOT OLD.authorization_id
+  OR NEW.agent_actor_id IS NOT OLD.agent_actor_id
+  OR NEW.participant_id IS NOT OLD.participant_id
+  OR NEW.scope_json IS NOT OLD.scope_json
+  OR NEW.evidence_id IS NOT OLD.evidence_id
+  OR NEW.evidence_scope IS NOT OLD.evidence_scope
+  OR NEW.granted_at IS NOT OLD.granted_at
+  OR NEW.expires_at IS NOT OLD.expires_at
+BEGIN SELECT RAISE(ABORT, 'invalid authorized-agent authorization transition'); END;
+CREATE TRIGGER IF NOT EXISTS authorized_agent_authorizations_no_delete
+BEFORE DELETE ON authorized_agent_authorizations BEGIN SELECT RAISE(ABORT, 'authorized-agent authorizations are durable'); END;
+
 CREATE TABLE IF NOT EXISTS external_commands (
   tenant_id TEXT NOT NULL,
   command_id TEXT NOT NULL,
@@ -408,5 +559,5 @@ CREATE TRIGGER IF NOT EXISTS external_business_events_no_delete
 BEFORE DELETE ON external_business_events BEGIN SELECT RAISE(ABORT, 'external business events are immutable'); END;
 
 UPDATE schema_metadata SET value = '${SCHEMA_VERSION}'
-WHERE key = 'schema_version' AND value IN ('1', '2', '3');
+WHERE key = 'schema_version' AND value IN ('1', '2', '3', '4');
 `;

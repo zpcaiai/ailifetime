@@ -37,7 +37,7 @@ export function scanRepository(options = {}) {
   scanSurface(root, "nativeSource", ["packages", "services"], SOURCE_RULES, findings, coverage);
   scanSurface(root, "frontend", ["apps/web/src", "apps/web/public"], CLIENT_RULES, findings, coverage);
   scanSurface(root, "mobile", ["apps/mobile/src"], CLIENT_RULES, findings, coverage);
-  scanSurface(root, "mini", ["apps/wechat-mini/src"], CLIENT_RULES, findings, coverage);
+  scanSurface(root, "mini", ["apps/wechat-mini/src", "apps/wechat-mini/miniprogram"], CLIENT_RULES, findings, coverage);
   scanIac(root, findings, coverage);
   scanApi(root, findings, coverage);
   applyExternalEvidence(options, findings, coverage);
@@ -186,7 +186,7 @@ function applyExternalEvidence(options, findings, coverage) {
   else coverage.sca = missingExternal("pnpm audit JSON");
   coverage.iac = externalStatus(options.trivyConfigReport, "Trivy IaC/config JSON", (report) => scanTrivy(report, findings, "iac"));
   const imageReports = options.trivyImageReports ?? [];
-  if (imageReports.length < (options.expectedImageCount ?? 3)) coverage.container = missingExternal(`Trivy image JSON (${options.expectedImageCount ?? 3} images required, ${imageReports.length} supplied)`);
+  if (imageReports.length < (options.expectedImageCount ?? 5)) coverage.container = missingExternal(`Trivy image JSON (${options.expectedImageCount ?? 5} images required, ${imageReports.length} supplied)`);
   else {
     const artifactNames = imageReports.map((report) => report?.ArtifactName);
     if (artifactNames.some((name) => typeof name !== "string") || new Set(artifactNames).size !== imageReports.length) throw new Error("Trivy image evidence must cover distinct OCI artifacts");

@@ -17,9 +17,9 @@ These states are separate:
 
 CI uses a run-scoped Ed25519 key for the CI trust tier, then attaches GitHub OIDC build provenance to the signed bundle on `main`. A production release must instead use an externally managed Ed25519 key whose key ID is on the production trust list. A CI-scoped key is not production release authority.
 
-OCI artifacts are captured by `tools/security-image-manifest.mjs`. Local/CI image IDs prove the exact built content but do not pretend to be pushed-registry digests. Production verification requires all six roles (`api`, `workers`, `integration-gateway`, `postgres`, `redis`, `object-storage`) to carry `registry/name@sha256:...` digests. Missing registry digests produce `BLOCKED_EXTERNAL`.
+OCI artifacts are captured by `tools/security-image-manifest.mjs`. Local/CI image IDs prove the exact built content but do not pretend to be pushed-registry digests. Production verification requires all five application workloads (`api`, `workers`, `integration-gateway`, `client-integration-broker`, `migrator`) to carry `registry/name@sha256:...` digests. PostgreSQL, Redis and object storage are managed dependencies verified by their dedicated signed deployment reports, not substituted with unrelated container-image assertions. Missing workload registry digests produce `BLOCKED_EXTERNAL`.
 
-The Compose file and service Dockerfiles use exact version tags, not `latest` or major-only tags. Because registry access timed out while this implementation was being validated, no unverified multi-architecture digest was written. Deployment must resolve and record registry digests, run Trivy against those exact digests, and bind the resulting manifest into the signed supply-chain bundle.
+The service Dockerfiles pin Node.js 26.0.0 Bookworm Slim to the registry-resolved multi-architecture OCI index digest as well as its human-readable tag. Deployment must still resolve the five application images to their own immutable registry digests, run Trivy against those exact images, and bind the resulting manifest into the signed supply-chain bundle.
 
 Reproduce after building:
 
@@ -39,7 +39,7 @@ The `b123-security-assurance` job runs and retains evidence for:
 | SAST | CodeQL `security-extended` SARIF | error or security severity >= 7 |
 | SCA | `pnpm audit --prod --json` | high/critical |
 | IaC | Trivy config JSON plus native invariants | high/critical |
-| Containers | three Trivy scans over the exact locally built OCI IDs | high/critical |
+| Containers | five Trivy scans over the exact locally built OCI IDs (API, worker, gateway, client broker, migrator) | high/critical |
 | API | OpenAPI/server invariants plus live DAST | missing control or failed probe |
 | Frontend | targeted browser-storage, DOM injection, TLS checks | high/critical |
 | Mobile | targeted storage, transport, credential checks | high/critical |
