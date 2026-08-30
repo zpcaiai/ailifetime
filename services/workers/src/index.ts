@@ -1,6 +1,13 @@
 import { DomainError, resolveExternalCommandCallbackRoute } from "@ltm/core";
-import type { ActorContext, LifeTimeMachineRuntimePort, OutboxEvent, OutboxPublisher } from "@ltm/core";
+import type {
+  ActorContext,
+  LifeTimeMachineRuntimePort,
+  OutboxEvent,
+  OutboxPublisher,
+  RecordEnvelope,
+} from "@ltm/core";
 import type { PartnerCommandInput, PartnerCommandReceipt } from "@ltm/providers";
+import { isDeepStrictEqual } from "node:util";
 
 export type WorkerRoute = "media" | "notification" | "fulfillment" | "integration" | "data";
 
@@ -229,9 +236,16 @@ export class ProductionRoutePublisher implements OutboxPublisher {
     // the one requested intent. Delivering any of them would duplicate the
     // provider side effect under a different outbox idempotency key.
     const snapshot = recordSnapshot(event);
-    const reconciliationAlert = event.eventType === "external_command.reconciliation_required";
-    if (!reconciliationAlert &&
+    const reconciliationNotice = event.eventType === "external_command.reconciliation_required" ||
+      event.eventType === "external_command.reconciled";
+    if (!reconciliationNotice &&
         (snapshot?.data.operationMode === "external-command" || event.eventType.startsWith("external_command."))) return;
+    if (snapshot !== undefined && !await revalidateRecordSnapshot(
+      this.runtime,
+      this.actor,
+      event,
+      snapshot,
+    )) return;
     const batchId = stringValue(snapshot?.data.batchId, "capability event batchId");
     if (!/^B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])$/.test(batchId)) {
       throw new DomainError("VALIDATION_FAILED", "capability event batchId is invalid");
@@ -292,12 +306,69 @@ function abortableDelay(milliseconds: number, signal: AbortSignal): Promise<void
   });
 }
 
-function recordSnapshot(event: OutboxEvent): { readonly data: Record<string, unknown> } | undefined {
+interface RecordSnapshot {
+  readonly record: Readonly<Record<string, unknown>>;
+  readonly data: Readonly<Record<string, unknown>>;
+}
+
+function recordSnapshot(event: OutboxEvent): RecordSnapshot | undefined {
   const record = event.payload.record;
   if (record === null || typeof record !== "object" || Array.isArray(record)) return undefined;
   const data = (record as Record<string, unknown>).data;
   if (data === null || typeof data !== "object" || Array.isArray(data)) return undefined;
-  return { data: data as Record<string, unknown> };
+  return {
+    record: record as Readonly<Record<string, unknown>>,
+    data: data as Readonly<Record<string, unknown>>,
+  };
+}
+
+/**
+ * Re-authorize a record snapshot at the point of external delivery. The outbox
+ * may wait behind retries while consent, ownership, purpose or the record
+ * itself changes. A stale snapshot is never sent: a newer record supersedes it,
+ * while an equal-version mismatch is treated as durable-state corruption.
+ */
+async function revalidateRecordSnapshot(
+  runtime: LifeTimeMachineRuntimePort,
+  actor: ActorContext,
+  event: OutboxEvent,
+  snapshot: RecordSnapshot,
+): Promise<boolean> {
+  const collection = stringValue(snapshot.record.collection, "outbox record collection");
+  const recordId = stringValue(snapshot.record.id, "outbox record ID");
+  const tenantId = stringValue(snapshot.record.tenantId, "outbox record tenantId");
+  const version = snapshot.record.version;
+  if (collection !== event.aggregateType || recordId !== event.aggregateId || tenantId !== event.tenantId ||
+      !Number.isSafeInteger(version) || (version as number) <= 0) {
+    throw new DomainError("EVENT_FINGERPRINT_CONFLICT", "outbox record snapshot does not match its event identity", {
+      retryable: false,
+      details: { eventId: event.id, aggregateType: event.aggregateType, aggregateId: event.aggregateId },
+    });
+  }
+  // getRecord performs current tenant, purpose, participant, guardian and
+  // consent authorization. It must happen immediately before network egress.
+  const current = await runtime.getRecord(actor, collection, recordId) as RecordEnvelope;
+  if (current.version > (version as number)) {
+    await runtime.appendAudit(actor, {
+      action: "outbox.stale_projection_skipped",
+      resourceType: event.aggregateType,
+      resourceId: event.aggregateId,
+      details: {
+        eventId: event.id,
+        eventType: event.eventType,
+        eventVersion: version as number,
+        currentVersion: current.version,
+      },
+    });
+    return false;
+  }
+  if (current.version !== version || !isDeepStrictEqual(snapshot.record, current)) {
+    throw new DomainError("EVENT_FINGERPRINT_CONFLICT", "outbox record snapshot differs from current durable state", {
+      retryable: false,
+      details: { eventId: event.id, eventVersion: version as number, currentVersion: current.version },
+    });
+  }
+  return true;
 }
 
 function externalCommandSnapshot(event: OutboxEvent): {

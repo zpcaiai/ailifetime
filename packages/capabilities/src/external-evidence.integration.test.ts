@@ -103,6 +103,23 @@ function registerSandboxEvidence(
   });
 }
 
+function requestBoundBinding(
+  registry: ReturnType<typeof createCapabilityRegistry>,
+  evidenceCase: EvidenceCase,
+  context: ActorContext,
+): CapabilityEvidenceBinding {
+  const parsed = registry.get(evidenceCase.batchId)?.parseInput({
+    actor: context,
+    idempotencyKey: `request-binding-${evidenceCase.batchId}`,
+    input: evidenceCase.input,
+  });
+  assert.ok(parsed);
+  const requestSha256 = parsed.decisionRequestSha256;
+  return typeof requestSha256 === "string"
+    ? { ...evidenceCase.binding, requestSha256 }
+    : evidenceCase.binding;
+}
+
 function objectResult(value: JsonValue): JsonObject {
   assert.ok(value !== null && typeof value === "object" && !Array.isArray(value));
   return value;
@@ -440,13 +457,15 @@ const cases: readonly EvidenceCase[] = [
     input: {
       launchId: "launch-127", releaseControlProviderId: "control-plane-127", providerEnvironment: "sandbox",
       releaseManifestDigest: DIGEST_A, repositoryCommit: "commit-127", artifactCommit: "commit-127", sbomDigest: DIGEST_B,
-      wave: "internal", rolloutPercent: 1, waveStartedAt: "2026-08-20T00:00:00.000Z",
+      wave: "global", rolloutPercent: 100, waveStartedAt: "2026-08-20T00:00:00.000Z",
       releaseGates: Array.from({ length: 12 }, (_, index) => `G${index}`),
       monitoringDomains: ["quality", "payment", "refund", "message", "support", "ledger", "supply", "privacy", "security", "cost", "slo"],
       approvalIds: ["approval-127-a", "approval-127-b"], rollbackExerciseId: "rollback-127",
       automaticPausePolicyVersion: "pause-v1", activeGuardrailBreaches: 0,
       guardrailPolicySha256: DIGEST_A, waveObservationSetSha256: DIGEST_B,
       rollbackForwardDrillSha256: DIGEST_C,
+      globalWaveObservationPath: "security/evidence/global-wave-observation.json",
+      globalWaveObservationSha256: DIGEST_A,
       changeApproverEvidenceIds: ["change-risk-evidence", "change-operations-evidence"],
       externalEvidenceIds: evidenceIds("B127", 5),
     },
@@ -481,7 +500,7 @@ for (const evidenceCase of cases) {
       });
     }
     const ids = (evidenceCase.input.externalEvidenceIds ?? evidenceCase.input.approvalEvidenceIds) as string[];
-    registerSandboxEvidence(runtime, context, evidenceCase.binding, ids);
+    registerSandboxEvidence(runtime, context, requestBoundBinding(registry, evidenceCase, context), ids);
 
     const result = objectResult(await registry.execute(runtime, evidenceCase.batchId, {
       actor: context,
@@ -523,7 +542,7 @@ for (const evidenceCase of cases) {
       });
     }
     const ids = (evidenceCase.input.externalEvidenceIds ?? evidenceCase.input.approvalEvidenceIds) as string[];
-    registerSandboxEvidence(runtime, context, evidenceCase.binding, ids);
+    registerSandboxEvidence(runtime, context, requestBoundBinding(registry, evidenceCase, context), ids);
 
     await rejectsDomainCode(
       registry.execute(runtime, evidenceCase.batchId, {
@@ -567,7 +586,12 @@ test("B56 approval requires an independent step-up auditor rather than a client 
   const runtime = runtimeFor(testContext, evidenceCase.binding.provider);
   const registry = createCapabilityRegistry();
   const ids = evidenceCase.input.externalEvidenceIds as string[];
-  registerSandboxEvidence(runtime, admin("B56", "register-role-check"), evidenceCase.binding, ids);
+  registerSandboxEvidence(
+    runtime,
+    admin("B56", "register-role-check"),
+    requestBoundBinding(registry, evidenceCase, admin("B56", "request-role-check")),
+    ids,
+  );
 
   await rejectsDomainCode(registry.execute(runtime, "B56", {
     actor: { ...admin("B56", "non-auditor"), roles: ["platform_admin"] },
@@ -586,8 +610,9 @@ test("B47 rolls back single-use evidence when the capability transition fails", 
   assert.ok(evidenceCase);
   const context = admin("B47", "atomic-rollback");
   const runtime = runtimeFor(testContext, evidenceCase.binding.provider);
+  const registry = createCapabilityRegistry();
   const ids = evidenceCase.input.externalEvidenceIds as string[];
-  registerSandboxEvidence(runtime, context, evidenceCase.binding, ids);
+  registerSandboxEvidence(runtime, context, requestBoundBinding(registry, evidenceCase, context), ids);
   runtime.createRecord(context, {
     collection: "release.promotions",
     id: "release-47",

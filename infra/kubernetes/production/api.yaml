@@ -108,6 +108,7 @@ spec:
               cpu: "2"
               memory: 1Gi
           securityContext:
+            privileged: false
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:
@@ -122,7 +123,8 @@ spec:
               mountPath: /var/run/secrets/ltm-client-broker-ca
               readOnly: true
             - name: consent-policy
-              mountPath: /var/run/secrets/ltm-consent-policy
+              mountPath: /var/run/secrets/ltm-consent-policy/catalog.json
+              subPath: catalog.json
               readOnly: true
       volumes:
         - name: tmp

@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
+import { generateKeyPairSync } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import {
   DomainError,
   EXTERNAL_COMMAND_CALLBACK_ROUTES,
   LifeTimeMachineRuntime,
+  signConsentPolicyCatalog,
   type ActorContext,
   type OutboxEvent,
 } from "@ltm/core";
@@ -397,7 +402,119 @@ test("production route publisher signs and delivers ordinary capability events",
   assert.equal(runtime.listAudit(actor).some((entry) => entry.action === "outbox.provider_accepted"), true);
 });
 
-test("production worker configuration requires all routes, batches, and managed secret references", () => {
+test("ordinary route delivery re-authorizes current state, skips stale snapshots, and rejects snapshot corruption", async (testContext) => {
+  const runtime = new LifeTimeMachineRuntime({ databasePath: ":memory:" });
+  testContext.after(() => runtime.close());
+  const created = runtime.createRecord(actor, {
+    collection: "projects",
+    id: "route-revalidation-1",
+    data: { batchId: "B01", operationMode: "resource", state: "created", privateValue: "version-one" },
+    idempotencyKey: "route-revalidation-create-1",
+  }).value;
+  const createdEvent = runtime.listOutbox(actor)
+    .find((event) => event.eventType === "projects.created");
+  assert.ok(createdEvent);
+  const updated = runtime.updateRecord(actor, {
+    collection: created.collection,
+    id: created.id,
+    expectedVersion: created.version,
+    data: { batchId: "B01", operationMode: "resource", state: "updated", privateValue: "version-two" },
+    idempotencyKey: "route-revalidation-update-1",
+  }).value;
+  const updatedEvent = runtime.listOutbox(actor)
+    .find((event) => event.eventType === "projects.updated");
+  assert.ok(updatedEvent);
+  let deliveries = 0;
+  const publisher = new ProductionRoutePublisher(runtime, actor, {}, {
+    async send() {
+      deliveries += 1;
+      return {
+        providerRequestId: "revalidated-route-receipt-1",
+        state: "accepted",
+        artifact: Buffer.from("accepted"),
+        artifactSha256: "f".repeat(64),
+      };
+    },
+  });
+
+  await publisher.publish(createdEvent);
+  assert.equal(deliveries, 0);
+  assert.equal(runtime.listAudit(actor).some((entry) =>
+    entry.action === "outbox.stale_projection_skipped" &&
+    entry.details.eventVersion === 1 && entry.details.currentVersion === 2), true);
+
+  const persistedSnapshot = updatedEvent.payload.record as Record<string, unknown>;
+  const forgedEvent: OutboxEvent = {
+    ...updatedEvent,
+    payload: {
+      ...updatedEvent.payload,
+      record: {
+        ...persistedSnapshot,
+        data: { ...updated.data, privateValue: "forged-value" },
+      },
+    },
+  };
+  await assert.rejects(
+    publisher.publish(forgedEvent),
+    (error: unknown) => error instanceof DomainError && error.code === "EVENT_FINGERPRINT_CONFLICT",
+  );
+  assert.equal(deliveries, 0);
+
+  await publisher.publish(updatedEvent);
+  assert.equal(deliveries, 1);
+});
+
+test("ordinary route delivery never reaches the network when point-of-egress consent authorization fails", async () => {
+  const record = {
+    id: "consent-egress-1",
+    tenantId: actor.tenantId,
+    collection: "projects",
+    processingPurpose: actor.purpose,
+    ownerActorId: actor.actorId,
+    participantIds: ["participant-egress-1"],
+    containsMinor: false,
+    data: { batchId: "B01", operationMode: "resource", state: "ready" },
+    version: 1,
+    createdAt: "2026-08-20T00:00:00.000Z",
+    updatedAt: "2026-08-20T00:00:00.000Z",
+    deletedAt: null,
+  };
+  const event: OutboxEvent = {
+    id: "outbox-consent-egress-1",
+    tenantId: actor.tenantId,
+    aggregateType: record.collection,
+    aggregateId: record.id,
+    eventType: "projects.created",
+    payload: { record },
+    status: "leased",
+    attempts: 1,
+    availableAt: "2026-08-20T00:00:00.000Z",
+    leaseOwner: "worker-consent-egress",
+    leaseUntil: "2026-08-20T00:01:00.000Z",
+    createdAt: "2026-08-20T00:00:00.000Z",
+    publishedAt: null,
+    lastError: null,
+  };
+  let deliveries = 0;
+  const consentDeniedRuntime = {
+    getRecord() {
+      throw new DomainError("CONSENT_REQUIRED", "participant consent was withdrawn");
+    },
+  } as unknown as LifeTimeMachineRuntime;
+  const publisher = new ProductionRoutePublisher(consentDeniedRuntime, actor, {}, {
+    async send() {
+      deliveries += 1;
+      throw new Error("network delivery must not run");
+    },
+  });
+  await assert.rejects(
+    publisher.publish(event),
+    (error: unknown) => error instanceof DomainError && error.code === "CONSENT_REQUIRED",
+  );
+  assert.equal(deliveries, 0);
+});
+
+test("production worker configuration requires all routes, batches, managed secrets, and signed consent authority", (testContext) => {
   assert.equal(EXTERNAL_COMMAND_CALLBACK_ROUTES.length, 19);
   assert.equal(new Set(EXTERNAL_COMMAND_CALLBACK_ROUTES.map((route) => route.batchId)).size, 18);
   assert.deepEqual(
@@ -425,6 +542,7 @@ test("production worker configuration requires all routes, batches, and managed 
     DATABASE_URL: "postgresql://ltm_worker@example.test/ltm?sslmode=verify-full",
     LTM_WORKER_TENANT_ID: "tenant-production",
     LTM_METRICS_TOKEN_SHA256: "a".repeat(64),
+    ...productionConsentPolicyEnvironment(testContext),
     LTM_EXTERNAL_COMMAND_ADAPTERS_JSON: JSON.stringify(Object.fromEntries(batches.map((batch) => [batch, adapter]))),
     LTM_OUTBOX_ROUTE_ADAPTERS_JSON: JSON.stringify(Object.fromEntries(
       ["media", "notification", "fulfillment", "integration", "data"].map((route) => [route, adapter]),
@@ -437,6 +555,9 @@ test("production worker configuration requires all routes, batches, and managed 
   assert.equal(configuration.actor.permissions?.includes("record:purpose:cross"), true);
   assert.equal(configuration.deploymentProfile, "distributed");
   assert.equal(configuration.postgresRuntimeOptions?.applicationName, "ltm-worker");
+  assert.equal(configuration.postgresRuntimeOptions?.consentPolicyJurisdiction, "CN");
+  assert.equal(configuration.postgresRuntimeOptions?.consentPolicyLocale, "zh-CN");
+  assert.equal(configuration.postgresRuntimeOptions?.allowLegacyConsentPolicy, undefined);
 
   assert.throws(() => loadWorkerConfiguration({
     APP_ENV: "development",
@@ -450,6 +571,39 @@ test("production worker configuration requires all routes, batches, and managed 
       },
     }),
   }, "/tmp/ltm-product"), /AWS Secrets Manager reference/);
+
+  assert.throws(() => loadWorkerConfiguration({
+    APP_ENV: "development",
+    LTM_WORKER_TENANT_ID: "tenant-development",
+    LTM_EXTERNAL_COMMAND_ADAPTERS_JSON: JSON.stringify({ B999: adapter }),
+  }, "/tmp/ltm-product"), /unknown external command batches: B999/);
+
+  assert.throws(() => loadWorkerConfiguration({
+    APP_ENV: "development",
+    LTM_WORKER_TENANT_ID: "tenant-development",
+    LTM_OUTBOX_ROUTE_ADAPTERS_JSON: JSON.stringify({
+      media: { ...adapter, endpoint: "https://integrations.example.test/ltm?route=v1" },
+    }),
+  }, "/tmp/ltm-product"), /must not contain a query string/);
+});
+
+test("development worker opens a ready runtime in explicit legacy-only consent mode", async (testContext) => {
+  const configuration = loadWorkerConfiguration({
+    APP_ENV: "development",
+    LTM_DEPLOYMENT_PROFILE: "single-node",
+    LTM_DATABASE_PATH: ":memory:",
+    LTM_WORKER_TENANT_ID: "tenant-development-ready",
+  }, "/tmp/ltm-product");
+  assert.equal(configuration.runtimeOptions.allowLegacyConsentPolicy, true);
+  const runtime = new LifeTimeMachineRuntime(configuration.runtimeOptions);
+  testContext.after(() => runtime.close());
+  assert.deepEqual(await runtime.readiness(), {
+    ready: true,
+    database: "ok",
+    auditChain: "ok",
+    evidenceTrust: "disabled",
+    consentPolicy: "legacy_test_only",
+  });
 });
 
 test("worker health is public while metrics require a hashed bearer token", async (testContext) => {
@@ -458,7 +612,13 @@ test("worker health is public while metrics require a hashed bearer token", asyn
   const metrics = new WorkerMetrics(new Date("2026-08-20T00:00:00.000Z"));
   metrics.record({ published: 3, failed: 1 }, new Date("2026-08-20T00:01:00.000Z"));
   const server = createWorkerHealthServer({
-    readiness: async () => ({ ready: true, database: "ok", auditChain: "ok", evidenceTrust: "disabled" }),
+    readiness: async () => ({
+      ready: true,
+      database: "ok",
+      auditChain: "ok",
+      evidenceTrust: "disabled",
+      consentPolicy: "legacy_test_only",
+    }),
     metricsTokenSha256: digest,
   }, metrics);
   await new Promise<void>((resolvePromise) => server.listen(0, "127.0.0.1", resolvePromise));
@@ -474,3 +634,51 @@ test("worker health is public while metrics require a hashed bearer token", asyn
   assert.equal(response.status, 200);
   assert.match(await response.text(), /ltm_worker_events_published_total 3/);
 });
+
+function productionConsentPolicyEnvironment(testContext: { after(callback: () => void): void }): NodeJS.ProcessEnv {
+  const directory = mkdtempSync(join(tmpdir(), "ltm-worker-consent-"));
+  testContext.after(() => rmSync(directory, { recursive: true, force: true }));
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const issuedAt = new Date(Date.now() - 60_000).toISOString();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60_000).toISOString();
+  const catalog = signConsentPolicyCatalog({
+    schemaVersion: "ltm.consent-policy-catalog.v1",
+    catalogId: "worker-production-policy-1",
+    issuer: "privacy-policy-authority",
+    environment: "production",
+    issuedAt,
+    expiresAt,
+    algorithm: "Ed25519",
+    keyId: "worker-consent-key-1",
+    policies: [{
+      policyVersion: "worker-policy-v1",
+      purpose: "external_provider_delivery",
+      locale: "zh-CN",
+      jurisdictions: ["CN"],
+      resourceKinds: ["record"],
+      allowedActions: ["read"],
+      grantorCapacities: ["self"],
+      minorApplicability: "all",
+      disclosureSha256: "d".repeat(64),
+      effectiveFrom: issuedAt,
+      effectiveUntil: expiresAt,
+      maxConsentLifetimeSeconds: 3_600,
+    }],
+  }, privateKey.export({ type: "pkcs8", format: "pem" }).toString());
+  const path = join(directory, "consent-policy.json");
+  writeFileSync(path, JSON.stringify(catalog), { mode: 0o600 });
+  return {
+    LTM_CONSENT_POLICY_CATALOG_FILE: path,
+    LTM_CONSENT_POLICY_TRUST_KEYS_JSON: JSON.stringify([{
+      keyId: "worker-consent-key-1",
+      issuer: "privacy-policy-authority",
+      algorithm: "Ed25519",
+      publicKeyPem: publicKey.export({ type: "spki", format: "pem" }).toString(),
+      allowedEnvironments: ["production"],
+      notBefore: issuedAt,
+      notAfter: expiresAt,
+    }]),
+    LTM_CONSENT_POLICY_JURISDICTION: "CN",
+    LTM_CONSENT_POLICY_LOCALE: "zh-CN",
+  };
+}

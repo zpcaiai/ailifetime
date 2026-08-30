@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ai-life-time-machine/execution-receipt.schema.json",
+  "title": "Trusted clean-checkout execution receipt index",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "batch_id", "execution_nonce", "lease_receipt_sha256", "lease_started_at", "started_at",
+    "completed_at", "base_commit", "source_commit", "source_tree", "branch", "worktree",
+    "allowed_paths", "actual_changes", "acceptance_commands", "command_receipts",
+    "clean_checkout_before", "clean_checkout_after", "temporary_worktree_removed",
+    "all_passed", "production_release"
+  ],
+  "properties": {
+    "schema_version": { "const": "ltm.execution-receipt.v1" },
+    "batch_id": { "type": "string", "pattern": "^B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])$" },
+    "execution_nonce": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "lease_receipt_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "lease_started_at": { "type": "string", "format": "date-time" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "base_commit": { "type": "string", "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$" },
+    "source_commit": { "type": "string", "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$" },
+    "source_tree": { "type": "string", "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$" },
+    "branch": { "type": "string", "minLength": 1 },
+    "worktree": { "type": "string", "minLength": 1 },
+    "allowed_paths": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+    "actual_changes": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path", "change"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "old_path": { "type": "string", "minLength": 1 },
+          "change": { "enum": ["added", "modified", "deleted", "renamed"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "acceptance_commands": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["argv", "argv_sha256"],
+        "properties": {
+          "argv": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+          "argv_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        }
+      }
+    },
+    "command_receipts": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["path", "sha256", "argv_sha256", "exit_code", "status"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "argv_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "exit_code": { "type": "integer" },
+          "status": { "enum": ["passed", "failed"] }
+        }
+      }
+    },
+    "clean_checkout_before": { "type": "boolean" },
+    "clean_checkout_after": { "type": "boolean" },
+    "temporary_worktree_removed": { "type": "boolean" },
+    "all_passed": { "type": "boolean" },
+    "production_release": { "const": "EVIDENCE_PENDING" }
+  }
+}

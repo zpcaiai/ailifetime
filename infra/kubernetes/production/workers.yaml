@@ -72,6 +72,11 @@ spec:
               value: "__LTM_TENANT_ID__"
             - name: LTM_WORKER_HEALTH_PORT
               value: "8090"
+            - name: LTM_CONSENT_POLICY_TRUST_KEYS_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: ltm-production-consent-policy
+                  key: trust-keys.json
             - name: AWS_WEB_IDENTITY_TOKEN_FILE
               value: /var/run/secrets/ltm-workload/token
           readinessProbe:
@@ -104,6 +109,7 @@ spec:
               cpu: "2"
               memory: 1Gi
           securityContext:
+            privileged: false
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:
@@ -111,6 +117,10 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: consent-policy
+              mountPath: /var/run/secrets/ltm-consent-policy/catalog.json
+              subPath: catalog.json
+              readOnly: true
             - name: workload-token
               mountPath: /var/run/secrets/ltm-workload
               readOnly: true
@@ -118,6 +128,13 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 128Mi
+        - name: consent-policy
+          secret:
+            secretName: ltm-production-consent-policy
+            defaultMode: 0440
+            items:
+              - key: catalog.json
+                path: catalog.json
         - name: workload-token
           projected:
             defaultMode: 0440

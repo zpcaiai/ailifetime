@@ -1,0 +1,15 @@
+{
+  "version": "ltm.ingestion-sources.v1",
+  "cursorPolicy": "strict-contiguous-sequence",
+  "watermarkPolicy": "source-occurred-at-utc",
+  "sources": [
+    { "id": "event", "mode": "incremental", "deletion": "tombstone" },
+    { "id": "postgres_cdc", "mode": "cdc-and-snapshot", "deletion": "tombstone" },
+    { "id": "ledger", "mode": "append-only", "deletion": "prohibited" },
+    { "id": "payment", "mode": "incremental", "deletion": "tombstone" },
+    { "id": "partner", "mode": "incremental", "deletion": "tombstone" },
+    { "id": "notification", "mode": "incremental", "deletion": "tombstone" },
+    { "id": "ticket", "mode": "incremental", "deletion": "tombstone" },
+    { "id": "supply_chain", "mode": "incremental", "deletion": "tombstone" }
+  ]
+}

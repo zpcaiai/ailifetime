@@ -42,6 +42,11 @@ function supportTicket(input: JsonObject, invocation: CapabilityInvocation): Jso
   if (privacySensitive && assignedRole !== "privacy_officer") {
     throw new DomainError("AUTH_FORBIDDEN", "privacy-sensitive tickets require the privacy queue");
   }
+  if (invocation.actor.roles.includes("consumer") &&
+      (channel !== "in_app" || !["P2", "P3"].includes(severity) || queue !== "consumer-support" ||
+       privacySensitive || assignedRole !== "support_agent")) {
+    throw new DomainError("AUTH_FORBIDDEN", "consumer ticket routing and severity are fixed by the support intake policy");
+  }
   return { ticketId, channel, severity, queue, dueAt, privacySensitive, dedupeKey, assignedRole };
 }
 

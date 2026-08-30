@@ -427,6 +427,8 @@ export interface TrustedEvidenceKey {
   readonly publicKeyPem: string;
   readonly allowedScopes: readonly string[];
   readonly allowedEnvironments: readonly EvidenceEnvironment[];
+  /** Reserved verifier roles assigned by deployment configuration, never by evidence producers. */
+  readonly authorityRoles?: readonly string[];
   readonly notBefore?: string;
   readonly notAfter?: string;
 }

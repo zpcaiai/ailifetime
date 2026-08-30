@@ -149,6 +149,7 @@ const definitions: readonly DomainCapabilityDefinition[] = [
     collection: "security.baselines",
     recordIdField: "baselineId",
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "baselineArtifactSha256",
   }),
   defineCapability("B45", SKILL, "defineServiceObjective", defineServiceObjective, {
     permission: "operations.slo.manage", mode: "resource", collection: "operations.service-objectives", recordIdField: "objectiveId",
@@ -160,6 +161,7 @@ const definitions: readonly DomainCapabilityDefinition[] = [
     collection: "operations.recovery-drills",
     recordIdField: "drillId",
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "recoveryArtifactSha256",
   }),
   defineCapability("B47", SKILL, "promoteRelease", promoteRelease, {
     permission: "release.promote",
@@ -168,6 +170,7 @@ const definitions: readonly DomainCapabilityDefinition[] = [
     collection: "release.promotions",
     recordIdField: "releaseId",
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "artifactDigest",
     transition: { fromField: "fromEnvironment", toField: "toEnvironment", stateField: "environment", initialFromStates: ["preview"] },
   }),
 ];

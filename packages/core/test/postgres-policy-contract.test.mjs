@@ -181,6 +181,10 @@ test("PostgreSQL 17 runtime rejects broadened, duplicated, restrictive, scoped-r
     }
 
     await assertRuntimeStarts(runtimeUrl);
+    // pg_get_expr output depends on the caller search_path. Pin the catalog
+    // view exactly as production runtime connections do so an administrator's
+    // role/database default cannot make a qualified policy look unqualified.
+    await databaseAdmin.query("SET search_path = pg_catalog");
     const policies = await databaseAdmin.query(
       `SELECT c.relname AS tablename,p.polname AS policyname,p.polcmd AS command,
               p.polpermissive AS permissive,p.polroles=ARRAY[0::oid] AS public_only,
@@ -223,8 +227,8 @@ async function restoreExactRecordsPolicy(admin) {
 async function applyChecksumBoundMigrations(admin) {
   const manifestBytes = readFileSync(new URL("manifest.json", MIGRATION_ROOT));
   const manifest = JSON.parse(manifestBytes.toString("utf8"));
-  assert.equal(manifest.runtimeSchemaVersion, "5");
-  assert.equal(manifest.migrations.length, 5);
+  assert.equal(manifest.runtimeSchemaVersion, "7");
+  assert.equal(manifest.migrations.length, 7);
   for (const migration of manifest.migrations) {
     const bytes = readFileSync(new URL(migration.path, MIGRATION_ROOT));
     assert.equal(createHash("sha256").update(bytes).digest("hex"), migration.sha256, migration.path);

@@ -13,4 +13,6 @@ Page({
   },
   start() { wx.switchTab({ url: "/pages/capture/index" }); },
   login() { wx.navigateTo({ url: "/pages/auth/index" }); },
+  commerce() { wx.navigateTo({ url: "/pages/commerce/index" }); },
+  service() { wx.navigateTo({ url: "/pages/service/index" }); },
 });

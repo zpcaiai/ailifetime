@@ -299,6 +299,7 @@ const definitions: readonly DomainCapabilityDefinition[] = [
     permission: "model.evaluation.record",
     requiresExternalEvidence: true,
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "evaluationReportSha256",
     mode: "attestation",
   }),
 ];

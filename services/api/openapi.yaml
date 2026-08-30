@@ -265,14 +265,21 @@ paths:
           schema:
             type: string
             pattern: '^bytes (0|[1-9]\d*)-(0|[1-9]\d*)/(0|[1-9]\d*)$'
+        - name: X-Chunk-Sha256
+          in: header
+          required: true
+          description: Lowercase SHA-256 of the exact binary request body.
+          schema:
+            type: string
+            pattern: '^[a-f0-9]{64}$'
       requestBody:
         required: true
         content:
           application/octet-stream:
             schema:
               type: string
-              format: byte
-              maxLength: 6990508
+              format: binary
+              maxLength: 5242880
       responses:
         "200":
           description: Chunk durably accepted at the exact offset.
@@ -378,6 +385,162 @@ paths:
           $ref: "#/components/responses/DispatchResult"
         default:
           $ref: "#/components/responses/Error"
+  /v1/integrations/evidence-sink/preflight:
+    post:
+      operationId: preflightEvidenceSinkPermissions
+      description: Proves that the same authenticated service principal owns both evidence registration and external-event apply permissions. The operation is read-only and accepts only an empty object.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        "200":
+          description: Both evidence sink permissions are present on this service principal.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvidenceSinkPreflight"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/mobile/telemetry:
+    post:
+      operationId: ingestMinimizedNativeMobileTelemetry
+      description: Authenticated, server-pseudonymized operational telemetry persisted through B41. Arbitrary fields, identifiers, URLs, credentials, and raw payloads are rejected.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobileTelemetryEvent"
+      responses:
+        "200":
+          $ref: "#/components/responses/DispatchResult"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/wechat/payments:
+    post:
+      operationId: createWechatPaymentIntent
+      description: Creates a JSAPI payment intent from a trusted server checkout. Client price, currency, payer openid, merchant configuration, notify URL, and provider state are rejected. B71 remains a signed callback-only capability.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WechatPaymentCreateRequest"
+      responses:
+        "201":
+          description: Server-priced, short-lived WeChat JSAPI payment intent.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WechatPaymentIntentResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/wechat/payments/{orderId}:
+    get:
+      operationId: getWechatPaymentProjection
+      description: Returns the merchant-server projection whose terminal state is driven only by the verified WeChat Pay callback and reconciliation path.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Identifier"
+      responses:
+        "200":
+          description: Tenant- and actor-bound payment projection.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WechatPaymentProjectionResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/wechat/subscription-offer:
+    get:
+      operationId: getWechatSubscriptionOffer
+      description: Returns only currently enrolled WeChat subscription template IDs. The client cannot add or replace templates.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+      responses:
+        "200":
+          description: Bounded, expiring server-enrolled subscription offer.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WechatSubscriptionOfferResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/wechat/subscription-authorizations:
+    post:
+      operationId: recordWechatSubscriptionAuthorization
+      description: Persists only the subset accepted by wx.requestSubscribeMessage against the exact server offer revision.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WechatSubscriptionAuthorizationRequest"
+      responses:
+        "201":
+          description: Opaque one-use authorization references durably recorded by the server.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WechatSubscriptionAuthorizationResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/wechat/customer-service-grants:
+    post:
+      operationId: createWechatCustomerServiceGrant
+      description: Creates a short-lived customer-service grant bound to an enrolled HTTPS origin and a server-created minimal ticket context.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        "201":
+          description: Short-lived WeChat customer-service chat grant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WechatCustomerServiceGrantResponse"
+        default:
+          $ref: "#/components/responses/Error"
   /v1/commands:
     post:
       operationId: dispatchCommand
@@ -447,6 +610,64 @@ components:
         maxLength: 256
         pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$'
   schemas:
+    MobileTelemetryEvent:
+      type: object
+      additionalProperties: false
+      required: [eventId, name, occurredAt, fields]
+      properties:
+        eventId:
+          $ref: "#/components/schemas/Identifier"
+        name:
+          type: string
+          pattern: '^[A-Za-z][A-Za-z0-9._:-]{1,127}$'
+        occurredAt:
+          type: string
+          format: date-time
+        fields:
+          type: object
+          minProperties: 1
+          maxProperties: 10
+          additionalProperties: false
+          properties:
+            platform: { oneOf: [{ type: string, maxLength: 128 }, { type: number }, { type: boolean }] }
+            appVersion: { oneOf: [{ type: string, maxLength: 128 }, { type: number }, { type: boolean }] }
+            networkType: { oneOf: [{ type: string, maxLength: 128 }, { type: number }, { type: boolean }] }
+            status: { oneOf: [{ type: string, maxLength: 128 }, { type: number }, { type: boolean }] }
+            errorCode: { oneOf: [{ type: string, maxLength: 128 }, { type: number }, { type: boolean }] }
+            durationMs: { oneOf: [{ type: string, maxLength: 128 }, { type: number }, { type: boolean }] }
+            bytes: { oneOf: [{ type: string, maxLength: 128 }, { type: number }, { type: boolean }] }
+            attempt: { oneOf: [{ type: string, maxLength: 128 }, { type: number }, { type: boolean }] }
+            screen: { oneOf: [{ type: string, maxLength: 128 }, { type: number }, { type: boolean }] }
+            operation: { oneOf: [{ type: string, maxLength: 128 }, { type: number }, { type: boolean }] }
+    EvidenceSinkPreflight:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, principal, permissions, requestId]
+      properties:
+        schemaVersion:
+          const: ltm.evidence-sink-preflight.v1
+        principal:
+          type: object
+          additionalProperties: false
+          required: [actorId, tenantId]
+          properties:
+            actorId:
+              type: string
+              minLength: 1
+              maxLength: 128
+            tenantId:
+              type: string
+              minLength: 1
+              maxLength: 128
+        permissions:
+          type: array
+          prefixItems:
+            - const: evidence:register
+            - const: external-event:apply
+          minItems: 2
+          maxItems: 2
+        requestId:
+          type: string
     BatchId:
       type: string
       pattern: '^B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])$'
@@ -678,7 +899,7 @@ components:
     UploadSession:
       type: object
       additionalProperties: false
-      required: [uploadId, nextOffset, expiresAt]
+      required: [uploadId, nextOffset, chunkBytes, expiresAt]
       properties:
         uploadId:
           type: string
@@ -687,6 +908,9 @@ components:
         nextOffset:
           type: integer
           minimum: 0
+        chunkBytes:
+          type: integer
+          const: 5242880
         expiresAt:
           type: string
           format: date-time

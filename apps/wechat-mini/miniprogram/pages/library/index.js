@@ -1,5 +1,6 @@
 const api = require("../../services/api");
 const session = require("../../services/session");
+const policy = require("../../services/policy");
 const sharingPolicy = require("../../policies/sharing");
 
 Page({
@@ -74,6 +75,7 @@ Page({
   async prepareShare(event) {
     const workId = event.currentTarget.dataset.id;
     try {
+      policy.requireCapabilities(["B10"], session.requireSession().roles);
       const item = this.data.items.find((candidate) => candidate.id === workId);
       if (!item || item.participantIds.length === 0 || !item.provenanceId) throw new Error("SHARE_AUTHORIZATION_CONTEXT_MISSING");
       const existing = grantsForWork(this.shareGrants, workId);

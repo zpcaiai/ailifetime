@@ -44,6 +44,7 @@ test("all 19 external-command callback evidence tuples bind exact routes, comman
     const scope = capabilityEvidenceScope(binding);
     assert.notEqual(scope, capabilityEvidenceScope({ ...binding, subjectId: `${binding.subjectId}-other` }), route.batchId);
     assert.notEqual(scope, capabilityEvidenceScope({ ...binding, artifactSha256: "f".repeat(64) }), route.batchId);
+    assert.notEqual(scope, capabilityEvidenceScope({ ...binding, requestSha256: "e".repeat(64) }), route.batchId);
 
     const draft = externalCommandTerminalBusinessEventDraft(binding, {
       eventId: `${route.batchId.toLowerCase()}-event-1`,

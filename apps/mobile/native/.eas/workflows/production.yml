@@ -1,0 +1,30 @@
+name: Controlled store candidates
+defaults:
+  tools:
+    node: "22.13.0"
+on:
+  workflow_dispatch:
+jobs:
+  release_gate:
+    environment: production
+    steps:
+      - uses: eas/checkout
+      - uses: eas/install_node_modules
+      - name: Code, privacy, security and provider evidence gate
+        run: npm run quality && npm run release:gate
+  build_android:
+    needs: [release_gate]
+    type: build
+    params: { platform: android, profile: production }
+  build_ios:
+    needs: [release_gate]
+    type: build
+    params: { platform: ios, profile: production }
+  submit_android_draft:
+    type: submit
+    needs: [build_android]
+    params: { build_id: "${{ needs.build_android.outputs.build_id }}", profile: production }
+  submit_ios_candidate:
+    type: submit
+    needs: [build_ios]
+    params: { build_id: "${{ needs.build_ios.outputs.build_id }}", profile: production }

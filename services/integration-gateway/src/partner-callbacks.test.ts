@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, createHmac, generateKeyPairSync } from "node:crypto";
 import { once } from "node:events";
 import test from "node:test";
-import { EXTERNAL_COMMAND_CALLBACK_ROUTES } from "@ltm/core";
+import { canonicalJson, EXTERNAL_COMMAND_CALLBACK_ROUTES } from "@ltm/core";
 import {
   Ed25519EvidenceAttestor,
   ProductionIntegrationError,
@@ -218,22 +218,22 @@ test("terminal callback rejects provider/subject/terminal tampering and native r
   const policy = parsePolicies()[0]!;
   const dependencies = testDependencies();
   const handler = createExternalCommandPartnerCallbackHandler(policy, dependencies);
-  const validBody = Buffer.from(JSON.stringify(callbackPayload()));
+  const validBody = Buffer.from(canonicalJson(callbackPayload()));
   const valid = signedRequest(validBody, "nonce-valid-1");
 
-  const tamperedSubject = Buffer.from(JSON.stringify(callbackPayload({ command: { id: "command-attacker" } })));
+  const tamperedSubject = Buffer.from(canonicalJson(callbackPayload({ command: { id: "command-attacker" } })));
   await assert.rejects(
     handler.process({ ...valid, rawBody: tamperedSubject }),
     (error: unknown) => error instanceof ProductionIntegrationError && error.code === "PROVIDER_SIGNATURE_INVALID",
   );
 
-  const providerBody = Buffer.from(JSON.stringify(callbackPayload({ provider: "attacker-provider" })));
+  const providerBody = Buffer.from(canonicalJson(callbackPayload({ provider: "attacker-provider" })));
   await assert.rejects(
     handler.process(signedRequest(providerBody, "nonce-provider-1")),
     (error: unknown) => error instanceof ProductionIntegrationError && error.code === "PROVIDER_RESPONSE_INVALID",
   );
 
-  const booleanTerminalBody = Buffer.from(JSON.stringify(callbackPayload({ result: { state: true, operationId: "provider-operation-1" } })));
+  const booleanTerminalBody = Buffer.from(canonicalJson(callbackPayload({ result: { state: true, operationId: "provider-operation-1" } })));
   await assert.rejects(
     handler.process(signedRequest(booleanTerminalBody, "nonce-terminal-1")),
     (error: unknown) => error instanceof ProductionIntegrationError && error.code === "PROVIDER_RESPONSE_INVALID",
@@ -257,12 +257,12 @@ test("B10 revoke callback binds the exact original provider share operation", as
   const policy = parsePolicies().find((candidate) => candidate.routeId === "b10-export-revoke");
   assert.ok(policy);
   const handler = createExternalCommandPartnerCallbackHandler(policy, testDependencies());
-  const missingTarget = Buffer.from(JSON.stringify(callbackPayload()));
+  const missingTarget = Buffer.from(canonicalJson(callbackPayload()));
   await assert.rejects(
     handler.process(signedRequest(missingTarget, "nonce-revoke-missing-target")),
     (error: unknown) => error instanceof ProductionIntegrationError && error.code === "PROVIDER_RESPONSE_INVALID",
   );
-  const validBody = Buffer.from(JSON.stringify(callbackPayload({
+  const validBody = Buffer.from(canonicalJson(callbackPayload({
     result: {
       state: "completed",
       operationId: "provider-revoke-operation-1",
@@ -297,7 +297,7 @@ test("fixed partner HTTP route verifies, attests, persists evidence, and publish
   await once(server, "listening");
   const address = server.address();
   assert.ok(address !== null && typeof address === "object");
-  const body = Buffer.from(JSON.stringify(callbackPayload()));
+  const body = Buffer.from(canonicalJson(callbackPayload()));
   const signed = signedRequest(body, "nonce-http-1");
   const send = () => fetch(`http://127.0.0.1:${address.port}${partnerCallbackPath(policy)}`, {
     method: "POST",
@@ -307,9 +307,9 @@ test("fixed partner HTTP route verifies, attests, persists evidence, and publish
   assert.equal((await send()).status, 204);
   assert.equal((await send()).status, 204);
   assert.equal(published.length, 1);
-  assert.equal(published[0]?.businessEvent.batchId, policy.routeDefinition.batchId);
-  assert.equal(published[0]?.businessEvent.operation, policy.routeDefinition.operation);
-  assert.equal(published[0]?.businessEvent.subjectId, "command-1");
-  assert.equal(published[0]?.businessEvent.eventType, "external-command.succeeded");
+  assert.equal(published[0]?.businessEvent?.batchId, policy.routeDefinition.batchId);
+  assert.equal(published[0]?.businessEvent?.operation, policy.routeDefinition.operation);
+  assert.equal(published[0]?.businessEvent?.subjectId, "command-1");
+  assert.equal(published[0]?.businessEvent?.eventType, "external-command.succeeded");
   assert.equal(dependencies.artifacts.stored.length, 1);
 });

@@ -1,0 +1,32 @@
+version: 2
+sources:
+  - name: ltm_raw
+    schema: raw
+    loaded_at_field: ingested_at
+    freshness:
+      warn_after: {count: 15, period: minute}
+      error_after: {count: 60, period: minute}
+    tables:
+      - name: source_records
+        columns:
+          - name: tenant_id
+            tests: [not_null]
+          - name: source
+            tests:
+              - not_null
+              - accepted_values:
+                  values: [event, postgres_cdc, ledger, payment, partner, notification, ticket, supply_chain]
+          - name: source_sequence
+            tests: [not_null]
+          - name: primary_key
+            tests: [not_null]
+          - name: source_fingerprint
+            tests: [not_null, unique]
+          - name: source_occurred_at
+            tests: [not_null]
+          - name: ingested_at
+            tests: [not_null]
+          - name: source_version
+            tests: [not_null]
+          - name: deleted
+            tests: [not_null]

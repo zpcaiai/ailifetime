@@ -23,11 +23,12 @@ import { DatabaseSync } from "node:sqlite";
 import { Pool } from "pg";
 import {
   APPROVAL_AUTHORITY_ROLES,
+  B127_PRODUCTION_RELEASE_AUTHORITY_ROLE,
   CHANGE_APPROVER_AUTHORITY_ROLES,
   CONTROL_ARTIFACT_AUTHORITY_ROLES,
   EvidenceContractError,
   REQUIRED_APPROVAL_NAMES,
-  REQUIRED_SCHEMA5_FORCE_RLS_TABLES,
+  REQUIRED_SCHEMA7_FORCE_RLS_TABLES,
   REQUIRED_WORKLOAD_ROLES,
   SUPPLY_CHAIN_AUTHORITY_ROLE,
   productionReleaseSubjectSha256,
@@ -58,6 +59,7 @@ const MAX_APPROVAL_ARTIFACT_BYTES = 100 * 1024 * 1024;
 const MAX_RELEASE_CONTROL_ARTIFACT_BYTES = 100 * 1024 * 1024;
 const CHANGE_APPROVER_SCOPE_PREFIX = "ltm-change-approval:v1:";
 const PRODUCTION_CHANGE_EXECUTOR_ROLE = "production-change-executor";
+const GENERAL_GATEWAY_AUTHORITY_IDENTITY = /(?:^|[:._-])(?:integration[-_]?gateway|direct[-_]?evidence|supply[-_]?event|callback)(?:$|[:._-])/i;
 const CONTROL_ARTIFACT_PROVIDER_PREFIXES = Object.freeze({
   monitoring_query: "monitoring-query",
   monitoring_result: "monitoring-result",
@@ -84,12 +86,14 @@ const REQUIRED_COMPONENT_VERSIONS = Object.freeze([
   "productionConfiguration",
 ]);
 const REQUIRED_RELEASE_GATES = Object.freeze(Array.from({ length: 12 }, (_, index) => `G${index}`));
-const REQUIRED_SCHEMA5_MIGRATIONS = Object.freeze([
+const REQUIRED_SCHEMA7_MIGRATIONS = Object.freeze([
   Object.freeze({ id: "001", path: "001_core.sql" }),
   Object.freeze({ id: "002", path: "002_external_evidence.sql" }),
   Object.freeze({ id: "003", path: "003_runtime_compatibility.sql" }),
   Object.freeze({ id: "004", path: "004_external_business_events.sql" }),
   Object.freeze({ id: "005", path: "005_participant_authority_and_processing_purpose.sql" }),
+  Object.freeze({ id: "006", path: "006_data_intelligence_durability.sql" }),
+  Object.freeze({ id: "007", path: "007_commerce_partner_growth.sql" }),
 ]);
 const REQUIRED_APPROVALS = Object.freeze({
   independentPenetrationTest: "passed",
@@ -107,7 +111,7 @@ const B127_POSTGRES_TABLES = Object.freeze([
   "external_evidence",
   "evidence_consumptions",
 ]);
-const B127_POSTGRES_TENANT_TABLES = REQUIRED_SCHEMA5_FORCE_RLS_TABLES;
+const B127_POSTGRES_TENANT_TABLES = REQUIRED_SCHEMA7_FORCE_RLS_TABLES;
 const B127_POSTGRES_COLUMNS = Object.freeze({
   schema_metadata: ["key:text:NO", "value:text:NO"],
   records: [
@@ -128,6 +132,72 @@ const B127_POSTGRES_COLUMNS = Object.freeze({
     "tenant_id:text:NO", "evidence_id:text:NO", "scope:text:NO",
     "consumption_key_hash:text:NO", "consumed_at:timestamp with time zone:NO",
   ],
+});
+const B127_POSTGRES_FUNCTIONS = Object.freeze({
+  current_tenant: Object.freeze({
+    language: "sql",
+    volatility: "s",
+    result: "text",
+    body: "SELECT nullif(current_setting('app.tenant_id', true), '')",
+  }),
+  reject_immutable_change: Object.freeze({
+    language: "plpgsql",
+    volatility: "v",
+    result: "trigger",
+    body: `BEGIN
+      RAISE EXCEPTION 'immutable financial or audit records cannot be changed';
+    END;`,
+  }),
+  reject_external_evidence_payload_change: Object.freeze({
+    language: "plpgsql",
+    volatility: "v",
+    result: "trigger",
+    body: `BEGIN
+      IF NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
+         OR NEW.id IS DISTINCT FROM OLD.id
+         OR NEW.envelope_version IS DISTINCT FROM OLD.envelope_version
+         OR NEW.issuer IS DISTINCT FROM OLD.issuer
+         OR NEW.provider IS DISTINCT FROM OLD.provider
+         OR NEW.environment IS DISTINCT FROM OLD.environment
+         OR NEW.scope IS DISTINCT FROM OLD.scope
+         OR NEW.artifact_sha256 IS DISTINCT FROM OLD.artifact_sha256
+         OR NEW.canonical_claims_sha256 IS DISTINCT FROM OLD.canonical_claims_sha256
+         OR NEW.business_event_sha256 IS DISTINCT FROM OLD.business_event_sha256
+         OR NEW.issued_at IS DISTINCT FROM OLD.issued_at
+         OR NEW.expires_at IS DISTINCT FROM OLD.expires_at
+         OR NEW.nonce IS DISTINCT FROM OLD.nonce
+         OR NEW.replay_policy IS DISTINCT FROM OLD.replay_policy
+         OR NEW.algorithm IS DISTINCT FROM OLD.algorithm
+         OR NEW.key_id IS DISTINCT FROM OLD.key_id
+         OR NEW.signature IS DISTINCT FROM OLD.signature
+         OR NEW.verified_at IS DISTINCT FROM OLD.verified_at THEN
+        RAISE EXCEPTION 'verified external evidence payload is immutable';
+      END IF;
+      IF OLD.status <> 'verified'
+         OR NEW.status <> 'revoked'
+         OR NEW.version <> OLD.version + 1
+         OR NEW.revoked_at IS NULL
+         OR NEW.revocation_reason IS NULL
+         OR length(NEW.revocation_reason) = 0 THEN
+        RAISE EXCEPTION 'external evidence may only transition once from verified to revoked';
+      END IF;
+      RETURN NEW;
+    END;`,
+  }),
+});
+const B127_POSTGRES_TRIGGERS = Object.freeze({
+  "external_evidence:external_evidence_payload_immutable": Object.freeze({
+    type: 19,
+    functionName: "reject_external_evidence_payload_change",
+  }),
+  "external_evidence:external_evidence_no_delete": Object.freeze({
+    type: 11,
+    functionName: "reject_immutable_change",
+  }),
+  "evidence_consumptions:evidence_consumptions_immutable": Object.freeze({
+    type: 27,
+    functionName: "reject_immutable_change",
+  }),
 });
 
 export class CertificationError extends Error {
@@ -181,10 +251,28 @@ export class SqliteB127CertificationSource {
             AND deleted_at IS NULL
             AND json_extract(data_json, '$.batchId') = 'B127'
             AND json_extract(data_json, '$.launchId') = ?
+            AND json_extract(data_json, '$.wave') = 'global'
+            AND json_extract(data_json, '$.rolloutPercent') = 100
           ORDER BY updated_at DESC, id DESC
           LIMIT 2`,
       ).all(tenantId, launchId);
       if (rows.length === 0) {
+        const intermediate = database.prepare(
+          `SELECT 1
+             FROM records
+            WHERE tenant_id = ?
+              AND collection = 'capability.launching-complete-commercial-product'
+              AND deleted_at IS NULL
+              AND json_extract(data_json, '$.batchId') = 'B127'
+              AND json_extract(data_json, '$.launchId') = ?
+            LIMIT 1`,
+        ).get(tenantId, launchId);
+        if (intermediate !== undefined) {
+          throw blocked(
+            "B127_FINAL_ROLLOUT_INCOMPLETE",
+            "A B127 launch record exists, but no global 100 percent record is available for final certification",
+          );
+        }
         throw blocked("B127_RECORD_NOT_FOUND", "No completed B127 production launch record matches the configured tenant and launch ID");
       }
       if (rows.length !== 1) {
@@ -323,6 +411,10 @@ export class PostgresB127CertificationSource {
       }
       await client.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
       began = true;
+      // Catalog deparsers such as pg_get_expr/pg_get_functiondef are sensitive
+      // to search_path. Pin pg_catalog before every catalog or application query
+      // so a role-level path cannot hide schema qualification or shadow helpers.
+      await client.query("SET LOCAL search_path = pg_catalog");
       await client.query("SET LOCAL row_security = on");
       await client.query("SET LOCAL statement_timeout = '15s'");
       // tenantId is constrained to IDENTIFIER before source invocation, so this
@@ -343,11 +435,29 @@ export class PostgresB127CertificationSource {
             AND deleted_at IS NULL
             AND data->>'batchId'='B127'
             AND data->>'launchId'=$2
+            AND data @> '{"wave":"global","rolloutPercent":100}'::jsonb
           ORDER BY updated_at DESC,id DESC
           LIMIT 2`,
         [tenantId, launchId],
       );
       if (recordResult.rows.length === 0) {
+        const intermediateResult = await client.query(
+          `SELECT 1
+             FROM ltm.records
+            WHERE tenant_id=$1
+              AND collection='capability.launching-complete-commercial-product'
+              AND deleted_at IS NULL
+              AND data->>'batchId'='B127'
+              AND data->>'launchId'=$2
+            LIMIT 1`,
+          [tenantId, launchId],
+        );
+        if (intermediateResult.rows.length > 0) {
+          throw blocked(
+            "B127_FINAL_ROLLOUT_INCOMPLETE",
+            "A B127 launch record exists, but no global 100 percent record is available for final certification",
+          );
+        }
         throw blocked("B127_RECORD_NOT_FOUND", "No completed B127 production launch record matches the configured tenant and launch ID");
       }
       if (recordResult.rows.length !== 1) {
@@ -575,11 +685,11 @@ async function verifyPostgresCertificationContract(client, certificationProfile)
     "SELECT value FROM ltm.schema_metadata WHERE key='runtime_schema_version'",
   );
   const schemaVersion = metadata.rows[0]?.value;
-  if (metadata.rows.length !== 1 || !["3", "4", "5"].includes(schemaVersion)) {
-    throw new CertificationError("B127_POSTGRES_SCHEMA_UNSUPPORTED", "B127 PostgreSQL runtime schema must be an explicitly supported version (3, 4, or 5)");
+  if (metadata.rows.length !== 1 || !["3", "4", "5", "6", "7"].includes(schemaVersion)) {
+    throw new CertificationError("B127_POSTGRES_SCHEMA_UNSUPPORTED", "B127 PostgreSQL runtime schema must be an explicitly supported version (3, 4, 5, 6, or 7)");
   }
-  if (certificationProfile === "production" && schemaVersion !== "5") {
-    throw blocked("B127_POSTGRES_SCHEMA_OUTDATED", "Production B127 certification requires runtime schema version 5");
+  if (certificationProfile === "production" && schemaVersion !== "7") {
+    throw blocked("B127_POSTGRES_SCHEMA_OUTDATED", "Production B127 certification requires runtime schema version 7");
   }
   const columns = await client.query(
     `SELECT table_name,column_name,data_type,is_nullable
@@ -609,7 +719,7 @@ async function verifyPostgresCertificationContract(client, certificationProfile)
     rls.rows.length !== B127_POSTGRES_TENANT_TABLES.length ||
     rls.rows.some((table) => table.relrowsecurity !== true || table.relforcerowsecurity !== true)
   ) {
-    throw new CertificationError("B127_POSTGRES_RLS_NOT_FORCED", "All 17 schema-5 PostgreSQL tenant tables must enable and force row-level security");
+    throw new CertificationError("B127_POSTGRES_RLS_NOT_FORCED", "All schema-7 PostgreSQL tenant tables must enable and force row-level security");
   }
   const policies = await client.query(
     `SELECT tablename,policyname,permissive,cmd,roles::text AS roles,qual,with_check
@@ -618,40 +728,86 @@ async function verifyPostgresCertificationContract(client, certificationProfile)
       ORDER BY tablename,policyname`,
     [B127_POSTGRES_TENANT_TABLES],
   );
+  const partnerScopedTables = new Set(["partner_settlement_state", "partner_usage_events", "partner_rate_contracts", "partner_settlement_statements", "partner_anomaly_decisions"]);
   if (
     policies.rows.length !== B127_POSTGRES_TENANT_TABLES.length ||
-    policies.rows.some((policy) =>
-      policy.policyname !== "tenant_isolation" ||
-      policy.permissive !== "PERMISSIVE" ||
-      policy.cmd !== "ALL" ||
-      policy.roles !== "{public}" ||
-      policy.qual !== "(tenant_id = ltm.current_tenant())" ||
-      policy.with_check !== "(tenant_id = ltm.current_tenant())"
-    )
+    policies.rows.some((policy) => {
+      const partnerScoped = partnerScopedTables.has(policy.tablename);
+      const expectedExpression = partnerScoped
+        ? "(partner_id = current_setting('app.partner_id'::text, true))"
+        : "(tenant_id = ltm.current_tenant())";
+      return policy.policyname !== "tenant_isolation" || policy.permissive !== "PERMISSIVE" || policy.cmd !== "ALL" || policy.roles !== "{public}" || policy.qual !== expectedExpression || policy.with_check !== expectedExpression;
+    })
   ) {
-    throw new CertificationError("B127_POSTGRES_RLS_POLICY_INVALID", "Every schema-5 tenant table must have exactly one PERMISSIVE ALL PUBLIC tenant_isolation policy with exact ltm.current_tenant() USING and WITH CHECK expressions");
+    throw new CertificationError("B127_POSTGRES_RLS_POLICY_INVALID", "Every schema-7 tenant table must have exactly one PERMISSIVE ALL PUBLIC tenant_isolation policy bound to its tenant or partner context");
+  }
+  const functions = await client.query(
+    `SELECT p.proname,l.lanname,p.provolatile,p.prosecdef,p.proleakproof,p.proparallel,
+            p.proconfig,p.prokind,p.proisstrict,p.proretset,p.pronargs,p.prosrc,
+            pg_get_function_result(p.oid) AS result
+       FROM pg_proc p
+       JOIN pg_namespace n ON n.oid=p.pronamespace
+       JOIN pg_language l ON l.oid=p.prolang
+      WHERE n.nspname='ltm' AND p.pronargs=0 AND p.proname=ANY($1::text[])
+      ORDER BY p.proname`,
+    [Object.keys(B127_POSTGRES_FUNCTIONS)],
+  );
+  if (functions.rows.length !== Object.keys(B127_POSTGRES_FUNCTIONS).length) {
+    throw new CertificationError("B127_POSTGRES_FUNCTION_DRIFT", "B127 PostgreSQL tenant isolation and evidence immutability functions are missing or overloaded");
+  }
+  for (const routine of functions.rows) {
+    const expected = B127_POSTGRES_FUNCTIONS[routine.proname];
+    if (
+      expected === undefined ||
+      routine.lanname !== expected.language ||
+      routine.provolatile !== expected.volatility ||
+      routine.result !== expected.result ||
+      routine.prosecdef !== false ||
+      routine.proleakproof !== false ||
+      routine.proparallel !== "u" ||
+      routine.proconfig !== null ||
+      routine.prokind !== "f" ||
+      routine.proisstrict !== false ||
+      routine.proretset !== false ||
+      Number(routine.pronargs) !== 0 ||
+      normalizePostgresFunctionBody(routine.prosrc) !== normalizePostgresFunctionBody(expected.body)
+    ) {
+      throw new CertificationError("B127_POSTGRES_FUNCTION_DRIFT", `B127 PostgreSQL function ltm.${routine.proname} does not match the certified fail-closed definition`);
+    }
   }
   const triggers = await client.query(
-    `SELECT c.relname,t.tgname,t.tgenabled
+    `SELECT c.relname,t.tgname,t.tgenabled,t.tgtype::int AS trigger_type,
+            t.tgdeferrable,t.tginitdeferred,(t.tgconstraint=0) AS unconstrained,
+            pn.nspname AS function_schema,p.proname AS function_name
        FROM pg_trigger t
        JOIN pg_class c ON c.oid=t.tgrelid
        JOIN pg_namespace n ON n.oid=c.relnamespace
+       JOIN pg_proc p ON p.oid=t.tgfoid
+       JOIN pg_namespace pn ON pn.oid=p.pronamespace
       WHERE n.nspname='ltm' AND NOT t.tgisinternal
         AND ((c.relname='external_evidence' AND t.tgname=ANY($1::text[]))
-          OR (c.relname='evidence_consumptions' AND t.tgname='evidence_consumptions_immutable'))`,
+          OR (c.relname='evidence_consumptions' AND t.tgname='evidence_consumptions_immutable'))
+      ORDER BY c.relname,t.tgname`,
     [["external_evidence_payload_immutable", "external_evidence_no_delete"]],
   );
-  const requiredTriggers = new Set([
-    "external_evidence:external_evidence_payload_immutable",
-    "external_evidence:external_evidence_no_delete",
-    "evidence_consumptions:evidence_consumptions_immutable",
-  ]);
+  const requiredTriggers = new Set(Object.keys(B127_POSTGRES_TRIGGERS));
   for (const trigger of triggers.rows) {
-    if (trigger.tgenabled === "D") continue;
-    requiredTriggers.delete(`${trigger.relname}:${trigger.tgname}`);
+    const key = `${trigger.relname}:${trigger.tgname}`;
+    const expected = B127_POSTGRES_TRIGGERS[key];
+    if (
+      expected === undefined ||
+      trigger.tgenabled !== "O" ||
+      Number(trigger.trigger_type) !== expected.type ||
+      trigger.tgdeferrable !== false ||
+      trigger.tginitdeferred !== false ||
+      trigger.unconstrained !== true ||
+      trigger.function_schema !== "ltm" ||
+      trigger.function_name !== expected.functionName
+    ) continue;
+    requiredTriggers.delete(key);
   }
-  if (requiredTriggers.size !== 0) {
-    throw new CertificationError("B127_POSTGRES_IMMUTABILITY_INCOMPLETE", "B127 PostgreSQL evidence immutability triggers are missing or disabled");
+  if (triggers.rows.length !== Object.keys(B127_POSTGRES_TRIGGERS).length || requiredTriggers.size !== 0) {
+    throw new CertificationError("B127_POSTGRES_IMMUTABILITY_INCOMPLETE", "B127 PostgreSQL evidence immutability triggers are missing, drifted, disabled, or bound to the wrong function/event");
   }
   const ssl = await client.query("SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()");
   const tls = ssl.rows[0]?.ssl === true;
@@ -666,8 +822,12 @@ async function verifyPostgresCertificationContract(client, certificationProfile)
   };
 }
 
+function normalizePostgresFunctionBody(value) {
+  return typeof value === "string" ? value.replace(/\s+/gu, " ").trim() : "";
+}
+
 function validatePostgresConnectionString(value, profile, allowInsecureTestConnection) {
-  if (typeof value !== "string" || value.trim() === "") {
+  if (typeof value !== "string" || value.trim() === "" || value.length > 8_192) {
     throw blocked("B127_POSTGRES_URL_REQUIRED", "LTM_B127_POSTGRES_URL or DATABASE_URL is required for production certification");
   }
   if (!["production", "local", "test"].includes(profile)) {
@@ -692,8 +852,20 @@ function validatePostgresConnectionString(value, profile, allowInsecureTestConne
     "sslmode", "sslrootcert", "sslcert", "sslkey", "channel_binding",
     "connect_timeout", "application_name",
   ]);
-  for (const key of url.searchParams.keys()) {
-    if (!allowedParameters.has(key)) {
+  const parameterNames = [...url.searchParams.keys()];
+  const normalizedParameterNames = parameterNames.map((name) => name.toLowerCase());
+  if (new Set(normalizedParameterNames).size !== normalizedParameterNames.length) {
+    throw new CertificationError(
+      "B127_POSTGRES_URL_PARAMETER_INVALID",
+      "B127 PostgreSQL URL must not contain duplicate or case-variant query parameters",
+    );
+  }
+  for (const [index, key] of parameterNames.entries()) {
+    const normalizedKey = normalizedParameterNames[index];
+    // node-postgres/libpq applies `options=-c ...` after Pool configuration.
+    // Reject it under every percent-encoded or case-variant spelling rather
+    // than relying on transaction-local settings as the only boundary.
+    if (normalizedKey === "options" || key !== normalizedKey || !allowedParameters.has(normalizedKey)) {
       throw new CertificationError("B127_POSTGRES_URL_PARAMETER_INVALID", `B127 PostgreSQL URL parameter ${key} is not allowed`);
     }
   }
@@ -774,6 +946,7 @@ export async function verifyB127Certification(options) {
     launchId,
     expectedCommit,
     manifestSha256,
+    now,
   });
   const validatedManifest = validateManifest(manifest, {
     root,
@@ -816,6 +989,7 @@ export async function verifyB127Certification(options) {
     trustedKeys,
     now,
     minimumIssuedAt: validatedManifest.generatedAt,
+    minimumConsumedAt: validatedManifest.rollout.globalWaveObservation.completedAt,
   });
   validateApprovalEvidence(validatedManifest.approvals, evidence, record.approvalIds, trustedKeys);
   validateProductionChangeSignerSeparation(validatedManifest.approvals.productionChangeApproval, evidence, trustedKeys);
@@ -877,6 +1051,14 @@ export async function verifyB127Certification(options) {
         reportId: wave.observation.reportId,
         artifact: wave.observationArtifact,
       })),
+      globalWaveObservation: {
+        wave: validatedManifest.rollout.globalWaveObservation.wave,
+        rolloutPercent: validatedManifest.rollout.globalWaveObservation.rolloutPercent,
+        startedAt: validatedManifest.rollout.globalWaveObservation.startedAt,
+        completedAt: validatedManifest.rollout.globalWaveObservation.completedAt,
+        reportId: validatedManifest.rollout.globalWaveObservation.observation.reportId,
+        artifact: validatedManifest.rollout.globalWaveObservation.observationArtifact,
+      },
       rollbackForwardDrill: {
         reportId: validatedManifest.rollout.rollbackForwardDrill.reportId,
         exerciseId: validatedManifest.rollout.rollbackForwardDrill.exerciseId,
@@ -944,6 +1126,10 @@ function validateRecord(recordEnvelope, expected) {
   if (recordEnvelope.tenantId !== expected.tenantId) {
     throw new CertificationError("B127_TENANT_MISMATCH", "The B127 record tenant does not match the release tenant");
   }
+  const recordCreatedAt = canonicalTimestamp(recordEnvelope.createdAt, "B127 record createdAt");
+  if (recordCreatedAt.getTime() > expected.now.getTime() + CLOCK_SKEW_MS) {
+    throw new CertificationError("B127_RECORD_FROM_FUTURE", "The B127 record creation time is in the future");
+  }
   const data = plainObject(recordEnvelope.data, "B127 record data");
   for (const [field, value] of Object.entries({
     batchId: "B127",
@@ -993,6 +1179,8 @@ function validateRecord(recordEnvelope, expected) {
   const approvalIds = stringArray(data.approvalIds, "B127 approvalIds", Object.keys(REQUIRED_APPROVALS).length, 100);
   const guardrailPolicySha256 = exactSha256(data.guardrailPolicySha256, "B127 guardrailPolicySha256");
   const waveObservationSetSha256 = exactSha256(data.waveObservationSetSha256, "B127 waveObservationSetSha256");
+  const globalWaveObservationPath = safeRelativePath(data.globalWaveObservationPath, "B127 globalWaveObservationPath");
+  const globalWaveObservationSha256 = exactSha256(data.globalWaveObservationSha256, "B127 globalWaveObservationSha256");
   const rollbackForwardDrillSha256 = exactSha256(data.rollbackForwardDrillSha256, "B127 rollbackForwardDrillSha256");
   const changeApproverEvidenceIds = stringArray(data.changeApproverEvidenceIds, "B127 changeApproverEvidenceIds", 2, 2)
     .map((id) => identifier(id, "B127 change approver evidenceId"));
@@ -1019,9 +1207,12 @@ function validateRecord(recordEnvelope, expected) {
     approvalIds,
     guardrailPolicySha256,
     waveObservationSetSha256,
+    globalWaveObservationPath,
+    globalWaveObservationSha256,
     rollbackForwardDrillSha256,
     changeApproverEvidenceIds,
     externalEvidenceIds,
+    recordCreatedAt: recordCreatedAt.toISOString(),
   };
 }
 
@@ -1260,6 +1451,31 @@ function validateManifest(manifestValue, { root, tenantId, launchId, expectedCom
       trustedKeys,
     },
   );
+  const globalWaveObservation = validateGlobalWaveObservation(
+    {
+      path: record.globalWaveObservationPath,
+      sha256: record.globalWaveObservationSha256,
+    },
+    {
+      root,
+      artifactPaths,
+      globalWaveStartedAt: waveStartedAt,
+      now,
+      tenantId,
+      launchId,
+      deploymentId,
+      repositoryCommit,
+      componentSetSha256,
+      automaticPausePolicyVersion,
+      guardrailPolicy,
+      guardrailPolicySha256: guardrailPolicyArtifactResult.artifact.sha256,
+      trustedKeys,
+    },
+  );
+  if (canonicalTimestamp(record.recordCreatedAt, "B127 record createdAt") < canonicalTimestamp(globalWaveObservation.completedAt, "global wave completedAt")) {
+    throw blocked("B127_RECORD_PREDATES_GLOBAL_OBSERVATION", "The B127 record was created before the global wave observation completed");
+  }
+  validateWaveEvidenceUniqueness([...completedWaves, globalWaveObservation]);
   const waveObservationSetSha256 = waveObservationArtifactSetSha256(
     completedWaves.map((wave) => ({ wave: wave.wave, sha256: wave.observationArtifact.sha256 })),
   );
@@ -1285,6 +1501,16 @@ function validateManifest(manifestValue, { root, tenantId, launchId, expectedCom
       repositoryCommit,
       componentSetSha256,
       maximumCompletedAt: waveStartedAt.toISOString(),
+      readArtifact(reference, label) {
+        return validateManifestArtifact(
+          root,
+          reference,
+          label,
+          MAX_RELEASE_CONTROL_ARTIFACT_BYTES,
+          artifactPaths,
+          "ROLLBACK_DRILL_EVIDENCE_DIGEST_MISMATCH",
+        ).file.bytes;
+      },
     },
   ));
   const rollout = {
@@ -1296,6 +1522,7 @@ function validateManifest(manifestValue, { root, tenantId, launchId, expectedCom
     guardrailPolicyArtifact: guardrailPolicyArtifactResult.artifact,
     guardrailPolicy,
     completedWaves,
+    globalWaveObservation,
     waveObservationSetSha256,
     rollbackForwardDrillArtifact: rollbackForwardDrillArtifactResult.artifact,
     rollbackForwardDrill,
@@ -1471,6 +1698,10 @@ function validateManifest(manifestValue, { root, tenantId, launchId, expectedCom
   }
 
   const handoffValue = plainObject(manifest.operationsHandoff, "manifest operationsHandoff");
+  requireExactObjectKeys(handoffValue, [
+    "handoffId", "status", "acceptedAt", "acceptedBy", "runbookVersion",
+    "onCallScheduleVersion", "supportPlanVersion", "artifact",
+  ], "manifest operationsHandoff");
   if (handoffValue.status !== "accepted") {
     throw blocked("OPERATIONS_HANDOFF_INCOMPLETE", "Production operations must accept the release handoff before B127 certification");
   }
@@ -1478,22 +1709,54 @@ function validateManifest(manifestValue, { root, tenantId, launchId, expectedCom
   if (acceptedAt > generatedAt) {
     throw new CertificationError("OPERATIONS_HANDOFF_AFTER_MANIFEST", "Operations handoff acceptance occurred after the release manifest was frozen");
   }
-  const operationsHandoff = {
-    handoffId: identifier(handoffValue.handoffId, "manifest operationsHandoff.handoffId"),
+  const handoffId = identifier(handoffValue.handoffId, "manifest operationsHandoff.handoffId");
+  const acceptedBy = identifier(handoffValue.acceptedBy, "manifest operationsHandoff.acceptedBy");
+  const runbookVersion = releaseVersion(handoffValue.runbookVersion, "manifest operationsHandoff.runbookVersion");
+  const onCallScheduleVersion = releaseVersion(handoffValue.onCallScheduleVersion, "manifest operationsHandoff.onCallScheduleVersion");
+  const supportPlanVersion = releaseVersion(handoffValue.supportPlanVersion, "manifest operationsHandoff.supportPlanVersion");
+  const handoffArtifactResult = validateManifestArtifact(
+    root,
+    handoffValue.artifact,
+    "operations handoff artifact",
+    MAX_RELEASE_CONTROL_ARTIFACT_BYTES,
+    artifactPaths,
+    "OPERATIONS_HANDOFF_ARTIFACT_DIGEST_MISMATCH",
+  );
+  const expectedHandoffDocument = {
+    schemaVersion: "ltm.operations-handoff.v1",
+    releaseId: launchId,
+    tenantId,
+    launchId,
+    deploymentId: releaseSubject.deploymentId,
+    repositoryCommit,
+    componentSetSha256,
+    handoffId,
     status: "accepted",
     acceptedAt: acceptedAt.toISOString(),
-    acceptedBy: identifier(handoffValue.acceptedBy, "manifest operationsHandoff.acceptedBy"),
-    runbookVersion: releaseVersion(handoffValue.runbookVersion, "manifest operationsHandoff.runbookVersion"),
-    onCallScheduleVersion: releaseVersion(handoffValue.onCallScheduleVersion, "manifest operationsHandoff.onCallScheduleVersion"),
-    supportPlanVersion: releaseVersion(handoffValue.supportPlanVersion, "manifest operationsHandoff.supportPlanVersion"),
-    artifact: validateManifestArtifact(
-      root,
-      handoffValue.artifact,
-      "operations handoff artifact",
-      MAX_RELEASE_CONTROL_ARTIFACT_BYTES,
-      artifactPaths,
-      "OPERATIONS_HANDOFF_ARTIFACT_DIGEST_MISMATCH",
-    ).artifact,
+    acceptedBy,
+    runbookVersion,
+    onCallScheduleVersion,
+    supportPlanVersion,
+  };
+  const handoffDocument = parseJsonObject(
+    handoffArtifactResult.file.bytes.toString("utf8"),
+    "operations handoff artifact",
+  );
+  if (canonicalJson(handoffDocument) !== canonicalJson(expectedHandoffDocument)) {
+    throw new CertificationError(
+      "OPERATIONS_HANDOFF_ARTIFACT_CONTENT_MISMATCH",
+      "The operations handoff artifact does not exactly bind the accepted release, runbook, on-call schedule, and support plan",
+    );
+  }
+  const operationsHandoff = {
+    handoffId,
+    status: "accepted",
+    acceptedAt: acceptedAt.toISOString(),
+    acceptedBy,
+    runbookVersion,
+    onCallScheduleVersion,
+    supportPlanVersion,
+    artifact: handoffArtifactResult.artifact,
   };
 
   if (!Array.isArray(manifest.exceptions) || manifest.exceptions.length > 50) {
@@ -1600,8 +1863,8 @@ function validateManifestReleaseSubject(value, {
   const requiredProviderIds = sortedIdentifiers(controlled.requiredProviderIds, "manifest releaseSubject.requiredProviderIds", 1, 100);
   const secretReferences = sortedVisibleStrings(controlled.secretReferences, "manifest releaseSubject.secretReferences", 1, 200);
   const forcedRlsTables = sortedIdentifiers(controlled.forcedRlsTables, "manifest releaseSubject.forcedRlsTables", 1, 200);
-  if (!sameStringSet(forcedRlsTables, REQUIRED_SCHEMA5_FORCE_RLS_TABLES)) {
-    throw new CertificationError("RELEASE_FORCE_RLS_TABLES_INVALID", "releaseSubject forcedRlsTables must exactly equal the schema 5 runtime tenant-table set");
+  if (!sameStringSet(forcedRlsTables, REQUIRED_SCHEMA7_FORCE_RLS_TABLES)) {
+    throw new CertificationError("RELEASE_FORCE_RLS_TABLES_INVALID", "releaseSubject forcedRlsTables must exactly equal the schema 7 runtime tenant-table set");
   }
   const databaseUrlReference = nonEmptyText(controlled.databaseUrlReference, "manifest releaseSubject.databaseUrlReference", 512);
   const consentPolicyCatalogSha256 = exactSha256(
@@ -1832,7 +2095,7 @@ function validateLocalMigrationManifest(root) {
   const file = readRootRelativeFile(root, relativeManifestPath, "PostgreSQL migration manifest", MAX_RELEASE_CONTROL_ARTIFACT_BYTES);
   const manifest = parseJsonObject(file.bytes.toString("utf8"), "PostgreSQL migration manifest");
   requireExactObjectKeys(manifest, ["schemaVersion", "database", "runtimeSchemaVersion", "migrations"], "PostgreSQL migration manifest");
-  if (manifest.schemaVersion !== "ltm.postgres-migration-manifest.v1" || manifest.database !== "postgresql" || manifest.runtimeSchemaVersion !== "5" || !Array.isArray(manifest.migrations) || manifest.migrations.length !== REQUIRED_SCHEMA5_MIGRATIONS.length) {
+  if (manifest.schemaVersion !== "ltm.postgres-migration-manifest.v1" || manifest.database !== "postgresql" || manifest.runtimeSchemaVersion !== "7" || !Array.isArray(manifest.migrations) || manifest.migrations.length !== REQUIRED_SCHEMA7_MIGRATIONS.length) {
     throw new CertificationError("MIGRATION_MANIFEST_INVALID", "PostgreSQL migration manifest identity or migration set is invalid");
   }
   const ids = new Set();
@@ -1841,9 +2104,9 @@ function validateLocalMigrationManifest(root) {
     const migration = plainObject(value, `PostgreSQL migration manifest.migrations[${index}]`);
     requireExactObjectKeys(migration, ["id", "path", "sha256"], `PostgreSQL migration manifest.migrations[${index}]`);
     const id = identifier(migration.id, `PostgreSQL migration manifest.migrations[${index}].id`);
-    const expected = REQUIRED_SCHEMA5_MIGRATIONS[index];
+    const expected = REQUIRED_SCHEMA7_MIGRATIONS[index];
     if (id !== expected.id || migration.path !== expected.path) {
-      throw new CertificationError("MIGRATION_MANIFEST_INVALID", "PostgreSQL schema 5 migration IDs and paths must exactly equal the controlled 001..005 sequence");
+      throw new CertificationError("MIGRATION_MANIFEST_INVALID", "PostgreSQL schema 7 migration IDs and paths must exactly equal the controlled 001..007 sequence");
     }
     if (typeof migration.path !== "string" || !/^[0-9]{3}_[A-Za-z0-9._-]+\.sql$/.test(migration.path)) throw new CertificationError("MIGRATION_PATH_INVALID", `Migration ${id} path is invalid`);
     const declared = exactSha256(migration.sha256, `PostgreSQL migration ${id} sha256`);
@@ -2079,6 +2342,120 @@ function validateCompletedWaves(value, {
       observation,
     };
   });
+  validateWaveEvidenceUniqueness(completed);
+  return completed;
+}
+
+function validateGlobalWaveObservation(reference, {
+  root,
+  artifactPaths,
+  globalWaveStartedAt,
+  now,
+  tenantId,
+  launchId,
+  deploymentId,
+  repositoryCommit,
+  componentSetSha256,
+  automaticPausePolicyVersion,
+  guardrailPolicy,
+  guardrailPolicySha256,
+  trustedKeys,
+}) {
+  const observationArtifactResult = validateManifestArtifact(
+    root,
+    reference,
+    "global typed wave observation",
+    MAX_RELEASE_CONTROL_ARTIFACT_BYTES,
+    artifactPaths,
+    "GLOBAL_WAVE_ARTIFACT_DIGEST_MISMATCH",
+  );
+  const document = parseJsonObject(
+    observationArtifactResult.file.bytes.toString("utf8"),
+    "global rollout-wave observation",
+  );
+  const window = plainObject(document.monitoringWindow, "global rollout-wave observation monitoringWindow");
+  const startedAt = canonicalTimestamp(window.startedAt, "global wave startedAt");
+  const completedAt = canonicalTimestamp(window.endedAt, "global wave completedAt");
+  const minimumObservationSeconds = integerInRange(
+    window.minimumObservationSeconds,
+    "global wave minimumObservationSeconds",
+    3_600,
+    30 * 24 * 60 * 60,
+  );
+  const observedSeconds = integerInRange(
+    window.observedSeconds,
+    "global wave observedSeconds",
+    minimumObservationSeconds,
+    60 * 24 * 60 * 60,
+  );
+  if (
+    document.wave !== "global" ||
+    document.rolloutPercent !== 100 ||
+    startedAt.getTime() !== globalWaveStartedAt.getTime() ||
+    completedAt <= startedAt ||
+    completedAt.getTime() - startedAt.getTime() < observedSeconds * 1_000 ||
+    completedAt > now
+  ) {
+    throw blocked(
+      "GLOBAL_WAVE_OBSERVATION_INCOMPLETE",
+      "The global 100 percent wave requires a completed duration-bound observation from its approved start through the current verification time",
+    );
+  }
+  const observation = mapReleaseControlValidation(() => validateRolloutWaveObservation(
+    observationArtifactResult.file.bytes,
+    {
+      tenantId,
+      launchId,
+      deploymentId,
+      repositoryCommit,
+      componentSetSha256,
+      wave: "global",
+      rolloutPercent: 100,
+      startedAt: startedAt.toISOString(),
+      completedAt: completedAt.toISOString(),
+      minimumObservationSeconds,
+      observedSeconds,
+      automaticPausePolicyVersion,
+      guardrailPolicy,
+      guardrailPolicySha256,
+      readArtifact(rawReference, label) {
+        return validateManifestArtifact(
+          root,
+          rawReference,
+          `global ${label}`,
+          MAX_RELEASE_CONTROL_ARTIFACT_BYTES,
+          artifactPaths,
+          "WAVE_RAW_EVIDENCE_DIGEST_MISMATCH",
+        ).file.bytes;
+      },
+      verifyAttestation(attestationReference, expectedClaims, label) {
+        return verifyControlArtifactAttestation({
+          root,
+          artifactPaths,
+          now,
+          trustedKeys,
+          reference: attestationReference,
+          expectedClaims,
+          label: `global ${label}`,
+        });
+      },
+    },
+  ));
+  return {
+    wave: "global",
+    status: "passed",
+    rolloutPercent: 100,
+    startedAt: startedAt.toISOString(),
+    completedAt: completedAt.toISOString(),
+    minimumObservationSeconds,
+    observedSeconds,
+    guardrailBreaches: 0,
+    observationArtifact: observationArtifactResult.artifact,
+    observation,
+  };
+}
+
+function validateWaveEvidenceUniqueness(completed) {
   const evidenceBindings = completed.flatMap((wave) => wave.observation.evidenceBindings.map((binding) => ({
     ...binding,
     wave: wave.wave,
@@ -2118,7 +2495,6 @@ function validateCompletedWaves(value, {
       seen.set(binding[field], binding);
     }
   }
-  return completed;
 }
 
 function verifyControlArtifactAttestation({
@@ -2378,6 +2754,9 @@ function validateEvidenceSet(rowsValue, expected) {
     if (expected.maximumConsumedAt !== undefined && consumedAt > canonicalTimestamp(expected.maximumConsumedAt, "maximum evidence consumption time")) {
       throw new CertificationError(code("EVIDENCE_AFTER_CERTIFICATE"), `Evidence ${evidenceId} was consumed after the certificate was frozen`);
     }
+    if (expected.minimumConsumedAt !== undefined && consumedAt < canonicalTimestamp(expected.minimumConsumedAt, "minimum evidence consumption time")) {
+      throw blocked(code("EVIDENCE_CONSUMED_BEFORE_GLOBAL_OBSERVATION"), `Evidence ${evidenceId} was consumed before the global wave observation completed`);
+    }
     if (expiresAt.getTime() <= expected.now.getTime() || expiresAt <= issuedAt) {
       throw blocked(code("EVIDENCE_EXPIRED"), `Evidence ${evidenceId} is expired`);
     }
@@ -2396,6 +2775,33 @@ function validateEvidenceSet(rowsValue, expected) {
     }
     if (!trustedKey.allowedEnvironments.includes("production") || !scopeAllowed(trustedKey.allowedScopes, row.scope)) {
       throw new CertificationError(code("TRUST_POLICY_MISMATCH"), `Trusted key policy does not permit evidence ${evidenceId}`);
+    }
+    if (batchId === "B127") {
+      if (!trustedKey.authorityRoles.includes(B127_PRODUCTION_RELEASE_AUTHORITY_ROLE)) {
+        throw blocked(
+          "B127_RELEASE_AUTHORITY_NOT_TRUSTED",
+          `Evidence ${evidenceId} is not signed by an independently enrolled B127 production release authority`,
+        );
+      }
+      if (
+        trustedKey.allowedScopes.length !== 1 || trustedKey.allowedScopes[0] !== row.scope ||
+        trustedKey.allowedEnvironments.length !== 1 || trustedKey.allowedEnvironments[0] !== "production"
+      ) {
+        throw new CertificationError(
+          "B127_RELEASE_AUTHORITY_POLICY_INVALID",
+          `Evidence ${evidenceId} must use an exact B127 scope and a production-only trust policy`,
+        );
+      }
+      if (
+        !trustedKey.provider.startsWith("release-control:") ||
+        GENERAL_GATEWAY_AUTHORITY_IDENTITY.test(trustedKey.issuer) ||
+        GENERAL_GATEWAY_AUTHORITY_IDENTITY.test(trustedKey.provider)
+      ) {
+        throw new CertificationError(
+          "B127_RELEASE_AUTHORITY_IDENTITY_INVALID",
+          `Evidence ${evidenceId} cannot use an integration-gateway, direct-evidence, supply-event, or callback signer`,
+        );
+      }
     }
     if (
       (trustedKey.notBefore !== undefined && row.issued_at < trustedKey.notBefore) ||
@@ -2659,16 +3065,53 @@ export function loadTrustedKeys(pathValue, now) {
     }
     const authorityRoles = key.authorityRoles === undefined
       ? []
-      : stringArray(key.authorityRoles, `trusted key ${keyId} authorityRoles`, 1, Object.keys(APPROVAL_AUTHORITY_ROLES).length + CHANGE_APPROVER_AUTHORITY_ROLES.length + Object.keys(CONTROL_ARTIFACT_AUTHORITY_ROLES).length + 2);
+      : stringArray(key.authorityRoles, `trusted key ${keyId} authorityRoles`, 1, Object.keys(APPROVAL_AUTHORITY_ROLES).length + CHANGE_APPROVER_AUTHORITY_ROLES.length + Object.keys(CONTROL_ARTIFACT_AUTHORITY_ROLES).length + 3);
     const knownAuthorityRoles = new Set([
       ...Object.values(APPROVAL_AUTHORITY_ROLES),
       ...CHANGE_APPROVER_AUTHORITY_ROLES,
       ...Object.values(CONTROL_ARTIFACT_AUTHORITY_ROLES),
+      B127_PRODUCTION_RELEASE_AUTHORITY_ROLE,
       PRODUCTION_CHANGE_EXECUTOR_ROLE,
       SUPPLY_CHAIN_AUTHORITY_ROLE,
     ]);
     if (authorityRoles.some((role) => !knownAuthorityRoles.has(role))) {
       throw new CertificationError("TRUST_KEY_AUTHORITY_ROLE_INVALID", `Trusted key ${keyId} declares an unknown authority role`);
+    }
+    const approvalRoles = new Set(Object.values(APPROVAL_AUTHORITY_ROLES));
+    const declaresApprovalRole = authorityRoles.some((role) => approvalRoles.has(role));
+    const isB127ReleaseAuthority = authorityRoles.includes(B127_PRODUCTION_RELEASE_AUTHORITY_ROLE);
+    if (declaresApprovalRole && !isB127ReleaseAuthority) {
+      throw new CertificationError(
+        "B127_RELEASE_AUTHORITY_ROLE_REQUIRED",
+        `Trusted key ${keyId} cannot declare a B127 approval role without ${B127_PRODUCTION_RELEASE_AUTHORITY_ROLE}`,
+      );
+    }
+    if (isB127ReleaseAuthority) {
+      if (
+        provider.startsWith("release-control:") === false ||
+        GENERAL_GATEWAY_AUTHORITY_IDENTITY.test(issuer) ||
+        GENERAL_GATEWAY_AUTHORITY_IDENTITY.test(provider)
+      ) {
+        throw new CertificationError(
+          "B127_RELEASE_AUTHORITY_IDENTITY_INVALID",
+          `Trusted key ${keyId} cannot enroll a general integration-gateway or provider callback identity as a B127 release authority`,
+        );
+      }
+      if (
+        allowedScopes.length !== 1 || !/^ltm-evidence:v1:[a-f0-9]{64}$/.test(allowedScopes[0]) ||
+        allowedEnvironments.length !== 1 || allowedEnvironments[0] !== "production"
+      ) {
+        throw new CertificationError(
+          "B127_RELEASE_AUTHORITY_POLICY_INVALID",
+          `Trusted key ${keyId} must be bound to one exact B127 evidence scope and production only`,
+        );
+      }
+      if (authorityRoles.some((role) => role !== B127_PRODUCTION_RELEASE_AUTHORITY_ROLE && !approvalRoles.has(role))) {
+        throw new CertificationError(
+          "B127_RELEASE_AUTHORITY_ROLE_CONFLICT",
+          `Trusted key ${keyId} cannot combine the B127 release role with gateway, supply-chain, rollout-control, or change-executor roles`,
+        );
+      }
     }
     let publicKey;
     try {
@@ -2731,7 +3174,7 @@ function validateSbom(bytes, format) {
 function assertRequiredTables(database) {
   const schema = database.prepare("SELECT value FROM schema_metadata WHERE key = 'schema_version'").get();
   if (schema?.value !== "5") {
-    throw new CertificationError("DATABASE_SCHEMA_UNSUPPORTED", "The B127 verifier requires runtime database schema version 5");
+    throw new CertificationError("DATABASE_SCHEMA_UNSUPPORTED", "The B127 verifier requires runtime database schema version 5 for SQLite evidence");
   }
   const tables = database.prepare(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('records', 'external_evidence', 'evidence_consumptions')",

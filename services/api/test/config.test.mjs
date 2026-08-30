@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { DomainError, signConsentPolicyCatalog } from "@ltm/core";
-import { loadApiConfiguration } from "../dist/index.js";
+import {
+  B127_PRODUCTION_RELEASE_AUTHORITY_ROLE,
+  loadApiConfiguration,
+} from "../dist/index.js";
 
 const productRoot = mkdtempSync(join(tmpdir(), "ltm-api-config-"));
 after(() => rmSync(productRoot, { recursive: true, force: true }));
@@ -57,13 +60,14 @@ function productionEnvironment(overrides = {}) {
       allowedPurposes: ["product_operation"],
     }]),
     LTM_EVIDENCE_TRUST_KEYS_JSON: JSON.stringify([{
-      issuer: "production-issuer",
-      provider: "production-provider",
+      issuer: "production-release-authority",
+      provider: "release-control:production-control-plane",
       keyId: "production-key-1",
       algorithm: "Ed25519",
       publicKeyPem: publicKey.export({ type: "spki", format: "pem" }).toString(),
-      allowedScopes: ["B127:*"],
+      allowedScopes: [`ltm-evidence:v1:${"a".repeat(64)}`],
       allowedEnvironments: ["production"],
+      authorityRoles: [B127_PRODUCTION_RELEASE_AUTHORITY_ROLE],
     }]),
     LTM_CONSENT_POLICY_CATALOG_FILE: policyFile,
     LTM_CONSENT_POLICY_TRUST_KEYS_JSON: JSON.stringify([{
@@ -81,6 +85,9 @@ function productionEnvironment(overrides = {}) {
     LTM_DATABASE_PATH: ".data/production.sqlite",
     LTM_WECHAT_IDENTITY_BROKER_URL: "https://identity-broker.example.test",
     LTM_WECHAT_IDENTITY_TOKEN_FILE: "/var/run/secrets/ltm/wechat-identity-token",
+    LTM_WECHAT_PLATFORM_BROKER_URL: "https://wechat-platform-broker.example.test",
+    LTM_WECHAT_PLATFORM_BROKER_TOKEN_FILE: "/var/run/secrets/ltm/wechat-platform-token",
+    LTM_WECHAT_CUSTOMER_SERVICE_ALLOWED_ORIGINS: "https://service.product.cn",
     LTM_UPLOAD_BROKER_URL: "https://upload-broker.example.test",
     LTM_UPLOAD_BROKER_TOKEN_FILE: "/var/run/secrets/ltm/upload-broker-token",
     ...overrides,
@@ -116,8 +123,78 @@ test("production configuration is root-relative, digest-only, and evidence envir
   assert.equal(configuration.runtimeOptions.evidencePolicy, "production");
   assert.equal(configuration.runtimeOptions.evidenceEnvironment, "production");
   assert.equal(configuration.runtimeOptions.trustedEvidenceKeys?.[0]?.allowedEnvironments[0], "production");
+  assert.deepEqual(
+    configuration.runtimeOptions.trustedEvidenceKeys?.[0]?.authorityRoles,
+    [B127_PRODUCTION_RELEASE_AUTHORITY_ROLE],
+  );
   assert.equal(configuration.port, 8080);
   assert.match(configuration.metricsTokenSha256 ?? "", /^[a-f0-9]{64}$/);
+});
+
+test("production isolates B127 release-authority keys from general gateways and wildcard trust", () => {
+  const cases = [
+    ["integration gateway provider", (key) => { key.provider = "integration-gateway:direct-evidence"; }],
+    ["direct evidence issuer", (key) => { key.issuer = "prod:direct-evidence"; }],
+    ["supply event issuer", (key) => { key.issuer = "prod:supply-event"; }],
+    ["callback provider", (key) => { key.provider = "release-control:provider-callback"; }],
+    ["wildcard B127 scope", (key) => { key.allowedScopes = ["ltm-evidence:v1:*"]; }],
+    ["non-production environment", (key) => { key.allowedEnvironments = ["production", "staging"]; }],
+    ["malformed authority role", (key) => { key.authorityRoles = ["B127 production authority"]; }],
+  ];
+  for (const [name, mutate] of cases) {
+    const environment = productionEnvironment();
+    const keys = JSON.parse(environment.LTM_EVIDENCE_TRUST_KEYS_JSON);
+    mutate(keys[0]);
+    environment.LTM_EVIDENCE_TRUST_KEYS_JSON = JSON.stringify(keys);
+    assert.throws(
+      () => loadApiConfiguration(environment, productRoot),
+      (error) => error instanceof DomainError && error.code === "CONFIGURATION_INVALID",
+      name,
+    );
+  }
+
+  const wildcardGateway = productionEnvironment();
+  const gatewayKeys = JSON.parse(wildcardGateway.LTM_EVIDENCE_TRUST_KEYS_JSON);
+  gatewayKeys[0].issuer = "prod:integration-gateway";
+  gatewayKeys[0].provider = "integration-gateway:provider-events";
+  gatewayKeys[0].allowedScopes = ["*"];
+  delete gatewayKeys[0].authorityRoles;
+  wildcardGateway.LTM_EVIDENCE_TRUST_KEYS_JSON = JSON.stringify(gatewayKeys);
+  expectConfigurationError(wildcardGateway);
+
+  const reusedKey = productionEnvironment();
+  const reusedKeys = JSON.parse(reusedKey.LTM_EVIDENCE_TRUST_KEYS_JSON);
+  reusedKeys.push({
+    ...reusedKeys[0],
+    issuer: "prod:integration-gateway",
+    provider: "integration-gateway:provider-events",
+    keyId: "general-gateway-key-1",
+    allowedScopes: [`ltm-evidence:v1:${"b".repeat(64)}`],
+    authorityRoles: ["provider-event-authority"],
+  });
+  reusedKey.LTM_EVIDENCE_TRUST_KEYS_JSON = JSON.stringify(reusedKeys);
+  expectConfigurationError(reusedKey);
+});
+
+test("non-production sandbox fixtures may use general gateway trust only for code-level testing", () => {
+  const { publicKey } = generateKeyPairSync("ed25519");
+  const configuration = loadApiConfiguration({
+    APP_ENV: "test",
+    LTM_AUTH_MODE: "local-synthetic-only",
+    LTM_ALLOW_LEGACY_CONSENT_POLICY: "true",
+    LTM_EVIDENCE_TRUST_KEYS_JSON: JSON.stringify([{
+      issuer: "sandbox:integration-gateway",
+      provider: "direct-evidence:test-fixture",
+      keyId: "sandbox-gateway-key",
+      algorithm: "Ed25519",
+      publicKeyPem: publicKey.export({ type: "spki", format: "pem" }).toString(),
+      allowedScopes: ["*"],
+      allowedEnvironments: ["test"],
+    }]),
+  }, productRoot);
+  assert.equal(configuration.runtimeOptions.evidencePolicy, "development");
+  assert.equal(configuration.runtimeOptions.evidenceEnvironment, "test");
+  assert.deepEqual(configuration.runtimeOptions.trustedEvidenceKeys?.[0]?.allowedScopes, ["*"]);
 });
 
 test("production refuses synthetic auth, plaintext long-lived tokens, missing trust, and unprotected metrics", () => {
@@ -138,6 +215,8 @@ test("production refuses synthetic auth, plaintext long-lived tokens, missing tr
   expectConfigurationError(productionEnvironment({ LTM_METRICS_TOKEN_SHA256: "" }));
   expectConfigurationError(productionEnvironment({ LTM_DATABASE_PATH: ":memory:" }));
   expectConfigurationError(productionEnvironment({ LTM_WECHAT_IDENTITY_BROKER_URL: undefined }));
+  expectConfigurationError(productionEnvironment({ LTM_WECHAT_PLATFORM_BROKER_TOKEN_FILE: undefined }));
+  expectConfigurationError(productionEnvironment({ LTM_WECHAT_CUSTOMER_SERVICE_ALLOWED_ORIGINS: undefined }));
   expectConfigurationError(productionEnvironment({ LTM_UPLOAD_BROKER_TOKEN_FILE: undefined }));
   expectConfigurationError(productionEnvironment({
     LTM_CONSENT_POLICY_CATALOG_FILE: undefined,

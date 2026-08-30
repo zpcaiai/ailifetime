@@ -69,6 +69,10 @@ export function renderProductionManifests(options) {
     writeFileSync(path, content, { mode: 0o600 });
     rendered.push(relative(PRODUCT_ROOT, path).split(sep).join("/"));
   }
+  const readinessPolicyName = "integration-gateway-readiness-iam-policy.json";
+  const readinessPolicy = readFileSync(resolve(TEMPLATE_DIRECTORY, "policies", readinessPolicyName), "utf8");
+  writeFileSync(resolve(output, readinessPolicyName), readinessPolicy, { mode: 0o600 });
+  rendered.push(relative(PRODUCT_ROOT, resolve(output, readinessPolicyName)).split(sep).join("/"));
   const validation = validateRenderedProductionManifests(output);
   return { ...validation, output, files: rendered };
 }
@@ -80,8 +84,10 @@ export function validateRenderedProductionManifests(directoryValue) {
   }
   const files = readdirSync(directory).filter((name) => name.endsWith(".yaml")).sort();
   if (files.length !== 11) throw failure("KUBERNETES_FILE_SET_INVALID", "Production Kubernetes output must contain exactly eleven YAML files");
-  const content = files.map((name) => readFileSync(resolve(directory, name), "utf8")).join("\n---\n");
-  if (/__LTM_[A-Z0-9_]+__/.test(content)) throw failure("KUBERNETES_VALUE_UNRESOLVED", "Rendered Kubernetes output contains unresolved tokens");
+  const rawContent = files.map((name) => readFileSync(resolve(directory, name), "utf8")).join("\n---\n");
+  if (/__LTM_[A-Z0-9_]+__/.test(rawContent)) throw failure("KUBERNETES_VALUE_UNRESOLVED", "Rendered Kubernetes output contains unresolved tokens");
+  if (/\t/u.test(rawContent)) throw failure("KUBERNETES_YAML_INVALID", "Rendered Kubernetes output must use spaces and never YAML-significant tabs");
+  const content = stripYamlComments(rawContent);
   if (/\nkind:\s*Secret\s*(?:\n|$)/.test(content) || /\n\s*(?:data|stringData):\s*\n\s+[A-Za-z0-9_.-]+:/m.test(content) && /\nkind:\s*Secret/m.test(content)) {
     throw failure("KUBERNETES_INLINE_SECRET_FORBIDDEN", "Production templates must reference external Secrets and never define secret values");
   }
@@ -108,7 +114,10 @@ export function validateRenderedProductionManifests(directoryValue) {
   validatePrivateNetworkPolicy(documents, "allow-redis-egress", "redis");
   validateClientBrokerHttpsEgress(documents);
   validateClientBrokerMediaSafety(documents);
+  validateIntegrationGatewayCloudReadiness(documents, directory);
   validateBrowserOidcConfig(content);
+  validateConsentPolicyMount(documents, "ltm-api");
+  validateConsentPolicyMount(documents, "ltm-workers");
   const jobs = documents.filter((document) => document.kind === "Job");
   if (jobs.length !== 1 || !jobs[0].name.startsWith("ltm-postgres-migrate-")) {
     throw failure("KUBERNETES_MIGRATION_JOB_MISSING", "Exactly one release-bound PostgreSQL migration Job is required");
@@ -153,6 +162,10 @@ export function validateRenderedProductionManifests(directoryValue) {
     "secretKeyRef:",
     "projected:",
     "secretName: ltm-production-integration-gateway-api-token",
+    "LTM_SUPPLY_EVENT_AUTHORITIES_REFERENCE",
+    "value: secret-manager:ltm/production/supply-event-authorities",
+    "LTM_DIRECT_EVIDENCE_AUTHORITIES_REFERENCE",
+    "value: secret-manager:ltm/production/direct-evidence-authorities",
     "ltm.openai.com/external-command-batches: \"18\"",
     "ltm.openai.com/external-callback-route-contracts: \"19\"",
     "tls:",
@@ -170,27 +183,182 @@ export function validateRenderedProductionManifests(directoryValue) {
   };
 }
 
-function validateRestrictedWorkload(workload) {
-  const requiredControls = [
-    "automountServiceAccountToken: false",
-    "enableServiceLinks: false",
-    "runAsNonRoot: true",
-    "runAsUser: 10001",
-    "runAsGroup: 10001",
-    "fsGroup: 10001",
-    "fsGroupChangePolicy: OnRootMismatch",
-    "type: RuntimeDefault",
-    "allowPrivilegeEscalation: false",
-    "readOnlyRootFilesystem: true",
-    "drop: [\"ALL\"]",
-    "requests:",
-    "limits:",
-    "imagePullPolicy: IfNotPresent",
-    "serviceAccountName:",
-  ];
-  for (const control of requiredControls) {
-    if (!workload.text.includes(control)) throw failure("KUBERNETES_RESTRICTED_WORKLOAD_INVALID", `${workload.name} is missing ${control}`);
+function validateIntegrationGatewayCloudReadiness(documents, directory) {
+  const deployment = documents.find(
+    (document) => document.kind === "Deployment" && document.name === "ltm-integration-gateway",
+  );
+  const text = deployment?.text ?? "";
+  if ([...text.matchAll(/audience: sts\.amazonaws\.com/g)].length !== 1 ||
+      [...text.matchAll(/- name: AWS_WEB_IDENTITY_TOKEN_FILE/g)].length !== 1 ||
+      !text.includes("value: /var/run/secrets/ltm-workload/token")) {
+    throw failure(
+      "KUBERNETES_GATEWAY_READINESS_IAM_INVALID",
+      "integration gateway must use one STS-audience projected token at the configured AWS web-identity path",
+    );
   }
+  const path = resolve(directory, "integration-gateway-readiness-iam-policy.json");
+  if (!existsSync(path) || !statSync(path).isFile()) {
+    throw failure("KUBERNETES_GATEWAY_READINESS_IAM_INVALID", "integration gateway readiness IAM policy is missing");
+  }
+  let policy;
+  try { policy = JSON.parse(readFileSync(path, "utf8")); }
+  catch { throw failure("KUBERNETES_GATEWAY_READINESS_IAM_INVALID", "integration gateway readiness IAM policy is invalid JSON"); }
+  const keys = (value) => value !== null && typeof value === "object" && !Array.isArray(value) ? Object.keys(value).sort() : [];
+  const exact = (value, expected) => JSON.stringify(keys(value)) === JSON.stringify([...expected].sort());
+  if (!exact(policy, ["Version", "Statement"]) || policy.Version !== "2012-10-17" || !Array.isArray(policy.Statement) || policy.Statement.length !== 2) {
+    throw failure("KUBERNETES_GATEWAY_READINESS_IAM_INVALID", "readiness IAM policy must use the closed two-statement schema");
+  }
+  const [s3, kms] = policy.Statement;
+  const s3Actions = ["s3:ListBucket", "s3:GetBucketVersioning", "s3:GetBucketObjectLockConfiguration"];
+  const kmsActions = ["kms:DescribeKey", "kms:GenerateDataKeyWithoutPlaintext"];
+  const actionsEqual = (actual, expected) => Array.isArray(actual) && actual.length === expected.length && [...actual].sort().every((action, index) => action === [...expected].sort()[index]);
+  if (!exact(s3, ["Sid", "Effect", "Action", "Resource"]) || s3.Sid !== "ReadEvidenceBucketDurabilityMetadata" || s3.Effect !== "Allow" ||
+      !actionsEqual(s3.Action, s3Actions) || s3.Resource !== "arn:aws:s3:::${aws:PrincipalTag/ltm-evidence-bucket}") {
+    throw failure("KUBERNETES_GATEWAY_READINESS_IAM_INVALID", "S3 readiness permissions must be exact and bucket-tag scoped");
+  }
+  if (!exact(kms, ["Sid", "Effect", "Action", "Resource", "Condition"]) || kms.Sid !== "ProbeEvidenceKmsWithoutPlaintext" || kms.Effect !== "Allow" ||
+      !actionsEqual(kms.Action, kmsActions) || kms.Resource !== "arn:aws:kms:${aws:RequestedRegion}:${aws:PrincipalAccount}:key/${aws:PrincipalTag/ltm-evidence-kms-key-id}" ||
+      !exact(kms.Condition, ["StringEquals"]) || !exact(kms.Condition.StringEquals, ["kms:EncryptionContext:ltm:purpose", "kms:EncryptionContext:ltm:tenant"]) ||
+      kms.Condition.StringEquals["kms:EncryptionContext:ltm:purpose"] !== "integration-gateway-readiness" ||
+      kms.Condition.StringEquals["kms:EncryptionContext:ltm:tenant"] !== "${aws:PrincipalTag/ltm-tenant}") {
+    throw failure("KUBERNETES_GATEWAY_READINESS_IAM_INVALID", "KMS readiness permissions must be exact, key-tag scoped, ciphertext-only, and context-bound");
+  }
+}
+
+function validateConsentPolicyMount(documents, deploymentName) {
+  const deployment = documents.find((document) =>
+    document.kind === "Deployment" && document.name === deploymentName);
+  if (deployment === undefined) {
+    throw failure("KUBERNETES_CONSENT_POLICY_INVALID", `${deploymentName} deployment is missing`);
+  }
+  const required = [
+    "name: LTM_CONSENT_POLICY_TRUST_KEYS_JSON",
+    "name: consent-policy",
+    "mountPath: /var/run/secrets/ltm-consent-policy/catalog.json",
+    "subPath: catalog.json",
+    "secretName: ltm-production-consent-policy",
+    "key: catalog.json",
+    "path: catalog.json",
+  ];
+  if (required.some((token) => !deployment.text.includes(token)) ||
+      [...deployment.text.matchAll(/mountPath: \/var\/run\/secrets\/ltm-consent-policy\/catalog\.json/g)].length !== 1 ||
+      [...deployment.text.matchAll(/subPath: catalog\.json/g)].length !== 1) {
+    throw failure(
+      "KUBERNETES_CONSENT_POLICY_INVALID",
+      `${deploymentName} must mount the signed consent catalog once as a non-symlink subPath file and project its trust keys`,
+    );
+  }
+}
+
+function validateRestrictedWorkload(workload) {
+  const podSpec = yamlIndentedBlock(workload.text, 4, "spec", `${workload.name} pod spec`);
+  for (const [label, pattern] of [
+    ["serviceAccountName", /^ {6}serviceAccountName: [a-z0-9-]+$/gmu],
+    ["automountServiceAccountToken: false", /^ {6}automountServiceAccountToken: false$/gmu],
+    ["enableServiceLinks: false", /^ {6}enableServiceLinks: false$/gmu],
+  ]) requireExactlyOneLine(podSpec, pattern, workload.name, label);
+
+  const podSecurity = yamlIndentedBlock(podSpec, 6, "securityContext", `${workload.name} pod securityContext`);
+  for (const [label, pattern] of [
+    ["runAsNonRoot: true", /^ {8}runAsNonRoot: true$/gmu],
+    ["runAsUser: 10001", /^ {8}runAsUser: 10001$/gmu],
+    ["runAsGroup: 10001", /^ {8}runAsGroup: 10001$/gmu],
+    ["fsGroup: 10001", /^ {8}fsGroup: 10001$/gmu],
+    ["fsGroupChangePolicy: OnRootMismatch", /^ {8}fsGroupChangePolicy: OnRootMismatch$/gmu],
+    ["seccompProfile", /^ {8}seccompProfile:$/gmu],
+    ["type: RuntimeDefault", /^ {10}type: RuntimeDefault$/gmu],
+  ]) requireExactlyOneLine(podSecurity, pattern, workload.name, label);
+
+  const containers = yamlIndentedBlock(podSpec, 6, "containers", `${workload.name} containers`);
+  requireExactlyOneLine(containers, /^ {8}- name: [a-z0-9-]+$/gmu, workload.name, "one application container");
+  requireExactlyOneLine(containers, /^ {10}imagePullPolicy: IfNotPresent$/gmu, workload.name, "imagePullPolicy: IfNotPresent");
+  const containerSecurity = yamlIndentedBlock(containers, 10, "securityContext", `${workload.name} container securityContext`);
+  for (const [label, pattern] of [
+    ["privileged: false", /^ {12}privileged: false$/gmu],
+    ["allowPrivilegeEscalation: false", /^ {12}allowPrivilegeEscalation: false$/gmu],
+    ["readOnlyRootFilesystem: true", /^ {12}readOnlyRootFilesystem: true$/gmu],
+    ["capabilities", /^ {12}capabilities:$/gmu],
+    ["drop all capabilities", /^ {14}drop: \["ALL"\]$/gmu],
+  ]) requireExactlyOneLine(containerSecurity, pattern, workload.name, label);
+  const resources = yamlIndentedBlock(containers, 10, "resources", `${workload.name} container resources`);
+  requireExactlyOneLine(resources, /^ {12}requests:$/gmu, workload.name, "resource requests");
+  requireExactlyOneLine(resources, /^ {12}limits:$/gmu, workload.name, "resource limits");
+
+  const forbiddenControls = [
+    /^\s*privileged:\s*true\s*$/m,
+    /^\s*allowPrivilegeEscalation:\s*true\s*$/m,
+    /^\s*readOnlyRootFilesystem:\s*false\s*$/m,
+    /^\s*runAsNonRoot:\s*false\s*$/m,
+    /^\s*hostNetwork:\s*true\s*$/m,
+    /^\s*hostPID:\s*true\s*$/m,
+    /^\s*hostIPC:\s*true\s*$/m,
+    /^\s*hostPath:\s*$/m,
+    /^\s*procMount:\s*Unmasked\s*$/m,
+    /^\s*add:\s*/m,
+  ];
+  if (forbiddenControls.some((control) => control.test(workload.text))) {
+    throw failure("KUBERNETES_RESTRICTED_WORKLOAD_INVALID", `${workload.name} contains a forbidden privilege escalation control`);
+  }
+}
+
+function yamlIndentedBlock(content, indentation, key, label) {
+  const lines = content.split("\n");
+  const marker = `${" ".repeat(indentation)}${key}:`;
+  const indexes = lines.flatMap((line, index) => line === marker ? [index] : []);
+  if (indexes.length !== 1) {
+    throw failure("KUBERNETES_RESTRICTED_WORKLOAD_INVALID", `${label} must occur exactly once at its canonical YAML path`);
+  }
+  const start = indexes[0];
+  let end = lines.length;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line.trim() === "") continue;
+    const lineIndentation = /^ */u.exec(line)[0].length;
+    if (lineIndentation <= indentation) {
+      end = index;
+      break;
+    }
+  }
+  return lines.slice(start, end).join("\n");
+}
+
+function requireExactlyOneLine(content, pattern, workloadName, label) {
+  if ([...content.matchAll(pattern)].length !== 1) {
+    throw failure("KUBERNETES_RESTRICTED_WORKLOAD_INVALID", `${workloadName} must contain exactly one ${label} at the certified YAML path`);
+  }
+}
+
+function stripYamlComments(content) {
+  return content.split("\n").map((line) => {
+    let singleQuoted = false;
+    let doubleQuoted = false;
+    let escaped = false;
+    for (let index = 0; index < line.length; index += 1) {
+      const character = line[index];
+      if (doubleQuoted) {
+        if (escaped) {
+          escaped = false;
+        } else if (character === "\\") {
+          escaped = true;
+        } else if (character === '"') {
+          doubleQuoted = false;
+        }
+        continue;
+      }
+      if (singleQuoted) {
+        if (character === "'" && line[index + 1] === "'") {
+          index += 1;
+        } else if (character === "'") {
+          singleQuoted = false;
+        }
+        continue;
+      }
+      if (character === '"') doubleQuoted = true;
+      else if (character === "'") singleQuoted = true;
+      else if (character === "#" && (index === 0 || /\s/u.test(line[index - 1]))) return line.slice(0, index).trimEnd();
+    }
+    return line;
+  }).join("\n");
 }
 
 function yamlDocuments(content) {

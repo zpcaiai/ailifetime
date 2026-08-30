@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "ltm.wechat.release-metadata.v1",
+  "version": "2.0.0",
+  "appIdSource": "LTM_WECHAT_APP_ID",
+  "privateKeySource": "LTM_WECHAT_PRIVATE_KEY_PATH",
+  "merchantEvidence": "EVIDENCE_PENDING",
+  "deviceEvidence": "EVIDENCE_PENDING",
+  "platformReview": "NOT_CERTIFIED",
+  "externalCertification": "NOT_CERTIFIED"
+}

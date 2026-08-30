@@ -1,0 +1,14 @@
+{
+  "name": "@ltm/wechat-mini-release",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "preview": "node upload.mjs preview",
+    "upload": "node upload.mjs upload",
+    "test": "node --test upload.test.mjs"
+  },
+  "dependencies": {
+    "miniprogram-ci": "2.1.31"
+  }
+}

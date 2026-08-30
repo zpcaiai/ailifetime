@@ -5,7 +5,11 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
-import { certifyB127, verifyB127Certification } from "./b127-certifier.mjs";
+import {
+  certifyB127,
+  PostgresB127CertificationSource,
+  verifyB127Certification,
+} from "./b127-certifier.mjs";
 import {
   deploymentEvidenceScope,
   REQUIRED_DEPLOYMENT_CHECKS,
@@ -15,6 +19,7 @@ import {
 import { isProductionReleaseApproved, releaseGateOutcome } from "./release-gate-policy.mjs";
 import {
   APPROVAL_AUTHORITY_ROLES,
+  B127_PRODUCTION_RELEASE_AUTHORITY_ROLE,
   CHANGE_APPROVER_AUTHORITY_ROLES,
   CONTROL_ARTIFACT_AUTHORITY_ROLES,
   REQUIRED_SCHEMA5_FORCE_RLS_TABLES,
@@ -27,7 +32,7 @@ import {
   createB127ReleaseSubjectFixture,
 } from "./b127-release-fixture.mjs";
 
-const NOW = new Date("2026-08-20T12:00:00.000Z");
+const NOW = new Date("2026-08-20T12:05:00.000Z");
 const COMMIT = "a".repeat(40);
 const TENANT_ID = "tenant-production";
 const LAUNCH_ID = "launch-production-2026";
@@ -43,6 +48,54 @@ const APPROVAL_DECISIONS = {
   productionChangeApproval: "approved",
 };
 
+test("PostgreSQL certifier pins pg_catalog immediately after BEGIN", async () => {
+  const queries = [];
+  const client = {
+    async query(text) {
+      queries.push(text);
+      if (text.includes("current_setting('app.tenant_id'")) {
+        return { rows: [{ tenant_id: "tenant-search-path", read_only: "on" }] };
+      }
+      if (text.includes("SELECT current_user,session_user")) {
+        return {
+          rows: [{
+            current_user: "ltm_b127_reader",
+            session_user: "ltm_b127_reader",
+            server_version_num: "160000",
+            database_name: "ltm",
+          }],
+        };
+      }
+      return { rows: [] };
+    },
+    release() {},
+  };
+  const source = new PostgresB127CertificationSource(
+    "postgresql://ltm_b127_reader@127.0.0.1/ltm?sslmode=disable",
+    {
+      certificationProfile: "test",
+      allowInsecureTestConnection: true,
+      poolFactory: () => ({
+        connect: async () => client,
+        end: async () => undefined,
+      }),
+    },
+  );
+  await assert.rejects(
+    () => source.load({
+      tenantId: "tenant-search-path",
+      launchId: "launch-search-path",
+      b126CertificationId: "b126-search-path",
+    }),
+    (error) => error?.code === "B127_POSTGRES_VERSION_UNSUPPORTED",
+  );
+  assert.deepEqual(queries.slice(0, 3), [
+    "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+    "SET LOCAL search_path = pg_catalog",
+    "SET LOCAL row_security = on",
+  ]);
+});
+
 test("B127 verifier independently validates production manifest, SBOM, record, consumption, and five Ed25519 signers", async (testContext) => {
   const fixture = createFixture(testContext);
   const result = await verifyB127Certification({ ...fixture.options, now: NOW });
@@ -57,6 +110,9 @@ test("B127 verifier independently validates production manifest, SBOM, record, c
   assert.match(result.policyAuthority.mediaAuthorityArtifact.sha256, /^[a-f0-9]{64}$/);
   assert.match(result.releaseControls.waveObservationSetSha256, /^[a-f0-9]{64}$/);
   assert.equal(result.releaseControls.completedWaveObservations.length, 5);
+  assert.equal(result.releaseControls.globalWaveObservation.wave, "global");
+  assert.equal(result.releaseControls.globalWaveObservation.rolloutPercent, 100);
+  assert.equal(result.releaseControls.globalWaveObservation.completedAt, "2026-08-20T12:00:00.000Z");
   assert.match(result.releaseControls.rollbackForwardDrill.scopeSetSha256, /^[a-f0-9]{64}$/);
   assert.deepEqual(Object.keys(result.approvals).sort(), Object.keys(APPROVAL_DECISIONS).sort());
 });
@@ -88,12 +144,49 @@ test("B127 verifier rejects a changed B00-B127 certification report", async (tes
   assert.equal(result.code, "BATCH_REPORT_ARTIFACT_DIGEST_MISMATCH");
 });
 
+test("B127 operations handoff artifact must bind the exact accepted release and operating plans", async (testContext) => {
+  const fixture = createFixture(testContext, {
+    mutateOperationsHandoffArtifact(document) {
+      document.onCallScheduleVersion = "unbound-oncall-version";
+    },
+  });
+  const result = await certifyB127({ ...fixture.options, now: NOW });
+  assert.equal(result.status, "FAIL");
+  assert.equal(result.code, "OPERATIONS_HANDOFF_ARTIFACT_CONTENT_MISMATCH");
+});
+
 test("B127 verifier keeps canary and regional waves intermediate", async (testContext) => {
   const fixture = createFixture(testContext, { wave: "consumer_canary", rolloutPercent: 5 });
   const result = await certifyB127({ ...fixture.options, now: NOW });
 
   assert.equal(result.status, "BLOCKED_EXTERNAL");
   assert.equal(result.code, "B127_FINAL_ROLLOUT_INCOMPLETE");
+});
+
+test("B127 verifier requires a completed duration-bound global wave observation", async (testContext) => {
+  const changedBytes = createFixture(testContext);
+  writeFileSync(changedBytes.waveObservationArtifactPaths.global, "tampered global wave report\n", { mode: 0o600 });
+  const changedResult = await certifyB127({ ...changedBytes.options, now: NOW });
+  assert.equal(changedResult.status, "FAIL");
+  assert.equal(changedResult.code, "GLOBAL_WAVE_ARTIFACT_DIGEST_MISMATCH");
+
+  const fixture = createFixture(testContext, {
+    mutateWaveObservation(wave, report) {
+      if (wave === "global") report.monitoringWindow.endedAt = "2026-08-20T11:59:00.000Z";
+    },
+  });
+  const result = await certifyB127({ ...fixture.options, now: NOW });
+
+  assert.equal(result.status, "BLOCKED_EXTERNAL");
+  assert.equal(result.code, "GLOBAL_WAVE_OBSERVATION_INCOMPLETE");
+});
+
+test("B127 evidence consumption cannot predate the completed global observation", async (testContext) => {
+  const fixture = createFixture(testContext, { earlyGlobalEvidenceConsumption: true });
+  const result = await certifyB127({ ...fixture.options, now: NOW });
+
+  assert.equal(result.status, "BLOCKED_EXTERNAL");
+  assert.equal(result.code, "B127_EVIDENCE_CONSUMED_BEFORE_GLOBAL_OBSERVATION");
 });
 
 test("B127 verifier rejects an invalid B126 prerequisite signature", async (testContext) => {
@@ -152,7 +245,7 @@ test("production release decision requires every check to be exactly PASS", () =
   assert.equal(releaseGateOutcome("production", [{ status: "PASS" }, { status: "FAIL" }]), "FAIL");
 });
 
-test("schema 5 release subject requires the exact runtime FORCE-RLS table set", () => {
+test("schema 7 release subject requires the exact runtime FORCE-RLS table set", () => {
   const subject = deploymentReleaseSubject({
     deploymentId: "deployment-production-2026",
     targetBaseUrl: "https://release.ailifetime.ai/",
@@ -162,14 +255,14 @@ test("schema 5 release subject requires the exact runtime FORCE-RLS table set", 
       ...subject,
       forcedRlsTables: subject.forcedRlsTables.filter((table) => table !== "participants"),
     }),
-    /exactly equal the schema 5 runtime tenant-table set/,
+    /exactly equal the schema 7 runtime tenant-table set/,
   );
   assert.throws(
     () => validateProductionReleaseSubject({
       ...subject,
       forcedRlsTables: [...subject.forcedRlsTables, "uncontrolled_extra_table"],
     }),
-    /exactly equal the schema 5 runtime tenant-table set/,
+    /exactly equal the schema 7 runtime tenant-table set/,
   );
   const withoutConsentCatalog = { ...subject };
   delete withoutConsentCatalog.consentPolicyCatalogSha256;
@@ -199,7 +292,7 @@ test("schema 5 release subject requires the exact runtime FORCE-RLS table set", 
   );
 });
 
-test("B127 rejects a schema 5 manifest missing any controlled migration ID or path", async (testContext) => {
+test("B127 rejects a schema 7 manifest missing any controlled migration ID or path", async (testContext) => {
   const fixture = createFixture(testContext);
   const path = join(fixture.options.root, "infra/postgres/migrations/manifest.json");
   const manifest = JSON.parse(readFileSync(path, "utf8"));
@@ -488,6 +581,16 @@ test("B127 rollback-forward drills fail closed on tampering, field drift, cross-
   assert.equal(changedResult.status, "FAIL");
   assert.equal(changedResult.code, "ROLLBACK_DRILL_ARTIFACT_DIGEST_MISMATCH");
 
+  const changedRawEvidence = createFixture(testContext);
+  writeFileSync(
+    Object.values(changedRawEvidence.rawRollbackArtifactPaths)[0],
+    "tampered rollback operation evidence\n",
+    { mode: 0o600 },
+  );
+  const changedRawResult = await certifyB127({ ...changedRawEvidence.options, now: NOW });
+  assert.equal(changedRawResult.status, "FAIL");
+  assert.equal(changedRawResult.code, "ROLLBACK_DRILL_EVIDENCE_DIGEST_MISMATCH");
+
   const cases = [
     {
       name: "field drift",
@@ -640,6 +743,47 @@ test("B127 blocks an approval signer not enrolled for its authority role", async
   const result = await certifyB127({ ...fixture.options, now: NOW });
   assert.equal(result.status, "BLOCKED_EXTERNAL");
   assert.equal(result.code, "APPROVAL_AUTHORITY_ROLE_NOT_TRUSTED");
+});
+
+test("B127 production evidence rejects ordinary gateway keys and non-exact release-authority policy", async (testContext) => {
+  const scenarios = [
+    {
+      name: "ordinary key without the reserved B127 role",
+      mutate(keys) {
+        const key = keys.find((candidate) => candidate.provider === `release-control:${RELEASE_PROVIDER_ID}`);
+        assert.ok(key);
+        delete key.authorityRoles;
+      },
+      status: "BLOCKED_EXTERNAL",
+      code: "B127_RELEASE_AUTHORITY_NOT_TRUSTED",
+    },
+    {
+      name: "integration gateway identity claiming the reserved role",
+      mutate(keys) {
+        const key = keys.find((candidate) => candidate.provider === `release-control:${RELEASE_PROVIDER_ID}`);
+        assert.ok(key);
+        key.issuer = "prod:integration-gateway";
+      },
+      status: "FAIL",
+      code: "B127_RELEASE_AUTHORITY_IDENTITY_INVALID",
+    },
+    {
+      name: "wildcard B127 scope",
+      mutate(keys) {
+        const key = keys.find((candidate) => candidate.provider === `release-control:${RELEASE_PROVIDER_ID}`);
+        assert.ok(key);
+        key.allowedScopes = ["ltm-evidence:v1:*"];
+      },
+      status: "FAIL",
+      code: "B127_RELEASE_AUTHORITY_POLICY_INVALID",
+    },
+  ];
+  for (const scenario of scenarios) {
+    const fixture = createFixture(testContext, { mutateControlTrustedKeys: scenario.mutate });
+    const result = await certifyB127({ ...fixture.options, now: NOW });
+    assert.equal(result.status, scenario.status, scenario.name);
+    assert.equal(result.code, scenario.code, scenario.name);
+  }
 });
 
 function createFixture(testContext, options = {}) {
@@ -878,10 +1022,27 @@ function createFixture(testContext, options = {}) {
   const rolloutPercent = options.rolloutPercent ?? 100;
   const waveStartedAt = "2026-08-20T11:00:00.000Z";
   const completedWaves = releaseControls.completedWaves;
-  const operationsHandoffArtifact = artifact("release/operations-handoff.json", {
+  const operationsHandoffSummary = {
     handoffId: "operations-handoff-2026",
     status: "accepted",
-  });
+    acceptedAt: "2026-08-20T09:50:00.000Z",
+    acceptedBy: "production-operations-lead",
+    runbookVersion: "runbook-v3",
+    onCallScheduleVersion: "oncall-v4",
+    supportPlanVersion: "support-v2",
+  };
+  const operationsHandoffDocument = {
+    schemaVersion: "ltm.operations-handoff.v1",
+    releaseId: LAUNCH_ID,
+    tenantId: TENANT_ID,
+    launchId: LAUNCH_ID,
+    deploymentId: releaseSubject.deploymentId,
+    repositoryCommit: COMMIT,
+    componentSetSha256,
+    ...operationsHandoffSummary,
+  };
+  options.mutateOperationsHandoffArtifact?.(operationsHandoffDocument);
+  const operationsHandoffArtifact = artifact("release/operations-handoff.json", operationsHandoffDocument);
   const manifest = {
     schemaVersion: "ltm.production-release-manifest.v1",
     generatedAt: "2026-08-20T10:30:00.000Z",
@@ -917,13 +1078,7 @@ function createFixture(testContext, options = {}) {
       changeApprovalId: "approval-8",
     },
     operationsHandoff: {
-      handoffId: "operations-handoff-2026",
-      status: "accepted",
-      acceptedAt: "2026-08-20T09:50:00.000Z",
-      acceptedBy: "production-operations-lead",
-      runbookVersion: "runbook-v3",
-      onCallScheduleVersion: "oncall-v4",
-      supportPlanVersion: "support-v2",
+      ...operationsHandoffSummary,
       artifact: operationsHandoffArtifact.reference,
     },
     exceptions: [],
@@ -935,9 +1090,12 @@ function createFixture(testContext, options = {}) {
   const trustDocument = {
     schemaVersion: "ltm.trusted-evidence-keys.v1",
     keys: [...keys.map((key) =>
-      trustedKey(key, `release-control:${RELEASE_PROVIDER_ID}`, b127ScopeValue, options.omitAuthorityRoles === true ? [] : approvalNames
-        .filter((_, approvalIndex) => approvalIndex % keys.length === keys.indexOf(key))
-        .map((approvalName) => APPROVAL_AUTHORITY_ROLES[approvalName])),
+      trustedKey(key, `release-control:${RELEASE_PROVIDER_ID}`, b127ScopeValue, [
+        B127_PRODUCTION_RELEASE_AUTHORITY_ROLE,
+        ...(options.omitAuthorityRoles === true ? [] : approvalNames
+          .filter((_, approvalIndex) => approvalIndex % keys.length === keys.indexOf(key))
+          .map((approvalName) => APPROVAL_AUTHORITY_ROLES[approvalName])),
+      ]),
     ),
     ...b126Keys.map((key) => trustedKey(key, `e2e-auditor:${b126ProviderId}`, b126ScopeValue)),
     ...changeApproverKeys.map((key) => trustedKey(
@@ -1000,13 +1158,23 @@ function createFixture(testContext, options = {}) {
     automaticPausePolicyVersion,
     guardrailPolicySha256: releaseControls.guardrailPolicyArtifact.reference.sha256,
     waveObservationSetSha256: releaseControls.waveObservationSetSha256,
+    globalWaveObservationPath: releaseControls.globalWaveObservation.observationArtifact.path,
+    globalWaveObservationSha256: releaseControls.globalWaveObservation.observationArtifact.sha256,
     rollbackForwardDrillSha256: releaseControls.rollbackForwardDrillArtifact.reference.sha256,
     changeApproverEvidenceIds: changeApproverKeys.map((key) => `production-change-approver-evidence-${changeApproverKeys.indexOf(key) + 1}`),
     activeGuardrailBreaches: 0,
     externalEvidenceIds: evidenceIds,
     evidenceScope: b127ScopeValue,
   };
-  insertFixtureRecord(database, "b127-record", record, "2026-08-20T11:30:00.000Z");
+  const priorWaveRecord = {
+    ...record,
+    wave: "regional",
+    rolloutPercent: 25,
+  };
+  delete priorWaveRecord.globalWaveObservationPath;
+  delete priorWaveRecord.globalWaveObservationSha256;
+  insertFixtureRecord(database, "b127-prior-wave-record", priorWaveRecord, "2026-08-20T01:05:00.000Z");
+  insertFixtureRecord(database, "b127-record", record, "2026-08-20T12:02:00.000Z");
   b126Keys.forEach((key, index) => {
     insertFixtureEvidence(database, key, {
       evidenceId: b126EvidenceIds[index],
@@ -1029,7 +1197,9 @@ function createFixture(testContext, options = {}) {
       artifactSha256: manifestSha256,
       issuedAt: "2026-08-20T10:45:00.000Z",
       verifiedAt: "2026-08-20T10:46:00.000Z",
-      consumedAt: "2026-08-20T11:31:00.000Z",
+      consumedAt: options.earlyGlobalEvidenceConsumption === true
+        ? "2026-08-20T11:59:00.000Z"
+        : "2026-08-20T12:01:00.000Z",
       expiresAt: options.expiredEvidenceIndex === index ? "2026-08-20T11:30:00.000Z" : "2026-08-21T12:00:00.000Z",
       nonce: `production-release-nonce-${index + 1}`,
       tampered: options.tamperedSignatureIndex === index,
@@ -1046,6 +1216,9 @@ function createFixture(testContext, options = {}) {
     guardrailPolicyArtifactPath: releaseControls.guardrailPolicyArtifact.path,
     rawObservationArtifactPaths: Object.fromEntries(
       [...releaseControls.rawObservationArtifacts].map(([name, item]) => [name, item.path]),
+    ),
+    rawRollbackArtifactPaths: Object.fromEntries(
+      [...releaseControls.rawRollbackArtifacts].map(([name, item]) => [name, item.path]),
     ),
     controlAttestationArtifactPaths: Object.fromEntries(
       [...releaseControls.controlAttestationArtifacts].map(([name, item]) => [name, item.path]),
@@ -1206,14 +1379,14 @@ function deploymentAssertions(checkId, { targetBaseUrl, observedAt, producer, re
   const toolVersion = producer.version;
   switch (checkId) {
     case "production-dependency-audit": return { tool, toolVersion, registry: "https://registry.npmjs.org/", lockfileSha256: releaseSubject.lockfileSha256, dependencyCount: 42, skippedCount: 0, high: 0, critical: 0, exitCode: 0 };
-    case "production-backup-restore-drill": return { tool, toolVersion, backend: "postgresql", serverMajor: 17, schemaVersion: "5", backupId: "backup-2026", sourceEnvironment: "production", restoreTargetId: "restore-isolated-2026", restorePoint: observedAt, backupSha256: hash("backup"), restoredSha256: hash("restore"), targetRtoSeconds: 900, observedRtoSeconds: 600, targetRpoSeconds: 300, observedRpoSeconds: 120, pointInTimeRecoveryVerified: true, crossRegion: true, integrityChecks: { database: true, forcedRls: true, tenantIsolation: true, auditChain: true, ledgerBalance: true, evidenceChain: true, deletionNonResurrection: true, duplicateSideEffectsPrevented: true }, exitCode: 0 };
+    case "production-backup-restore-drill": return { tool, toolVersion, backend: "postgresql", serverMajor: 17, schemaVersion: "7", backupId: "backup-2026", sourceEnvironment: "production", restoreTargetId: "restore-isolated-2026", restorePoint: observedAt, backupSha256: hash("backup"), restoredSha256: hash("restore"), targetRtoSeconds: 900, observedRtoSeconds: 600, targetRpoSeconds: 300, observedRpoSeconds: 120, pointInTimeRecoveryVerified: true, crossRegion: true, integrityChecks: { database: true, forcedRls: true, tenantIsolation: true, auditChain: true, ledgerBalance: true, evidenceChain: true, deletionNonResurrection: true, duplicateSideEffectsPrevented: true }, exitCode: 0 };
     case "semgrep-static-analysis": return { tool, toolVersion, rulesetSha256: hash("rules"), scannedFiles: 680, scanErrors: 0, high: 0, critical: 0, sarifSha256: hash("sarif"), exitCode: 0 };
     case "trivy-container-scan": return { tool, toolVersion, databaseUpdatedAt: "2026-08-20T10:00:00.000Z", configurationScanned: true, images, scanErrors: 0, high: 0, critical: 0, exitCode: 0 };
     case "grype-image-scan": return { tool, toolVersion, databaseUpdatedAt: "2026-08-20T10:00:00.000Z", images, scanErrors: 0, high: 0, critical: 0, exitCode: 0 };
     case "syft-sbom": return { tool, toolVersion, images, sboms: images.map((image) => ({ role: image.role, imageDigest: image.digest, artifactSha256: hash(`sbom-${image.role}`), format: "cyclonedx-json", componentCount: 10 })), componentCount: images.length * 10, signedBundleSha256: releaseSubject.supplyChain.bundleSha256, provenanceSha256: releaseSubject.supplyChain.provenanceSha256, productionTrustKeyId: releaseSubject.supplyChain.trustKeyId, exitCode: 0 };
     case "osv-scanner": return { tool, toolVersion, lockfileSha256: releaseSubject.lockfileSha256, componentSetSha256: releaseSubject.componentSetSha256, scannedPackages: 42, skippedPackages: 0, high: 0, critical: 0, exitCode: 0 };
     case "gitleaks-scan": return { tool, toolVersion, commit: COMMIT, scanScope: "full-history-and-worktree", scannedFiles: 680, findings: 0, exitCode: 0 };
-    case "production-persistence": return { tool, toolVersion, engine: "postgresql", serverMajor: 17, schemaVersion: "5", tlsMode: "verify-full", hostnameVerified: true, role: "ltm_runtime", superuser: false, bypassRls: false, forcedRlsTables: releaseSubject.forcedRlsTables, tenantIsolationNegativeTest: true, migrationsSha256: releaseSubject.migrationManifestSha256, readWriteProbe: true, exitCode: 0 };
+    case "production-persistence": return { tool, toolVersion, engine: "postgresql", serverMajor: 17, schemaVersion: "7", tlsMode: "verify-full", hostnameVerified: true, role: "ltm_runtime", superuser: false, bypassRls: false, forcedRlsTables: releaseSubject.forcedRlsTables, tenantIsolationNegativeTest: true, migrationsSha256: releaseSubject.migrationManifestSha256, readWriteProbe: true, exitCode: 0 };
     case "enterprise-authentication": return { tool, toolVersion, protocol: "oidc", issuer: "https://identity.example.com/", jwksUrl: "https://identity.example.com/.well-known/jwks.json", audience: "ltm-production", algorithms: ["RS256", "ES256"], tokenExchangeVerified: true, claimsVerified: { issuer: true, audience: true, tenant: true, roles: true, purposes: true, mfaStepUp: true }, rejections: { expired: true, wrongIssuer: true, wrongAudience: true, wrongTenant: true, unknownRole: true, missingPurpose: true, unsigned: true }, exitCode: 0 };
     case "distributed-coordination": return { tool, toolVersion, engine: "redis", tlsVerified: true, clusterNodes: 3, leaseOwnershipVerified: true, replayPreventionVerified: true, concurrentClaimVerified: true, failoverVerified: true, duplicateSideEffects: 0, exitCode: 0 };
     case "durable-object-storage": return { tool, toolVersion, provider: "aws-s3", bucket: "ltm-production-evidence", kmsKeyReference: "arn:aws:kms:cn-north-1:000000000000:key/example", objectLockMode: "COMPLIANCE", versioningEnabled: true, retentionDays: 365, writeReadDigestVerified: true, deleteBeforeRetentionRejected: true, crossAccountDenyVerified: true, exitCode: 0 };
@@ -1221,7 +1394,7 @@ function deploymentAssertions(checkId, { targetBaseUrl, observedAt, producer, re
     case "external-provider-mode": return { tool, toolVersion, mode: "external-verified", providers: releaseSubject.requiredProviderIds.map((providerId) => ({ providerId, accountId: `${providerId}-account`, commandId: `${providerId}-command`, callbackId: `${providerId}-callback`, reconciliationId: `${providerId}-reconciliation`, requestAccepted: true, callbackVerified: true, reconciled: true })), exitCode: 0 };
     case "tls-and-proxy": return { tool, toolVersion, publicOrigin: targetBaseUrl, certificateSha256: hash("certificate"), notBefore: "2026-08-01T00:00:00.000Z", notAfter: "2026-12-01T00:00:00.000Z", minimumProtocol: "TLSv1.2", hostnameVerified: true, chainVerified: true, hstsMaxAgeSeconds: 31_536_000, proxyHeadersSanitized: true, externalProbeVerified: true, exitCode: 0 };
     case "managed-secret-references": return { tool, toolVersion, provider: "aws-secrets-manager", workloadIdentitySubject: "system:serviceaccount:ltm-production:ltm-api", secretReferences: releaseSubject.secretReferences, inlineSecretCount: 0, authorizedReadVerified: true, unauthorizedReadDenied: true, rotationObserved: true, reportContainsSecretValues: false, exitCode: 0 };
-    case "database-url-contract": return { tool, toolVersion, reference: releaseSubject.databaseUrlReference, scheme: "postgresql", tlsMode: "verify-full", hostnameVerified: true, caVerified: true, credentialsInline: false, applicationName: "ltm-api", serverMajor: 17, schemaVersion: "5", role: "ltm_runtime", superuser: false, bypassRls: false, migrationsSha256: releaseSubject.migrationManifestSha256, connectionVerified: true, exitCode: 0 };
+    case "database-url-contract": return { tool, toolVersion, reference: releaseSubject.databaseUrlReference, scheme: "postgresql", tlsMode: "verify-full", hostnameVerified: true, caVerified: true, credentialsInline: false, applicationName: "ltm-api", serverMajor: 17, schemaVersion: "7", role: "ltm_runtime", superuser: false, bypassRls: false, migrationsSha256: releaseSubject.migrationManifestSha256, connectionVerified: true, exitCode: 0 };
     case "runtime-policy-authority": return {
       tool,
       toolVersion,
@@ -1379,7 +1552,7 @@ function deploymentReleaseSubject({ deploymentId, targetBaseUrl }) {
       wechatMiniProgramDecision: { store: "wechat-mini-program", applicationId: "wxailifetimeprod", accountId: "wechat-production", version: "2.0.0", buildSha256: digest("wechat") },
     },
     penetrationTest: { targetOrigin: targetBaseUrl, reportArtifactSha256: digest("pentest"), findingRegistrySha256: digest("findings") },
-    disasterRecovery: { deploymentId, reportArtifactSha256: digest("dr"), sourceRegion: "cn-east-1", failoverRegion: "cn-north-1", schemaVersion: "5", targetRtoSeconds: 900, targetRpoSeconds: 300 },
+    disasterRecovery: { deploymentId, reportArtifactSha256: digest("dr"), sourceRegion: "cn-east-1", failoverRegion: "cn-north-1", schemaVersion: "7", targetRtoSeconds: 900, targetRpoSeconds: 300 },
     goLive: { windowStart: "2026-08-20T10:45:00.000Z", windowEnd: "2026-08-20T11:15:00.000Z", scheduledAt: "2026-08-20T11:00:00.000Z" },
     supplyChain: { bundleSha256: digest("bundle"), provenanceSha256: digest("provenance"), trustKeyId: "production-supply-chain-key" },
   });

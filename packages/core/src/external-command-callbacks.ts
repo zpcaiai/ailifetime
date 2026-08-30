@@ -1,3 +1,14 @@
+import { DomainError } from "./errors.js";
+import type {
+  ExternalCommandRecord,
+  ExternalCommandState,
+  JsonObject,
+  JsonValue,
+  RecordEnvelope,
+  SignedExternalEvidence,
+  VerifiedBusinessEvent,
+} from "./types.js";
+
 export type ExternalCommandTerminalState = "succeeded" | "failed" | "cancelled" | "compensated";
 
 export const EXTERNAL_COMMAND_TERMINAL_EVENT_TYPES = Object.freeze({
@@ -84,6 +95,150 @@ export function externalCommandCallbackProviderAllowed(
   const separator = provider.indexOf(":");
   if (separator <= 0 || separator === provider.length - 1) return false;
   return binding.allowedTypes.includes(provider.slice(0, separator));
+}
+
+export interface FrozenExternalCommandReconciliation {
+  readonly terminalState: ExternalCommandTerminalState;
+  readonly originalFreezeReason: string;
+  readonly previousState: ExternalCommandState;
+}
+
+/** Return the next state-graph edge inferred by an exact signed terminal fact. */
+export function frozenExternalCommandReconciliationBridge(
+  current: ExternalCommandState,
+  terminal: ExternalCommandTerminalState,
+): ExternalCommandState | null {
+  if (current === "requested" && terminal !== "cancelled") return "dispatched";
+  if (current === "dispatched" && (terminal === "succeeded" || terminal === "compensated")) {
+    return "acknowledged";
+  }
+  if (current === "acknowledged" && terminal === "compensated") return "succeeded";
+  return null;
+}
+
+/**
+ * Validate the sole path allowed to resolve a frozen external command. This is
+ * deliberately a pure binding check used by both storage runtimes; it does not
+ * expose an unfreeze operation. The caller must still perform the state change
+ * inside the same transaction that consumes the signed business evidence.
+ */
+export function validateFrozenExternalCommandReconciliation(
+  command: ExternalCommandRecord,
+  aggregate: RecordEnvelope,
+  event: VerifiedBusinessEvent,
+  evidence: SignedExternalEvidence,
+  toState: ExternalCommandState,
+): FrozenExternalCommandReconciliation {
+  if (command.decisionState !== "frozen" || command.reconciliationState !== "reconciliation_required" ||
+      aggregate.data._externalDecisionState !== "frozen" ||
+      aggregate.data._externalReconciliationState !== "reconciliation_required") {
+    throw new DomainError("EVIDENCE_REVOKED", "External command is not in the exact frozen reconciliation state");
+  }
+  if (evidence.replayPolicy !== "single_use") {
+    throw new DomainError(
+      "EVIDENCE_REPLAY_DETECTED",
+      "Frozen external-command reconciliation requires single-use signed evidence",
+    );
+  }
+  const terminalState = terminalStateForEventType(event.eventType);
+  if (terminalState === null || toState !== terminalState) {
+    throw new DomainError(
+      "EVIDENCE_REVOKED",
+      "Only an exact terminal external-command event may reconcile a frozen command",
+    );
+  }
+  if (event.tenantId !== command.tenantId || event.subjectId !== command.commandId ||
+      event.correlationId !== command.commandId || aggregate.tenantId !== command.tenantId ||
+      aggregate.collection !== command.aggregateCollection || aggregate.id !== command.aggregateId ||
+      event.batchId !== command.batchId || event.operation !== command.operation) {
+    throw new DomainError(
+      "EVENT_FINGERPRINT_CONFLICT",
+      "Frozen external-command event does not match its tenant, command, operation, or aggregate",
+    );
+  }
+  const routeDefinition = resolveExternalCommandCallbackRoute(command.batchId, command.operation);
+  if (routeDefinition === undefined || routeDefinition.collection !== command.aggregateCollection ||
+      routeDefinition.subjectType !== event.subjectType) {
+    throw new DomainError(
+      "EXTERNAL_ADAPTER_UNAVAILABLE",
+      "Frozen external command has no exact trusted terminal callback route",
+    );
+  }
+  if (aggregate.data.operationMode !== "external-command" || aggregate.data.externalCommandId !== command.commandId ||
+      aggregate.data.batchId !== command.batchId || aggregate.data.operation !== command.operation) {
+    throw new DomainError(
+      "EVENT_FINGERPRINT_CONFLICT",
+      "Frozen external-command aggregate binding is invalid",
+    );
+  }
+  const expectedProvider = expectedProviderForRecord(routeDefinition, aggregate.data);
+  if (event.provider !== expectedProvider || evidence.provider !== expectedProvider) {
+    throw new DomainError(
+      "TENANT_SCOPE_MISMATCH",
+      "Frozen external-command reconciliation provider does not match the requested authority",
+      { details: { expectedProvider, actualProvider: event.provider } },
+    );
+  }
+  for (const field of routeDefinition.requiredClaimIdentifiers ?? []) {
+    const persisted = persistedIdentifier(aggregate.data[field], field);
+    const supplied = persistedIdentifier(event.canonicalClaims[field], field);
+    if (persisted !== supplied) {
+      throw new DomainError(
+        "TENANT_SCOPE_MISMATCH",
+        "Frozen external-command reconciliation claim does not match the requested command",
+        { details: { field } },
+      );
+    }
+  }
+  const freezeReason = originalFreezeReason(command.details);
+  if (freezeReason !== "outbox_dead_letter") {
+    throw new DomainError(
+      "EVIDENCE_REVOKED",
+      "Only an outbox dead-letter ambiguity may be automatically reconciled by a provider terminal event",
+      { details: { originalFreezeReason: freezeReason } },
+    );
+  }
+  return {
+    terminalState,
+    originalFreezeReason: freezeReason,
+    previousState: command.state,
+  };
+}
+
+function terminalStateForEventType(eventType: string): ExternalCommandTerminalState | null {
+  for (const [state, expectedEventType] of Object.entries(EXTERNAL_COMMAND_TERMINAL_EVENT_TYPES)) {
+    if (eventType === expectedEventType) return state as ExternalCommandTerminalState;
+  }
+  return null;
+}
+
+function expectedProviderForRecord(routeDefinition: ExternalCommandCallbackRoute, data: JsonObject): string {
+  const binding = routeDefinition.providerBinding;
+  if (binding.kind === "exact") return binding.provider;
+  if (binding.kind === "record-field") {
+    return `${binding.prefix}${persistedIdentifier(data[binding.field], binding.field)}`;
+  }
+  const providerType = persistedIdentifier(data[binding.typeField], binding.typeField);
+  if (!binding.allowedTypes.includes(providerType)) {
+    throw new DomainError("INTERNAL_ERROR", "Frozen external command has an unsupported persisted provider type");
+  }
+  return `${providerType}:${persistedIdentifier(data[binding.idField], binding.idField)}`;
+}
+
+function persistedIdentifier(value: JsonValue | undefined, field: string): string {
+  if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value)) {
+    throw new DomainError("INTERNAL_ERROR", `Frozen external command is missing persisted ${field}`);
+  }
+  return value;
+}
+
+function originalFreezeReason(details: JsonObject): string {
+  if (typeof details.reconciliationReason === "string" && details.reconciliationReason.length > 0) {
+    return details.reconciliationReason;
+  }
+  if (typeof details.deadLetterEventId === "string") return "outbox_dead_letter";
+  if (typeof details.withdrawnConsentId === "string") return "participant_consent_withdrawal";
+  return "evidence_or_delivery_reconciliation_required";
 }
 
 function route<

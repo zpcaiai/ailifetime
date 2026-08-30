@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "ltm.public-web-requirements-trace.v1",
+  "skill": "building-marketing-content-platform",
+  "codeImplementationStatus": "PASSED",
+  "productionCertificationStatus": "NOT_CERTIFIED",
+  "externalOnlyGates": [
+    "Real CDN, DNS, public-domain deployment, synthetic probes, Core Web Vitals, form delivery, and attribution observations",
+    "Professional legal, privacy, child-safety, accessibility, brand, and security review evidence",
+    "Real CMP, advertising platform, analytics proxy, downstream deletion, and notification-provider receipts",
+    "Executed third-party content licenses, certification-provider verification, app/deep-link registration, and partner approval evidence"
+  ],
+  "requirements": [
+    { "id": "B57-R01", "sources": ["packages/public-web-platform/src/landing.mjs"], "symbols": ["REQUIRED_PAGE_KINDS", "validateSiteConfiguration"], "tests": ["packages/public-web-platform/test/landing.test.mjs"] },
+    { "id": "B57-R02", "sources": ["packages/public-web-platform/src/landing.mjs"], "symbols": ["buildStaticSite", "verifyBuiltSite"], "tests": ["packages/public-web-platform/test/landing.test.mjs"] },
+    { "id": "B57-R03", "sources": ["packages/public-web-platform/src/landing.mjs"], "symbols": ["APPROVED_COMPONENT_TYPES", "validateLandingPage"], "tests": ["packages/public-web-platform/test/landing.test.mjs"] },
+    { "id": "B57-R04", "sources": ["packages/public-web-platform/src/landing.mjs"], "symbols": ["evaluatePublicSiteMonitoring", "auditBuiltAccessibility"], "tests": ["packages/public-web-platform/test/landing.test.mjs"] },
+    { "id": "B57-R05", "sources": ["packages/public-web-platform/src/landing.mjs", "packages/public-web-platform/src/store.mjs"], "symbols": ["saveLandingPagePreview", "publishLandingPage", "rollbackLandingPage", "VersionedMarketingStore"], "tests": ["packages/public-web-platform/test/landing.test.mjs"] },
+
+    { "id": "B58-R01", "sources": ["packages/public-web-platform/src/cms.mjs"], "symbols": ["CONTENT_TYPES", "validateContentDocument"], "tests": ["packages/public-web-platform/test/cms.test.mjs"] },
+    { "id": "B58-R02", "sources": ["packages/public-web-platform/src/cms.mjs"], "symbols": ["transitionContent", "rollbackContentVersion"], "tests": ["packages/public-web-platform/test/cms.test.mjs"] },
+    { "id": "B58-R03", "sources": ["packages/public-web-platform/src/cms.mjs"], "symbols": ["createPreviewToken", "resolvePreview", "publicContentProjection"], "tests": ["packages/public-web-platform/test/cms.test.mjs"] },
+    { "id": "B58-R04", "sources": ["packages/public-web-platform/src/cms.mjs"], "symbols": ["markSourceContentChanged", "validateContentDocument"], "tests": ["packages/public-web-platform/test/cms.test.mjs"] },
+    { "id": "B58-R05", "sources": ["packages/public-web-platform/src/cms.mjs", "packages/public-web-platform/src/store.mjs"], "symbols": ["contentEtag", "assertMediaDeletable", "VersionedMarketingStore"], "tests": ["packages/public-web-platform/test/cms.test.mjs"] },
+
+    { "id": "B59-R01", "sources": ["packages/public-web-platform/src/consent-attribution.mjs"], "symbols": ["renderRegionalConsentInterface", "recordConsent"], "tests": ["packages/public-web-platform/test/consent-campaign.test.mjs"] },
+    { "id": "B59-R02", "sources": ["packages/public-web-platform/src/consent-attribution.mjs"], "symbols": ["eligibleTags", "scanTagExecution", "enforceTagExecution"], "tests": ["packages/public-web-platform/test/consent-campaign.test.mjs"] },
+    { "id": "B59-R03", "sources": ["packages/public-web-platform/src/consent-attribution.mjs"], "symbols": ["validateAttributionEvent", "validateConsentPolicy"], "tests": ["packages/public-web-platform/test/consent-campaign.test.mjs"] },
+    { "id": "B59-R04", "sources": ["packages/public-web-platform/src/consent-attribution.mjs"], "symbols": ["withdrawConsent", "acknowledgeWithdrawal"], "tests": ["packages/public-web-platform/test/consent-campaign.test.mjs"] },
+    { "id": "B59-R05", "sources": ["packages/public-web-platform/src/consent-attribution.mjs"], "symbols": ["recordAttributionEvent", "attributionHealth"], "tests": ["packages/public-web-platform/test/consent-campaign.test.mjs"] },
+
+    { "id": "B60-R01", "sources": ["packages/public-web-platform/src/campaign.mjs"], "symbols": ["validateCampaign", "configureCampaign", "issueCampaignEntry"], "tests": ["packages/public-web-platform/test/consent-campaign.test.mjs"] },
+    { "id": "B60-R02", "sources": ["packages/public-web-platform/src/campaign.mjs"], "symbols": ["validateCampaignPolicy", "resolveCampaignEntry"], "tests": ["packages/public-web-platform/test/consent-campaign.test.mjs"] },
+    { "id": "B60-R03", "sources": ["packages/public-web-platform/src/campaign.mjs"], "symbols": ["validateCampaign", "issueCampaignEntry"], "tests": ["packages/public-web-platform/test/consent-campaign.test.mjs"] },
+    { "id": "B60-R04", "sources": ["packages/public-web-platform/src/campaign.mjs"], "symbols": ["changeCampaignState", "resolveCampaignEntry"], "tests": ["packages/public-web-platform/test/consent-campaign.test.mjs"] },
+    { "id": "B60-R05", "sources": ["packages/public-web-platform/src/campaign.mjs"], "symbols": ["campaignFunnelHealth"], "tests": ["packages/public-web-platform/test/consent-campaign.test.mjs"] },
+
+    { "id": "B61-R01", "sources": ["packages/public-web-platform/src/sharing.mjs"], "symbols": ["createGovernedShareAsset", "requiredShareAiLabel"], "tests": ["packages/public-web-platform/test/sharing-trust.test.mjs"] },
+    { "id": "B61-R02", "sources": ["packages/public-web-platform/src/sharing.mjs"], "symbols": ["createGovernedShareAsset"], "tests": ["packages/public-web-platform/test/sharing-trust.test.mjs"] },
+    { "id": "B61-R03", "sources": ["packages/public-web-platform/src/sharing.mjs"], "symbols": ["validateUgcTemplate", "validateSharePolicy"], "tests": ["packages/public-web-platform/test/sharing-trust.test.mjs"] },
+    { "id": "B61-R04", "sources": ["packages/public-web-platform/src/sharing.mjs"], "symbols": ["MemoryShareRateLimiter", "resolveShareAccess", "revokeShare"], "tests": ["packages/public-web-platform/test/sharing-trust.test.mjs"] },
+    { "id": "B61-R05", "sources": ["packages/public-web-platform/src/sharing.mjs"], "symbols": ["validateOfficialMediaKit"], "tests": ["packages/public-web-platform/test/sharing-trust.test.mjs"] },
+
+    { "id": "B62-R01", "sources": ["packages/public-web-platform/src/trust-status.mjs"], "symbols": ["validateBrandAsset", "publishBrandAsset"], "tests": ["packages/public-web-platform/test/sharing-trust.test.mjs"] },
+    { "id": "B62-R02", "sources": ["packages/public-web-platform/src/trust-status.mjs"], "symbols": ["validateTrustCenter", "publicTrustCenter", "mandatoryTrustStatements"], "tests": ["packages/public-web-platform/test/sharing-trust.test.mjs"] },
+    { "id": "B62-R03", "sources": ["packages/public-web-platform/src/trust-status.mjs"], "symbols": ["publishStatusIncident", "publishStatusMaintenance", "publicStatusProjection", "createStatusSubscription", "confirmStatusSubscription", "planStatusNotifications", "acknowledgeStatusNotification"], "tests": ["packages/public-web-platform/test/sharing-trust.test.mjs"] },
+    { "id": "B62-R04", "sources": ["packages/public-web-platform/src/trust-status.mjs"], "symbols": ["validateSalesAsset", "publishSalesAsset"], "tests": ["packages/public-web-platform/test/sharing-trust.test.mjs"] },
+    { "id": "B62-R05", "sources": ["packages/public-web-platform/src/trust-status.mjs"], "symbols": ["markStaleSalesAssets", "registerMaterialDependencies", "reconcileMaterialDependencies"], "tests": ["packages/public-web-platform/test/sharing-trust.test.mjs"] }
+  ]
+}

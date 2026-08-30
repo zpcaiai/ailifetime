@@ -1,15 +1,21 @@
 const session = require("./services/session");
+const commerce = require("./services/commerce");
+const privacy = require("./services/privacy");
 
 App({
-  globalData: { session: null, policy: null },
+  globalData: { session: null, policy: null, privacyRequest: null },
 
   onLaunch() {
     session.clear();
+    commerce.clear();
+    privacy.install();
     this.globalData.policy = null;
   },
 
   onHide() {
     session.clearPrivateUrls();
+    commerce.clear();
+    privacy.clear();
   },
 
   onError(error) {

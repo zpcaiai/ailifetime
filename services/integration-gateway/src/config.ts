@@ -66,6 +66,8 @@ export interface IntegrationGatewayConfiguration {
   readonly google?: GatewayGoogleConfiguration;
   readonly wechat?: GatewayWechatConfiguration;
   readonly partnerPoliciesReference?: SecretReference;
+  readonly supplyEventAuthoritiesReference?: SecretReference;
+  readonly directEvidenceAuthoritiesReference?: SecretReference;
 }
 
 const FORBIDDEN_INLINE_SECRETS = [
@@ -113,7 +115,10 @@ export function loadIntegrationGatewayConfiguration(environment: NodeJS.ProcessE
   const googleEnabled = booleanValue(environment.LTM_GOOGLE_CALLBACKS_ENABLED, "LTM_GOOGLE_CALLBACKS_ENABLED");
   const wechatEnabled = booleanValue(environment.LTM_WECHAT_CALLBACKS_ENABLED, "LTM_WECHAT_CALLBACKS_ENABLED");
   const partnerPoliciesReference = optionalSecretReference(environment.LTM_PARTNER_WEBHOOK_POLICIES_REFERENCE);
-  if (!appleEnabled && !googleEnabled && !wechatEnabled && partnerPoliciesReference === undefined) {
+  const supplyEventAuthoritiesReference = optionalSecretReference(environment.LTM_SUPPLY_EVENT_AUTHORITIES_REFERENCE);
+  const directEvidenceAuthoritiesReference = optionalSecretReference(environment.LTM_DIRECT_EVIDENCE_AUTHORITIES_REFERENCE);
+  if (!appleEnabled && !googleEnabled && !wechatEnabled && partnerPoliciesReference === undefined &&
+      supplyEventAuthoritiesReference === undefined && directEvidenceAuthoritiesReference === undefined) {
     throw configError("at least one provider callback or partner policy reference must be configured");
   }
   const apple = appleEnabled ? appleConfiguration(environment, appEnvironment) : undefined;
@@ -121,6 +126,12 @@ export function loadIntegrationGatewayConfiguration(environment: NodeJS.ProcessE
   const wechat = wechatEnabled ? wechatConfiguration(environment) : undefined;
   if (appEnvironment === "production" && partnerPoliciesReference === undefined) {
     throw configError("production gateway requires the complete managed external-command partner policy inventory");
+  }
+  if (appEnvironment === "production" && supplyEventAuthoritiesReference === undefined) {
+    throw configError("production gateway requires the complete managed supply-event authority inventory");
+  }
+  if (appEnvironment === "production" && directEvidenceAuthoritiesReference === undefined) {
+    throw configError("production gateway requires the complete managed direct-evidence authority inventory");
   }
   return {
     appEnvironment,
@@ -171,6 +182,8 @@ export function loadIntegrationGatewayConfiguration(environment: NodeJS.ProcessE
     ...(google === undefined ? {} : { google }),
     ...(wechat === undefined ? {} : { wechat }),
     ...(partnerPoliciesReference === undefined ? {} : { partnerPoliciesReference }),
+    ...(supplyEventAuthoritiesReference === undefined ? {} : { supplyEventAuthoritiesReference }),
+    ...(directEvidenceAuthoritiesReference === undefined ? {} : { directEvidenceAuthoritiesReference }),
   };
 }
 

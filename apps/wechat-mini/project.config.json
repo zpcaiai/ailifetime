@@ -17,5 +17,6 @@
   },
   "compileType": "miniprogram",
   "libVersion": "3.7.12",
+  "__usePrivacyCheck__": true,
   "condition": {}
 }

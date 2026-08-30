@@ -10,7 +10,12 @@ import {
   normalizeConsentScope,
   participantEvidenceScope,
 } from "./consent-scope.js";
-import { evidenceScopeAllowed, validateTrustedEvidenceKey, verifyExternalEvidenceSignature } from "./evidence.js";
+import {
+  assertB127ProductionReleaseAuthority,
+  evidenceScopeAllowed,
+  validateTrustedEvidenceKey,
+  verifyExternalEvidenceSignature,
+} from "./evidence.js";
 import { DomainError } from "./errors.js";
 import {
   assertExternalCommandTransition,
@@ -22,6 +27,11 @@ import {
   normalizeExternalBusinessReduction,
   normalizeTransitionExternalCommandInput,
 } from "./external-business-events.js";
+import {
+  frozenExternalCommandReconciliationBridge,
+  validateFrozenExternalCommandReconciliation,
+  type FrozenExternalCommandReconciliation,
+} from "./external-command-callbacks.js";
 import { authorize as enforceAuthorization, hasPermission, validateContext } from "./policy.js";
 import {
   hasExactTenantIsolationPolicySet,
@@ -123,7 +133,7 @@ const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const COLLECTION = /^[a-z][a-z0-9_.-]{0,79}$/;
 const CURRENCY = /^[A-Z]{3}$/;
 const ACCOUNT_CODE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
-const REQUIRED_SCHEMA_VERSION = "5";
+const REQUIRED_SCHEMA_VERSION = "7";
 const TENANT_TABLES = POSTGRES_TENANT_TABLES;
 
 function token(value: string, label: string, pattern: RegExp = IDENTIFIER): string {
@@ -533,6 +543,14 @@ export class PostgresLifeTimeMachineRuntime implements LifeTimeMachineRuntimePor
     if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") {
       throw new DomainError("CONFIGURATION_INVALID", "connectionString must use postgres:// or postgresql://");
     }
+    for (const [parameter] of url.searchParams) {
+      if (parameter.toLowerCase() === "options") {
+        throw new DomainError(
+          "CONFIGURATION_INVALID",
+          "connectionString must not contain PostgreSQL startup options",
+        );
+      }
+    }
     this.#clock = options.clock ?? SYSTEM_CLOCK;
     this.#trustedEvidenceKeys = [...(options.trustedEvidenceKeys ?? [])];
     this.#evidencePolicy = options.evidencePolicy ?? (this.#trustedEvidenceKeys.length > 0 ? "development" : "disabled");
@@ -600,6 +618,10 @@ export class PostgresLifeTimeMachineRuntime implements LifeTimeMachineRuntimePor
     }
     this.#pool = new Pool({
       connectionString,
+      // Keep name resolution independent of role/database defaults. URL-level
+      // startup options are rejected above because node-postgres otherwise lets
+      // them override this explicit fail-closed setting.
+      options: "-c search_path=pg_catalog",
       application_name: textValue(options.applicationName ?? "ltm-api", "applicationName", 63),
       max: boundedInteger(options.poolMax, 10, 1, 100, "poolMax"),
       connectionTimeoutMillis: boundedInteger(
@@ -840,6 +862,9 @@ export class PostgresLifeTimeMachineRuntime implements LifeTimeMachineRuntimePor
     const operation = `evidence-gated.mutate:${normalized.mutation.kind}`;
     const requestFingerprint = fingerprint(operation, normalized);
     return this.#transaction(context, async (client) => {
+      if (this.#evidencePolicy === "production" && actionMatch[1] === "B127") {
+        await this.#assertB127ProductionReleaseEvidence(client, context, requirement.scope, requirement.ids);
+      }
       await this.#requireExternalEvidenceInternal(client, context, requirement.scope, requirement.ids);
       const result = await this.#idempotentValueInternal(
         client,
@@ -1219,8 +1244,26 @@ export class PostgresLifeTimeMachineRuntime implements LifeTimeMachineRuntimePor
             details: { previousState: previousState ?? "absent", nextState: reduction.nextState },
           });
         }
+        let reconciliation: FrozenExternalCommandReconciliation | null = null;
         if (current?.data._externalDecisionState === "frozen") {
-          throw new DomainError("EVIDENCE_REVOKED", "The aggregate is frozen pending reconciliation");
+          if (reduction.commandTransition === undefined) {
+            throw new DomainError(
+              "EVIDENCE_REVOKED",
+              "A frozen aggregate accepts only an exact terminal external-command reconciliation event",
+            );
+          }
+          reconciliation = validateFrozenExternalCommandReconciliation(
+            await this.#requiredExternalCommand(
+              client,
+              context.tenantId,
+              reduction.commandTransition.commandId,
+              true,
+            ),
+            current,
+            event,
+            evidence,
+            reduction.commandTransition.toState,
+          );
         }
         this.#assertExternalEventOrder(current, event);
         const aggregate = await this.#persistExternalAggregate(client, context, target, reduction, current, event);
@@ -1244,7 +1287,7 @@ export class PostgresLifeTimeMachineRuntime implements LifeTimeMachineRuntimePor
                 ? {}
                 : { details: reduction.commandTransition.details }),
               idempotencyKey: `external-event:${event.provider}:${event.eventId}`,
-            });
+            }, reconciliation);
         const finalAggregate = command === null
           ? aggregate
           : await this.#requiredRecord(client, context.tenantId, target.collection, target.aggregateId, true);
@@ -3240,6 +3283,7 @@ export class PostgresLifeTimeMachineRuntime implements LifeTimeMachineRuntimePor
       if (current.decisionState === "active" && current.reconciliationState === "clear") {
         const details = jsonObject({
           ...current.details,
+          reconciliationReason: "outbox_dead_letter",
           deadLetterEventId: eventId,
           deadLetteredAt: now,
           deliveryAttempts: event.attempts,
@@ -4922,11 +4966,21 @@ export class PostgresLifeTimeMachineRuntime implements LifeTimeMachineRuntimePor
     context: ActorContext,
     event: ApplyExternalBusinessEventInput["event"],
     input: TransitionExternalCommandInput,
+    reconciliation: FrozenExternalCommandReconciliation | null = null,
   ): Promise<ExternalCommandRecord> {
     if (input.commandId !== event.subjectId || event.correlationId !== event.subjectId) {
       throw new DomainError(
         "EVENT_FINGERPRINT_CONFLICT",
         "External-command callback must bind its exact subject and correlation to the command ID",
+      );
+    }
+    if (reconciliation !== null) {
+      return this.#reconcileFrozenExternalCommandFromBusinessEvent(
+        client,
+        context,
+        event,
+        input,
+        reconciliation,
       );
     }
     const current = await this.#requiredExternalCommand(client, context.tenantId, input.commandId, true);
@@ -4942,6 +4996,243 @@ export class PostgresLifeTimeMachineRuntime implements LifeTimeMachineRuntimePor
       }, randomUUID());
     }
     return this.#transitionExternalCommandInternal(client, context, input, randomUUID());
+  }
+
+  async #reconcileFrozenExternalCommandFromBusinessEvent(
+    client: PoolClient,
+    context: ActorContext,
+    event: ApplyExternalBusinessEventInput["event"],
+    input: TransitionExternalCommandInput,
+    reconciliation: FrozenExternalCommandReconciliation,
+  ): Promise<ExternalCommandRecord> {
+    if (!isExternalCommandTerminal(input.toState) || input.toState !== reconciliation.terminalState ||
+        input.evidenceId !== event.evidenceId) {
+      throw new DomainError(
+        "EVIDENCE_REVOKED",
+        "Frozen external command can only reconcile through its exact terminal signed event",
+      );
+    }
+    await this.#advisoryLock(client, `external-command\n${context.tenantId}\n${input.commandId}`);
+    const reconciledAt = this.#now();
+    let current = await this.#requiredExternalCommand(client, context.tenantId, input.commandId, true);
+    let bridgeState = frozenExternalCommandReconciliationBridge(current.state, reconciliation.terminalState);
+    while (bridgeState !== null) {
+      await this.#applyFrozenExternalCommandTransition(client, context, event, {
+        ...input,
+        toState: bridgeState,
+        details: {
+          ...(input.details ?? {}),
+          reconciliationSyntheticEdge: true,
+          inferredFromTerminalState: reconciliation.terminalState,
+          providerResultSha256: event.artifactSha256,
+        },
+      }, reconciliation, reconciledAt, false);
+      current = await this.#requiredExternalCommand(client, context.tenantId, input.commandId, true);
+      bridgeState = frozenExternalCommandReconciliationBridge(current.state, reconciliation.terminalState);
+    }
+    assertExternalCommandTransition(current.state, input.toState);
+    return this.#applyFrozenExternalCommandTransition(
+      client,
+      context,
+      event,
+      input,
+      reconciliation,
+      reconciledAt,
+      true,
+    );
+  }
+
+  async #applyFrozenExternalCommandTransition(
+    client: PoolClient,
+    context: ActorContext,
+    event: ApplyExternalBusinessEventInput["event"],
+    input: TransitionExternalCommandInput,
+    reconciliation: FrozenExternalCommandReconciliation,
+    reconciledAt: string,
+    completeReconciliation: boolean,
+  ): Promise<ExternalCommandRecord> {
+    const current = await this.#requiredExternalCommand(client, context.tenantId, input.commandId, true);
+    if (current.decisionState !== "frozen" || current.reconciliationState !== "reconciliation_required" ||
+        current.batchId !== input.batchId || current.operation !== input.operation ||
+        current.aggregateCollection !== input.aggregateCollection || current.aggregateId !== input.aggregateId) {
+      throw new DomainError("EVENT_FINGERPRINT_CONFLICT", "Frozen external command reconciliation binding changed");
+    }
+    if ((completeReconciliation && input.toState !== reconciliation.terminalState) ||
+        (!completeReconciliation && input.toState === reconciliation.terminalState)) {
+      throw new DomainError("EVIDENCE_REVOKED", "Frozen external command reconciliation transition is not terminal-safe");
+    }
+    assertExternalCommandTransition(current.state, input.toState);
+    const requestedProviderOperationId = input.providerOperationId ?? null;
+    if (current.providerOperationId !== null && requestedProviderOperationId !== null &&
+        current.providerOperationId !== requestedProviderOperationId) {
+      throw new DomainError("EVENT_FINGERPRINT_CONFLICT", "External command provider operation ID changed");
+    }
+    const reconciliationEvidenceId = input.evidenceId ?? null;
+    if (reconciliationEvidenceId === null || reconciliationEvidenceId !== event.evidenceId) {
+      throw new DomainError("EXTERNAL_EVIDENCE_UNVERIFIED", "Terminal reconciliation requires its event evidence");
+    }
+    const evidence = await this.#requiredEvidence(client, context.tenantId, reconciliationEvidenceId, true);
+    if (evidence.status !== "verified" || evidence.provider !== event.provider ||
+        evidence.businessEventSha256 !== event.businessEventSha256) {
+      throw new DomainError("EVIDENCE_REVOKED", "Terminal reconciliation evidence is not active or event-bound");
+    }
+    const providerOperationId = current.providerOperationId ?? requestedProviderOperationId;
+    const commandEvidenceId = current.evidenceId ?? reconciliationEvidenceId;
+    const now = this.#now();
+    const reconciliationDetails = {
+      originalFreezeReason: reconciliation.originalFreezeReason,
+      reconciledAt,
+      reconciliationEventId: event.eventId,
+      reconciliationEvidenceId,
+      reconciliationProvider: event.provider,
+      reconciliationBusinessEventSha256: event.businessEventSha256,
+      previousState: reconciliation.previousState,
+    };
+    const details = jsonObject({
+      ...current.details,
+      ...(input.details ?? {}),
+      ...reconciliationDetails,
+      ...(completeReconciliation ? { reconciliationReason: "reconciled_outbox_dead_letter" } : {}),
+    }, "external command reconciliation details");
+    const updated = await client.query(
+      `UPDATE ltm.external_commands SET state=$1,provider_operation_id=$2,evidence_id=$3,
+         decision_state=$4,reconciliation_state=$5,version=version+1,updated_at=$6,terminal_at=$7,details=$8::jsonb
+       WHERE tenant_id=$9 AND command_id=$10 AND version=$11 AND state=$12
+         AND decision_state='frozen' AND reconciliation_state='reconciliation_required'`,
+      [
+        input.toState,
+        providerOperationId,
+        commandEvidenceId,
+        completeReconciliation ? "active" : "frozen",
+        completeReconciliation ? "clear" : "reconciliation_required",
+        now,
+        isExternalCommandTerminal(input.toState) ? now : current.terminalAt,
+        canonicalJson(details),
+        context.tenantId,
+        input.commandId,
+        current.version,
+        current.state,
+      ],
+    );
+    if (updated.rowCount !== 1) throw new DomainError("VERSION_CONFLICT", "Frozen external command changed concurrently");
+    await client.query(
+      `INSERT INTO ltm.external_command_transitions(
+        tenant_id,transition_id,command_id,from_state,to_state,provider_operation_id,evidence_id,details,occurred_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9)`,
+      [
+        context.tenantId,
+        randomUUID(),
+        input.commandId,
+        current.state,
+        input.toState,
+        providerOperationId,
+        reconciliationEvidenceId,
+        canonicalJson({ ...(input.details ?? {}), ...reconciliationDetails }),
+        now,
+      ],
+    );
+    const aggregate = await this.#requiredRecord(
+      client,
+      context.tenantId,
+      current.aggregateCollection,
+      current.aggregateId,
+      false,
+      true,
+    );
+    const aggregateData = jsonObject({
+      ...aggregate.data,
+      externalCommandId: current.commandId,
+      commandState: input.toState,
+      executionState: input.toState,
+      externalReceipt: {
+        providerOperationId,
+        evidenceId: reconciliationEvidenceId,
+        state: input.toState,
+        updatedAt: now,
+      },
+      ...(completeReconciliation ? {
+        externalReconciliation: {
+          ...reconciliationDetails,
+          terminalState: input.toState,
+        },
+        _externalDecisionState: "active",
+        _externalReconciliationState: "clear",
+      } : {
+        _externalDecisionState: "frozen",
+        _externalReconciliationState: "reconciliation_required",
+      }),
+    }, "external command reconciliation aggregate data");
+    const recordUpdate = await client.query(
+      `UPDATE ltm.records SET data=$1::jsonb,version=version+1,updated_at=$2
+       WHERE tenant_id=$3 AND collection=$4 AND id=$5 AND version=$6 AND deleted_at IS NULL`,
+      [
+        canonicalJson(aggregateData),
+        now,
+        context.tenantId,
+        current.aggregateCollection,
+        current.aggregateId,
+        aggregate.version,
+      ],
+    );
+    if (recordUpdate.rowCount !== 1) {
+      throw new DomainError("VERSION_CONFLICT", "External command aggregate changed concurrently");
+    }
+    const command = await this.#requiredExternalCommand(client, context.tenantId, input.commandId, true);
+    const record = await this.#requiredRecord(
+      client,
+      context.tenantId,
+      current.aggregateCollection,
+      current.aggregateId,
+      false,
+      true,
+    );
+    await this.#appendAuditInternal(client, context, {
+      action: "external_command.transitioned",
+      resourceType: current.aggregateCollection,
+      resourceId: current.aggregateId,
+      details: {
+        commandId: input.commandId,
+        fromState: current.state,
+        toState: input.toState,
+        providerOperationId,
+        evidenceId: reconciliationEvidenceId,
+        ...reconciliationDetails,
+      },
+    });
+    await this.#emitOutbox(
+      client,
+      context.tenantId,
+      current.aggregateCollection,
+      current.aggregateId,
+      `external_command.${input.toState}`,
+      { command: jsonObject(command) },
+    );
+    if (completeReconciliation) {
+      await this.#appendAuditInternal(client, context, {
+        action: "external_command.reconciled",
+        resourceType: current.aggregateCollection,
+        resourceId: current.aggregateId,
+        details: {
+          commandId: input.commandId,
+          terminalState: input.toState,
+          ...reconciliationDetails,
+        },
+      });
+      await this.#emitOutbox(
+        client,
+        context.tenantId,
+        current.aggregateCollection,
+        current.aggregateId,
+        "external_command.reconciled",
+        {
+          command: jsonObject(command),
+          record: jsonObject(record),
+          terminalState: input.toState,
+          ...reconciliationDetails,
+        },
+      );
+    }
+    return command;
   }
 
   #assertBusinessEvidenceBinding(event: ApplyExternalBusinessEventInput["event"], evidence: SignedExternalEvidence): void {
@@ -6078,6 +6369,34 @@ export class PostgresLifeTimeMachineRuntime implements LifeTimeMachineRuntimePor
       details: { scope, evidenceIds: [...ids] },
     });
     return verified;
+  }
+
+  async #assertB127ProductionReleaseEvidence(
+    client: PoolClient,
+    context: ActorContext,
+    scope: string,
+    ids: readonly string[],
+  ): Promise<void> {
+    for (const evidenceId of ids) {
+      let evidence: RegisteredExternalEvidence;
+      try {
+        evidence = await this.#requiredEvidence(client, context.tenantId, evidenceId, true);
+      } catch (error) {
+        if (error instanceof DomainError && error.code === "RESOURCE_NOT_FOUND") {
+          throw new DomainError("EXTERNAL_EVIDENCE_UNVERIFIED", "External evidence is not registered", {
+            details: { evidenceId, scope },
+          });
+        }
+        throw error;
+      }
+      if (evidence.scope !== scope) {
+        throw new DomainError("EVIDENCE_SCOPE_MISMATCH", "External evidence scope does not match this operation", {
+          details: { evidenceId, requiredScope: scope },
+        });
+      }
+      const key = this.#matchingEvidenceKey(evidence);
+      assertB127ProductionReleaseAuthority(key, evidence, scope);
+    }
   }
 
   async #consumeEvidence(

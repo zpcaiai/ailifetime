@@ -98,6 +98,12 @@ Prefer adapting existing modules discovered in B00. These paths are reference ta
 | B50-R04 | 支持 planned/ready/running/blocked/failed/review/merged/certified 状态、租约、心跳、超时回收和从证据恢复。 | 必须 |
 | B50-R05 | 自动检查 diff、运行批次门、生成 PR/提交说明与 completion report；未验证结果不得标记 completed。 | 必须 |
 
+Product adaptation: the legacy Factory word `certified` in B50-R04 is
+implemented as the fail-closed local state `factory_attested`. It means only
+that reproducible code evidence passed the Factory verifier. The B50 runtime
+rejects caller-supplied production evidence and cannot issue a production
+certificate; only B127 can evaluate independently signed production evidence.
+
 No requirement may be marked complete using prose alone. Each requires source, symbol/entrypoint, test, and evidence references.
 
 ## 8. Implementation workflow

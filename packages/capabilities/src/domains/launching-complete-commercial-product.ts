@@ -22,6 +22,22 @@ function sha256(input: JsonObject, field: string): string {
   return value;
 }
 
+function repositoryRelativeEvidencePath(input: JsonObject, field: string): string {
+  const value = requiredString(input, field);
+  const segments = value.split("/");
+  if (
+    value.startsWith("/") ||
+    value.includes("\\") ||
+    value.includes("\0") ||
+    value.length > 512 ||
+    segments.some((segment) => segment === "" || segment === "." || segment === "..") ||
+    !segments.every((segment) => /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(segment))
+  ) {
+    throw new DomainError("VALIDATION_FAILED", `${field} must be a safe repository-relative evidence path`);
+  }
+  return value;
+}
+
 function commercialReadiness(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
   rejectClientAssertions(input, ["vendorContractsApproved"]);
   assertActorTenant(input, invocation);
@@ -171,6 +187,12 @@ function stagedLaunch(input: JsonObject, invocation: CapabilityInvocation): Json
   const guardrailPolicySha256 = sha256(input, "guardrailPolicySha256");
   const waveObservationSetSha256 = sha256(input, "waveObservationSetSha256");
   const rollbackForwardDrillSha256 = sha256(input, "rollbackForwardDrillSha256");
+  const globalWaveObservationPath = typeof input.globalWaveObservationPath === "string"
+    ? repositoryRelativeEvidencePath(input, "globalWaveObservationPath")
+    : undefined;
+  const globalWaveObservationSha256 = typeof input.globalWaveObservationSha256 === "string"
+    ? sha256(input, "globalWaveObservationSha256")
+    : undefined;
   const changeApproverEvidenceIds = stringList(input, "changeApproverEvidenceIds", { min: 2, unique: true });
   if (changeApproverEvidenceIds.length !== 2) throw new DomainError("VALIDATION_FAILED", "changeApproverEvidenceIds must contain the exact risk and operations signer evidence IDs");
   const activeGuardrailBreaches = requireInteger(
@@ -181,6 +203,16 @@ function stagedLaunch(input: JsonObject, invocation: CapabilityInvocation): Json
   const externalEvidenceIds = stringList(input, "externalEvidenceIds", { min: 5, unique: true });
   if (repositoryCommit !== artifactCommit || rolloutPercent <= 0 || rolloutPercent > 100 || activeGuardrailBreaches !== 0) {
     throw new DomainError("AUTH_FORBIDDEN", "artifact mismatch, invalid wave size, or guardrail breach blocks rollout");
+  }
+  const isCompletedGlobalWave = wave === "global" && rolloutPercent === 100;
+  if (wave === "global" && rolloutPercent !== 100) {
+    throw new DomainError("VALIDATION_FAILED", "global wave approval requires rolloutPercent 100");
+  }
+  if (isCompletedGlobalWave && (globalWaveObservationPath === undefined || globalWaveObservationSha256 === undefined)) {
+    throw new DomainError("VALIDATION_FAILED", "completed global wave requires its observation path and digest");
+  }
+  if (!isCompletedGlobalWave && (globalWaveObservationPath !== undefined || globalWaveObservationSha256 !== undefined)) {
+    throw new DomainError("VALIDATION_FAILED", "pre-global waves must not predeclare global observation evidence");
   }
   for (let gate = 0; gate <= 11; gate += 1) {
     if (!releaseGates.includes(`G${gate}`)) throw new DomainError("VALIDATION_FAILED", `releaseGates must include G${gate}`);
@@ -223,6 +255,8 @@ function stagedLaunch(input: JsonObject, invocation: CapabilityInvocation): Json
     guardrailPolicySha256,
     waveObservationSetSha256,
     rollbackForwardDrillSha256,
+    ...(globalWaveObservationPath === undefined ? {} : { globalWaveObservationPath }),
+    ...(globalWaveObservationSha256 === undefined ? {} : { globalWaveObservationSha256 }),
     changeApproverEvidenceIds,
     activeGuardrailBreaches,
     externalEvidenceIds,
@@ -236,12 +270,14 @@ const definitions: readonly DomainCapabilityDefinition[] = [
     permission: "launch.readiness.approve",
     requiresExternalEvidence: true,
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "readinessArtifactSha256",
     mode: "attestation",
   }),
   defineCapability("B126", SKILL, "certifyCommercialE2e", commercialCertification, {
     permission: "launch.e2e.certify",
     requiresExternalEvidence: true,
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "scenarioArtifactSha256",
     mode: "attestation",
   }),
   defineCapability("B127", SKILL, "approveStagedProductionLaunch", stagedLaunch, {

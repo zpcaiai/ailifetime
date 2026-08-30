@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ltm.invalid/schemas/enterprise-control-plane.v1.json",
+  "title": "Enterprise control plane service configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["environment", "databasePath", "workloadIdentity", "authorityCatalogReference", "defaultRegion", "regions", "protections"],
+  "properties": {
+    "environment": { "enum": ["test", "staging", "production"] },
+    "databasePath": { "type": "string", "minLength": 1 },
+    "workloadIdentity": { "type": "string", "pattern": "^workload-identity://[A-Za-z0-9._/-]+$" },
+    "authorityCatalogReference": { "type": "string", "pattern": "^(secret-manager|file)://[A-Za-z0-9._/-]+$" },
+    "defaultRegion": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$" },
+    "regions": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$" } },
+    "protections": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["consent", "safety", "aiLabel", "children", "highImpact", "provenance"],
+      "properties": {
+        "consent": { "const": true }, "safety": { "const": true }, "aiLabel": { "const": true },
+        "children": { "const": true }, "highImpact": { "const": true }, "provenance": { "const": true }
+      }
+    }
+  }
+}

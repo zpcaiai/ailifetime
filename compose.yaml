@@ -1,4 +1,60 @@
 services:
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    environment:
+      APP_ENV: development
+      HOST: 0.0.0.0
+      PORT: "8080"
+      LTM_AUTH_MODE: local-synthetic-only
+      LTM_DEPLOYMENT_PROFILE: single-node
+      LTM_DATABASE_PATH: /workspace/.data/ltm-compose.sqlite
+      LTM_STATIC_DIR: /workspace/apps/web/public
+      LTM_ALLOW_LEGACY_CONSENT_POLICY: "true"
+    ports: ["8080:8080"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      object-storage:
+        condition: service_healthy
+    init: true
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    volumes:
+      - application-data:/workspace/.data
+
+  workflow-worker:
+    build:
+      context: .
+      dockerfile: services/workers/Dockerfile
+    environment:
+      APP_ENV: development
+      LTM_DEPLOYMENT_PROFILE: single-node
+      LTM_DATABASE_PATH: /workspace/.data/ltm-compose.sqlite
+      LTM_WORKER_TENANT_ID: tenant-local
+      LTM_WORKER_ACTOR_ID: ltm-local-workflow-worker
+      LTM_WORKER_ID: ltm-local-workflow-worker
+      LTM_WORKER_HEALTH_HOST: 0.0.0.0
+      LTM_WORKER_HEALTH_PORT: "8090"
+    ports: ["8090:8090"]
+    depends_on:
+      api:
+        condition: service_healthy
+    init: true
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    volumes:
+      - application-data:/workspace/.data
+
   postgres:
     image: postgres:17.5-alpine@sha256:6567bca8d7bc8c82c5922425a0baee57be8402df92bae5eacad5f01ae9544daa
     environment:
@@ -32,10 +88,16 @@ services:
       MINIO_ROOT_USER: local
       MINIO_ROOT_PASSWORD: local-development-only
     ports: ["9000:9000", "9001:9001"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:9000/minio/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     volumes:
       - object-data:/data
 
 volumes:
+  application-data:
   postgres-data:
   redis-data:
   object-data:

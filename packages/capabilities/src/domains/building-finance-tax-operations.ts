@@ -373,12 +373,14 @@ const definitions: readonly DomainCapabilityDefinition[] = [
     permission: "finance.dispute.manage",
     requiresExternalEvidence: true,
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "disputeArtifactSha256",
     mode: "attestation",
   }),
   defineCapability("B92", SKILL, "approvePartnerPayout", payout, {
     permission: "finance.payout.approve",
     requiresExternalEvidence: true,
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "payoutArtifactSha256",
     mode: "attestation",
   }),
   defineCapability("B93", SKILL, "recordCostAllocation", costAllocation, { permission: "finance.cost.allocate", mode: "resource" }),
@@ -386,6 +388,7 @@ const definitions: readonly DomainCapabilityDefinition[] = [
     permission: "finance.close.approve",
     requiresExternalEvidence: true,
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "closeArtifactSha256",
     mode: "attestation",
   }),
 ];

@@ -7,6 +7,8 @@
   <view class="card" wx:if="{{authenticated}}">
     <view>已通过服务端身份验证</view>
     <view class="muted">租户 {{tenantId}} · 可见能力 {{capabilityCount}} 项</view>
+    <button class="button secondary" bindtap="commerce">查看受控订单与微信支付</button>
+    <button class="button secondary" bindtap="service">消息订阅与微信客服</button>
   </view>
   <view class="card" wx:else>
     <view>登录后才会加载服务端授权的功能。</view>

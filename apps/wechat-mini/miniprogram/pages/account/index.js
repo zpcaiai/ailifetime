@@ -1,5 +1,6 @@
 const api = require("../../services/api");
 const session = require("../../services/session");
+const policy = require("../../services/policy");
 
 Page({
   data: { authenticated: false, actorId: "", tenantId: "", roles: "", error: "" },
@@ -29,6 +30,7 @@ Page({
   },
   async support() {
     try {
+      policy.requireCapabilities(["B80"], session.requireSession().roles);
       const ticketId = api.idempotencyKey("support");
       const dueAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
       const result = await api.request("/v1/capabilities/B80", {

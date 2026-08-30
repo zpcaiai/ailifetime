@@ -8,6 +8,12 @@ import { canonicalJson } from "./canonical.js";
 import { DomainError } from "./errors.js";
 import type { SignedExternalEvidence, TrustedEvidenceKey, UnsignedExternalEvidence } from "./types.js";
 
+export const B127_PRODUCTION_RELEASE_AUTHORITY_ROLE = "b127-production-release-authority";
+const AUTHORITY_ROLE = /^[a-z][a-z0-9-]{0,127}$/;
+const EXACT_EXTERNAL_EVIDENCE_SCOPE = /^ltm-evidence:v1:[a-f0-9]{64}$/;
+const GENERAL_GATEWAY_AUTHORITY_IDENTITY =
+  /(?:^|[:._-])(?:integration[-_]?gateway|direct[-_]?evidence|supply[-_]?event|callback)(?:$|[:._-])/i;
+
 export function externalEvidenceSigningPayload(evidence: UnsignedExternalEvidence): Buffer {
   return Buffer.from(canonicalJson({
     version: evidence.version,
@@ -83,6 +89,10 @@ export function validateTrustedEvidenceKey(key: TrustedEvidenceKey): void {
       throw new DomainError("CONFIGURATION_INVALID", "Evidence key scopes must be exact values or suffix wildcards");
     }
   }
+  const authorityRoles = key.authorityRoles ?? [];
+  if (authorityRoles.some((role) => !AUTHORITY_ROLE.test(role)) || new Set(authorityRoles).size !== authorityRoles.length) {
+    throw new DomainError("CONFIGURATION_INVALID", "Trusted evidence authority roles must be unique canonical role names");
+  }
   try {
     const publicKey = createPublicKey(key.publicKeyPem);
     if (publicKey.asymmetricKeyType !== "ed25519") {
@@ -90,6 +100,37 @@ export function validateTrustedEvidenceKey(key: TrustedEvidenceKey): void {
     }
   } catch {
     throw new DomainError("CONFIGURATION_INVALID", "Trusted evidence public key must be a valid Ed25519 public key");
+  }
+}
+
+/**
+ * B127 is the sole production mutation that requires an independently reserved
+ * release authority. This assertion is intentionally separate from generic
+ * scope matching so wildcard or integration-gateway trust can never consume
+ * release evidence before the stronger policy is evaluated.
+ */
+export function assertB127ProductionReleaseAuthority(
+  key: TrustedEvidenceKey,
+  evidence: SignedExternalEvidence,
+  requiredScope: string,
+): void {
+  const valid =
+    evidence.environment === "production" &&
+    evidence.scope === requiredScope &&
+    EXACT_EXTERNAL_EVIDENCE_SCOPE.test(requiredScope) &&
+    key.authorityRoles?.includes(B127_PRODUCTION_RELEASE_AUTHORITY_ROLE) === true &&
+    key.allowedScopes.length === 1 &&
+    key.allowedScopes[0] === requiredScope &&
+    key.allowedEnvironments.length === 1 &&
+    key.allowedEnvironments[0] === "production" &&
+    !GENERAL_GATEWAY_AUTHORITY_IDENTITY.test(key.issuer) &&
+    !GENERAL_GATEWAY_AUTHORITY_IDENTITY.test(key.provider);
+  if (!valid) {
+    throw new DomainError(
+      "EVIDENCE_TRUST_KEY_NOT_FOUND",
+      "B127 production evidence requires an exact-scope independent production release authority",
+      { details: { evidenceId: evidence.evidenceId, keyId: evidence.keyId } },
+    );
   }
 }
 

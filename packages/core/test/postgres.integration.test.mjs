@@ -8,10 +8,150 @@ import {
   DomainError,
   PostgresLifeTimeMachineRuntime,
   participantEvidenceScope,
+  signConsentPolicyCatalog,
   signExternalEvidence,
 } from "../dist/index.js";
 
 const connectionString = process.env.LTM_TEST_POSTGRES_URL;
+
+test("PostgreSQL B127 production mutation requires the reserved exact-scope release authority before consumption", {
+  skip: connectionString === undefined ? "set LTM_TEST_POSTGRES_URL to a migrated disposable database" : false,
+}, async () => {
+  assert.ok(connectionString);
+  const ordinary = generateKeyPairSync("ed25519");
+  const release = generateKeyPairSync("ed25519");
+  const consent = generateKeyPairSync("ed25519");
+  const issuedAt = new Date(Date.now() - 60_000).toISOString();
+  const expiresAt = new Date(Date.now() + 3_600_000).toISOString();
+  const scope = `ltm-evidence:v1:${"c".repeat(64)}`;
+  const consentPublicKeyPem = consent.publicKey.export({ type: "spki", format: "pem" }).toString();
+  const consentPrivateKeyPem = consent.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const runtime = await PostgresLifeTimeMachineRuntime.connect({
+    connectionString,
+    applicationName: "ltm-b127-authority-integration",
+    evidencePolicy: "production",
+    evidenceEnvironment: "production",
+    trustedEvidenceKeys: [{
+      issuer: "ordinary-assurance",
+      provider: "ordinary-provider",
+      keyId: "ordinary-production-key",
+      algorithm: "Ed25519",
+      publicKeyPem: ordinary.publicKey.export({ type: "spki", format: "pem" }).toString(),
+      allowedScopes: [scope],
+      allowedEnvironments: ["production"],
+    }, {
+      issuer: "independent-release-board",
+      provider: "release-control:independent-board",
+      keyId: "independent-release-key",
+      algorithm: "Ed25519",
+      publicKeyPem: release.publicKey.export({ type: "spki", format: "pem" }).toString(),
+      allowedScopes: [scope],
+      allowedEnvironments: ["production"],
+      authorityRoles: ["b127-production-release-authority"],
+    }],
+    consentPolicyCatalog: signConsentPolicyCatalog({
+      schemaVersion: "ltm.consent-policy-catalog.v1",
+      catalogId: "b127-pg-production-policy",
+      issuer: "b127-privacy-authority",
+      environment: "production",
+      issuedAt,
+      expiresAt,
+      algorithm: "Ed25519",
+      keyId: "b127-consent-key",
+      policies: [{
+        policyVersion: "b127-pg-v1",
+        purpose: "product_operation",
+        locale: "zh-CN",
+        jurisdictions: ["CN"],
+        resourceKinds: ["record"],
+        allowedActions: ["read"],
+        grantorCapacities: ["self"],
+        minorApplicability: "adult",
+        disclosureSha256: "d".repeat(64),
+        effectiveFrom: issuedAt,
+        effectiveUntil: expiresAt,
+        maxConsentLifetimeSeconds: 3_600,
+      }],
+    }, consentPrivateKeyPem),
+    trustedConsentPolicyKeys: [{
+      keyId: "b127-consent-key",
+      issuer: "b127-privacy-authority",
+      algorithm: "Ed25519",
+      publicKeyPem: consentPublicKeyPem,
+      allowedEnvironments: ["production"],
+      notBefore: issuedAt,
+      notAfter: expiresAt,
+    }],
+    consentPolicyJurisdiction: "CN",
+    consentPolicyLocale: "zh-CN",
+  });
+  const context = actor("tenant-pg-b127-authority", "b127-production-authority-operation");
+  const baseEvidence = {
+    version: "ltm.external-evidence.v1",
+    tenantId: context.tenantId,
+    environment: "production",
+    scope,
+    artifactSha256: "e".repeat(64),
+    issuedAt,
+    expiresAt,
+    replayPolicy: "single_use",
+    algorithm: "Ed25519",
+  };
+  const register = async (authority, evidenceId, nonce) => {
+    const evidence = signExternalEvidence({
+      ...baseEvidence,
+      evidenceId,
+      issuer: authority.issuer,
+      provider: authority.provider,
+      keyId: authority.keyId,
+      nonce,
+    }, authority.privateKey.export({ type: "pkcs8", format: "pem" }).toString());
+    await runtime.registerExternalEvidence(context, {
+      evidence,
+      idempotencyKey: `register-${evidenceId}`,
+    });
+    return evidence;
+  };
+  const mutation = (evidenceId, suffix) => ({
+    scope,
+    evidenceIds: [evidenceId],
+    idempotencyKey: `b127-pg-mutation-${suffix}`,
+    mutation: {
+      kind: "record.create",
+      input: {
+        collection: "release.authorizations",
+        id: `b127-pg-${suffix}`,
+        data: { batchId: "B127", state: "approved" },
+      },
+    },
+    audit: { action: "capability.B127.execute", details: { operation: "approveProductionRelease" } },
+  });
+  try {
+    const ordinaryEvidence = await register({
+      issuer: "ordinary-assurance",
+      provider: "ordinary-provider",
+      keyId: "ordinary-production-key",
+      privateKey: ordinary.privateKey,
+    }, "b127-pg-ordinary-evidence", "b127-pg-ordinary-nonce-2026");
+    await assert.rejects(
+      runtime.executeEvidenceGatedMutation(context, mutation(ordinaryEvidence.evidenceId, "ordinary")),
+      (error) => error instanceof DomainError && error.code === "EVIDENCE_TRUST_KEY_NOT_FOUND",
+    );
+    assert.equal((await runtime.getExternalEvidence(context, ordinaryEvidence.evidenceId)).consumedAt, null);
+
+    const releaseEvidence = await register({
+      issuer: "independent-release-board",
+      provider: "release-control:independent-board",
+      keyId: "independent-release-key",
+      privateKey: release.privateKey,
+    }, "b127-pg-release-evidence", "b127-pg-release-nonce-2026");
+    const result = await runtime.executeEvidenceGatedMutation(context, mutation(releaseEvidence.evidenceId, "release"));
+    assert.equal(result.kind, "record.create");
+    assert.notEqual((await runtime.getExternalEvidence(context, releaseEvidence.evidenceId)).consumedAt, null);
+  } finally {
+    await runtime.close();
+  }
+});
 
 function actor(tenantId, operationId = "operation-default") {
   return {
@@ -31,6 +171,7 @@ test("PostgreSQL runtime enforces RLS and persists the complete core transaction
 }, async () => {
   assert.ok(connectionString);
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const vendorKeys = generateKeyPairSync("ed25519");
   const trustedEvidenceKey = {
     issuer: "integration-issuer",
     provider: "integration-provider",
@@ -40,11 +181,20 @@ test("PostgreSQL runtime enforces RLS and persists the complete core transaction
     allowedScopes: ["B127:*", "identity.*"],
     allowedEnvironments: ["sandbox"],
   };
+  const trustedVendorKey = {
+    issuer: "pg-vendor-gateway",
+    provider: "vendor:pg-vendor-1",
+    keyId: "pg-vendor-key-1",
+    algorithm: "Ed25519",
+    publicKeyPem: vendorKeys.publicKey.export({ type: "spki", format: "pem" }).toString(),
+    allowedScopes: ["B98:*"],
+    allowedEnvironments: ["sandbox"],
+  };
   const runtime = await PostgresLifeTimeMachineRuntime.connect({
     connectionString,
     allowLegacyConsentPolicy: true,
     applicationName: "ltm-core-integration-test",
-    trustedEvidenceKeys: [trustedEvidenceKey],
+    trustedEvidenceKeys: [trustedEvidenceKey, trustedVendorKey],
     evidencePolicy: "development",
     evidenceEnvironment: "sandbox",
   });
@@ -252,8 +402,13 @@ test("PostgreSQL runtime enforces RLS and persists the complete core transaction
     const deadLetterCommand = await runtime.createExternalCommand(serviceA, {
       record: {
         id: "pg-dead-letter-command-record-1",
-        collection: "operations.delivery-commands",
-        data: { state: "requested", operationMode: "external-command" },
+        collection: "supply.vendor-production-commands",
+        data: {
+          operationMode: "external-command",
+          batchId: "B98",
+          operation: "createVendorProductionJob",
+          vendorId: "pg-vendor-1",
+        },
       },
       commandId: "pg-dead-letter-command-1",
       batchId: "B98",
@@ -310,6 +465,96 @@ test("PostgreSQL runtime enforces RLS and persists the complete core transaction
     );
     assert.equal(reconciledAggregate.data.executionState, "reconciliation_required");
     assert.equal(reconciledAggregate.data._externalDecisionState, "frozen");
+    await assert.rejects(runtime.transitionExternalCommand(serviceA, {
+      commandId: deadLetterCommand.value.command.commandId,
+      batchId: deadLetterCommand.value.command.batchId,
+      operation: deadLetterCommand.value.command.operation,
+      aggregateCollection: deadLetterCommand.value.command.aggregateCollection,
+      aggregateId: deadLetterCommand.value.command.aggregateId,
+      toState: "acknowledged",
+      idempotencyKey: "pg-frozen-direct-transition-denied",
+    }), (error) => error instanceof DomainError && error.code === "EVIDENCE_REVOKED");
+
+    const reconciliationClaims = {
+      providerOperationId: "pg-vendor-operation-1",
+      vendorId: "pg-vendor-1",
+    };
+    const reconciliationClaimsSha256 = canonicalBusinessClaimsSha256(reconciliationClaims);
+    const unsignedReconciliationEvent = {
+      version: "ltm.external-business-event.v1",
+      eventId: "pg-vendor-reconciliation-event-1",
+      tenantId: tenantA.tenantId,
+      batchId: "B98",
+      operation: "createVendorProductionJob",
+      provider: trustedVendorKey.provider,
+      subjectType: "vendor-job",
+      subjectId: deadLetterCommand.value.command.commandId,
+      eventType: "external-command.failed",
+      providerOccurredAt: new Date(Date.now() - 500).toISOString(),
+      sequence: 1,
+      correlationId: deadLetterCommand.value.command.commandId,
+      artifactSha256: "9".repeat(64),
+      evidenceId: "pg-vendor-reconciliation-evidence-1",
+      evidenceScope: `B98:vendor-job:${deadLetterCommand.value.command.commandId}`,
+      canonicalClaims: reconciliationClaims,
+      canonicalClaimsSha256: reconciliationClaimsSha256,
+    };
+    const reconciliationEvent = {
+      ...unsignedReconciliationEvent,
+      businessEventSha256: canonicalBusinessEventSha256(unsignedReconciliationEvent),
+    };
+    const reconciliationEvidence = signExternalEvidence({
+      version: "ltm.external-evidence.v1",
+      evidenceId: reconciliationEvent.evidenceId,
+      tenantId: reconciliationEvent.tenantId,
+      issuer: trustedVendorKey.issuer,
+      provider: reconciliationEvent.provider,
+      environment: "sandbox",
+      scope: reconciliationEvent.evidenceScope,
+      artifactSha256: reconciliationEvent.artifactSha256,
+      canonicalClaimsSha256: reconciliationClaimsSha256,
+      businessEventSha256: reconciliationEvent.businessEventSha256,
+      issuedAt: new Date(Date.now() - 1_000).toISOString(),
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      nonce: "nonce-pg-vendor-reconciliation-0001",
+      replayPolicy: "single_use",
+      algorithm: "Ed25519",
+      keyId: trustedVendorKey.keyId,
+    }, vendorKeys.privateKey.export({ type: "pkcs8", format: "pem" }));
+    const reconciliationReducer = {
+      name: "pg-vendor-terminal-reconciliation-v1",
+      locate: () => ({
+        collection: deadLetterCommand.value.command.aggregateCollection,
+        aggregateId: deadLetterCommand.value.command.aggregateId,
+      }),
+      reduce: (event) => ({
+        stateField: "providerState",
+        allowedPriorStates: [null],
+        nextState: "failed",
+        patch: reconciliationClaims,
+        decisionType: "vendor-job-provider-decision",
+        decisionId: event.eventId,
+        commandTransition: {
+          commandId: deadLetterCommand.value.command.commandId,
+          toState: "failed",
+          providerOperationId: reconciliationClaims.providerOperationId,
+        },
+      }),
+    };
+    const pgReconciled = await runtime.applyExternalBusinessEvent(serviceA, {
+      event: reconciliationEvent,
+      evidence: reconciliationEvidence,
+      reducer: reconciliationReducer,
+      idempotencyKey: "pg-vendor-reconciliation-apply-1",
+    });
+    assert.equal(pgReconciled.value.command.state, "failed");
+    assert.equal(pgReconciled.value.command.decisionState, "active");
+    assert.equal(pgReconciled.value.command.reconciliationState, "clear");
+    assert.equal(pgReconciled.value.command.details.originalFreezeReason, "outbox_dead_letter");
+    assert.equal(pgReconciled.value.command.details.reconciliationEventId, reconciliationEvent.eventId);
+    assert.equal(pgReconciled.value.command.details.reconciliationEvidenceId, reconciliationEvidence.evidenceId);
+    assert.equal(pgReconciled.value.aggregate.data._externalDecisionState, "active");
+    assert.equal(pgReconciled.value.aggregate.data._externalReconciliationState, "clear");
 
     const externalCommand = await runtime.createExternalCommand(serviceA, {
       record: {

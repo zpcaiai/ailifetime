@@ -1,0 +1,147 @@
+{
+  "schemaVersion": "ltm.public-site.v1",
+  "site": {
+    "name": "Life Time Machine",
+    "origin": "https://www.example.com",
+    "allowedOrigins": ["https://www.example.com"],
+    "locales": ["en-US"],
+    "defaultLocale": "en-US",
+    "requiredPageKinds": [
+      "home",
+      "product",
+      "family",
+      "future-self",
+      "gift",
+      "studio",
+      "partner",
+      "insurance-retirement-education",
+      "pricing",
+      "contact-sales"
+    ]
+  },
+  "pages": [
+    {
+      "pageId": "home-en-US", "version": "v1", "kind": "home", "locale": "en-US", "path": "/en-US",
+      "title": "Life Time Machine", "description": "Create a consented artistic view of possible moments.", "canonicalUrl": "https://www.example.com/en-US", "visibility": "public",
+      "dimensions": { "brand": "ltm", "partner": null, "campaign": null, "region": "us", "experiment": null },
+      "components": [
+        { "id": "home-hero", "type": "hero", "text": "An artistic experience for memories and imagination.", "href": "/en-US/product", "formId": null },
+        { "id": "home-ai", "type": "ai_disclosure", "text": "AI-generated artistic simulation; illustrative, not predictive.", "href": null, "formId": null }
+      ],
+      "structuredData": { "type": "WebSite", "name": "Life Time Machine", "description": "An artistic AI experience." },
+      "og": { "title": "Life Time Machine", "description": "An artistic AI experience.", "imageUrl": "https://www.example.com/media/og-home.png", "imageAlt": "Abstract time-inspired artwork" },
+      "aiDisclosure": { "visible": true, "text": "AI-generated artistic simulation; illustrative, not predictive." }, "approvals": ["content"], "publishedAt": "2026-08-28T00:00:00.000Z"
+    },
+    {
+      "pageId": "product-en-US", "version": "v1", "kind": "product", "locale": "en-US", "path": "/en-US/product",
+      "title": "Product", "description": "Understand the creative workflow and its safeguards.", "canonicalUrl": "https://www.example.com/en-US/product", "visibility": "public",
+      "dimensions": { "brand": "ltm", "partner": null, "campaign": null, "region": "us", "experiment": null },
+      "components": [
+        { "id": "product-hero", "type": "hero", "text": "A governed creative workflow.", "href": "/en-US/pricing", "formId": null },
+        { "id": "product-ai", "type": "ai_disclosure", "text": "AI-generated artistic simulation; illustrative, not predictive.", "href": null, "formId": null }
+      ],
+      "structuredData": { "type": "Product", "name": "Life Time Machine", "description": "A governed artistic experience." },
+      "og": { "title": "Product", "description": "A governed artistic experience.", "imageUrl": "https://www.example.com/media/og-product.png", "imageAlt": "Product workflow illustration" },
+      "aiDisclosure": { "visible": true, "text": "AI-generated artistic simulation; illustrative, not predictive." }, "approvals": ["content"], "publishedAt": "2026-08-28T00:00:00.000Z"
+    },
+    {
+      "pageId": "family-en-US", "version": "v1", "kind": "family", "locale": "en-US", "path": "/en-US/family",
+      "title": "Family", "description": "Consent-first family experiences with guardian controls.", "canonicalUrl": "https://www.example.com/en-US/family", "visibility": "public",
+      "dimensions": { "brand": "ltm", "partner": null, "campaign": null, "region": "us", "experiment": null },
+      "components": [
+        { "id": "family-hero", "type": "hero", "text": "Participant and guardian controls come first.", "href": "/en-US/contact-sales", "formId": null },
+        { "id": "family-ai", "type": "ai_disclosure", "text": "AI-generated artistic simulation; illustrative, not predictive.", "href": null, "formId": null }
+      ],
+      "structuredData": { "type": "WebSite", "name": "Family experience", "description": "Consent-first family creativity." },
+      "og": { "title": "Family", "description": "Consent-first family creativity.", "imageUrl": "https://www.example.com/media/og-family.png", "imageAlt": "Synthetic family-themed artwork" },
+      "aiDisclosure": { "visible": true, "text": "AI-generated artistic simulation; illustrative, not predictive." }, "approvals": ["content"], "publishedAt": "2026-08-28T00:00:00.000Z"
+    },
+    {
+      "pageId": "future-self-en-US", "version": "v1", "kind": "future-self", "locale": "en-US", "path": "/en-US/future-self",
+      "title": "Future Self", "description": "Explore an illustrative artistic simulation.", "canonicalUrl": "https://www.example.com/en-US/future-self", "visibility": "public",
+      "dimensions": { "brand": "ltm", "partner": null, "campaign": null, "region": "us", "experiment": null },
+      "components": [
+        { "id": "future-hero", "type": "hero", "text": "Illustrative art, never a prediction.", "href": "/en-US/product", "formId": null },
+        { "id": "future-ai", "type": "ai_disclosure", "text": "AI-generated artistic simulation; illustrative, not predictive.", "href": null, "formId": null }
+      ],
+      "structuredData": { "type": "Product", "name": "Future Self", "description": "An illustrative artistic simulation." },
+      "og": { "title": "Future Self", "description": "Illustrative, not predictive.", "imageUrl": "https://www.example.com/media/og-future.png", "imageAlt": "Abstract future-inspired artwork" },
+      "aiDisclosure": { "visible": true, "text": "AI-generated artistic simulation; illustrative, not predictive." }, "approvals": ["content"], "publishedAt": "2026-08-28T00:00:00.000Z"
+    },
+    {
+      "pageId": "gift-en-US", "version": "v1", "kind": "gift", "locale": "en-US", "path": "/en-US/gift",
+      "title": "Gift", "description": "Gift a governed artistic experience.", "canonicalUrl": "https://www.example.com/en-US/gift", "visibility": "public",
+      "dimensions": { "brand": "ltm", "partner": null, "campaign": null, "region": "us", "experiment": null },
+      "components": [
+        { "id": "gift-hero", "type": "hero", "text": "A thoughtful creative gift.", "href": "/en-US/pricing", "formId": null },
+        { "id": "gift-ai", "type": "ai_disclosure", "text": "AI-generated artistic simulation; illustrative, not predictive.", "href": null, "formId": null }
+      ],
+      "structuredData": { "type": "Product", "name": "Gift experience", "description": "A governed creative gift." },
+      "og": { "title": "Gift", "description": "A governed creative gift.", "imageUrl": "https://www.example.com/media/og-gift.png", "imageAlt": "Synthetic gift artwork" },
+      "aiDisclosure": { "visible": true, "text": "AI-generated artistic simulation; illustrative, not predictive." }, "approvals": ["content"], "publishedAt": "2026-08-28T00:00:00.000Z"
+    },
+    {
+      "pageId": "studio-en-US", "version": "v1", "kind": "studio", "locale": "en-US", "path": "/en-US/studio",
+      "title": "Studio", "description": "Create with controlled media and consent workflows.", "canonicalUrl": "https://www.example.com/en-US/studio", "visibility": "public",
+      "dimensions": { "brand": "ltm", "partner": null, "campaign": null, "region": "us", "experiment": null },
+      "components": [
+        { "id": "studio-hero", "type": "hero", "text": "Create within explicit participant controls.", "href": "/en-US/product", "formId": null },
+        { "id": "studio-ai", "type": "ai_disclosure", "text": "AI-generated artistic simulation; illustrative, not predictive.", "href": null, "formId": null }
+      ],
+      "structuredData": { "type": "Product", "name": "Studio", "description": "Controlled creative studio." },
+      "og": { "title": "Studio", "description": "Controlled creative studio.", "imageUrl": "https://www.example.com/media/og-studio.png", "imageAlt": "Synthetic studio interface" },
+      "aiDisclosure": { "visible": true, "text": "AI-generated artistic simulation; illustrative, not predictive." }, "approvals": ["content"], "publishedAt": "2026-08-28T00:00:00.000Z"
+    },
+    {
+      "pageId": "partner-en-US", "version": "v1", "kind": "partner", "locale": "en-US", "path": "/en-US/partner",
+      "title": "Partners", "description": "Integrate using governed partner controls.", "canonicalUrl": "https://www.example.com/en-US/partner", "visibility": "public",
+      "dimensions": { "brand": "ltm", "partner": "example-partner", "campaign": null, "region": "us", "experiment": null },
+      "components": [
+        { "id": "partner-hero", "type": "hero", "text": "Governed partner delivery.", "href": "/en-US/contact-sales", "formId": null },
+        { "id": "partner-ai", "type": "ai_disclosure", "text": "AI-generated artistic simulation; illustrative, not predictive.", "href": null, "formId": null }
+      ],
+      "structuredData": { "type": "Organization", "name": "Partner program", "description": "Governed partner integrations." },
+      "og": { "title": "Partners", "description": "Governed partner integrations.", "imageUrl": "https://www.example.com/media/og-partner.png", "imageAlt": "Abstract partnership artwork" },
+      "aiDisclosure": { "visible": true, "text": "AI-generated artistic simulation; illustrative, not predictive." }, "approvals": ["content"], "publishedAt": "2026-08-28T00:00:00.000Z"
+    },
+    {
+      "pageId": "education-en-US", "version": "v1", "kind": "insurance-retirement-education", "locale": "en-US", "path": "/en-US/education",
+      "title": "Insurance, Retirement, and Education", "description": "Educational material only; no high-impact decisions.", "canonicalUrl": "https://www.example.com/en-US/education", "visibility": "public",
+      "dimensions": { "brand": "ltm", "partner": null, "campaign": null, "region": "us", "experiment": null },
+      "components": [
+        { "id": "education-hero", "type": "hero", "text": "Educational illustrations, never eligibility or underwriting advice.", "href": "/en-US/contact-sales", "formId": null },
+        { "id": "education-ai", "type": "ai_disclosure", "text": "AI-generated artistic simulation; illustrative, not predictive.", "href": null, "formId": null }
+      ],
+      "structuredData": { "type": "FAQPage", "name": "Educational information", "description": "No high-impact decision use." },
+      "og": { "title": "Educational information", "description": "No high-impact decision use.", "imageUrl": "https://www.example.com/media/og-education.png", "imageAlt": "Abstract educational artwork" },
+      "aiDisclosure": { "visible": true, "text": "AI-generated artistic simulation; illustrative, not predictive." }, "approvals": ["content", "legal"], "publishedAt": "2026-08-28T00:00:00.000Z"
+    },
+    {
+      "pageId": "pricing-en-US", "version": "v1", "kind": "pricing", "locale": "en-US", "path": "/en-US/pricing",
+      "title": "Pricing", "description": "Clear plan information without hidden terms.", "canonicalUrl": "https://www.example.com/en-US/pricing", "visibility": "public",
+      "dimensions": { "brand": "ltm", "partner": null, "campaign": null, "region": "us", "experiment": null },
+      "components": [
+        { "id": "pricing-grid", "type": "pricing", "text": "Choose the plan that fits your creative project.", "href": "/en-US/contact-sales", "formId": null },
+        { "id": "pricing-ai", "type": "ai_disclosure", "text": "AI-generated artistic simulation; illustrative, not predictive.", "href": null, "formId": null }
+      ],
+      "structuredData": { "type": "Product", "name": "Pricing", "description": "Clear plan information." },
+      "og": { "title": "Pricing", "description": "Clear plan information.", "imageUrl": "https://www.example.com/media/og-pricing.png", "imageAlt": "Pricing plan illustration" },
+      "aiDisclosure": { "visible": true, "text": "AI-generated artistic simulation; illustrative, not predictive." }, "approvals": ["content"], "publishedAt": "2026-08-28T00:00:00.000Z"
+    },
+    {
+      "pageId": "contact-sales-en-US", "version": "v1", "kind": "contact-sales", "locale": "en-US", "path": "/en-US/contact-sales",
+      "title": "Contact Sales", "description": "Contact the commercial team through a controlled form.", "canonicalUrl": "https://www.example.com/en-US/contact-sales", "visibility": "public",
+      "dimensions": { "brand": "ltm", "partner": null, "campaign": null, "region": "us", "experiment": null },
+      "components": [
+        { "id": "contact-form", "type": "lead_form", "text": "Tell us about your project.", "href": null, "formId": "sales-lead-v1" },
+        { "id": "contact-ai", "type": "ai_disclosure", "text": "AI-generated artistic simulation; illustrative, not predictive.", "href": null, "formId": null }
+      ],
+      "structuredData": { "type": "Organization", "name": "Contact Sales", "description": "Commercial contact." },
+      "og": { "title": "Contact Sales", "description": "Commercial contact.", "imageUrl": "https://www.example.com/media/og-contact.png", "imageAlt": "Sales contact illustration" },
+      "aiDisclosure": { "visible": true, "text": "AI-generated artistic simulation; illustrative, not predictive." }, "approvals": ["content"], "publishedAt": "2026-08-28T00:00:00.000Z"
+    }
+  ],
+  "redirects": [
+    { "from": "/en-US/sales", "to": "/en-US/contact-sales", "status": 308 }
+  ]
+}

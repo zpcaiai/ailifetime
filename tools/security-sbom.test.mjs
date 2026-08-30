@@ -49,3 +49,16 @@ test("rejects dependencies whose licenses are not explicitly approved", () => {
   input.licenses = { "GPL-3.0-only": [{ name: "copyleft-lib", versions: ["1.0.0"], license: "GPL-3.0-only" }] };
   assert.throws(() => generateSupplyChainBundle({ ...input, artifactPaths: ["dist"] }), /legal approval/);
 });
+
+test("production evidence requires an exact source revision even when trustTier is derived", () => {
+  const input = fixture();
+  assert.throws(
+    () => generateSupplyChainBundle({
+      ...input,
+      artifactPaths: ["dist"],
+      environment: "production",
+      sourceRevision: "unversioned",
+    }),
+    /production provenance requires an exact source revision digest/,
+  );
+});

@@ -68,6 +68,10 @@ spec:
               value: "https://__LTM_HOST__/v1/commands"
             - name: LTM_API_BEARER_TOKEN_FILE
               value: /var/run/secrets/ltm-api/token
+            - name: LTM_SUPPLY_EVENT_AUTHORITIES_REFERENCE
+              value: secret-manager:ltm/production/supply-event-authorities
+            - name: LTM_DIRECT_EVIDENCE_AUTHORITIES_REFERENCE
+              value: secret-manager:ltm/production/direct-evidence-authorities
             - name: AWS_WEB_IDENTITY_TOKEN_FILE
               value: /var/run/secrets/ltm-workload/token
           readinessProbe:
@@ -100,6 +104,7 @@ spec:
               cpu: "2"
               memory: 1Gi
           securityContext:
+            privileged: false
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:
@@ -130,7 +135,7 @@ spec:
             sources:
               - serviceAccountToken:
                   path: token
-                  audience: ltm-production-secrets
+                  audience: sts.amazonaws.com
                   expirationSeconds: 3600
 ---
 apiVersion: v1

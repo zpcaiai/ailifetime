@@ -141,6 +141,7 @@ const definitions: readonly DomainCapabilityDefinition[] = [
     recordIdField: "experienceId",
     requiresExternalEvidence: true,
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "assuranceArtifactSha256",
   }),
   defineCapability("B38", SKILL, "handoffLead", handoffLead, {
     consent: participantConsent(), mode: "external-command", collection: "channels.crm-handoff-commands", recordIdField: "handoffId",

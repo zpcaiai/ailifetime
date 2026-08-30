@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const WORKFLOW_STATES = new Set([
@@ -31,10 +31,15 @@ export function loadFactoryStatus(rootValue = process.cwd()) {
     .map((entry) => entry.name)
     .sort();
   if (skillNames.length !== 22) throw new Error("canonical skills directory must contain exactly 22 skills");
+  const manifestSkills = [...new Set(batches.map((batch) => batch?.skill))].sort();
+  if (manifestSkills.length !== 22 || JSON.stringify(manifestSkills) !== JSON.stringify(skillNames)) {
+    throw new Error("canonical skill names must exactly match the batch manifest");
+  }
   const included = new Set(profile.required_batches ?? []);
   if (included.size !== 128 || [...included].some((batchId) => !batches.some((batch) => batch.id === batchId))) {
     throw new Error("active full-commercial profile must include all 128 batches");
   }
+  const executable = loadExecutableCapabilityInventory(root, batches, skillNames);
 
   const workflowCounts = {};
   const ready = [];
@@ -54,7 +59,7 @@ export function loadFactoryStatus(rootValue = process.cwd()) {
   }
 
   return {
-    schemaVersion: "ltm.factory-status.v1",
+    schemaVersion: "ltm.factory-status.v2",
     package: { name: manifest.name, version: manifest.version },
     profile: { id: profile.id, includedBatches: included.size },
     canonicalSkills: { directory: "skills", count: skillNames.length, names: skillNames },
@@ -64,6 +69,11 @@ export function loadFactoryStatus(rootValue = process.cwd()) {
         (sum, batch) => sum + (Array.isArray(batch.requirement_ids) ? batch.requirement_ids.length : 0),
         0,
       ),
+      executableBatches: executable.batches,
+      dedicatedValidators: executable.validators,
+      boundRequirements: executable.requirements,
+      sourceModules: executable.sourceModules,
+      bySkill: executable.bySkill,
       verification: "NOT_RUN",
       verifyCommand: "pnpm check",
     },
@@ -92,6 +102,9 @@ export function formatFactoryStatus(status, readyOnly = false) {
     `Factory scope: ${status.factoryWorkflow.scope}`,
     `Profile: ${status.profile.id} | included ${status.profile.includedBatches}/${status.implementationSurface.batches}`,
     `Canonical skills: ${status.canonicalSkills.count} in ${status.canonicalSkills.directory}/`,
+    `Executable mappings: ${status.implementationSurface.executableBatches}/${status.implementationSurface.batches} batches | ` +
+      `${status.implementationSurface.boundRequirements}/${status.implementationSurface.requirements} requirement IDs | ` +
+      `${status.implementationSurface.dedicatedValidators} dedicated validators`,
     `Workflow: ${counts}`,
     `Production certification: ${status.productionCertification.status} (${status.productionCertification.verification})`,
     `Production authority: ${status.productionCertification.authority}`,
@@ -99,6 +112,73 @@ export function formatFactoryStatus(status, readyOnly = false) {
   if (readyOnly) lines.push(`Ready batches: ${status.factoryWorkflow.ready.join(", ") || "none"}`);
   else lines.push(status.factoryWorkflow.warning);
   return `${lines.join("\n")}\n`;
+}
+
+function loadExecutableCapabilityInventory(root, batches, skillNames) {
+  const directory = resolve(root, "packages/capabilities/src/domains");
+  if (!existsSync(directory)) throw new Error("executable capability domain source directory is missing");
+  const files = readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".ts") && !entry.name.endsWith(".d.ts") && entry.name !== "_shared.ts")
+    .map((entry) => resolve(directory, entry.name))
+    .sort();
+  const definitions = [];
+  for (const file of files) {
+    const source = readFileSync(file, "utf8");
+    const skill = /^const SKILL = "([a-z0-9-]+)";$/mu.exec(source)?.[1];
+    if (skill === undefined) throw new Error(`capability source has no closed skill binding: ${relative(root, file)}`);
+    const pattern = /defineCapability\(\s*"(B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7]))"\s*,\s*SKILL\s*,\s*"([a-z][A-Za-z0-9]+)"\s*,\s*([a-z][A-Za-z0-9]+)\s*,/gu;
+    for (const match of source.matchAll(pattern)) {
+      const [, batchId, operation, validator] = match;
+      if (!new RegExp(`function\\s+${validator}\\s*\\(`, "u").test(source)) {
+        throw new Error(`${batchId} does not bind a declared domain validator ${validator}`);
+      }
+      definitions.push({ batchId, operation, validator, skill, source: relative(root, file) });
+    }
+  }
+  if (files.length !== 22) throw new Error(`capability source must contain exactly 22 domain modules, got ${files.length}`);
+  if (definitions.length !== 128) throw new Error(`capability source must contain exactly 128 executable definitions, got ${definitions.length}`);
+  for (const field of ["batchId", "operation", "validator"]) {
+    if (new Set(definitions.map((definition) => definition[field])).size !== definitions.length) {
+      throw new Error(`capability source contains a duplicate ${field}`);
+    }
+  }
+  const byBatch = new Map(definitions.map((definition) => [definition.batchId, definition]));
+  const requirementIds = new Set();
+  for (const batch of batches) {
+    const definition = byBatch.get(batch.id);
+    if (definition === undefined) throw new Error(`batch ${batch.id} has no executable capability definition`);
+    if (definition.skill !== batch.skill) throw new Error(`batch ${batch.id} executable skill binding does not match the manifest`);
+    if (!Array.isArray(batch.requirement_ids) || batch.requirement_ids.length !== 5) {
+      throw new Error(`batch ${batch.id} must declare exactly five requirement IDs`);
+    }
+    for (const [index, requirementId] of batch.requirement_ids.entries()) {
+      if (requirementId !== `${batch.id}-R0${index + 1}` || requirementIds.has(requirementId)) {
+        throw new Error(`batch ${batch.id} has an invalid or duplicate requirement binding`);
+      }
+      requirementIds.add(requirementId);
+    }
+    if (typeof batch.reference !== "string" || !existsSync(resolve(root, batch.reference))) {
+      throw new Error(`batch ${batch.id} canonical skill reference is missing`);
+    }
+  }
+  const sourceSkills = [...new Set(definitions.map((definition) => definition.skill))].sort();
+  if (JSON.stringify(sourceSkills) !== JSON.stringify(skillNames)) {
+    throw new Error("executable capability skills do not exactly cover the canonical skill catalog");
+  }
+  return {
+    batches: definitions.length,
+    validators: new Set(definitions.map((definition) => definition.validator)).size,
+    requirements: requirementIds.size,
+    sourceModules: files.length,
+    bySkill: Object.fromEntries(skillNames.map((skill) => {
+      const skillDefinitions = definitions.filter((definition) => definition.skill === skill);
+      return [skill, {
+        batches: skillDefinitions.length,
+        requirements: skillDefinitions.length * 5,
+        source: skillDefinitions[0]?.source,
+      }];
+    })),
+  };
 }
 
 function json(path, label) {

@@ -1,0 +1,31 @@
+{
+  "name": "@ltm/public-web-platform",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "bin",
+    "config",
+    "src",
+    "requirements.trace.json"
+  ],
+  "bin": {
+    "ltm-public-web": "./bin/public-web.mjs"
+  },
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "scripts": {
+    "build": "node ./bin/public-web.mjs build --config=./config/site.example.json --out=./dist",
+    "lint": "for file in ./src/*.mjs ./bin/*.mjs; do node --check \"$file\" || exit; done",
+    "typecheck": "for file in ./src/*.mjs ./bin/*.mjs; do node --check \"$file\" || exit; done",
+    "test": "node --test ./test/*.test.mjs",
+    "trace": "node ../../tools/public-web-trace.mjs"
+  },
+  "dependencies": {
+    "qrcode": "1.5.4"
+  },
+  "engines": {
+    "node": ">=26"
+  }
+}

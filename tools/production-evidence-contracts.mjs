@@ -17,6 +17,13 @@ export const APPROVAL_AUTHORITY_ROLES = Object.freeze({
   productionChangeApproval: "production-change-authority",
 });
 
+/**
+ * Reserved trust role for the primary evidence envelopes that authorize a
+ * final B127 production release. Integration-gateway and provider callback
+ * attestations must never be enrolled under this role.
+ */
+export const B127_PRODUCTION_RELEASE_AUTHORITY_ROLE = "b127-production-release-authority";
+
 export const SUPPLY_CHAIN_AUTHORITY_ROLE = "production-supply-chain-signer";
 export const CHANGE_APPROVER_AUTHORITY_ROLES = Object.freeze([
   "production-change-risk-approver",
@@ -30,7 +37,7 @@ export const CONTROL_ARTIFACT_AUTHORITY_ROLES = Object.freeze({
 });
 export const REQUIRED_WORKLOAD_ROLES = Object.freeze(["api", "workers", "integration-gateway", "client-integration-broker", "migrator"]);
 export const REQUIRED_APPROVAL_NAMES = Object.freeze(Object.keys(APPROVAL_AUTHORITY_ROLES));
-export const REQUIRED_SCHEMA5_FORCE_RLS_TABLES = Object.freeze([
+export const REQUIRED_SCHEMA7_FORCE_RLS_TABLES = Object.freeze([
   "records",
   "consents",
   "idempotency",
@@ -48,7 +55,21 @@ export const REQUIRED_SCHEMA5_FORCE_RLS_TABLES = Object.freeze([
   "participants",
   "guardian_authorizations",
   "authorized_agent_authorizations",
+  "data_tracking_queue",
+  "data_warehouse_state",
+  "commerce_finance_state",
+  "growth_operations_state",
+  "partner_settlement_state",
+  "referral_rewards",
+  "lifecycle_deliveries",
+  "partner_usage_events",
+  "partner_rate_contracts",
+  "partner_settlement_statements",
+  "partner_anomaly_decisions",
 ].sort((left, right) => left.localeCompare(right)));
+// Compatibility export retained for existing fixture/tool callers; new
+// releases use the schema-7 table set above.
+export const REQUIRED_SCHEMA5_FORCE_RLS_TABLES = REQUIRED_SCHEMA7_FORCE_RLS_TABLES;
 
 export function validateProductionReleaseSubject(value) {
   const subject = exactObject(value, "production releaseSubject", [
@@ -79,8 +100,8 @@ export function validateProductionReleaseSubject(value) {
   const secretReferences = sortedStringArray(subject.secretReferences, "releaseSubject.secretReferences", 1, 200);
   if (secretReferences.some((item) => /(?:password|secret|token)=/i.test(item))) subjectInvalid("secretReferences contains inline secret material");
   const forcedRlsTables = sortedStringArray(subject.forcedRlsTables, "releaseSubject.forcedRlsTables", 1, 200);
-  if (!sameArray(forcedRlsTables, REQUIRED_SCHEMA5_FORCE_RLS_TABLES)) {
-    subjectInvalid("forcedRlsTables must exactly equal the schema 5 runtime tenant-table set");
+  if (!sameArray(forcedRlsTables, REQUIRED_SCHEMA7_FORCE_RLS_TABLES)) {
+    subjectInvalid("forcedRlsTables must exactly equal the schema 7 runtime tenant-table set");
   }
   visible(subject.databaseUrlReference, "releaseSubject.databaseUrlReference", 512);
   if (/postgres(?:ql)?:\/\//i.test(subject.databaseUrlReference)) subjectInvalid("databaseUrlReference must not contain connection credentials");
@@ -134,7 +155,7 @@ export function validateProductionReleaseSubject(value) {
   digest(disasterRecovery.reportArtifactSha256, "releaseSubject.disasterRecovery.reportArtifactSha256");
   identifier(disasterRecovery.sourceRegion, "releaseSubject.disasterRecovery.sourceRegion");
   identifier(disasterRecovery.failoverRegion, "releaseSubject.disasterRecovery.failoverRegion");
-  if (disasterRecovery.sourceRegion === disasterRecovery.failoverRegion || disasterRecovery.schemaVersion !== "5") subjectInvalid("DR regions/schema are invalid");
+  if (disasterRecovery.sourceRegion === disasterRecovery.failoverRegion || disasterRecovery.schemaVersion !== "7") subjectInvalid("DR regions/schema are invalid");
   positive(disasterRecovery.targetRtoSeconds, "releaseSubject.disasterRecovery.targetRtoSeconds");
   positive(disasterRecovery.targetRpoSeconds, "releaseSubject.disasterRecovery.targetRpoSeconds");
 
@@ -237,7 +258,7 @@ const deploymentAssertionValidators = Object.freeze({
       "crossRegion", "integrityChecks", "exitCode",
     ]);
     exactTool(value, producer, "ltm-postgres-restore-verifier", expected.checkId);
-    if (value.backend !== "postgresql" || integer(value.serverMajor, "serverMajor", 17) < 17 || value.schemaVersion !== "5") invalidDeployment(expected.checkId, "requires restored PostgreSQL 17+ schema 5");
+    if (value.backend !== "postgresql" || integer(value.serverMajor, "serverMajor", 17) < 17 || value.schemaVersion !== "7") invalidDeployment(expected.checkId, "requires restored PostgreSQL 17+ schema 7");
     identifier(value.backupId, "backupId"); identifier(value.restoreTargetId, "restoreTargetId"); timestamp(value.restorePoint, "restorePoint");
     digest(value.backupSha256, "backupSha256"); digest(value.restoredSha256, "restoredSha256");
     if (value.backupSha256 === value.restoredSha256) invalidDeployment(expected.checkId, "backup and restored verification artifacts must be distinct");
@@ -290,7 +311,7 @@ const deploymentAssertionValidators = Object.freeze({
   "production-persistence": (value, expected, producer) => {
     exactFields(value, expected.checkId, ["tool", "toolVersion", "engine", "serverMajor", "schemaVersion", "tlsMode", "hostnameVerified", "role", "superuser", "bypassRls", "forcedRlsTables", "tenantIsolationNegativeTest", "migrationsSha256", "readWriteProbe", "exitCode"]);
     exactTool(value, producer, "ltm-postgres-runtime-probe", expected.checkId);
-    if (value.engine !== "postgresql" || integer(value.serverMajor, "serverMajor", 17) < 17 || value.schemaVersion !== "5" || value.tlsMode !== "verify-full") invalidDeployment(expected.checkId, "requires PostgreSQL 17+ schema 5 over verify-full TLS");
+    if (value.engine !== "postgresql" || integer(value.serverMajor, "serverMajor", 17) < 17 || value.schemaVersion !== "7" || value.tlsMode !== "verify-full") invalidDeployment(expected.checkId, "requires PostgreSQL 17+ schema 7 over verify-full TLS");
     identifier(value.role, "role");
     if (value.hostnameVerified !== true || value.superuser !== false || value.bypassRls !== false || value.tenantIsolationNegativeTest !== true || value.readWriteProbe !== true) invalidDeployment(expected.checkId, "PostgreSQL role, TLS, RLS, or read/write probes failed");
     const tables = sortedStringArray(value.forcedRlsTables, "forcedRlsTables", 1, 200);
@@ -376,7 +397,7 @@ const deploymentAssertionValidators = Object.freeze({
     exactFields(value, expected.checkId, ["tool", "toolVersion", "reference", "scheme", "tlsMode", "hostnameVerified", "caVerified", "credentialsInline", "applicationName", "serverMajor", "schemaVersion", "role", "superuser", "bypassRls", "migrationsSha256", "connectionVerified", "exitCode"]);
     exactTool(value, producer, "ltm-database-contract-probe", expected.checkId);
     visible(value.reference, "reference", 512); identifier(value.applicationName, "applicationName"); identifier(value.role, "role");
-    if (/postgres(?:ql)?:\/\//i.test(value.reference) || value.scheme !== "postgresql" || value.tlsMode !== "verify-full" || value.hostnameVerified !== true || value.caVerified !== true || value.credentialsInline !== false || integer(value.serverMajor, "serverMajor", 17) < 17 || value.schemaVersion !== "5" || value.superuser !== false || value.bypassRls !== false || value.connectionVerified !== true) invalidDeployment(expected.checkId, "database contract must use a redacted reference and verified least-privilege PostgreSQL 17+ TLS connection");
+    if (/postgres(?:ql)?:\/\//i.test(value.reference) || value.scheme !== "postgresql" || value.tlsMode !== "verify-full" || value.hostnameVerified !== true || value.caVerified !== true || value.credentialsInline !== false || integer(value.serverMajor, "serverMajor", 17) < 17 || value.schemaVersion !== "7" || value.superuser !== false || value.bypassRls !== false || value.connectionVerified !== true) invalidDeployment(expected.checkId, "database contract must use a redacted reference and verified least-privilege PostgreSQL 17+ TLS connection");
     if (value.reference !== expected.releaseSubject.databaseUrlReference) invalidDeployment(expected.checkId, "database reference does not match the controlled release subject");
     if (digest(value.migrationsSha256, "migrationsSha256") !== expected.releaseSubject.migrationManifestSha256) invalidDeployment(expected.checkId, "database contract migration digest does not match the checked-out release");
     return { reference: value.reference, serverMajor: value.serverMajor, schemaVersion: value.schemaVersion };
@@ -537,7 +558,7 @@ const approvalSubjectValidators = Object.freeze({
   disasterRecoveryDrill(value, expected) {
     exactFields(value, expected.approvalName, ["exerciseId", "deploymentId", "reportArtifactSha256", "backupId", "sourceRegion", "failoverRegion", "restoreTargetId", "schemaVersion", "targetRtoSeconds", "observedRtoSeconds", "targetRpoSeconds", "observedRpoSeconds", "failoverVerified", "failbackVerified", "forcedRlsVerified", "auditChainVerified", "ledgerBalanced", "deletionNonResurrection", "duplicateSideEffectsPrevented"]);
     identifier(value.exerciseId, "exerciseId"); identifier(value.deploymentId, "deploymentId"); digest(value.reportArtifactSha256, "reportArtifactSha256"); identifier(value.backupId, "backupId"); identifier(value.sourceRegion, "sourceRegion"); identifier(value.failoverRegion, "failoverRegion"); identifier(value.restoreTargetId, "restoreTargetId");
-    if (value.sourceRegion === value.failoverRegion || value.schemaVersion !== "5") invalidApproval(expected.approvalName, "DR must restore schema 5 into a distinct region");
+    if (value.sourceRegion === value.failoverRegion || value.schemaVersion !== "7") invalidApproval(expected.approvalName, "DR must restore schema 7 into a distinct region");
     boundedObjective(value, "RtoSeconds", expected.approvalName); boundedObjective(value, "RpoSeconds", expected.approvalName);
     for (const field of ["failoverVerified", "failbackVerified", "forcedRlsVerified", "auditChainVerified", "ledgerBalanced", "deletionNonResurrection", "duplicateSideEffectsPrevented"]) if (value[field] !== true) invalidApproval(expected.approvalName, `${field} is required`);
     const dr = expected.releaseSubject.disasterRecovery;

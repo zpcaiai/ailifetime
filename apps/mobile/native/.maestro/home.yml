@@ -1,0 +1,11 @@
+appId: com.ailifetime.mobile.test
+---
+- launchApp:
+    clearState: true
+- assertVisible: "把珍贵时刻变成可控的艺术想象"
+- assertVisible: "安全登录"
+- tapOn: "作品库"
+- assertVisible: "离线或暂无可验证作品。"
+- back
+- tapOn: "账户与隐私"
+- assertVisible: "账户与隐私"

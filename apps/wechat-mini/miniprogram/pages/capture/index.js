@@ -1,5 +1,6 @@
 const session = require("../../services/session");
 const upload = require("../../services/upload");
+const privacy = require("../../services/privacy");
 
 Page({
   data: { accepted: false, preview: "", details: "", busy: false, progress: 0, error: "" },
@@ -13,6 +14,7 @@ Page({
   consentChanged(event) { this.setData({ accepted: event.detail.value.includes("accepted") }); },
   async choose() {
     try {
+      await privacy.requireAuthorization();
       const result = await new Promise((resolve, reject) => wx.chooseMedia({ count: 1, mediaType: ["image"], sourceType: ["album", "camera"], sizeType: ["original"], success: resolve, fail: reject }));
       const original = result.tempFiles && result.tempFiles[0] && result.tempFiles[0].tempFilePath;
       if (!original) throw new Error("MEDIA_SELECTION_EMPTY");

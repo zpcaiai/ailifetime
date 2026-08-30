@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ai-life-time-machine/execution-lease.schema.json",
+  "title": "Immutable acceptance execution lease",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "batch_id", "execution_nonce", "owner", "worktree", "branch",
+    "base_commit", "allowed_paths", "shared_contracts", "acceptance_commands",
+    "timeout_seconds", "started_at", "expires_at", "producer"
+  ],
+  "properties": {
+    "schema_version": { "const": "ltm.execution-lease.v1" },
+    "batch_id": { "type": "string", "pattern": "^B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])$" },
+    "execution_nonce": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "owner": { "type": "string", "minLength": 1 },
+    "worktree": { "type": "string", "minLength": 1 },
+    "branch": { "type": "string", "minLength": 1 },
+    "base_commit": { "type": "string", "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$" },
+    "allowed_paths": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "shared_contracts": {
+      "type": "array", "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "acceptance_commands": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["argv", "argv_sha256"],
+        "properties": {
+          "argv": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+          "argv_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        }
+      }
+    },
+    "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 3600 },
+    "started_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["orchestrator", "orchestrator_sha256", "trusted_execution_sha256"],
+      "properties": {
+        "orchestrator": { "type": "string", "minLength": 1 },
+        "orchestrator_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "trusted_execution_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    }
+  }
+}

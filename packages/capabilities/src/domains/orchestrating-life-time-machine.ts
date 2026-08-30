@@ -1,11 +1,10 @@
 import { DomainError } from "@ltm/core";
-import type { CapabilityRegistry, JsonObject } from "../registry.js";
+import type { CapabilityInvocation, CapabilityRegistry, JsonObject } from "../registry.js";
 import { requiredString, stringList } from "../validation.js";
 import {
   assertISODate,
   assertKnownState,
   defineCapability,
-  jsonStringList,
   registerDefinitions,
   requireNonEmptyObject,
   type DomainCapabilityDefinition,
@@ -13,7 +12,10 @@ import {
 
 const SKILL = "orchestrating-life-time-machine";
 
-function recordRepositoryBaseline(input: JsonObject): JsonObject {
+function recordRepositoryBaseline(input: JsonObject, invocation: CapabilityInvocation): JsonObject {
+  if (!invocation.actor.roles.some((role) => role === "platform_admin" || role === "service_account")) {
+    throw new DomainError("AUTH_FORBIDDEN", "B00 is restricted to a platform administrator or service identity");
+  }
   const repositoryId = requiredString(input, "repositoryId");
   const repositoryKind = assertKnownState(requiredString(input, "repositoryKind"), ["single_repo", "multi_repo", "monorepo"] as const, "repositoryKind");
   const baseCommit = requiredString(input, "baseCommit");
@@ -42,8 +44,8 @@ const ORCHESTRATION_TRANSITIONS: Readonly<Record<string, readonly string[]>> = {
   blocked: ["ready", "failed"],
   failed: ["ready"],
   review: ["merged", "blocked", "failed"],
-  merged: ["certified"],
-  certified: [],
+  merged: ["factory_attested"],
+  factory_attested: [],
 };
 
 function transitionBatchOrchestration(input: JsonObject): JsonObject {
@@ -61,15 +63,18 @@ function transitionBatchOrchestration(input: JsonObject): JsonObject {
   if (!ORCHESTRATION_TRANSITIONS[fromState]?.includes(toState)) {
     throw new DomainError("VERSION_CONFLICT", `illegal orchestration transition ${fromState} -> ${toState}`);
   }
-  if (["ready", "running", "review", "merged", "certified"].includes(toState)) {
+  if (["ready", "running", "review", "merged", "factory_attested"].includes(toState)) {
     const missing = dependencyBatchIds.filter((dependency) => !verifiedDependencyIds.includes(dependency));
     if (missing.length > 0) throw new DomainError("DEPENDENCY_UNAVAILABLE", "batch dependencies lack validated completion evidence", { details: { missing } });
   }
-  if (["review", "merged", "certified"].includes(toState) && evidenceIds.length === 0) {
+  if (["review", "merged", "factory_attested"].includes(toState) && evidenceIds.length === 0) {
     throw new DomainError("DEPENDENCY_UNAVAILABLE", "review and terminal states require reproducible evidence");
   }
-  if (toState === "certified") {
-    jsonStringList(input.externalEvidenceIds, "externalEvidenceIds", 1);
+  if (Object.prototype.hasOwnProperty.call(input, "externalEvidenceIds")) {
+    throw new DomainError(
+      "VALIDATION_FAILED",
+      "B50 local orchestration cannot consume production certification evidence; use the independently gated B127 authority",
+    );
   }
   if (Date.parse(leaseExpiresAt) <= Date.now() && toState === "running") throw new DomainError("VERSION_CONFLICT", "cannot enter running with an expired lease");
   return { orchestrationId, batchId, fromState, toState, branch, worktree, leaseExpiresAt, dependencyBatchIds, verifiedDependencyIds, evidenceIds };
@@ -77,6 +82,7 @@ function transitionBatchOrchestration(input: JsonObject): JsonObject {
 
 const definitions: readonly DomainCapabilityDefinition[] = [
   defineCapability("B00", SKILL, "recordRepositoryBaseline", recordRepositoryBaseline, {
+    permission: "platform.baseline.record",
     mode: "resource",
     collection: "orchestration.baselines",
     recordIdField: "repositoryId",

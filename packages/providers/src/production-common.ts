@@ -601,11 +601,10 @@ export async function storeVerifiedArtifact(
 
 export function requiredString(value: unknown, field: string, maximum = 512): string {
   if (typeof value !== "string") throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", `${field} must be a string`);
-  const normalized = value.trim();
-  if (normalized.length === 0 || normalized.length > maximum || /[\u0000-\u001f\u007f]/.test(normalized)) {
+  if (value.length === 0 || value.length > maximum || value !== value.trim() || /[\u0000-\u001f\u007f]/.test(value)) {
     throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", `${field} is invalid`);
   }
-  return normalized;
+  return value;
 }
 
 export function identifier(value: string, field: string): string {

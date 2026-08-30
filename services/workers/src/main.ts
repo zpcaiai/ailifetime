@@ -7,7 +7,11 @@ import {
   PostgresLifeTimeMachineRuntime,
   type LifeTimeMachineRuntimePort,
 } from "@ltm/core";
-import { AwsSecretsManagerResolver, SignedPartnerCommandAdapter } from "@ltm/providers";
+import {
+  AwsSecretsManagerResolver,
+  SignedPartnerCommandAdapter,
+  preflightPartnerCommandAdapterCredentials,
+} from "@ltm/providers";
 import { loadWorkerConfiguration } from "./config.js";
 import { createWorkerHealthServer, WorkerMetrics } from "./health.js";
 import { DurableOutboxWorker, ProductionRoutePublisher, type ExternalCommandSenders, type WorkerPublishers } from "./index.js";
@@ -24,6 +28,17 @@ function log(level: "info" | "error", event: string, details: Record<string, unk
 async function run(): Promise<void> {
   const configuration = loadWorkerConfiguration(process.env, PRODUCT_ROOT);
   const secrets = new AwsSecretsManagerResolver();
+  const configuredAdapters = [
+    ...Object.values(configuration.externalCommandAdapters),
+    ...Object.values(configuration.routeAdapters),
+  ];
+  const uniqueAdapters = new Map(configuredAdapters.map((adapter) => [
+    `${adapter.signingSecretReference}\n${adapter.responseVerificationKeyReference}\n${adapter.responseSignatureScheme}`,
+    adapter,
+  ]));
+  for (const adapter of uniqueAdapters.values()) {
+    await preflightPartnerCommandAdapterCredentials(adapter, secrets);
+  }
   const externalCommandSenders: Record<`B${string}`, SignedPartnerCommandAdapter> = {};
   for (const [batchId, adapter] of Object.entries(configuration.externalCommandAdapters)) {
     externalCommandSenders[batchId as `B${string}`] = new SignedPartnerCommandAdapter(adapter, secrets);
@@ -34,7 +49,7 @@ async function run(): Promise<void> {
           throw new Error("PostgreSQL worker configuration is missing");
         })(),
       )
-    : new LifeTimeMachineRuntime({ databasePath: configuration.databasePath });
+    : new LifeTimeMachineRuntime(configuration.runtimeOptions);
   const actor = { ...configuration.actor, requestId: `worker:${randomUUID()}` };
   const publishers: Partial<Record<keyof typeof configuration.routeAdapters, ProductionRoutePublisher>> = {};
   for (const [route, adapter] of Object.entries(configuration.routeAdapters)) {
@@ -54,7 +69,13 @@ async function run(): Promise<void> {
   const controller = new AbortController();
   const metrics = new WorkerMetrics();
   const healthServer = createWorkerHealthServer({
-    readiness: () => runtime?.readiness() ?? { ready: false, database: "error", auditChain: "error", evidenceTrust: "error" },
+    readiness: () => runtime?.readiness() ?? {
+      ready: false,
+      database: "error",
+      auditChain: "error",
+      evidenceTrust: "error",
+      consentPolicy: "error",
+    },
     ...(configuration.metricsTokenSha256 === undefined ? {} : { metricsTokenSha256: configuration.metricsTokenSha256 }),
   }, metrics);
   healthServerForCleanup = healthServer;

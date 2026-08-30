@@ -6,9 +6,29 @@ import { MiniProgramValidationError, validateMiniProgram } from "./validate-mini
 
 test("the checked-in mini-program has complete pages and fail-closed controls", () => {
   const result = validateMiniProgram();
-  assert.equal(result.pages, 7);
+  assert.equal(result.pages, 10);
   assert.equal(result.release, false);
   assert.equal(result.appIdMode, "development");
+});
+
+test("mini-program capability policy validates the closed portalId projection", () => {
+  const application = { globalData: { policy: {
+    schemaVersion: "ltm.visible-capability-manifest.v1",
+    capabilities: [{
+      batchId: "B10", skill: "building-consumer-time-machine", operation: "publishExport",
+      permission: "record:create", portalId: "consumer", mode: "external-command",
+      requirements: ["B10-R01", "B10-R02", "B10-R03", "B10-R04", "B10-R05"], requiresExternalEvidence: false,
+    }],
+    portals: [{ id: "consumer", skills: ["building-consumer-time-machine"], capabilityCount: 1 }],
+    count: 1,
+    requestId: "mini-policy-test",
+  } } };
+  const policy = loadMiniCommonJs("../miniprogram/services/policy.js", { getApp: () => application });
+  assert.equal(policy.routeAllowed("consumer", ["consumer"]), true);
+  assert.equal(policy.capabilitiesAllowed(["B10"], ["consumer"]), true);
+  assert.throws(() => policy.requireCapabilities(["B14"], ["consumer"]), /CLIENT_CAPABILITY_FORBIDDEN/);
+  application.globalData.policy.capabilities[0].portal = "consumer";
+  assert.throws(() => policy.requireManifest(), /CLIENT_MANIFEST_UNAVAILABLE/);
 });
 
 test("release validation rejects a tourist or placeholder app id", () => {
@@ -420,6 +440,100 @@ test("generation job polling uses the same age-transformation purpose as the cre
   assert.equal(page.data.complete, true);
 });
 
+test("WeChat payment calls wx.requestPayment but remains pending until the exact server projection is paid", async () => {
+  const checkout = { checkoutId: "checkout-12345678" };
+  const intent = {
+    schemaVersion: "ltm.wechat.payment-intent.v1", checkoutId: checkout.checkoutId, orderId: "order-12345678", amountMinor: 1299,
+    currency: "CNY", expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    parameters: { timeStamp: Math.floor(Date.now() / 1000).toString(), nonceStr: "nonce-12345678", package: "prepay_id=prepay_12345678", signType: "RSA", paySign: "A".repeat(64) },
+  };
+  let nativeRequest;
+  const calls = [];
+  const commerce = loadMiniCommonJs("../miniprogram/services/commerce.js", {
+    require: () => ({
+      idempotencyKey: () => "wechat-pay-test-id-0001",
+      requestForPurpose: async (path, purpose, options) => {
+        assert.equal(purpose, "commerce");
+        calls.push({ path, options });
+        if (path === "/v1/wechat/payments") return { data: intent };
+        return { data: { schemaVersion: "ltm.wechat.payment-projection.v1", checkoutId: intent.checkoutId, orderId: intent.orderId, amountMinor: intent.amountMinor, currency: "CNY", state: "paid", version: 2, updatedAt: new Date().toISOString(), providerTransactionReference: "wechat-provider-transaction-001" } };
+      },
+    }),
+    wx: { requestPayment: (input) => { nativeRequest = input; } },
+    setTimeout,
+  });
+  const first = commerce.requestPayment(checkout);
+  await Promise.resolve(); await Promise.resolve();
+  await assert.rejects(commerce.requestPayment(checkout), /PAYMENT_ALREADY_IN_PROGRESS/);
+  assert.deepEqual(Object.keys(nativeRequest).sort(), ["fail", "nonceStr", "package", "paySign", "signType", "success", "timeStamp"]);
+  nativeRequest.success({ errMsg: "requestPayment:ok" });
+  const accepted = await first;
+  assert.equal(accepted.state, "native_payment_accepted_pending_server_verification");
+  assert.deepEqual(Object.keys(calls[0].options.data), ["checkoutId"]);
+  assert.equal(calls[0].options.data.checkoutId, checkout.checkoutId);
+  assert.equal(Object.hasOwn(calls[0].options.data, "amountMinor"), false);
+  const terminal = await commerce.projectPayment(accepted.orderId);
+  assert.equal(terminal.state, "paid"); assert.equal(calls[1].path, `/v1/wechat/payments/${intent.orderId}`); assert.equal(calls[1].options.method, "GET");
+});
+
+test("WeChat payment rejects native cancellation and forged amount or terminal state", async () => {
+  const checkout = { checkoutId: "checkout-12345678" };
+  const base = { schemaVersion: "ltm.wechat.payment-intent.v1", checkoutId: checkout.checkoutId, orderId: "order-12345678", amountMinor: 1299, currency: "CNY", expiresAt: new Date(Date.now() + 60_000).toISOString(), parameters: { timeStamp: Math.floor(Date.now() / 1000).toString(), nonceStr: "nonce-12345678", package: "prepay_id=prepay_12345678", signType: "RSA", paySign: "A".repeat(64) } };
+  let nativeRequest; let nativeReadyResolve; const nativeReady = new Promise((resolve) => { nativeReadyResolve = resolve; });
+  const commerce = loadMiniCommonJs("../miniprogram/services/commerce.js", {
+    require: () => ({ idempotencyKey: () => "wechat-pay-test-id-0001", requestForPurpose: async (path) => path === "/v1/wechat/payments" ? { data: base } : { data: { schemaVersion: "ltm.wechat.payment-projection.v1", checkoutId: base.checkoutId, orderId: base.orderId, amountMinor: 1, currency: "CNY", state: "paid", version: 2, updatedAt: new Date().toISOString(), providerTransactionReference: "provider-transaction-00001" } } }),
+    wx: { requestPayment: (input) => { nativeRequest = input; nativeReadyResolve(); } }, setTimeout,
+  });
+  const payment = commerce.requestPayment(checkout); await nativeReady; nativeRequest.fail({ errMsg: "requestPayment:fail cancel" });
+  await assert.rejects(payment, /PAYMENT_USER_CANCELLED/);
+  await assert.rejects(commerce.projectPayment(base.orderId), /PAYMENT_PROJECTION_INVALID/);
+  await assert.rejects(commerce.requestPayment({ ...checkout, amountMinor: 1 }), /PAYMENT_CHECKOUT_INVALID/);
+  assert.throws(() => commerce.validatePaymentIntent({ ...base, checkoutId: "different-checkout-1" }, checkout), /PAYMENT_INTENT_INVALID/);
+});
+
+test("subscription messages authorize only native-accepted server-enrolled templates and customer service uses a short grant", async () => {
+  const offer = { schemaVersion: "ltm.wechat.subscription-offer.v1", offerId: "offer-12345678", revision: 2, templateIds: ["template_identifier_000001", "template_identifier_000002"], expiresAt: new Date(Date.now() + 60_000).toISOString() };
+  const calls = []; let subscribeRequest; let serviceRequest;
+  const messaging = loadMiniCommonJs("../miniprogram/services/messaging.js", {
+    require: () => ({
+      idempotencyKey: () => "messaging-test-id-000001",
+      requestForPurpose: async (path, purpose, options) => {
+        calls.push({ path, purpose, options });
+        if (path === "/v1/wechat/subscription-authorizations") return { data: { schemaVersion: "ltm.wechat.subscription-authorization.v1", offerId: offer.offerId, revision: offer.revision, state: "server_recorded", authorizationReferences: ["subscription-authorization-reference-0001"] } };
+        if (path === "/v1/wechat/customer-service-grants") return { data: { schemaVersion: "ltm.wechat.customer-service-grant.v1", corpId: "ww0123456789abcdef", extInfoUrl: "https://service.product.cn/chat?grant=opaque", ticketId: "support-ticket-00001", expiresAt: new Date(Date.now() + 60_000).toISOString() } };
+        return { data: offer };
+      },
+    }),
+    wx: {
+      requestSubscribeMessage: (input) => { subscribeRequest = input; input.success({ [offer.templateIds[0]]: "accept", [offer.templateIds[1]]: "reject" }); },
+      openCustomerServiceChat: (input) => { serviceRequest = input; input.success({}); },
+    },
+  });
+  assert.deepEqual(Array.from((await messaging.loadSubscriptionOffer()).templateIds), offer.templateIds);
+  const authorized = await messaging.requestSubscriptions(offer);
+  assert.equal(authorized.authorizationReferences.length, 1); assert.deepEqual(Array.from(subscribeRequest.tmplIds), offer.templateIds);
+  const command = calls.find(({ path }) => path === "/v1/wechat/subscription-authorizations");
+  assert.deepEqual(Array.from(command.options.data.acceptedTemplateIds), [offer.templateIds[0]]); assert.equal(command.purpose, "notifications");
+  const service = await messaging.openCustomerService(); assert.equal(service.ticketId, "support-ticket-00001");
+  assert.equal(serviceRequest.corpId, "ww0123456789abcdef"); assert.equal(serviceRequest.extInfo.url, "https://service.product.cn/chat?grant=opaque");
+  assert.throws(() => messaging.validateOffer({ ...offer, templateIds: ["unregistered"] }), /SUBSCRIPTION_OFFER_INVALID/);
+});
+
+test("privacy gate drives official exposure, agree and disagree events before chooseMedia", async () => {
+  const application = { globalData: { privacyRequest: null } }; let listener; let current; const events = []; const navigations = [];
+  const privacy = loadMiniCommonJs("../miniprogram/services/privacy.js", {
+    getApp: () => application,
+    wx: {
+      onNeedPrivacyAuthorization: (callback) => { listener = callback; },
+      requirePrivacyAuthorize: (input) => { current = input; listener((event) => { events.push(event.event); if (event.event === "agree") input.success(); if (event.event === "disagree") input.fail(); }, { referrer: "chooseMedia" }); },
+      navigateTo: (input) => navigations.push(input.url),
+    },
+  });
+  privacy.install(); const allowed = privacy.requireAuthorization(); privacy.decide(true); await allowed;
+  assert.deepEqual(events, ["exposureAuthorization", "agree"]); assert.equal(privacy.isAuthorized(), true); assert.equal(navigations[0], "/pages/privacy/index");
+  const denied = privacy.requireAuthorization(); privacy.decide(false); await assert.rejects(denied, /PRIVACY_AUTHORIZATION_DENIED/); assert.equal(current !== undefined, true);
+});
+
 function loadEditorPage(request) {
   let page;
   const redirects = [];
@@ -440,6 +554,7 @@ function loadEditorPage(request) {
     require: (specifier) => {
       if (specifier === "../../services/api") return api;
       if (specifier === "../../services/session") return { get: () => activeSession, requireSession: () => activeSession };
+      if (specifier === "../../services/policy") return { requireCapabilities() {} };
       if (specifier === "../../policies/age-transformation") return { version: "privacy-v1", text: "age transformation consent" };
       throw new Error(`unexpected editor dependency: ${specifier}`);
     },
@@ -493,6 +608,7 @@ function loadLibraryPage(request) {
       if (specifier === "../../policies/sharing") {
         return { version: "sharing-v1", text: "单独确认本作品的分享授权" };
       }
+      if (specifier === "../../services/policy") return { requireCapabilities() {} };
       throw new Error(`unexpected library dependency: ${specifier}`);
     },
     wx: {

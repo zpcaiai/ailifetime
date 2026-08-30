@@ -1,0 +1,14 @@
+{
+  "version": "ltm.semantic-metrics.v1",
+  "metrics": {
+    "activation": { "expression": "activated_users / eligible_users", "owner": "growth", "grain": "day" },
+    "generation_success": { "expression": "successful_generations / accepted_generations", "owner": "ai-operations", "grain": "hour" },
+    "paid_conversion": { "expression": "paid_orders / checkout_starts", "owner": "commerce", "grain": "day" },
+    "retention": { "expression": "retained_accounts / cohort_accounts", "owner": "growth", "grain": "cohort_week" },
+    "arr": { "expression": "sum(active_subscription_mrr_minor) * 12", "owner": "finance", "grain": "month" },
+    "mrr": { "expression": "sum(active_subscription_mrr_minor)", "owner": "finance", "grain": "month" },
+    "gross_margin": { "expression": "(net_revenue_minor - variable_cost_minor) / net_revenue_minor", "owner": "finance", "grain": "month" },
+    "sla_attainment": { "expression": "within_sla_cases / eligible_cases", "owner": "operations", "grain": "day" },
+    "security_incident_rate": { "expression": "confirmed_security_incidents / million_requests", "owner": "security", "grain": "day" }
+  }
+}

@@ -1,0 +1,39 @@
+name: Mobile quality and device builds
+defaults:
+  tools:
+    node: "22.13.0"
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  code_quality:
+    steps:
+      - uses: eas/checkout
+      - uses: eas/install_node_modules
+      - name: Typecheck, unit contracts, and public config
+        run: npm run quality
+  test_build_android:
+    needs: [code_quality]
+    type: build
+    params:
+      platform: android
+      profile: test
+  test_build_ios:
+    needs: [code_quality]
+    type: build
+    params:
+      platform: ios
+      profile: test
+  device_e2e_android:
+    needs: [test_build_android]
+    type: maestro
+    params:
+      build_id: ${{ needs.test_build_android.outputs.build_id }}
+      flow_path: [".maestro/home.yml"]
+  device_e2e_ios:
+    needs: [test_build_ios]
+    type: maestro
+    params:
+      build_id: ${{ needs.test_build_ios.outputs.build_id }}
+      flow_path: [".maestro/home.yml"]

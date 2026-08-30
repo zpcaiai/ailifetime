@@ -349,12 +349,14 @@ const definitions: readonly DomainCapabilityDefinition[] = [
     permission: "vendor.profile.manage",
     requiresExternalEvidence: true,
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "vendorProfileArtifactSha256",
     mode: "attestation",
   }),
   defineCapability("B97", SKILL, "recordProofApproval", proofApproval, {
     permission: "production.proof.approve",
     requiresExternalEvidence: true,
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "proofArtifactSha256",
     mode: "attestation",
   }),
   defineCapability("B98", SKILL, "createVendorProductionJob", vendorJob, {

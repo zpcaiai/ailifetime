@@ -13,11 +13,11 @@ import {
 const MANIFEST = resolve("infra/postgres/migrations/manifest.json");
 const TEST_URL = "postgresql://ltm_migrator@127.0.0.1:5432/ltm_test?sslmode=disable";
 
-test("migration manifest binds five ordered SQL files to immutable SHA-256 digests", () => {
+test("migration manifest binds seven ordered SQL files to immutable SHA-256 digests", () => {
   const manifest = loadMigrationManifest(MANIFEST);
-  assert.equal(manifest.runtimeSchemaVersion, "5");
-  assert.deepEqual(manifest.migrations.map((item) => item.id), ["001", "002", "003", "004", "005"]);
-  assert.equal(new Set(manifest.migrations.map((item) => item.sha256)).size, 5);
+  assert.equal(manifest.runtimeSchemaVersion, "7");
+  assert.deepEqual(manifest.migrations.map((item) => item.id), ["001", "002", "003", "004", "005", "006", "007"]);
+  assert.equal(new Set(manifest.migrations.map((item) => item.sha256)).size, 7);
   assert.equal(manifest.migrations.every((item) => !/^\s*(?:BEGIN|COMMIT);\s*$/m.test(item.sql)), true);
 });
 
@@ -64,20 +64,21 @@ test("runner acquires an advisory lock, appends every migration, and is idempote
   const database = new FakeDatabase();
   const first = await execute(database);
   assert.equal(first.status, "PASS");
-  assert.deepEqual(first.migrations.newlyApplied, ["001", "002", "003", "004", "005"]);
+  assert.deepEqual(first.migrations.newlyApplied, ["001", "002", "003", "004", "005", "006", "007"]);
   assert.equal(first.role.leastPrivilegeVerified, true);
-  assert.equal(first.runtimeSchemaVersion, "5");
-  assert.equal(database.ledger.length, 5);
+  assert.equal(first.runtimeSchemaVersion, "7");
+  assert.equal(database.ledger.length, 7);
   assert.equal(database.queries.some((item) => item.text.includes("pg_try_advisory_lock")), true);
   assert.equal(database.queries.some((item) => item.text.includes("pg_advisory_unlock")), true);
   assert.equal(database.queries.some((item) => item.text.includes("pg_get_constraintdef")), true);
   assert.equal(database.queries.some((item) => item.text.includes("pg_get_triggerdef")), true);
-  assert.equal(database.queries.filter((item) => item.text === "COMMIT").length, 6);
+  // One bootstrap transaction plus one transaction per schema migration.
+  assert.equal(database.queries.filter((item) => item.text === "COMMIT").length, 8);
 
   const second = await execute(database);
-  assert.deepEqual(second.migrations.previouslyApplied, ["001", "002", "003", "004", "005"]);
+  assert.deepEqual(second.migrations.previouslyApplied, ["001", "002", "003", "004", "005", "006", "007"]);
   assert.deepEqual(second.migrations.newlyApplied, []);
-  assert.equal(database.ledger.length, 5);
+  assert.equal(database.ledger.length, 7);
 });
 
 test("runner fails closed for ledger drift and always releases the advisory lock", async () => {
@@ -232,7 +233,7 @@ class FakeDatabase {
     if (text.includes("CREATE TABLE IF NOT EXISTS ltm.external_evidence") && this.failMigration === "002") {
       throw new Error("synthetic migration failure");
     }
-    if (text.includes("SELECT value FROM ltm.schema_metadata")) return { rows: [{ value: "5" }] };
+    if (text.includes("SELECT value FROM ltm.schema_metadata")) return { rows: [{ value: "7" }] };
     if (text.includes("server_version_num")) return { rows: [{ server_version_num: 170_005, database_name: "ltm_test" }] };
     return { rows: [] };
   }

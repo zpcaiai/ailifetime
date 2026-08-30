@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ai-life-time-machine.example/contracts/rollback-forward-drill.v1.schema.json",
-  "title": "Digest-bound B127 rollback and forward drill",
+  "$id": "https://ai-life-time-machine.example/contracts/rollback-forward-drill.v2.schema.json",
+  "title": "Raw-artifact-bound B127 rollback and forward drill",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -10,7 +10,7 @@
     "scopes", "scopeSetSha256", "conclusion", "producer"
   ],
   "properties": {
-    "schemaVersion": { "const": "ltm.rollback-forward-drill.v1" },
+    "schemaVersion": { "const": "ltm.rollback-forward-drill.v2" },
     "reportId": { "$ref": "#/$defs/identifier" },
     "exerciseId": { "$ref": "#/$defs/identifier" },
     "releaseId": { "$ref": "#/$defs/identifier" },
@@ -74,26 +74,35 @@
     "drillStep": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["operationId", "startedAt", "completedAt", "result", "stateSha256", "evidenceSha256"],
+      "required": ["operationId", "startedAt", "completedAt", "result", "stateSha256", "evidenceArtifact"],
       "properties": {
         "operationId": { "$ref": "#/$defs/identifier" },
         "startedAt": { "type": "string", "format": "date-time" },
         "completedAt": { "type": "string", "format": "date-time" },
         "result": { "const": "passed" },
         "stateSha256": { "$ref": "#/$defs/sha256" },
-        "evidenceSha256": { "$ref": "#/$defs/sha256" }
+        "evidenceArtifact": { "$ref": "#/$defs/artifactReference" }
       }
     },
     "verification": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["checkId", "expectedSha256", "observedSha256", "evidenceSha256", "conclusion"],
+      "required": ["checkId", "expectedSha256", "observedSha256", "evidenceArtifact", "conclusion"],
       "properties": {
         "checkId": { "$ref": "#/$defs/identifier" },
         "expectedSha256": { "$ref": "#/$defs/sha256" },
         "observedSha256": { "$ref": "#/$defs/sha256" },
-        "evidenceSha256": { "$ref": "#/$defs/sha256" },
+        "evidenceArtifact": { "$ref": "#/$defs/artifactReference" },
         "conclusion": { "const": "passed" }
+      }
+    },
+    "artifactReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "sha256": { "$ref": "#/$defs/sha256" }
       }
     },
     "producer": {
@@ -107,5 +116,5 @@
       }
     }
   },
-  "$comment": "The executable B127 validator additionally enforces the exact per-scope verification sets, sequential rollback/forward windows, distinct raw evidence digests, restored baseline state, and scopeSetSha256."
+  "$comment": "The executable B127 validator additionally reads every referenced operation and verification artifact, enforces its digest and closed release binding, and checks the exact per-scope verification sets, sequential rollback/forward windows, restored baseline state, and scopeSetSha256."
 }

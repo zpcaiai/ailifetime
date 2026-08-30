@@ -11,6 +11,10 @@ build/
 apps/web/public/assets/app.js
 apps/web/public/assets/auth*.js
 apps/web/public/assets/surface*.js
+apps/web/public/assets/capability-execution-*.js
+packages/capabilities/src/**/*.d.ts
+packages/capabilities/src/**/*.js
+packages/capabilities/src/**/*.js.map
 .gradle/
 .venv/
 .data/

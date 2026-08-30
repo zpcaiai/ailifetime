@@ -6,7 +6,10 @@
     "pages/editor/index",
     "pages/job/index",
     "pages/library/index",
-    "pages/account/index"
+    "pages/account/index",
+    "pages/commerce/index",
+    "pages/service/index",
+    "pages/privacy/index"
   ],
   "window": {
     "navigationBarTitleText": "生命时光机",

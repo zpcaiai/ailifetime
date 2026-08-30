@@ -7,7 +7,7 @@ import {
   verify as cryptoVerify,
 } from "node:crypto";
 import test from "node:test";
-import { verifyExternalEvidenceSignature } from "@ltm/core";
+import { canonicalJson, verifyExternalEvidenceSignature } from "@ltm/core";
 import {
   AppleStoreEvidenceIntegration,
   attestOperationalReport,
@@ -30,6 +30,9 @@ import {
   parseExperienceGateReport,
   parseModelEvaluationReport,
   parseResilienceExerciseReport,
+  preflightPartnerCommandAdapterCredentials,
+  preflightPartnerSignatureKey,
+  requiredString,
   sha256,
   toRuntimeExternalEvidence,
   type CapabilityEvidenceBindingTemplate,
@@ -622,7 +625,7 @@ test("signed partner webhook performs domain validation and cannot be replayed",
       assert.equal(payload.invoiceRequestId, binding.subjectId);
     },
   }, secrets, replays, artifacts, attestor, () => NOW);
-  const rawBody = Buffer.from(JSON.stringify({ state: "accepted", invoiceRequestId: "invoice-request-1" }));
+  const rawBody = Buffer.from(canonicalJson({ state: "accepted", invoiceRequestId: "invoice-request-1" }));
   const timestamp = String(Math.floor(NOW.getTime() / 1_000));
   const nonce = "tax-webhook-nonce-1";
   const signedPayload = Buffer.from(`ltm-provider-webhook-v1\n${timestamp}\n${nonce}\n${sha256(rawBody)}\n`);
@@ -656,6 +659,81 @@ test("signed partner webhook performs domain validation and cannot be replayed",
   );
 });
 
+test("signed partner webhook accepts only exact canonical JSON bytes after signature verification", async () => {
+  const webhookReference: SecretReference = "vault:test-canonical-partner-webhook";
+  const webhookKey = Buffer.from("canonical-partner-webhook-secret-at-least-32-bytes");
+  const { attestor, secrets } = testAttestor(new Map([[webhookReference, webhookKey]]));
+  const artifacts = new MemoryArtifacts();
+  const replays = new MemoryReplays();
+  let validationCalls = 0;
+  type TaxTemplate = Extract<CapabilityEvidenceBindingTemplate, { batchId: "B89" }>;
+  const integration = new SignedPartnerWebhookIntegration<TaxTemplate>({
+    provider: "tax-authority:canonical",
+    signatureScheme: "hmac-sha256",
+    verificationKeyReference: webhookReference,
+    retentionClass: "financial",
+    validate(payload, binding) {
+      validationCalls += 1;
+      assert.equal(payload.invoiceRequestId, binding.subjectId);
+      assert.equal(payload.quantity, 1);
+      assert.equal(payload.state, "accepted");
+      assert.equal(payload.text, "café");
+    },
+  }, secrets, replays, artifacts, attestor, () => NOW);
+  const timestamp = String(Math.floor(NOW.getTime() / 1_000));
+  const binding = {
+    tenantId: "tenant-1", batchId: "B89", operation: "requestTaxDocument",
+    kind: "tax-document-request", provider: "tax-authority:canonical",
+    environment: "sandbox", subjectId: "invoice-canonical-1",
+  } as const;
+  const signedInput = (rawBody: Buffer, nonce: string) => {
+    const signedPayload = Buffer.from(`ltm-provider-webhook-v1\n${timestamp}\n${nonce}\n${sha256(rawBody)}\n`);
+    return {
+      binding,
+      rawBody,
+      timestamp,
+      nonce,
+      signature: createHmac("sha256", webhookKey).update(signedPayload).digest("base64"),
+    };
+  };
+  const canonicalBody = Buffer.from(canonicalJson({
+    invoiceRequestId: "invoice-canonical-1",
+    quantity: 1,
+    state: "accepted",
+    text: "café",
+  }));
+  const nonCanonicalBodies = [
+    Buffer.from('{"invoiceRequestId":"invoice-canonical-1","invoiceRequestId":"invoice-canonical-1","quantity":1,"state":"accepted","text":"café"}'),
+    Buffer.concat([canonicalBody, Buffer.from("\n")]),
+    Buffer.from('{"state":"accepted","text":"café","quantity":1,"invoiceRequestId":"invoice-canonical-1"}'),
+    Buffer.from(String.raw`{"invoiceRequestId":"invoice-canonical-1","quantity":1,"state":"accepted","text":"caf\u00e9"}`),
+    Buffer.from('{"invoiceRequestId":"invoice-canonical-1","quantity":1.0,"state":"accepted","text":"café"}'),
+  ];
+  for (const [index, body] of nonCanonicalBodies.entries()) {
+    await assert.rejects(
+      integration.verifyAndAttest(signedInput(body, `canonical-reject-${index}`)),
+      (error: unknown) => error instanceof ProductionIntegrationError &&
+        error.code === "PROVIDER_RESPONSE_INVALID" && /canonical JSON/.test(error.message),
+    );
+  }
+  assert.equal(validationCalls, 0);
+  assert.equal(artifacts.stored.length, 0);
+  assert.equal(replays.seen.size, 0);
+
+  const forged = signedInput(canonicalBody, "canonical-invalid-signature");
+  await assert.rejects(
+    integration.verifyAndAttest({ ...forged, signature: Buffer.alloc(32).toString("base64") }),
+    (error: unknown) => error instanceof ProductionIntegrationError && error.code === "PROVIDER_SIGNATURE_INVALID",
+  );
+  assert.equal(validationCalls, 0);
+
+  const evidence = await integration.verifyAndAttest(signedInput(canonicalBody, "canonical-accepted"));
+  assert.equal(evidence.artifactSha256, sha256(canonicalBody));
+  assert.equal(validationCalls, 1);
+  assert.deepEqual(artifacts.stored, [sha256(canonicalBody)]);
+  assert.equal(replays.seen.size, 1);
+});
+
 test("standalone partner verification does not consume replay state before durable processing succeeds", async () => {
   const webhookReference: SecretReference = "vault:test-partner-retry";
   const webhookKey = Buffer.from("partner-retry-secret-at-least-32-bytes");
@@ -677,7 +755,7 @@ test("standalone partner verification does not consume replay state before durab
     retentionClass: "financial",
     validate() {},
   }, secrets, replays, artifacts, attestor, () => NOW);
-  const rawBody = Buffer.from(JSON.stringify({ state: "accepted", invoiceRequestId: "invoice-retry-1" }));
+  const rawBody = Buffer.from(canonicalJson({ state: "accepted", invoiceRequestId: "invoice-retry-1" }));
   const timestamp = String(Math.floor(NOW.getTime() / 1_000));
   const nonce = "tax-webhook-retry-nonce-1";
   const signedPayload = Buffer.from(`ltm-provider-webhook-v1\n${timestamp}\n${nonce}\n${sha256(rawBody)}\n`);
@@ -702,19 +780,23 @@ test("standalone partner verification does not consume replay state before durab
     error instanceof ProductionIntegrationError && error.code === "PROVIDER_REPLAY_DETECTED");
 });
 
-test("partner command requires an exact-body signed receipt bound to idempotency", async () => {
+test("required provider strings reject leading and trailing whitespace instead of normalizing it", () => {
+  assert.equal(requiredString("provider-value", "provider field"), "provider-value");
+  for (const value of [" provider-value", "provider-value ", "\tprovider-value", "provider-value\n", "\u00a0provider-value"]) {
+    assert.throws(
+      () => requiredString(value, "provider field"),
+      (error: unknown) => error instanceof ProductionIntegrationError && error.code === "PROVIDER_RESPONSE_INVALID",
+    );
+  }
+});
+
+test("partner command requires a v2 signed receipt bound to idempotency and the exact request bytes", async () => {
   const reference: SecretReference = "vault:test-command";
   const secret = Buffer.from("partner-command-secret-at-least-32-bytes");
   const secrets = new MemorySecrets(new Map([[reference, secret]]));
   let observed: HardenedHttpRequest | undefined;
-  const responseBody = Buffer.from(JSON.stringify({ accepted: true, providerRequestId: "provider-job-1" }));
   const responseTimestamp = String(Math.floor(NOW.getTime() / 1_000));
   const responseNonce = "partner-receipt-nonce-1";
-  const responseDigest = sha256(responseBody);
-  const responsePayload = Buffer.from(
-    `ltm-provider-receipt-v1\n${responseTimestamp}\n${responseNonce}\njob-1\n${responseDigest}\n`,
-  );
-  const responseSignature = createHmac("sha256", secret).update(responsePayload).digest("base64");
   const adapter = new SignedPartnerCommandAdapter(
     {
       endpoint: new URL("https://partner.example.test/v1/commands"),
@@ -725,6 +807,18 @@ test("partner command requires an exact-body signed receipt bound to idempotency
     secrets,
     { request: async (input) => {
       observed = input;
+      const requestDigest = input.headers?.["x-ltm-content-sha256"] ?? "";
+      const responseBody = Buffer.from(JSON.stringify({
+        version: "ltm-provider-receipt.v2",
+        accepted: true,
+        providerRequestId: "provider-job-1",
+        requestContentSha256: requestDigest,
+      }));
+      const responseDigest = sha256(responseBody);
+      const responsePayload = Buffer.from(
+        `ltm-provider-receipt-v2\n${responseTimestamp}\n${responseNonce}\njob-1\n${requestDigest}\n${responseDigest}\n`,
+      );
+      const responseSignature = createHmac("sha256", secret).update(responsePayload).digest("base64");
       return {
         status: 202,
         headers: new Headers({
@@ -732,6 +826,7 @@ test("partner command requires an exact-body signed receipt bound to idempotency
           "x-ltm-timestamp": responseTimestamp,
           "x-ltm-nonce": responseNonce,
           "x-ltm-idempotency-key": "job-1",
+          "x-ltm-request-content-sha256": requestDigest,
           "x-ltm-content-sha256": responseDigest,
           "x-ltm-signature": responseSignature,
         }),
@@ -748,34 +843,85 @@ test("partner command requires an exact-body signed receipt bound to idempotency
   assert.match(observed?.headers?.["x-ltm-signature"] ?? "", /^[A-Za-z0-9+/]+=*$/);
   assert.equal(observed?.headers?.["idempotency-key"], "job-1");
 
-  for (const mutation of ["unsigned", "tampered"] as const) {
+  for (const mutation of ["unsigned", "tampered", "request-mismatch", "body-mismatch"] as const) {
     const rejecting = new SignedPartnerCommandAdapter({
       endpoint: new URL("https://partner.example.test/v1/commands"),
       signingSecretReference: reference,
       responseVerificationKeyReference: reference,
       responseSignatureScheme: "hmac-sha256",
     }, secrets, {
-      async request() {
+      async request(request) {
+        const actualRequestDigest = request.headers?.["x-ltm-content-sha256"] ?? "";
+        const signedRequestDigest = mutation === "request-mismatch" ? "b".repeat(64) : actualRequestDigest;
+        const bodyRequestDigest = mutation === "body-mismatch" ? "c".repeat(64) : actualRequestDigest;
+        const signedBody = Buffer.from(JSON.stringify({
+          version: "ltm-provider-receipt.v2",
+          accepted: true,
+          providerRequestId: "provider-job-1",
+          requestContentSha256: bodyRequestDigest,
+        }));
+        const responseDigest = sha256(signedBody);
+        const responseSignature = createHmac("sha256", secret).update(Buffer.from(
+          `ltm-provider-receipt-v2\n${responseTimestamp}\n${responseNonce}\njob-1\n${signedRequestDigest}\n${responseDigest}\n`,
+        )).digest("base64");
         return {
           status: 202,
           headers: mutation === "unsigned" ? new Headers() : new Headers({
             "x-ltm-timestamp": responseTimestamp,
             "x-ltm-nonce": responseNonce,
             "x-ltm-idempotency-key": "job-1",
+            "x-ltm-request-content-sha256": signedRequestDigest,
             "x-ltm-content-sha256": responseDigest,
             "x-ltm-signature": responseSignature,
           }),
           body: mutation === "tampered"
-            ? Buffer.from(JSON.stringify({ accepted: true, providerRequestId: "attacker-job" }))
-            : responseBody,
+            ? Buffer.from(JSON.stringify({ ...JSON.parse(signedBody.toString("utf8")), providerRequestId: "attacker-job" }))
+            : signedBody,
         };
       },
     }, () => NOW);
     await assert.rejects(rejecting.send({
       tenantId: "tenant-1", batchId: "B98", operation: "createVendorProductionJob",
       idempotencyKey: "job-1", payload: { quantity: 1 },
-    }), (error: unknown) => error instanceof ProductionIntegrationError && error.code === "PROVIDER_SIGNATURE_INVALID");
+    }), (error: unknown) => error instanceof ProductionIntegrationError && (
+      error.code === "PROVIDER_SIGNATURE_INVALID" ||
+      (mutation === "body-mismatch" && error.code === "PROVIDER_RESPONSE_INVALID")
+    ));
   }
+});
+
+test("partner command startup preflight resolves all keys and enforces exact ES256 P-256 material", async () => {
+  const hmacReference: SecretReference = "vault:test-preflight-hmac";
+  const edReference: SecretReference = "vault:test-preflight-ed25519";
+  const p256Reference: SecretReference = "vault:test-preflight-p256";
+  const p384Reference: SecretReference = "vault:test-preflight-p384";
+  const shortReference: SecretReference = "vault:test-preflight-short";
+  const ed = generateKeyPairSync("ed25519");
+  const p256 = generateKeyPairSync("ec", { namedCurve: "P-256" });
+  const p384 = generateKeyPairSync("ec", { namedCurve: "P-384" });
+  const secrets = new MemorySecrets(new Map([
+    [hmacReference, Buffer.from("preflight-hmac-key-at-least-thirty-two-bytes")],
+    [edReference, Buffer.from(ed.publicKey.export({ type: "spki", format: "pem" }))],
+    [p256Reference, Buffer.from(p256.publicKey.export({ type: "spki", format: "pem" }))],
+    [p384Reference, Buffer.from(p384.publicKey.export({ type: "spki", format: "pem" }))],
+    [shortReference, Buffer.from("too-short")],
+  ]));
+
+  await preflightPartnerCommandAdapterCredentials({
+    endpoint: new URL("https://partner.example.test/v1/commands"),
+    signingSecretReference: hmacReference,
+    responseVerificationKeyReference: edReference,
+    responseSignatureScheme: "ed25519",
+  }, secrets);
+  await preflightPartnerSignatureKey(p256Reference, "es256", secrets);
+  await assert.rejects(
+    preflightPartnerSignatureKey(p384Reference, "es256", secrets),
+    (error: unknown) => error instanceof ProductionIntegrationError && error.code === "CONFIGURATION_INVALID",
+  );
+  await assert.rejects(
+    preflightPartnerSignatureKey(shortReference, "hmac-sha256", secrets),
+    (error: unknown) => error instanceof ProductionIntegrationError && error.code === "CONFIGURATION_INVALID",
+  );
 });
 
 test("Apple production verifier refuses incomplete trust configuration before accepting a JWS", async () => {

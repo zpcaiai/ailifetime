@@ -10,7 +10,11 @@ import {
   PostgresB127CertificationSource,
   verifyB127Certification,
 } from "./b127-certifier.mjs";
-import { APPROVAL_AUTHORITY_ROLES, CHANGE_APPROVER_AUTHORITY_ROLES } from "./production-evidence-contracts.mjs";
+import {
+  APPROVAL_AUTHORITY_ROLES,
+  B127_PRODUCTION_RELEASE_AUTHORITY_ROLE,
+  CHANGE_APPROVER_AUTHORITY_ROLES,
+} from "./production-evidence-contracts.mjs";
 import {
   createB127ReleaseControlFixtures,
   createB127ReleaseSubjectFixture,
@@ -38,6 +42,28 @@ test("production PostgreSQL source rejects a non-TLS connection before opening i
     }),
     (error) => error instanceof CertificationError && error.code === "B127_POSTGRES_TLS_CONFIG_INVALID",
   );
+  assert.throws(
+    () => new PostgresB127CertificationSource(
+      "postgresql://certifier@db.production.example/ltm?sslmode=verify-full&sslmode=disable",
+      { certificationProfile: "production" },
+    ),
+    (error) => error instanceof CertificationError && error.code === "B127_POSTGRES_URL_PARAMETER_INVALID",
+  );
+  for (const query of [
+    "sslmode=verify-full&options=-c%20search_path%3Dltm",
+    "sslmode=verify-full&opt%69ons=-c%20search_path%3Dltm",
+    "sslmode=verify-full&OPTIONS=-c%20search_path%3Dltm",
+    "sslmode=verify-full&sslMode=verify-full",
+  ]) {
+    assert.throws(
+      () => new PostgresB127CertificationSource(
+        `postgresql://certifier@db.production.example/ltm?${query}`,
+        { certificationProfile: "production" },
+      ),
+      (error) => error instanceof CertificationError && error.code === "B127_POSTGRES_URL_PARAMETER_INVALID",
+      query,
+    );
+  }
 });
 
 test("live PostgreSQL fixture uses the shared canonical release-subject and production supply-chain builder", (testContext) => {
@@ -70,9 +96,17 @@ test("PostgreSQL 17 B127 source proves SELECT-only FORCE-RLS evidence and reject
 
   await provisionRole(admin, readerRole, readerPassword, false);
   await provisionRole(admin, bypassRole, bypassPassword, true);
+  await admin.query(`ALTER ROLE ${quoteIdentifier(readerRole)} SET search_path TO ltm, public`);
   await seedRelease(admin, fixture);
 
   const readerUrl = roleUrl(TEST_POSTGRES_URL, readerRole, readerPassword);
+  const readerProbe = new Pool({ connectionString: readerUrl, max: 1 });
+  try {
+    const configuredSearchPath = await readerProbe.query("SHOW search_path");
+    assert.equal(configuredSearchPath.rows[0]?.search_path, "ltm, public");
+  } finally {
+    await readerProbe.end();
+  }
   const result = await verifyB127Certification({
     ...fixture.options,
     certificationProfile: "test",
@@ -126,6 +160,28 @@ test("PostgreSQL 17 B127 source proves SELECT-only FORCE-RLS evidence and reject
     await admin.query("ALTER POLICY tenant_isolation ON ltm.participants USING (tenant_id = ltm.current_tenant()) WITH CHECK (tenant_id = ltm.current_tenant())");
   }
 
+  const currentTenantFunction = await admin.query(
+    "SELECT pg_get_functiondef('ltm.current_tenant()'::regprocedure) AS definition",
+  );
+  await admin.query(
+    "CREATE OR REPLACE FUNCTION ltm.current_tenant() RETURNS text LANGUAGE sql STABLE AS $$ SELECT 'tampered-tenant'::text $$",
+  );
+  try {
+    await assert.rejects(
+      () => new PostgresB127CertificationSource(readerUrl, {
+        certificationProfile: "test",
+        allowInsecureTestConnection: true,
+      }).load({
+        tenantId: fixture.tenantId,
+        launchId: fixture.launchId,
+        b126CertificationId: fixture.b126Record.certificationId,
+      }),
+      (error) => error instanceof CertificationError && error.code === "B127_POSTGRES_FUNCTION_DRIFT",
+    );
+  } finally {
+    await admin.query(currentTenantFunction.rows[0].definition);
+  }
+
   await assert.rejects(
     () => new PostgresB127CertificationSource(TEST_POSTGRES_ADMIN_URL, {
       certificationProfile: "test",
@@ -155,11 +211,11 @@ function createFileFixture(testContext) {
   const tenantId = `tenant-pg-${randomUUID()}`;
   const launchId = `launch-pg-${randomUUID()}`;
   const now = new Date();
-  const approvedAt = new Date(now.getTime() - 4 * 60_000).toISOString();
-  const generatedAt = new Date(now.getTime() - 3 * 60_000).toISOString();
-  const issuedAt = new Date(now.getTime() - 2 * 60_000).toISOString();
-  const verifiedAt = new Date(now.getTime() - 90_000).toISOString();
-  const consumedAt = new Date(now.getTime() - 60_000).toISOString();
+  const approvedAt = new Date(now.getTime() - 3 * 60 * 60_000).toISOString();
+  const generatedAt = new Date(now.getTime() - 150 * 60_000).toISOString();
+  const issuedAt = new Date(now.getTime() - 45 * 60_000).toISOString();
+  const verifiedAt = new Date(now.getTime() - 40 * 60_000).toISOString();
+  const consumedAt = new Date(now.getTime() - 30 * 60_000).toISOString();
   const expiresAt = new Date(now.getTime() + 60 * 60_000).toISOString();
   const manifestPath = join(root, "release-manifest.json");
   const trustedKeysPath = join(root, "trusted-keys.json");
@@ -178,7 +234,8 @@ function createFileFixture(testContext) {
     artifact: artifact(`release/components/${name}.json`, { component: name, version: "2.0.0", commit: COMMIT }).reference,
   }]));
   const componentSetSha256 = sha256(Buffer.from(canonicalJson(componentVersions)));
-  const waveStartedAt = new Date(now.getTime() - 30_000).toISOString();
+  const waveStartedAt = new Date(now.getTime() - 2 * 60 * 60_000).toISOString();
+  const globalWaveCompletedAt = new Date(now.getTime() - 60 * 60_000).toISOString();
   const goLive = {
     windowStart: new Date(new Date(waveStartedAt).getTime() - 60_000).toISOString(),
     windowEnd: new Date(new Date(waveStartedAt).getTime() + 10 * 60_000).toISOString(),
@@ -194,7 +251,12 @@ function createFileFixture(testContext) {
     rolloutPercent: priorWavePercents[index],
     startedAt: new Date(new Date(waveStartedAt).getTime() - (priorWaveNames.length - index) * 60 * 60_000).toISOString(),
     completedAt: new Date(new Date(waveStartedAt).getTime() - (priorWaveNames.length - index - 1) * 60 * 60_000).toISOString(),
-  }));
+  })).concat({
+    wave: "global",
+    rolloutPercent: 100,
+    startedAt: waveStartedAt,
+    completedAt: globalWaveCompletedAt,
+  });
   const releaseControls = createB127ReleaseControlFixtures({
     artifact,
     tenantId,
@@ -228,7 +290,7 @@ function createFileFixture(testContext) {
     return [batchId, sha256(Buffer.from(`postgres-production-report:${batchId}:${COMMIT}`))];
   }));
   const reportSetSha256 = sha256(Buffer.from(canonicalJson(reportHashes)));
-  const batchReportGeneratedAt = new Date(now.getTime() - 5 * 60_000).toISOString();
+  const batchReportGeneratedAt = new Date(Date.parse(generatedAt) - 30 * 60_000).toISOString();
   const batchReportDocument = {
     schemaVersion: "ltm.batch-certification-report.v1",
     repositoryCommit: COMMIT,
@@ -365,9 +427,24 @@ function createFileFixture(testContext) {
     }];
   }));
   const completedWaves = releaseControls.completedWaves;
-  const operationsHandoff = artifact("release/operations-handoff.json", {
+  const operationsHandoffSummary = {
     handoffId: `pg-operations-${suffixId(tenantId)}`,
     status: "accepted",
+    acceptedAt: approvedAt,
+    acceptedBy: `pg-operations-lead-${suffixId(tenantId)}`,
+    runbookVersion: "runbook-v1",
+    onCallScheduleVersion: "oncall-v1",
+    supportPlanVersion: "support-v1",
+  };
+  const operationsHandoff = artifact("release/operations-handoff.json", {
+    schemaVersion: "ltm.operations-handoff.v1",
+    releaseId: launchId,
+    tenantId,
+    launchId,
+    deploymentId: releaseSubject.deploymentId,
+    repositoryCommit: COMMIT,
+    componentSetSha256,
+    ...operationsHandoffSummary,
   });
   const manifest = {
     schemaVersion: "ltm.production-release-manifest.v1",
@@ -408,13 +485,7 @@ function createFileFixture(testContext) {
       changeApprovalId: approvals.productionChangeApproval.approvalId,
     },
     operationsHandoff: {
-      handoffId: `pg-operations-${suffixId(tenantId)}`,
-      status: "accepted",
-      acceptedAt: new Date(now.getTime() - 6 * 60_000).toISOString(),
-      acceptedBy: `pg-operations-lead-${suffixId(tenantId)}`,
-      runbookVersion: "runbook-v1",
-      onCallScheduleVersion: "oncall-v1",
-      supportPlanVersion: "support-v1",
+      ...operationsHandoffSummary,
       artifact: operationsHandoff.reference,
     },
     exceptions: [],
@@ -426,9 +497,12 @@ function createFileFixture(testContext) {
   writeFileSync(trustedKeysPath, `${JSON.stringify({
     schemaVersion: "ltm.trusted-evidence-keys.v1",
     keys: [...keys.map((key) =>
-      pgTrustedKey(key, `release-control:${RELEASE_PROVIDER_ID}`, scope, now, approvalNames
-        .filter((_, approvalIndex) => approvalIndex % keys.length === keys.indexOf(key))
-        .map((approvalName) => APPROVAL_AUTHORITY_ROLES[approvalName])),
+      pgTrustedKey(key, `release-control:${RELEASE_PROVIDER_ID}`, scope, now, [
+        B127_PRODUCTION_RELEASE_AUTHORITY_ROLE,
+        ...approvalNames
+          .filter((_, approvalIndex) => approvalIndex % keys.length === keys.indexOf(key))
+          .map((approvalName) => APPROVAL_AUTHORITY_ROLES[approvalName]),
+      ]),
     ),
     ...b126Keys.map((key) => pgTrustedKey(key, `e2e-auditor:${b126ProviderId}`, b126ScopeValue, now)),
     ...changeApproverKeys.map((key) => pgTrustedKey(
@@ -538,12 +612,21 @@ function createFileFixture(testContext) {
     automaticPausePolicyVersion,
     guardrailPolicySha256: releaseControls.guardrailPolicyArtifact.reference.sha256,
     waveObservationSetSha256: releaseControls.waveObservationSetSha256,
+    globalWaveObservationPath: releaseControls.globalWaveObservation.observationArtifact.path,
+    globalWaveObservationSha256: releaseControls.globalWaveObservation.observationArtifact.sha256,
     rollbackForwardDrillSha256: releaseControls.rollbackForwardDrillArtifact.reference.sha256,
     changeApproverEvidenceIds: changeApproverKeys.map((_, index) => `pg-change-approver-evidence-${suffixId(tenantId)}-${index + 1}`),
     activeGuardrailBreaches: 0,
     externalEvidenceIds: evidenceIds,
     evidenceScope: scope,
   };
+  const priorWaveRecord = {
+    ...record,
+    wave: "regional",
+    rolloutPercent: 25,
+  };
+  delete priorWaveRecord.globalWaveObservationPath;
+  delete priorWaveRecord.globalWaveObservationSha256;
   return {
     root,
     manifest,
@@ -554,6 +637,7 @@ function createFileFixture(testContext) {
     b126Record,
     b126CreatedAt,
     record,
+    priorWaveRecord,
     evidence,
     b126Evidence,
     options: {
@@ -572,6 +656,17 @@ async function seedRelease(admin, fixture) {
   const client = await admin.connect();
   try {
     await client.query("BEGIN");
+    await client.query(
+      `INSERT INTO ltm.records(
+         tenant_id,collection,id,processing_purpose,owner_actor_id,participant_ids,contains_minor,data,version,created_at,updated_at,deleted_at
+       ) VALUES ($1,'capability.launching-complete-commercial-product',$2,'release_certification',NULL,'{}',false,$3::jsonb,1,$4,$4,NULL)`,
+      [
+        fixture.tenantId,
+        `b127-prior-${suffixId(fixture.tenantId)}`,
+        JSON.stringify(fixture.priorWaveRecord),
+        new Date(Date.parse(fixture.record.waveStartedAt) - 60 * 60_000).toISOString(),
+      ],
+    );
     await client.query(
       `INSERT INTO ltm.records(
          tenant_id,collection,id,processing_purpose,owner_actor_id,participant_ids,contains_minor,data,version,created_at,updated_at,deleted_at

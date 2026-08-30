@@ -265,6 +265,7 @@ const definitions: readonly DomainCapabilityDefinition[] = [
     permission: "content.workflow.manage",
     requiresExternalEvidence: true,
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "contentArtifactSha256",
     mode: "resource",
   }),
   defineCapability("B59", SKILL, "publishConsentPolicy", consentPolicy, {
@@ -284,6 +285,7 @@ const definitions: readonly DomainCapabilityDefinition[] = [
     permission: "trust.document.publish",
     requiresExternalEvidence: true,
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "documentArtifactSha256",
     mode: "attestation",
   }),
 ];

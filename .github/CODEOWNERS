@@ -1,0 +1,28 @@
+# Default review owner. More-specific trust boundaries below require the same
+# repository owner today and can be replaced by dedicated teams atomically.
+* @giftfuture
+
+# Public clients and user-facing entrypoints.
+/apps/ @giftfuture
+/packages/sdk-ts/ @giftfuture
+/packages/sdk-python/ @giftfuture
+/packages/sdk-java/ @giftfuture
+
+# Versioned domain, API, event, identity, consent, and persistence contracts.
+/packages/core/ @giftfuture
+/packages/capabilities/ @giftfuture
+/services/api/openapi.yaml @giftfuture
+/infra/postgres/migrations/ @giftfuture
+
+# External-side-effect and credential boundaries.
+/packages/providers/ @giftfuture
+/services/workers/ @giftfuture
+/services/integration-gateway/ @giftfuture
+/services/client-integration-broker/ @giftfuture
+
+# Deployment, assurance, factory, and release policy boundaries.
+/.github/workflows/ @giftfuture
+/infra/ @giftfuture
+/security/ @giftfuture
+/tools/ @giftfuture
+/skills/ @giftfuture

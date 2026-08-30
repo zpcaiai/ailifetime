@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "ltm.mobile.store-metadata.v1",
+  "version": "2.0.0",
+  "defaultLocale": "zh-Hans",
+  "locales": {
+    "zh-Hans": {
+      "name": "生命时光机",
+      "subtitle": "AI 艺术化年龄影像与家庭回忆",
+      "description": "在逐人授权和清晰 AI 标识下，创作非预测性的艺术化年龄影像，并安全管理家庭作品。",
+      "keywords": ["家庭影像", "AI艺术", "回忆", "年龄时间轴"]
+    },
+    "en-US": {
+      "name": "Life Time Machine",
+      "subtitle": "Illustrative AI family memories",
+      "description": "Create clearly labeled, non-predictive artistic age transformations with per-person consent and revocable family sharing.",
+      "keywords": ["family", "memories", "AI art", "timeline"]
+    }
+  },
+  "contentClaims": {
+    "predictsFutureAppearance": false,
+    "aiGeneratedDisclosureRequired": true,
+    "childGuardianAuthorizationRequired": true
+  },
+  "requiredEnvironment": ["MOBILE_PRIVACY_URL", "MOBILE_SUPPORT_URL", "MOBILE_REVIEW_TENANT", "MOBILE_REVIEW_ACCOUNT_RECEIPT"],
+  "externalCertification": "NOT_CERTIFIED"
+}

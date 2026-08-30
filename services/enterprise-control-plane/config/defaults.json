@@ -1,0 +1,16 @@
+{
+  "environment": "test",
+  "databasePath": ":memory:",
+  "workloadIdentity": "workload-identity://enterprise-control-plane/test",
+  "authorityCatalogReference": "file://enterprise-authorities.test.json",
+  "defaultRegion": "test-local",
+  "regions": ["test-local"],
+  "protections": {
+    "consent": true,
+    "safety": true,
+    "aiLabel": true,
+    "children": true,
+    "highImpact": true,
+    "provenance": true
+  }
+}

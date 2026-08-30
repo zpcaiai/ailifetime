@@ -113,6 +113,48 @@ async function json(response) {
   return response.json();
 }
 
+test("evidence sink preflight proves both permissions on the same authenticated service principal", async () => {
+  const authenticator = new StaticTokenAuthenticator([{
+    token: "evidence-sink-ready-token-0001",
+    actorId: "integration-gateway-ready",
+    tenantId: "tenant-a",
+    roles: ["service_account"],
+    permissions: ["evidence:register", "external-event:apply"],
+    allowedPurposes: ["external_business_event_projection"],
+  }, {
+    token: "evidence-sink-partial-token-0001",
+    actorId: "integration-gateway-partial",
+    tenantId: "tenant-a",
+    roles: ["service_account"],
+    permissions: ["evidence:register"],
+    allowedPurposes: ["external_business_event_projection"],
+  }, {
+    token: "evidence-sink-admin-token-0001",
+    actorId: "interactive-admin",
+    tenantId: "tenant-a",
+    roles: ["platform_admin"],
+    allowedPurposes: ["external_business_event_projection"],
+  }]);
+  const { baseUrl } = await fixture({ authenticator });
+  const request = (token) => fetch(`${baseUrl}/v1/integrations/evidence-sink/preflight`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+      "x-purpose": "external_business_event_projection",
+    },
+    body: "{}",
+  });
+  const ready = await request("evidence-sink-ready-token-0001");
+  assert.equal(ready.status, 200);
+  const receipt = await json(ready);
+  assert.equal(receipt.schemaVersion, "ltm.evidence-sink-preflight.v1");
+  assert.deepEqual(receipt.permissions, ["evidence:register", "external-event:apply"]);
+  assert.deepEqual(receipt.principal, { actorId: "integration-gateway-ready", tenantId: "tenant-a" });
+  assert.equal((await request("evidence-sink-partial-token-0001")).status, 403);
+  assert.equal((await request("evidence-sink-admin-token-0001")).status, 403);
+});
+
 function secureMediaProjection(assetId = "media-1", participantIds = ["consumer-1"]) {
   const sourceSha256 = "b".repeat(64);
   const canonicalSha256 = "c".repeat(64);
@@ -348,9 +390,44 @@ test("authenticated session and visible capability projection fail closed and ap
   const visibleBody = await json(visible);
   assert.equal(visibleBody.schemaVersion, "ltm.visible-capability-manifest.v1");
   assert.ok(visibleBody.count > 0 && visibleBody.count < 128);
-  assert.deepEqual(visibleBody.portals.map((portal) => portal.id), ["consumer", "family"]);
-  assert.equal(visibleBody.capabilities.every((capability) => ["consumer", "family"].includes(capability.portalId)), true);
-  assert.equal(visibleBody.capabilities.every((capability) => capability.permission === "record:create"), true);
+  assert.deepEqual(visibleBody.portals.map((portal) => portal.id), ["consumer", "family", "support"]);
+  assert.equal(visibleBody.capabilities.every((capability) => ["consumer", "family", "support"].includes(capability.portalId)), true);
+  assert.deepEqual(visibleBody.capabilities.filter((capability) => capability.portalId === "support").map((capability) => capability.batchId), ["B80"]);
+  assert.equal(visibleBody.capabilities.every((capability) => ["record:create", "support.ticket.create"].includes(capability.permission)), true);
+
+  const consumerTicketInput = {
+    ticketId: "consumer-support-ticket-1",
+    channel: "in_app",
+    severity: "P2",
+    queue: "consumer-support",
+    dueAt: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+    privacySensitive: false,
+    dedupeKey: "consumer-support-ticket-1",
+    assignedRole: "support_agent",
+  };
+  const consumerTicket = await fetch(`${baseUrl}/v1/capabilities/B80`, {
+    method: "POST",
+    headers: consumerAuthHeaders({ "idempotency-key": "consumer-support-ticket-1" }),
+    body: JSON.stringify({ input: consumerTicketInput }),
+  });
+  assert.equal(consumerTicket.status, 200);
+  assert.equal((await json(consumerTicket)).data.batchId, "B80");
+
+  const consumerPriorityEscalation = await fetch(`${baseUrl}/v1/capabilities/B80`, {
+    method: "POST",
+    headers: consumerAuthHeaders({ "idempotency-key": "consumer-support-ticket-priority-override-1" }),
+    body: JSON.stringify({ input: { ...consumerTicketInput, ticketId: "consumer-support-ticket-2", severity: "P0" } }),
+  });
+  assert.equal(consumerPriorityEscalation.status, 403);
+  assert.equal((await json(consumerPriorityEscalation)).error.code, "AUTH_FORBIDDEN");
+
+  const hiddenPartnerCapability = await fetch(`${baseUrl}/v1/capabilities/B33`, {
+    method: "POST",
+    headers: consumerAuthHeaders({ "idempotency-key": "hidden-partner-capability" }),
+    body: JSON.stringify({ input: {} }),
+  });
+  assert.equal(hiddenPartnerCapability.status, 403);
+  assert.equal((await json(hiddenPartnerCapability)).error.code, "AUTH_FORBIDDEN");
 
   const platformVisible = await fetch(`${baseUrl}/v1/capabilities/visible`, { headers: authHeaders() });
   assert.equal(platformVisible.status, 200);
@@ -359,6 +436,36 @@ test("authenticated session and visible capability projection fail closed and ap
   assert.equal(platformBody.count, 128);
   assert.equal(platformBody.portals.length, 7);
   assert.equal(new Set(platformBody.capabilities.map((capability) => capability.skill)).size, 22);
+});
+
+test("native telemetry is minimized, pseudonymized, durable, idempotent, and rejects unsafe fields", async () => {
+  const { baseUrl } = await fixture();
+  const event = {
+    eventId: "mobile-event-12345678",
+    name: "mobile.startup",
+    occurredAt: new Date().toISOString(),
+    fields: { platform: "ios", appVersion: "2.0.0", status: "ready", durationMs: 120 },
+  };
+  const send = (body, key = "mobile-telemetry-12345678") => fetch(`${baseUrl}/v1/mobile/telemetry`, {
+    method: "POST",
+    headers: consumerAuthHeaders({ "idempotency-key": key }),
+    body: JSON.stringify(body),
+  });
+  const first = await send(event);
+  assert.equal(first.status, 200);
+  const firstBody = await json(first);
+  assert.equal(firstBody.data.batchId, "B41");
+  assert.equal(firstBody.data.state, "received");
+  assert.equal(firstBody.data.replayed, false);
+  const replay = await send(event);
+  assert.equal(replay.status, 200);
+  const replayBody = await json(replay);
+  assert.equal(replayBody.data.eventId, firstBody.data.eventId);
+  assert.equal(replayBody.data.replayed, true);
+
+  const unsafe = await send({ ...event, eventId: "mobile-event-unsafe-1234", fields: { token: "Bearer secret-value" } }, "mobile-telemetry-unsafe-1234");
+  assert.equal(unsafe.status, 422);
+  assert.equal((await json(unsafe)).error.code, "VALIDATION_FAILED");
 });
 
 test("public browser OIDC configuration is closed, read-only, no-store, and CSP-bound to the trusted token origin", async () => {
@@ -884,18 +991,34 @@ test("WeChat identity and resumable upload routes bind broker work to the verifi
     }),
   });
   assert.equal(uploadCreate.status, 201);
-  assert.equal((await json(uploadCreate)).uploadId, "upload-1");
+  const uploadCreateBody = await json(uploadCreate);
+  assert.equal(uploadCreateBody.uploadId, "upload-1");
+  assert.equal(uploadCreateBody.chunkBytes, 5 * 1024 * 1024);
+  const chunkBytes = Buffer.from("abc");
   const chunk = await fetch(`${baseUrl}/v1/uploads/upload-1/chunks`, {
     method: "POST",
     headers: consumerAuthHeaders({
       "content-type": "application/octet-stream",
       "content-range": "bytes 0-2/3",
+      "x-chunk-sha256": createHash("sha256").update(chunkBytes).digest("hex"),
       "idempotency-key": "upload-1-0",
     }),
-    body: Buffer.from("abc").toString("base64"),
+    body: chunkBytes,
   });
   assert.equal(chunk.status, 200);
   assert.equal((await json(chunk)).nextOffset, 3);
+  const mismatchedChunk = await fetch(`${baseUrl}/v1/uploads/upload-1/chunks`, {
+    method: "POST",
+    headers: consumerAuthHeaders({
+      "content-type": "application/octet-stream",
+      "content-range": "bytes 0-2/3",
+      "x-chunk-sha256": "0".repeat(64),
+      "idempotency-key": "upload-1-invalid-checksum",
+    }),
+    body: chunkBytes,
+  });
+  assert.equal(mismatchedChunk.status, 422);
+  assert.equal((await json(mismatchedChunk)).error.code, "VALIDATION_FAILED");
   const complete = await fetch(`${baseUrl}/v1/uploads/upload-1/complete`, {
     method: "POST",
     headers: consumerAuthHeaders({ "idempotency-key": "upload-1-complete" }),
@@ -1624,13 +1747,31 @@ test("signed evidence registration/query works through JSON dispatch and remains
     algorithm: "Ed25519",
     keyId: "store-key-1",
   }, privateKeyPem);
-  const registered = await fetch(`${baseUrl}/v1/commands`, {
+  const registrationRequest = () => fetch(`${baseUrl}/v1/commands`, {
     method: "POST",
     headers: authHeaders({ "idempotency-key": "http-register-evidence-1" }),
     body: JSON.stringify({ command: "evidence.register", input: { evidence } }),
   });
-  assert.equal(registered.status, 200);
-  assert.equal((await json(registered)).data.value.environment, "staging");
+  const registrations = await Promise.all([registrationRequest(), registrationRequest()]);
+  assert.deepEqual(registrations.map((response) => response.status), [200, 200]);
+  const registrationBodies = await Promise.all(registrations.map(json));
+  assert.deepEqual(registrationBodies.map((body) => body.data.replayed).sort(), [false, true]);
+  assert.equal(registrationBodies[0].data.value.environment, "staging");
+
+  const changedEvidence = signExternalEvidence({
+    ...evidence,
+    evidenceId: "http-evidence-changed-body",
+    artifactSha256: "b".repeat(64),
+    nonce: "http-evidence-changed-body-nonce",
+    signature: undefined,
+  }, privateKeyPem);
+  const changed = await fetch(`${baseUrl}/v1/commands`, {
+    method: "POST",
+    headers: authHeaders({ "idempotency-key": "http-register-evidence-1" }),
+    body: JSON.stringify({ command: "evidence.register", input: { evidence: changedEvidence } }),
+  });
+  assert.equal(changed.status, 409);
+  assert.equal((await json(changed)).error.code, "IDEMPOTENCY_CONFLICT");
 
   const queried = await fetch(`${baseUrl}/v1/queries`, {
     method: "POST",
@@ -1985,6 +2126,168 @@ test("service-only external-event.apply resolves the compiled reducer and expose
   const command = (await json(queried)).data;
   assert.equal(command.state, "requested");
   assert.equal(command.reconciliationState, "clear");
+});
+
+test("HTTP external-event.apply atomically reconciles a frozen command while direct transition stays closed", async () => {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const authenticator = new StaticTokenAuthenticator([{
+    token: "reconciliation-service-token-0001",
+    actorId: "integration-gateway",
+    tenantId: "tenant-a",
+    roles: ["service_account"],
+    permissions: ["external-event:apply", "external-command:transition", "external-command:read"],
+    allowedPurposes: ["product_operation"],
+  }]);
+  const { baseUrl, runtime } = await fixture({
+    authenticator,
+    runtimeOptions: {
+      evidencePolicy: "development",
+      evidenceEnvironment: "sandbox",
+      trustedEvidenceKeys: [{
+        issuer: "vendor-gateway",
+        provider: "vendor:vendor-http-1",
+        keyId: "vendor-http-key-1",
+        algorithm: "Ed25519",
+        publicKeyPem: publicKey.export({ type: "spki", format: "pem" }).toString(),
+        allowedScopes: ["B98:*"],
+        allowedEnvironments: ["sandbox"],
+      }],
+    },
+  });
+  const service = {
+    actorId: "integration-gateway",
+    tenantId: "tenant-a",
+    roles: ["platform_admin", "service_account"],
+    purpose: "product_operation",
+    requestId: "http-reconciliation-setup",
+  };
+  runtime.createExternalCommand(service, {
+    record: {
+      id: "vendor-http-command-1",
+      collection: "supply.vendor-production-commands",
+      data: {
+        operationMode: "external-command",
+        batchId: "B98",
+        operation: "createVendorProductionJob",
+        vendorId: "vendor-http-1",
+      },
+    },
+    commandId: "vendor-http-command-1",
+    batchId: "B98",
+    operation: "createVendorProductionJob",
+    idempotencyKey: "create-http-reconciliation-command",
+  });
+  runtime.transitionExternalCommand(service, {
+    commandId: "vendor-http-command-1",
+    batchId: "B98",
+    operation: "createVendorProductionJob",
+    aggregateCollection: "supply.vendor-production-commands",
+    aggregateId: "vendor-http-command-1",
+    toState: "dispatched",
+    providerOperationId: "vendor-http-operation-1",
+    idempotencyKey: "dispatch-http-reconciliation-command",
+  });
+  const requestEvent = runtime.listOutbox(service, { limit: 200 }).find((event) =>
+    event.eventType === "external_command.requested" && event.aggregateId === "vendor-http-command-1");
+  assert.notEqual(requestEvent, undefined);
+  for (let attempt = 1; attempt <= 10; attempt += 1) {
+    const claimed = runtime.claimOutbox(service, "http-reconciliation-worker", 200, 30_000);
+    for (const event of claimed) {
+      if (event.id !== requestEvent.id) {
+        runtime.markOutboxPublished(service, event.id, "http-reconciliation-worker");
+      } else if (attempt < 10) {
+        runtime.markOutboxFailed(service, event.id, "http-reconciliation-worker", "provider result unknown", {
+          retryAt: new Date(Date.now() - 10_000).toISOString(),
+        });
+      }
+    }
+    if (attempt === 10) {
+      runtime.deadLetterExternalCommand(service, {
+        eventId: requestEvent.id,
+        workerId: "http-reconciliation-worker",
+        error: "provider result unknown after ten attempts",
+      });
+    }
+  }
+  const headers = {
+    authorization: "Bearer reconciliation-service-token-0001",
+    "content-type": "application/json",
+    "x-purpose": "product_operation",
+  };
+  const direct = await fetch(`${baseUrl}/v1/commands`, {
+    method: "POST",
+    headers: { ...headers, "idempotency-key": "direct-http-frozen-transition" },
+    body: JSON.stringify({
+      command: "external-command.transition",
+      input: {
+        commandId: "vendor-http-command-1",
+        batchId: "B98",
+        operation: "createVendorProductionJob",
+        aggregateCollection: "supply.vendor-production-commands",
+        aggregateId: "vendor-http-command-1",
+        toState: "acknowledged",
+      },
+    }),
+  });
+  assert.equal(direct.status, 409);
+  assert.equal((await json(direct)).error.code, "EVIDENCE_REVOKED");
+
+  const claims = { providerOperationId: "vendor-http-operation-1", vendorId: "vendor-http-1" };
+  const canonicalClaimsSha256 = canonicalBusinessClaimsSha256(claims);
+  const unsignedEvent = {
+    version: "ltm.external-business-event.v1",
+    eventId: "vendor-http-terminal-event-1",
+    tenantId: "tenant-a",
+    batchId: "B98",
+    operation: "createVendorProductionJob",
+    provider: "vendor:vendor-http-1",
+    subjectType: "vendor-job",
+    subjectId: "vendor-http-command-1",
+    eventType: "external-command.failed",
+    providerOccurredAt: new Date(Date.now() - 1_000).toISOString(),
+    sequence: 1,
+    correlationId: "vendor-http-command-1",
+    artifactSha256: "8".repeat(64),
+    evidenceId: "vendor-http-terminal-evidence-1",
+    evidenceScope: "B98:vendor-job:vendor-http-command-1",
+    canonicalClaims: claims,
+    canonicalClaimsSha256,
+  };
+  const event = { ...unsignedEvent, businessEventSha256: canonicalBusinessEventSha256(unsignedEvent) };
+  const evidence = signExternalEvidence({
+    version: "ltm.external-evidence.v1",
+    evidenceId: event.evidenceId,
+    tenantId: event.tenantId,
+    issuer: "vendor-gateway",
+    provider: event.provider,
+    environment: "sandbox",
+    scope: event.evidenceScope,
+    artifactSha256: event.artifactSha256,
+    canonicalClaimsSha256,
+    businessEventSha256: event.businessEventSha256,
+    issuedAt: new Date(Date.now() - 5_000).toISOString(),
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    nonce: "vendor-http-terminal-nonce-0001",
+    replayPolicy: "single_use",
+    algorithm: "Ed25519",
+    keyId: "vendor-http-key-1",
+  }, privateKeyPem);
+  const applied = await fetch(`${baseUrl}/v1/commands`, {
+    method: "POST",
+    headers: { ...headers, "idempotency-key": "http-terminal-reconciliation-apply" },
+    body: JSON.stringify({ command: "external-event.apply", input: { event, evidence } }),
+  });
+  assert.equal(applied.status, 200);
+  const result = (await json(applied)).data.value;
+  assert.equal(result.command.state, "failed");
+  assert.equal(result.command.decisionState, "active");
+  assert.equal(result.command.reconciliationState, "clear");
+  assert.equal(result.command.details.originalFreezeReason, "outbox_dead_letter");
+  assert.equal(result.command.details.reconciliationEventId, event.eventId);
+  assert.equal(result.command.details.reconciliationEvidenceId, evidence.evidenceId);
+  assert.equal(result.aggregate.data._externalDecisionState, "active");
+  assert.equal(result.aggregate.data._externalReconciliationState, "clear");
 });
 
 test("metrics can be digest protected and unexpected errors never leak secret text to logs", async () => {

@@ -1,6 +1,7 @@
 import { MobileApplicationError, MobileHttpApiError } from "./application.js";
 
 export * from "./application.js";
+export * from "./production.js";
 
 export interface CapabilityExecutor {
   execute<T>(batchId: string, payload: Record<string, unknown>, idempotencyKey: string): Promise<T>;

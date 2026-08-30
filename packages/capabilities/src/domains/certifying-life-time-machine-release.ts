@@ -124,6 +124,7 @@ const definitions: readonly DomainCapabilityDefinition[] = [
     collection: "certification.business-loop-runs",
     recordIdField: "certificationRunId",
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "certificationArtifactSha256",
   }),
   defineCapability("B49", SKILL, "submitReleaseEvidence", submitReleaseEvidence, {
     permission: "certification.release.submit",
@@ -133,6 +134,7 @@ const definitions: readonly DomainCapabilityDefinition[] = [
     collection: "certification.release-evidence",
     recordIdField: "releaseId",
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "releaseArtifactSha256",
   }),
 ];
 

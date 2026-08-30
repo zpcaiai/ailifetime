@@ -19,8 +19,8 @@
     "repositoryCommit": { "type": "string", "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$" },
     "componentSetSha256": { "$ref": "#/$defs/sha256" },
     "guardrailPolicySha256": { "$ref": "#/$defs/sha256" },
-    "wave": { "enum": ["internal", "pilot", "consumer_canary", "partner", "regional"] },
-    "rolloutPercent": { "type": "integer", "minimum": 1, "maximum": 99 },
+    "wave": { "enum": ["internal", "pilot", "consumer_canary", "partner", "regional", "global"] },
+    "rolloutPercent": { "type": "integer", "minimum": 1, "maximum": 100 },
     "monitoringWindow": {
       "type": "object",
       "additionalProperties": false,
@@ -103,6 +103,13 @@
     },
     "producer": { "$ref": "#/$defs/producer" }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "wave": { "const": "global" } }, "required": ["wave"] },
+      "then": { "properties": { "rolloutPercent": { "const": 100 } } },
+      "else": { "properties": { "rolloutPercent": { "maximum": 99 } } }
+    }
+  ],
   "$defs": {
     "identifier": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
     "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
@@ -135,5 +142,5 @@
       }
     }
   },
-  "$comment": "Each raw query/result and pause command/receipt reference includes a separate digest-addressed control-artifact attestation. The executable B127 validator additionally verifies its closed production Ed25519 producer contract and enforces exact domain signal/unit mappings, thresholds, raw-result digests, release bindings, time bounds, signer independence, single-use attestation identity, and measurementSetSha256."
+  "$comment": "Each raw query/result and pause command/receipt reference includes a separate digest-addressed control-artifact attestation. The executable B127 validator additionally verifies its closed production Ed25519 producer contract and enforces exact domain signal/unit mappings, thresholds, raw-result digests, release bindings, time bounds, signer independence, single-use attestation identity, and measurementSetSha256. Global is valid only at 100 percent and is validated as a separate post-go-live artifact after the frozen pre-release manifest."
 }

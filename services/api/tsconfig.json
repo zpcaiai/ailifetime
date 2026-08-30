@@ -15,6 +15,11 @@
   "include": ["src/**/*.ts"],
   "references": [
     { "path": "../../packages/core" },
-    { "path": "../../packages/capabilities" }
+    { "path": "../../packages/capabilities" },
+    { "path": "../commerce-platform" },
+    { "path": "../data-intelligence" },
+    { "path": "../growth-operations-platform" },
+    { "path": "../orchestration-platform" },
+    { "path": "../partner-channel-platform" }
   ]
 }

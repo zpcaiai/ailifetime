@@ -176,11 +176,25 @@ export async function dispatchCapability(
   batchIdValue: unknown,
   inputValue: unknown,
   idempotencyKey: string,
+  serverAuthorization: "portal-manifest" | "b05-data-erasure" = "portal-manifest",
 ): Promise<CapabilityJsonValue> {
   const batchId = normalizeCapabilityBatchId(batchIdValue);
   const definition = registry.get(batchId);
   if (definition === undefined) {
     throw new DomainError("RESOURCE_NOT_FOUND", "Capability was not found", { details: { batchId } });
+  }
+  const portal = capabilityPortalForSkill(definition.skill);
+  if (portal === undefined) {
+    throw new DomainError("INTERNAL_ERROR", "Capability skill is missing from the portal manifest", {
+      details: { batchId: definition.batchId, skill: definition.skill },
+    });
+  }
+  const serverAuthorizedErasure = batchId === "B05" && serverAuthorization === "b05-data-erasure";
+  if ((!roleCanAccessCapabilityPortal(context.roles, portal) && !serverAuthorizedErasure) ||
+      !hasPermission(context, definition.permission)) {
+    throw new DomainError("AUTH_FORBIDDEN", "Capability is outside the authenticated portal and permission boundary", {
+      details: { batchId: definition.batchId, portalId: portal.id },
+    });
   }
   const input = jsonObject(inputValue ?? {}, "input") as Record<string, CapabilityJsonValue>;
   return registry.execute(runtime, batchId, { actor: context, idempotencyKey, input });

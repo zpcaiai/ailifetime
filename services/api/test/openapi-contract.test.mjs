@@ -79,8 +79,16 @@ test("OpenAPI publishes WeChat identity and bounded resumable upload contracts",
   assert.match(specification, /WechatSessionRequest:[\s\S]*?additionalProperties: false/);
   assert.match(specification, /UploadCreateRequest:[\s\S]*?maximum: 26214400/);
   assert.match(specification, /UploadDigest:[\s\S]*?pattern: '\^\[a-f0-9\]\{64\}\$'[\s\S]*?const: sha256/);
+  assert.match(specification, /appendResumableUploadChunk[\s\S]*?name: Content-Range[\s\S]*?name: X-Chunk-Sha256[\s\S]*?format: binary[\s\S]*?maxLength: 5242880/);
+  assert.match(specification, /UploadSession:[\s\S]*?required: \[uploadId, nextOffset, chunkBytes, expiresAt\][\s\S]*?const: 5242880/);
   assert.match(specification, /ClientSession:[\s\S]*?accessToken:[\s\S]*?readOnly: true/);
   assert.doesNotMatch(specification, /ClientSession:[\s\S]*?accessToken:[\s\S]*?writeOnly: true/);
+});
+
+test("OpenAPI publishes the minimized authenticated native telemetry contract", () => {
+  assert.match(specification, /\/v1\/mobile\/telemetry:[\s\S]*?operationId: ingestMinimizedNativeMobileTelemetry/);
+  assert.match(specification, /MobileTelemetryEvent:[\s\S]*?additionalProperties: false[\s\S]*?required: \[eventId, name, occurredAt, fields\]/);
+  assert.match(specification, /MobileTelemetryEvent:[\s\S]*?fields:[\s\S]*?additionalProperties: false[\s\S]*?durationMs/);
 });
 
 test("OpenAPI publishes the closed server-policy B05 deletion and per-target receipt contracts", () => {

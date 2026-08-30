@@ -22,10 +22,15 @@ test("registry exactly covers the full-commercial B00 through B127 manifest", ()
     assert.equal(definition.skill, manifest.skill, `${definition.batchId} skill mismatch`);
     assert.deepEqual([...definition.requirements], manifest.requirement_ids, `${definition.batchId} requirement mismatch`);
     assert.match(definition.operation, /^[a-z][A-Za-z0-9]+$/);
+    assert.match(definition.validatorId, /^[a-z][A-Za-z0-9]+$/);
+    assert.ok(["capability", "signed-external-event"].includes(definition.executionPath));
     assert.match(definition.permission, /^(?:\*|[a-z][a-z0-9._:-]*\*?)$/);
     assert.notEqual(capabilityPortalForSkill(definition.skill), undefined, `${definition.batchId} portal mismatch`);
   }
   assert.equal(new Set(definitions.map((item) => item.skill)).size, 22);
+  assert.equal(new Set(definitions.map((item) => item.operation)).size, 128);
+  assert.equal(new Set(definitions.map((item) => item.validatorId)).size, 128);
+  assert.equal(new Set(definitions.flatMap((item) => item.requirements)).size, 640);
 });
 
 test("server portal manifest covers all 22 domains exactly once", () => {
@@ -45,8 +50,19 @@ test("production launch capabilities retain explicit external evidence gates", (
 
 test("platform bootstrap controls use dedicated permissions", () => {
   const registry = createCapabilityRegistry();
+  assert.equal(registry.get("B00")?.permission, "platform.baseline.record");
   assert.equal(registry.get("B01")?.permission, "platform.architecture.manage");
   assert.equal(registry.get("B02")?.permission, "platform.contract.publish");
+});
+
+test("provider facts expose only the signed external-event execution path", () => {
+  const definitions = createCapabilityRegistry().list();
+  assert.deepEqual(definitions.filter((item) => item.executionPath === "signed-external-event").map((item) => item.batchId), [
+    "B66", "B71", "B99", "B100", "B102",
+  ]);
+  for (const definition of definitions.filter((item) => item.executionPath === "signed-external-event")) {
+    assert.equal(definition.requiresExternalEvidence, true);
+  }
 });
 
 test("all capability execution modes and external gates remain explicit", () => {

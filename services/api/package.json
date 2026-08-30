@@ -27,11 +27,18 @@
   },
   "dependencies": {
     "@ltm/capabilities": "workspace:*",
+    "@ltm/commerce-platform": "workspace:*",
     "@ltm/core": "workspace:*",
-    "jose": "6.2.9"
+    "@ltm/data-intelligence": "workspace:*",
+    "@ltm/growth-operations-platform": "workspace:*",
+    "@ltm/orchestration-platform": "workspace:*",
+    "@ltm/partner-channel-platform": "workspace:*",
+    "jose": "6.2.9",
+    "pg": "8.16.3"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
+    "@types/pg": "8.15.5",
     "tsx": "^4.20.0",
     "typescript": "^5.8.3"
   }

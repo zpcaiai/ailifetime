@@ -1,13 +1,12 @@
-import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
+import { createPublicKey } from "node:crypto";
 import { isAbsolute, resolve } from "node:path";
-import { DomainError, verifyConsentPolicyCatalog } from "@ltm/core";
+import { DomainError, loadConsentPolicyRuntimeOptions } from "@ltm/core";
 import type {
   EvidenceEnvironment,
   PostgresRuntimeOptions,
   Role,
   RuntimeOptions,
   TrustedEvidenceKey,
-  TrustedConsentPolicyKey,
 } from "@ltm/core";
 import { StaticTokenAuthenticator, type RequestAuthenticator } from "./auth.js";
 import { OidcAuthenticator, type OidcAlgorithm } from "./oidc-auth.js";
@@ -16,6 +15,7 @@ import {
   HttpWechatIdentityBroker,
   type ClientIntegrationPorts,
 } from "./client-integrations.js";
+import { HttpWechatPlatformBroker } from "./wechat-platform.js";
 import { configuredBrowserOidc, type BrowserOidcPublicConfiguration } from "./browser-oidc.js";
 
 export type AppEnvironment = "local" | "development" | "test" | "staging" | "production";
@@ -52,6 +52,16 @@ const FORBIDDEN_VERIFIER_SECRETS = [
   "LTM_EVIDENCE_PRIVATE_KEY_BASE64",
   "LTM_SIGNING_PRIVATE_KEY",
 ] as const;
+
+export const B127_PRODUCTION_RELEASE_AUTHORITY_ROLE = "b127-production-release-authority";
+
+type ConfiguredTrustedEvidenceKey = TrustedEvidenceKey & {
+  readonly authorityRoles?: readonly string[];
+};
+
+const AUTHORITY_ROLE = /^[a-z][a-z0-9-]{0,127}$/;
+const EXACT_EXTERNAL_EVIDENCE_SCOPE = /^ltm-evidence:v1:[a-f0-9]{64}$/;
+const GENERAL_GATEWAY_AUTHORITY_IDENTITY = /(?:^|[:._-])(?:integration[-_]?gateway|direct[-_]?evidence|supply[-_]?event|callback)(?:$|[:._-])/i;
 
 export function loadApiConfiguration(
   environment: NodeJS.ProcessEnv,
@@ -122,7 +132,10 @@ export function loadApiConfiguration(
       "LTM_DATABASE_PATH is incompatible with the distributed PostgreSQL profile",
     );
   }
-  const trustedEvidenceKeys = parseTrustedEvidenceKeys(environment.LTM_EVIDENCE_TRUST_KEYS_JSON);
+  const trustedEvidenceKeys = parseTrustedEvidenceKeys(
+    environment.LTM_EVIDENCE_TRUST_KEYS_JSON,
+    appEnvironment,
+  );
   if (appEnvironment === "production" && trustedEvidenceKeys.length === 0) {
     throw new DomainError("CONFIGURATION_INVALID", "Production requires LTM_EVIDENCE_TRUST_KEYS_JSON");
   }
@@ -143,7 +156,12 @@ export function loadApiConfiguration(
     throw new DomainError("CONFIGURATION_INVALID", "LTM_SANDBOX_STEP_UP_HEADER must be true or false");
   }
   const clientIntegrations = configuredClientIntegrations(environment, appEnvironment);
-  const consentPolicyOptions = configuredConsentPolicy(environment, appEnvironment, productRoot);
+  const consentPolicyOptions = loadConsentPolicyRuntimeOptions({
+    environment,
+    applicationEnvironment: appEnvironment,
+    evidenceEnvironment: EVIDENCE_ENVIRONMENT[appEnvironment],
+    productRoot,
+  });
   const browserOidcConfiguration = configuredBrowserOidc(
     environment,
     appEnvironment,
@@ -195,6 +213,9 @@ function configuredClientIntegrations(
 ): ClientIntegrationPorts {
   const wechatUrl = environment.LTM_WECHAT_IDENTITY_BROKER_URL?.trim();
   const wechatTokenFile = environment.LTM_WECHAT_IDENTITY_TOKEN_FILE?.trim();
+  const wechatPlatformUrl = environment.LTM_WECHAT_PLATFORM_BROKER_URL?.trim() || undefined;
+  const wechatPlatformTokenFile = environment.LTM_WECHAT_PLATFORM_BROKER_TOKEN_FILE?.trim() || undefined;
+  const customerServiceOriginsValue = environment.LTM_WECHAT_CUSTOMER_SERVICE_ALLOWED_ORIGINS?.trim() || undefined;
   const uploadUrl = environment.LTM_UPLOAD_BROKER_URL?.trim();
   const uploadTokenFile = environment.LTM_UPLOAD_BROKER_TOKEN_FILE?.trim();
   if ((wechatUrl === undefined) !== (wechatTokenFile === undefined)) {
@@ -203,10 +224,18 @@ function configuredClientIntegrations(
   if ((uploadUrl === undefined) !== (uploadTokenFile === undefined)) {
     throw new DomainError("CONFIGURATION_INVALID", "Upload broker URL and workload token file must be configured together");
   }
-  if (appEnvironment === "production" && (wechatUrl === undefined || uploadUrl === undefined)) {
+  if ((wechatPlatformUrl === undefined) !== (wechatPlatformTokenFile === undefined) ||
+      (wechatPlatformUrl === undefined) !== (customerServiceOriginsValue === undefined)) {
     throw new DomainError(
       "CONFIGURATION_INVALID",
-      "Full-commercial production requires the WeChat identity and resumable upload brokers",
+      "WeChat platform broker URL, workload token file, and customer-service allowed origins must be configured together",
+    );
+  }
+  if (appEnvironment === "production" &&
+      (wechatUrl === undefined || wechatPlatformUrl === undefined || uploadUrl === undefined)) {
+    throw new DomainError(
+      "CONFIGURATION_INVALID",
+      "Full-commercial production requires the WeChat identity, WeChat platform, and resumable upload brokers",
     );
   }
   const allowInsecureLoopback = appEnvironment !== "production";
@@ -215,6 +244,17 @@ function configuredClientIntegrations(
       wechatIdentity: new HttpWechatIdentityBroker({
         baseUrl: wechatUrl,
         workloadTokenFile: wechatTokenFile,
+        allowInsecureLoopback,
+      }),
+    }),
+    ...(wechatPlatformUrl === undefined || wechatPlatformTokenFile === undefined || customerServiceOriginsValue === undefined ? {} : {
+      wechatPlatform: new HttpWechatPlatformBroker({
+        baseUrl: wechatPlatformUrl,
+        workloadTokenFile: wechatPlatformTokenFile,
+        customerServiceAllowedOrigins: commaList(
+          customerServiceOriginsValue,
+          "LTM_WECHAT_CUSTOMER_SERVICE_ALLOWED_ORIGINS",
+        ),
         allowInsecureLoopback,
       }),
     }),
@@ -306,61 +346,6 @@ function postgresRuntimeOptions(
   };
 }
 
-function configuredConsentPolicy(
-  environment: NodeJS.ProcessEnv,
-  appEnvironment: AppEnvironment,
-  productRoot: string,
-): Pick<RuntimeOptions,
-  "consentPolicyCatalog" | "trustedConsentPolicyKeys" | "consentPolicyJurisdiction" |
-  "consentPolicyLocale" | "allowLegacyConsentPolicy"> {
-  const catalogFile = environment.LTM_CONSENT_POLICY_CATALOG_FILE?.trim();
-  const trustJson = environment.LTM_CONSENT_POLICY_TRUST_KEYS_JSON?.trim();
-  const jurisdiction = environment.LTM_CONSENT_POLICY_JURISDICTION?.trim();
-  const locale = environment.LTM_CONSENT_POLICY_LOCALE?.trim();
-  const legacyValue = environment.LTM_ALLOW_LEGACY_CONSENT_POLICY;
-  if (legacyValue !== undefined && legacyValue !== "true" && legacyValue !== "false") {
-    throw new DomainError("CONFIGURATION_INVALID", "LTM_ALLOW_LEGACY_CONSENT_POLICY must be true or false");
-  }
-  const allowLegacyConsentPolicy = legacyValue === "true";
-  if (allowLegacyConsentPolicy && appEnvironment === "production") {
-    throw new DomainError("CONFIGURATION_INVALID", "Legacy consent policy mode is forbidden in production");
-  }
-  const supplied = [catalogFile, trustJson, jurisdiction, locale].filter((value) => value !== undefined).length;
-  if (supplied !== 0 && supplied !== 4) {
-    throw new DomainError(
-      "CONFIGURATION_INVALID",
-      "Consent policy catalog file, trust keys JSON, jurisdiction, and locale must be configured together",
-    );
-  }
-  if (supplied === 0) {
-    if (appEnvironment === "production") {
-      throw new DomainError(
-        "CONFIGURATION_INVALID",
-        "Production requires LTM_CONSENT_POLICY_CATALOG_FILE, trust keys, jurisdiction, and locale",
-      );
-    }
-    return allowLegacyConsentPolicy ? { allowLegacyConsentPolicy: true } : {};
-  }
-  if (allowLegacyConsentPolicy) {
-    throw new DomainError("CONFIGURATION_INVALID", "Legacy consent policy mode cannot accompany a signed catalog");
-  }
-  const path = resolveProductPath(catalogFile!, productRoot);
-  const catalogValue = readBoundedJsonFile(path, "LTM_CONSENT_POLICY_CATALOG_FILE", 2 * 1_024 * 1_024);
-  const trustedConsentPolicyKeys = parseTrustedConsentPolicyKeys(trustJson);
-  const verified = verifyConsentPolicyCatalog(
-    catalogValue,
-    trustedConsentPolicyKeys,
-    EVIDENCE_ENVIRONMENT[appEnvironment],
-    new Date().toISOString(),
-  );
-  return {
-    consentPolicyCatalog: verified.document,
-    trustedConsentPolicyKeys,
-    consentPolicyJurisdiction: visibleValue(jurisdiction!, "LTM_CONSENT_POLICY_JURISDICTION", 32),
-    consentPolicyLocale: visibleValue(locale!, "LTM_CONSENT_POLICY_LOCALE", 16),
-  };
-}
-
 function configuredAuthenticator(
   authMode: ApiConfiguration["authMode"],
   appEnvironment: AppEnvironment,
@@ -438,7 +423,10 @@ function commaEnumList<T extends string>(value: string, label: string, allowed: 
   return items as T[];
 }
 
-function parseTrustedEvidenceKeys(serialized: string | undefined): readonly TrustedEvidenceKey[] {
+function parseTrustedEvidenceKeys(
+  serialized: string | undefined,
+  appEnvironment: AppEnvironment,
+): readonly ConfiguredTrustedEvidenceKey[] {
   if (serialized === undefined || serialized.trim().length === 0) return [];
   let parsed: unknown;
   try {
@@ -449,14 +437,14 @@ function parseTrustedEvidenceKeys(serialized: string | undefined): readonly Trus
   if (!Array.isArray(parsed) || parsed.length > 100) {
     throw new DomainError("CONFIGURATION_INVALID", "LTM_EVIDENCE_TRUST_KEYS_JSON must be an array of at most 100 keys");
   }
-  return parsed.map((value) => {
+  const parsedKeys = parsed.map((value) => {
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
       throw new DomainError("CONFIGURATION_INVALID", "Each trusted evidence key must be an object");
     }
     const record = value as Record<string, unknown>;
     const allowedFields = new Set([
       "issuer", "provider", "keyId", "algorithm", "publicKeyPem", "allowedScopes",
-      "allowedEnvironments", "notBefore", "notAfter",
+      "allowedEnvironments", "authorityRoles", "notBefore", "notAfter",
     ]);
     if (Object.keys(record).some((field) => !allowedFields.has(field))) {
       throw new DomainError("CONFIGURATION_INVALID", "Trusted evidence key contains an unsupported field");
@@ -467,84 +455,82 @@ function parseTrustedEvidenceKeys(serialized: string | undefined): readonly Trus
       "allowedEnvironments",
       ["test", "sandbox", "staging", "production"] as const,
     );
+    const authorityRoles = record.authorityRoles === undefined
+      ? []
+      : stringList(record.authorityRoles, "authorityRoles", 32, 128);
+    if (authorityRoles.some((role) => !AUTHORITY_ROLE.test(role))) {
+      throw new DomainError("CONFIGURATION_INVALID", "authorityRoles contains an invalid authority role");
+    }
+    const issuer = requiredString(record.issuer, "issuer", 128);
+    const provider = requiredString(record.provider, "provider", 128);
+    const keyId = requiredString(record.keyId, "keyId", 128);
+    const publicKeyPem = requiredPem(record.publicKeyPem);
+    const hasB127ReleaseAuthorityRole = authorityRoles.includes(B127_PRODUCTION_RELEASE_AUTHORITY_ROLE);
+    if (appEnvironment === "production" && allowedScopes.some((scope) => scope.includes("*"))) {
+      throw new DomainError(
+        "CONFIGURATION_INVALID",
+        "Production trusted evidence keys must use exact scopes; wildcard scopes are forbidden",
+      );
+    }
+    if (appEnvironment === "production" && hasB127ReleaseAuthorityRole && (
+      !provider.startsWith("release-control:") ||
+      GENERAL_GATEWAY_AUTHORITY_IDENTITY.test(issuer) ||
+      GENERAL_GATEWAY_AUTHORITY_IDENTITY.test(provider)
+    )) {
+      throw new DomainError(
+        "CONFIGURATION_INVALID",
+        "The reserved B127 production release role cannot be assigned to an integration-gateway, direct-evidence, supply-event, or callback identity",
+      );
+    }
+    if (appEnvironment === "production" && hasB127ReleaseAuthorityRole && (
+      allowedScopes.length !== 1 || !EXACT_EXTERNAL_EVIDENCE_SCOPE.test(allowedScopes[0] ?? "") ||
+      allowedEnvironments.length !== 1 || allowedEnvironments[0] !== "production"
+    )) {
+      throw new DomainError(
+        "CONFIGURATION_INVALID",
+        "A B127 production release authority must be bound to one exact evidence scope and production only",
+      );
+    }
     return {
-      issuer: requiredString(record.issuer, "issuer", 128),
-      provider: requiredString(record.provider, "provider", 128),
-      keyId: requiredString(record.keyId, "keyId", 128),
+      issuer,
+      provider,
+      keyId,
       algorithm: enumValue(record.algorithm, "algorithm", ["Ed25519"] as const),
-      publicKeyPem: requiredPem(record.publicKeyPem),
+      publicKeyPem,
       allowedScopes,
       allowedEnvironments,
+      ...(authorityRoles.length === 0 ? {} : { authorityRoles }),
       ...(record.notBefore === undefined ? {} : { notBefore: requiredString(record.notBefore, "notBefore", 64) }),
       ...(record.notAfter === undefined ? {} : { notAfter: requiredString(record.notAfter, "notAfter", 64) }),
+      publicKeyIdentity: ed25519PublicKeyIdentity(publicKeyPem),
+      hasB127ReleaseAuthorityRole,
     };
   });
+  const identities = new Set<string>();
+  for (const key of parsedKeys) {
+    const identity = `${key.issuer}\n${key.provider}\n${key.keyId}`;
+    if (identities.has(identity)) {
+      throw new DomainError("CONFIGURATION_INVALID", "Trusted evidence key identities must be unique");
+    }
+    identities.add(identity);
+    if (!key.hasB127ReleaseAuthorityRole) continue;
+    if (parsedKeys.some((candidate) => candidate !== key && candidate.publicKeyIdentity === key.publicKeyIdentity)) {
+      throw new DomainError(
+        "CONFIGURATION_INVALID",
+        "A B127 production release authority key must not be reused by another evidence authority",
+      );
+    }
+  }
+  return parsedKeys.map(({ publicKeyIdentity: _publicKeyIdentity, hasB127ReleaseAuthorityRole: _hasRole, ...key }) => key);
 }
 
-function parseTrustedConsentPolicyKeys(serialized: string | undefined): readonly TrustedConsentPolicyKey[] {
-  if (serialized === undefined || serialized.trim().length === 0) {
-    throw new DomainError("CONFIGURATION_INVALID", "LTM_CONSENT_POLICY_TRUST_KEYS_JSON is required");
-  }
-  let parsed: unknown;
+function ed25519PublicKeyIdentity(publicKeyPem: string): string {
   try {
-    parsed = JSON.parse(serialized) as unknown;
+    const publicKey = createPublicKey(publicKeyPem);
+    if (publicKey.asymmetricKeyType !== "ed25519") throw new Error("not Ed25519");
+    return publicKey.export({ type: "spki", format: "der" }).toString("base64");
   } catch {
-    throw new DomainError("CONFIGURATION_INVALID", "LTM_CONSENT_POLICY_TRUST_KEYS_JSON must be valid JSON");
-  }
-  if (!Array.isArray(parsed) || parsed.length < 1 || parsed.length > 100) {
-    throw new DomainError("CONFIGURATION_INVALID", "Consent policy trust must contain one to 100 keys");
-  }
-  return parsed.map((value) => {
-    if (value === null || typeof value !== "object" || Array.isArray(value)) {
-      throw new DomainError("CONFIGURATION_INVALID", "Each consent policy trust key must be an object");
-    }
-    const record = value as Record<string, unknown>;
-    const allowedFields = new Set([
-      "keyId", "issuer", "algorithm", "publicKeyPem", "allowedEnvironments", "notBefore", "notAfter", "revokedAt",
-    ]);
-    if (Object.keys(record).some((field) => !allowedFields.has(field))) {
-      throw new DomainError("CONFIGURATION_INVALID", "Consent policy trust key contains an unsupported field");
-    }
-    return {
-      keyId: requiredString(record.keyId, "consent policy keyId", 128),
-      issuer: requiredString(record.issuer, "consent policy issuer", 128),
-      algorithm: enumValue(record.algorithm, "consent policy algorithm", ["Ed25519"] as const),
-      publicKeyPem: requiredPem(record.publicKeyPem),
-      allowedEnvironments: enumList(
-        record.allowedEnvironments,
-        "consent policy allowedEnvironments",
-        ["sandbox", "staging", "production"] as const,
-      ),
-      notBefore: requiredString(record.notBefore, "consent policy notBefore", 64),
-      notAfter: requiredString(record.notAfter, "consent policy notAfter", 64),
-      ...(record.revokedAt === undefined || record.revokedAt === null
-        ? {}
-        : { revokedAt: requiredString(record.revokedAt, "consent policy revokedAt", 64) }),
-    };
-  });
-}
-
-function readBoundedJsonFile(path: string, label: string, maximumBytes: number): unknown {
-  let descriptor: number | undefined;
-  try {
-    descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-    const stat = fstatSync(descriptor);
-    if (!stat.isFile() || stat.size < 2 || stat.size > maximumBytes) {
-      throw new DomainError("CONFIGURATION_INVALID", `${label} must be a bounded regular file`);
-    }
-    const serialized = readFileSync(descriptor, { encoding: "utf8" });
-    const parsed = JSON.parse(serialized) as unknown;
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new DomainError("CONFIGURATION_INVALID", `${label} must contain a JSON object`);
-    }
-    return parsed;
-  } catch (error) {
-    if (error instanceof DomainError) throw error;
-    throw new DomainError("CONFIGURATION_INVALID", `${label} could not be read as bounded JSON`, {
-      details: { cause: error instanceof Error ? error.name : "unknown" },
-    });
-  } finally {
-    if (descriptor !== undefined) closeSync(descriptor);
+    throw new DomainError("CONFIGURATION_INVALID", "publicKeyPem must contain an Ed25519 public key");
   }
 }
 

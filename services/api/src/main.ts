@@ -8,6 +8,7 @@ import {
 } from "@ltm/core";
 import { loadApiConfiguration } from "./config.js";
 import { createApiServer, type ApiLogEntry } from "./server.js";
+import { ProductionDomainRuntime } from "./domain-runtime.js";
 
 const PRODUCT_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 
@@ -17,6 +18,7 @@ function log(entry: ApiLogEntry): void {
 }
 
 let runtimeForCleanup: LifeTimeMachineRuntimePort | undefined;
+let domainRuntimeForCleanup: ProductionDomainRuntime | undefined;
 
 async function run(): Promise<void> {
   const configuration = loadApiConfiguration(process.env, PRODUCT_ROOT);
@@ -28,6 +30,13 @@ async function run(): Promise<void> {
       )
     : new LifeTimeMachineRuntime(configuration.runtimeOptions);
   runtimeForCleanup = runtime;
+  const domainRuntime = configuration.deploymentProfile === "distributed"
+    ? new ProductionDomainRuntime(configuration.postgresRuntimeOptions?.connectionString ?? (() => { throw new Error("PostgreSQL domain connection is missing"); })(), {
+      applicationName: "ltm-api-domain-runtime",
+      ...(configuration.postgresRuntimeOptions?.poolMax === undefined ? {} : { poolMax: configuration.postgresRuntimeOptions.poolMax }),
+    })
+    : undefined;
+  domainRuntimeForCleanup = domainRuntime;
   const server = createApiServer({
     runtime,
     authenticator: configuration.authenticator,
@@ -37,6 +46,7 @@ async function run(): Promise<void> {
     allowSandboxStepUpHeader: configuration.allowSandboxStepUpHeader,
     appEnvironment: configuration.appEnvironment,
     clientIntegrations: configuration.clientIntegrations,
+    ...(domainRuntime === undefined ? {} : { domainRuntime }),
     ...(configuration.browserOidcConfiguration === undefined
       ? {}
       : { browserOidcConfiguration: configuration.browserOidcConfiguration }),
@@ -52,6 +62,7 @@ async function run(): Promise<void> {
     if (!server.listening) {
       closing = true;
       void Promise.resolve(runtime.close());
+      void domainRuntime?.close();
       process.exitCode = 1;
     }
   });
@@ -70,6 +81,7 @@ async function run(): Promise<void> {
     log({ level: "info", event: "server.stopping", requestId: signal });
     server.close((error) => {
       void Promise.resolve(runtime.close());
+      void domainRuntime?.close();
       if (error !== undefined) {
         log({ level: "error", event: "server.stop_failed", requestId: signal, error: error.name });
         process.exitCode = 1;
@@ -78,6 +90,7 @@ async function run(): Promise<void> {
     setTimeout(() => {
       server.closeAllConnections();
       void Promise.resolve(runtime.close());
+      void domainRuntime?.close();
       process.exitCode = 1;
     }, 10_000).unref();
   };
@@ -89,6 +102,7 @@ void run().catch(async (error: unknown) => {
   if (runtimeForCleanup !== undefined) {
     await Promise.resolve(runtimeForCleanup.close()).catch(() => undefined);
   }
+  if (domainRuntimeForCleanup !== undefined) await domainRuntimeForCleanup.close().catch(() => undefined);
   log({
     level: "error",
     event: "server.start_failed",

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { generateSupplyChainBundle } from "../security/supply-chain.mjs";
 import {
   CONTROL_ARTIFACT_AUTHORITY_ROLES,
-  REQUIRED_SCHEMA5_FORCE_RLS_TABLES,
+  REQUIRED_SCHEMA7_FORCE_RLS_TABLES,
   SUPPLY_CHAIN_AUTHORITY_ROLE,
   validateProductionReleaseSubject,
 } from "./production-evidence-contracts.mjs";
@@ -25,6 +25,7 @@ const DEFAULT_WAVES = Object.freeze([
   Object.freeze({ wave: "consumer_canary", rolloutPercent: 5, startedAt: "2026-08-19T22:00:00.000Z", completedAt: "2026-08-19T23:00:00.000Z" }),
   Object.freeze({ wave: "partner", rolloutPercent: 10, startedAt: "2026-08-19T23:00:00.000Z", completedAt: "2026-08-20T00:00:00.000Z" }),
   Object.freeze({ wave: "regional", rolloutPercent: 25, startedAt: "2026-08-20T00:00:00.000Z", completedAt: "2026-08-20T01:00:00.000Z" }),
+  Object.freeze({ wave: "global", rolloutPercent: 100, startedAt: "2026-08-20T11:00:00.000Z", completedAt: "2026-08-20T12:00:00.000Z" }),
 ]);
 
 export function createB127ReleaseControlFixtures({
@@ -78,6 +79,7 @@ export function createB127ReleaseControlFixtures({
   const guardrailPolicyArtifact = artifact("release/policies/rollout-guardrails.json", guardrailPolicy);
   const observationArtifacts = new Map();
   const rawObservationArtifacts = new Map();
+  const rawRollbackArtifacts = new Map();
   const controlAttestationArtifacts = new Map();
   const controlSignerTypes = ["monitoring_query", "monitoring_result", "pause_command", "pause_receipt"];
   const controlSignerProfiles = Object.fromEntries(controlSignerTypes.map((artifactType) => {
@@ -145,7 +147,7 @@ export function createB127ReleaseControlFixtures({
       attestation: attestationArtifact.reference,
     };
   };
-  const completedWaves = waves.map((wave, waveIndex) => {
+  const allCompletedWaves = waves.map((wave, waveIndex) => {
     const measurements = REQUIRED_B127_MONITORING_DOMAINS.map((domain, domainIndex) => {
       const signal = REQUIRED_B127_MONITORING_SIGNALS[domain];
       const threshold = signal.unit === "count" ? 0 : signal.unit === "minor_currency" ? 5_000 : 0.05;
@@ -427,46 +429,117 @@ export function createB127ReleaseControlFixtures({
       observationArtifact: observationArtifact.reference,
     };
   });
+  const completedWaves = allCompletedWaves.filter((wave) => wave.wave !== "global");
+  const globalWaveObservations = allCompletedWaves.filter((wave) => wave.wave === "global");
+  if (completedWaves.length !== 5 || globalWaveObservations.length !== 1) {
+    throw new Error("B127 release-control fixtures require five pre-global waves and one global wave");
+  }
+  const globalWaveObservation = globalWaveObservations[0];
   const waveObservationSetSha256 = waveObservationArtifactSetSha256(
     completedWaves.map((wave) => ({ wave: wave.wave, sha256: wave.observationArtifact.sha256 })),
   );
 
   const scopes = REQUIRED_B127_ROLLBACK_SCOPES.map((scope, scopeIndex) => {
     const baselineStateSha256 = sha256(Buffer.from(`${idPrefix}:${scope}:release-state`));
+    const targetId = `${idPrefix}-${scope}-target`;
+    const rollbackOperationId = `${idPrefix}-${scope}-rollback`;
+    const forwardOperationId = `${idPrefix}-${scope}-forward`;
     const rollbackStartedAt = new Date(Date.parse("2026-08-19T18:00:00.000Z") + scopeIndex * 5 * 60_000).toISOString();
     const rollbackCompletedAt = new Date(Date.parse(rollbackStartedAt) + 60_000).toISOString();
     const forwardStartedAt = new Date(Date.parse(rollbackCompletedAt) + 60_000).toISOString();
     const forwardCompletedAt = new Date(Date.parse(forwardStartedAt) + 60_000).toISOString();
+    const rollbackStateSha256 = sha256(Buffer.from(`${idPrefix}:${scope}:rollback-state`));
+    const rollbackEvidence = artifact(`release/rollback/${scope}/rollback-operation.json`, {
+      schemaVersion: "ltm.rollback-operation-evidence.v1",
+      evidenceId: `${idPrefix}-${scope}-rollback-evidence`,
+      exerciseId: rollbackExerciseId,
+      releaseId: launchId,
+      tenantId,
+      launchId,
+      deploymentId,
+      repositoryCommit,
+      componentSetSha256,
+      scope,
+      targetId,
+      phase: "rollback",
+      operationId: rollbackOperationId,
+      version: "1.9.0",
+      startedAt: rollbackStartedAt,
+      completedAt: rollbackCompletedAt,
+      result: "passed",
+      stateSha256: rollbackStateSha256,
+    });
+    const forwardEvidence = artifact(`release/rollback/${scope}/forward-operation.json`, {
+      schemaVersion: "ltm.rollback-operation-evidence.v1",
+      evidenceId: `${idPrefix}-${scope}-forward-evidence`,
+      exerciseId: rollbackExerciseId,
+      releaseId: launchId,
+      tenantId,
+      launchId,
+      deploymentId,
+      repositoryCommit,
+      componentSetSha256,
+      scope,
+      targetId,
+      phase: "forward",
+      operationId: forwardOperationId,
+      version: "2.0.0",
+      startedAt: forwardStartedAt,
+      completedAt: forwardCompletedAt,
+      result: "passed",
+      stateSha256: baselineStateSha256,
+    });
+    rawRollbackArtifacts.set(`${scope}:rollback`, rollbackEvidence);
+    rawRollbackArtifacts.set(`${scope}:forward`, forwardEvidence);
     return {
       scope,
-      targetId: `${idPrefix}-${scope}-target`,
+      targetId,
       fromVersion: "2.0.0",
       rollbackVersion: "1.9.0",
       forwardVersion: "2.0.0",
       baselineStateSha256,
       rollback: {
-        operationId: `${idPrefix}-${scope}-rollback`,
+        operationId: rollbackOperationId,
         startedAt: rollbackStartedAt,
         completedAt: rollbackCompletedAt,
         result: "passed",
-        stateSha256: sha256(Buffer.from(`${idPrefix}:${scope}:rollback-state`)),
-        evidenceSha256: sha256(Buffer.from(`${idPrefix}:${scope}:rollback-evidence`)),
+        stateSha256: rollbackStateSha256,
+        evidenceArtifact: rollbackEvidence.reference,
       },
       forward: {
-        operationId: `${idPrefix}-${scope}-forward`,
+        operationId: forwardOperationId,
         startedAt: forwardStartedAt,
         completedAt: forwardCompletedAt,
         result: "passed",
         stateSha256: baselineStateSha256,
-        evidenceSha256: sha256(Buffer.from(`${idPrefix}:${scope}:forward-evidence`)),
+        evidenceArtifact: forwardEvidence.reference,
       },
       verifications: REQUIRED_B127_ROLLBACK_VERIFICATIONS[scope].map((checkId) => {
         const resultSha256 = sha256(Buffer.from(`${idPrefix}:${scope}:${checkId}:expected-result`));
+        const verificationEvidence = artifact(`release/rollback/${scope}/verification-${checkId}.json`, {
+          schemaVersion: "ltm.rollback-verification-evidence.v1",
+          evidenceId: `${idPrefix}-${scope}-${checkId}-evidence`,
+          exerciseId: rollbackExerciseId,
+          releaseId: launchId,
+          tenantId,
+          launchId,
+          deploymentId,
+          repositoryCommit,
+          componentSetSha256,
+          scope,
+          targetId,
+          checkId,
+          expectedSha256: resultSha256,
+          observedSha256: resultSha256,
+          verifiedAt: new Date(Date.parse(forwardCompletedAt) + 1_000).toISOString(),
+          conclusion: "passed",
+        });
+        rawRollbackArtifacts.set(`${scope}:verification:${checkId}`, verificationEvidence);
         return {
           checkId,
           expectedSha256: resultSha256,
           observedSha256: resultSha256,
-          evidenceSha256: sha256(Buffer.from(`${idPrefix}:${scope}:${checkId}:raw-evidence`)),
+          evidenceArtifact: verificationEvidence.reference,
           conclusion: "passed",
         };
       }),
@@ -474,8 +547,8 @@ export function createB127ReleaseControlFixtures({
     };
   });
   const rollbackForwardDrill = {
-    schemaVersion: "ltm.rollback-forward-drill.v1",
-    reportId: `${idPrefix}-rollback-forward-report-v1`,
+    schemaVersion: "ltm.rollback-forward-drill.v2",
+    reportId: `${idPrefix}-rollback-forward-report-v2`,
     exerciseId: rollbackExerciseId,
     releaseId: launchId,
     tenantId,
@@ -519,9 +592,11 @@ export function createB127ReleaseControlFixtures({
   return {
     guardrailPolicyArtifact,
     completedWaves,
+    globalWaveObservation,
     waveObservationSetSha256,
     observationArtifacts,
     rawObservationArtifacts,
+    rawRollbackArtifacts,
     controlAttestationArtifacts,
     controlArtifactTrustedKeys,
     rollbackForwardDrillArtifact,
@@ -600,6 +675,8 @@ export function createB127ReleaseSubjectFixture({
     ["003", "003_runtime_compatibility.sql"],
     ["004", "004_external_business_events.sql"],
     ["005", "005_participant_authority_and_processing_purpose.sql"],
+    ["006", "006_data_intelligence_durability.sql"],
+    ["007", "007_commerce_partner_growth.sql"],
   ].map(([id, path]) => {
     const bytes = Buffer.from(`BEGIN;\nSELECT '${id}'::text;\nCOMMIT;\n`);
     writeFileSync(join(migrationDirectory, path), bytes, { mode: 0o600 });
@@ -608,7 +685,7 @@ export function createB127ReleaseSubjectFixture({
   const migrationManifestBytes = Buffer.from(`${JSON.stringify({
     schemaVersion: "ltm.postgres-migration-manifest.v1",
     database: "postgresql",
-    runtimeSchemaVersion: "5",
+    runtimeSchemaVersion: "7",
     migrations: fixtureMigrations,
   }, null, 2)}\n`);
   writeFileSync(join(migrationDirectory, "manifest.json"), migrationManifestBytes, { mode: 0o600 });
@@ -634,7 +711,7 @@ export function createB127ReleaseSubjectFixture({
     "arn:aws:secretsmanager:cn-north-1:000000000000:secret:ltm/production/api",
     "arn:aws:secretsmanager:cn-north-1:000000000000:secret:ltm/production/database-url",
   ].sort();
-  const forcedRlsTables = [...REQUIRED_SCHEMA5_FORCE_RLS_TABLES];
+  const forcedRlsTables = [...REQUIRED_SCHEMA7_FORCE_RLS_TABLES];
   const consentPolicyCatalogSha256 = sha256(Buffer.from(`${idPrefix}:consent-policy-catalog:v1`));
   const mediaLifecycleCatalogSha256 = sha256(Buffer.from(`${idPrefix}:media-lifecycle-catalog:v1`));
   const mediaSafetyPolicySha256 = sha256(Buffer.from(`${idPrefix}:media-safety-policy:v1`));
@@ -696,7 +773,7 @@ export function createB127ReleaseSubjectFixture({
     accessibility,
     applications,
     penetrationTest: { targetOrigin: targetBaseUrl, reportArtifactSha256: pentestReport.reference.sha256, findingRegistrySha256: findingRegistry.reference.sha256 },
-    disasterRecovery: { deploymentId, reportArtifactSha256: drReport.reference.sha256, sourceRegion: "cn-east-1", failoverRegion: "cn-north-1", schemaVersion: "5", targetRtoSeconds: 900, targetRpoSeconds: 300 },
+    disasterRecovery: { deploymentId, reportArtifactSha256: drReport.reference.sha256, sourceRegion: "cn-east-1", failoverRegion: "cn-north-1", schemaVersion: "7", targetRtoSeconds: 900, targetRpoSeconds: 300 },
     goLive,
     supplyChain: { bundleSha256: supplyChainArtifact.reference.sha256, provenanceSha256: supplyChainBundle.attestation.claims.documents.provenance.sha256, trustKeyId: supplyChainBundle.attestation.keyId },
   });
@@ -720,7 +797,7 @@ export function createB127ReleaseSubjectFixture({
     accessibility,
     applications: Object.fromEntries(Object.entries(applications).map(([name, application]) => [name, { applicationId: application.applicationId, accountId: application.accountId }])),
     penetrationTest: { reportArtifact: pentestReport.reference, findingRegistryArtifact: findingRegistry.reference },
-    disasterRecovery: { reportArtifact: drReport.reference, sourceRegion: "cn-east-1", failoverRegion: "cn-north-1", schemaVersion: "5", targetRtoSeconds: 900, targetRpoSeconds: 300 },
+    disasterRecovery: { reportArtifact: drReport.reference, sourceRegion: "cn-east-1", failoverRegion: "cn-north-1", schemaVersion: "7", targetRtoSeconds: 900, targetRpoSeconds: 300 },
     supplyChain: { bundleArtifact: supplyChainArtifact.reference, trustedKeyId: supplyChainBundle.attestation.keyId },
   };
   return {

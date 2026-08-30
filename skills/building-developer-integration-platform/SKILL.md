@@ -66,7 +66,7 @@ When sources conflict, preserve active production compatibility, document the co
 4. Implement the smallest complete vertical slice through every affected surface.
 5. Run repository-native unit, integration, contract, E2E, negative, security/privacy, accessibility/performance, and migration checks relevant to the Batch.
 6. Capture evidence under `evidence/<batch-id>/` and produce requirement-level traceability.
-7. Run `python3 .ai-life-time-machine/skill-package/scripts/verify_release.py --repo . --batch <batch-id>`.
+7. Run `python3 skills/certifying-life-time-machine-release/scripts/verify_release.py --repo . --batch <batch-id>`.
 8. Leave a reviewable commit/PR. A prose claim such as “done” is never a state transition.
 
 ## Required completion behavior

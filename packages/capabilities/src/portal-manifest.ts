@@ -62,7 +62,7 @@ export const CAPABILITY_PORTAL_MANIFEST: readonly CapabilityPortalDefinition[] =
   },
   {
     id: "support",
-    roles: ["support_agent", "moderator", "privacy_officer", "platform_admin"],
+    roles: ["consumer", "support_agent", "moderator", "privacy_officer", "platform_admin"],
     skills: ["building-customer-support-success"],
   },
   {

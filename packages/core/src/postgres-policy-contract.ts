@@ -1,5 +1,5 @@
 /**
- * The complete tenant-owned PostgreSQL surface for runtime schema version 5.
+ * The core tenant-owned PostgreSQL surface used by the runtime policy probe.
  * Keep this closed set aligned with the checksum-bound migrations.
  */
 export const POSTGRES_TENANT_TABLES = [

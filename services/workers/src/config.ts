@@ -1,6 +1,17 @@
 import { isAbsolute, resolve } from "node:path";
-import { DomainError, type ActorContext, type PostgresRuntimeOptions } from "@ltm/core";
-import type { PartnerCommandAdapterOptions, PartnerWebhookSignatureScheme, SecretReference } from "@ltm/providers";
+import {
+  DomainError,
+  loadConsentPolicyRuntimeOptions,
+  type ActorContext,
+  type PostgresRuntimeOptions,
+  type RuntimeOptions,
+} from "@ltm/core";
+import {
+  assertProductionEndpoint,
+  type PartnerCommandAdapterOptions,
+  type PartnerWebhookSignatureScheme,
+  type SecretReference,
+} from "@ltm/providers";
 import type { WorkerOptions, WorkerRoute } from "./index.js";
 
 const EXTERNAL_COMMAND_BATCHES = [
@@ -22,6 +33,7 @@ export interface WorkerConfiguration {
   readonly appEnvironment: "development" | "staging" | "production";
   readonly deploymentProfile: "single-node" | "distributed";
   readonly databasePath: string;
+  readonly runtimeOptions: RuntimeOptions;
   readonly postgresRuntimeOptions: PostgresRuntimeOptions | undefined;
   readonly actor: ActorContext;
   readonly workerOptions: WorkerOptions;
@@ -71,9 +83,27 @@ export function loadWorkerConfiguration(environment: NodeJS.ProcessEnv, productR
     environment.LTM_OUTBOX_ROUTE_ADAPTERS_JSON,
     "LTM_OUTBOX_ROUTE_ADAPTERS_JSON",
   );
+  rejectUnknownKeys(externalCommandAdapters, EXTERNAL_COMMAND_BATCHES, "external command batches");
+  rejectUnknownKeys(routeAdapters, ROUTES, "outbox routes");
   if (appEnvironment === "production") {
     requireKeys(externalCommandAdapters, EXTERNAL_COMMAND_BATCHES, "external command batches");
     requireKeys(routeAdapters, ROUTES, "outbox routes");
+  }
+  const evidenceEnvironment = appEnvironment === "production" ? "production"
+    : appEnvironment === "staging" ? "staging"
+      : "sandbox";
+  const consentPolicyOptions = loadConsentPolicyRuntimeOptions({
+    environment,
+    applicationEnvironment: appEnvironment,
+    evidenceEnvironment,
+    productRoot,
+    defaultLegacyForDevelopment: true,
+  });
+  if (appEnvironment === "staging" && consentPolicyOptions.consentPolicyCatalog === undefined) {
+    throw new DomainError(
+      "CONFIGURATION_INVALID",
+      "staging worker requires the signed consent policy catalog, trust keys, jurisdiction, and locale",
+    );
   }
   const metricsTokenSha256 = optionalDigest(environment.LTM_METRICS_TOKEN_SHA256, "LTM_METRICS_TOKEN_SHA256");
   if (appEnvironment === "production" && metricsTokenSha256 === undefined) {
@@ -83,8 +113,14 @@ export function loadWorkerConfiguration(environment: NodeJS.ProcessEnv, productR
     appEnvironment,
     deploymentProfile,
     databasePath,
+    runtimeOptions: {
+      databasePath,
+      evidencePolicy: "disabled",
+      evidenceEnvironment,
+      ...consentPolicyOptions,
+    },
     postgresRuntimeOptions: deploymentProfile === "distributed"
-      ? postgresRuntimeOptions(environment, appEnvironment)
+      ? postgresRuntimeOptions(environment, appEnvironment, consentPolicyOptions)
       : undefined,
     actor: {
       actorId: token(environment.LTM_WORKER_ACTOR_ID ?? "ltm-production-worker", "LTM_WORKER_ACTOR_ID"),
@@ -119,6 +155,9 @@ export function loadWorkerConfiguration(environment: NodeJS.ProcessEnv, productR
 function postgresRuntimeOptions(
   environment: NodeJS.ProcessEnv,
   appEnvironment: WorkerConfiguration["appEnvironment"],
+  consentPolicyOptions: Pick<RuntimeOptions,
+    "consentPolicyCatalog" | "trustedConsentPolicyKeys" | "consentPolicyJurisdiction" |
+    "consentPolicyLocale" | "allowLegacyConsentPolicy">,
 ): PostgresRuntimeOptions {
   const connectionString = required(environment.DATABASE_URL, "DATABASE_URL");
   let url: URL;
@@ -166,6 +205,7 @@ function postgresRuntimeOptions(
     ),
     evidencePolicy: "disabled",
     evidenceEnvironment: appEnvironment === "production" ? "production" : "staging",
+    ...consentPolicyOptions,
   };
 }
 
@@ -216,8 +256,13 @@ function parseAdapters(serialized: string | undefined, label: string): Readonly<
     } catch {
       throw new DomainError("CONFIGURATION_INVALID", `${label}.${key}.endpoint must be a URL`);
     }
-    if (endpoint.protocol !== "https:" || endpoint.username !== "" || endpoint.password !== "") {
-      throw new DomainError("CONFIGURATION_INVALID", `${label}.${key}.endpoint must be credential-free HTTPS`);
+    try {
+      assertProductionEndpoint(endpoint);
+    } catch {
+      throw new DomainError("CONFIGURATION_INVALID", `${label}.${key}.endpoint must be a public credential-free HTTPS URL`);
+    }
+    if (endpoint.search !== "") {
+      throw new DomainError("CONFIGURATION_INVALID", `${label}.${key}.endpoint must not contain a query string`);
     }
     const secretReference = requiredString(
       record.signingSecretReference,
@@ -265,6 +310,18 @@ function requireKeys<T extends string>(value: Readonly<Record<string, unknown>>,
   const missing = keys.filter((key) => value[key] === undefined);
   if (missing.length > 0) {
     throw new DomainError("CONFIGURATION_INVALID", `production configuration is missing ${label}: ${missing.join(",")}`);
+  }
+}
+
+function rejectUnknownKeys<T extends string>(
+  value: Readonly<Record<string, unknown>>,
+  keys: readonly T[],
+  label: string,
+): void {
+  const allowed = new Set<string>(keys);
+  const unknown = Object.keys(value).filter((key) => !allowed.has(key));
+  if (unknown.length > 0) {
+    throw new DomainError("CONFIGURATION_INVALID", `configuration contains unknown ${label}: ${unknown.join(",")}`);
   }
 }
 

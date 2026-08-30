@@ -13,7 +13,7 @@ test("renders immutable, restricted, highly available production Kubernetes reso
   const output = temporaryOutput(context);
   const result = renderProductionManifests({ ...validOptions(), output });
   assert.equal(result.status, "PASS");
-  assert.equal(result.files.length, 11);
+  assert.equal(result.files.length, 12);
   assert.equal(result.resources, 32);
   assert.equal(result.workloadImages.length, 5);
   assert.equal(result.workloadImages.every((value) => value.includes("@sha256:")), true);
@@ -36,6 +36,28 @@ test("worker container and production probe share the configured health port", (
   assert.match(workers, /name: workload-token[\s\S]*projected:\n\s+defaultMode: 0440/);
 });
 
+test("API and worker mount the same signed consent catalog as a regular subPath file", (context) => {
+  const output = temporaryOutput(context);
+  renderProductionManifests({ ...validOptions(), output });
+  for (const name of ["api.yaml", "workers.yaml"]) {
+    const manifest = readFileSync(join(output, name), "utf8");
+    assert.match(manifest, /name: LTM_CONSENT_POLICY_TRUST_KEYS_JSON\n\s+valueFrom:\n\s+secretKeyRef:\n\s+name: ltm-production-consent-policy\n\s+key: trust-keys\.json/);
+    assert.match(manifest, /name: consent-policy\n\s+mountPath: \/var\/run\/secrets\/ltm-consent-policy\/catalog\.json\n\s+subPath: catalog\.json\n\s+readOnly: true/);
+  }
+
+  const drifted = temporaryOutput(context);
+  renderProductionManifests({ ...validOptions(), output: drifted });
+  const workersPath = join(drifted, "workers.yaml");
+  writeFileSync(
+    workersPath,
+    readFileSync(workersPath, "utf8").replace("subPath: catalog.json", "subPath: catalog-link.json"),
+  );
+  assert.throws(
+    () => validateRenderedProductionManifests(drifted),
+    (error) => error instanceof KubernetesProductionError && error.code === "KUBERNETES_CONSENT_POLICY_INVALID",
+  );
+});
+
 test("gateway projected API and workload tokens are readable only by the restricted pod group", (context) => {
   const output = temporaryOutput(context);
   renderProductionManifests({ ...validOptions(), output });
@@ -43,6 +65,47 @@ test("gateway projected API and workload tokens are readable only by the restric
   assert.match(gateway, /runAsUser: 10001[\s\S]*runAsGroup: 10001[\s\S]*fsGroup: 10001[\s\S]*fsGroupChangePolicy: OnRootMismatch/);
   assert.equal([...gateway.matchAll(/defaultMode: 0440/g)].length, 2);
   assert.doesNotMatch(gateway, /defaultMode: 0400/);
+  assert.match(
+    gateway,
+    /name: LTM_SUPPLY_EVENT_AUTHORITIES_REFERENCE\n\s+value: secret-manager:ltm\/production\/supply-event-authorities/,
+  );
+  assert.match(
+    gateway,
+    /name: LTM_DIRECT_EVIDENCE_AUTHORITIES_REFERENCE\n\s+value: secret-manager:ltm\/production\/direct-evidence-authorities/,
+  );
+  assert.match(gateway, /audience: sts\.amazonaws\.com/);
+  const policy = JSON.parse(readFileSync(join(output, "integration-gateway-readiness-iam-policy.json"), "utf8"));
+  assert.deepEqual(policy.Statement.flatMap((statement) => statement.Action).sort(), [
+    "kms:DescribeKey",
+    "kms:GenerateDataKeyWithoutPlaintext",
+    "s3:GetBucketObjectLockConfiguration",
+    "s3:GetBucketVersioning",
+    "s3:ListBucket",
+  ]);
+});
+
+test("gateway readiness IAM policy rejects a missing or broadened cloud action", (context) => {
+  const missing = temporaryOutput(context);
+  renderProductionManifests({ ...validOptions(), output: missing });
+  const missingPath = join(missing, "integration-gateway-readiness-iam-policy.json");
+  const missingPolicy = JSON.parse(readFileSync(missingPath, "utf8"));
+  missingPolicy.Statement[0].Action.pop();
+  writeFileSync(missingPath, `${JSON.stringify(missingPolicy, null, 2)}\n`);
+  assert.throws(
+    () => validateRenderedProductionManifests(missing),
+    (error) => error.code === "KUBERNETES_GATEWAY_READINESS_IAM_INVALID",
+  );
+
+  const broadened = temporaryOutput(context);
+  renderProductionManifests({ ...validOptions(), output: broadened });
+  const broadenedPath = join(broadened, "integration-gateway-readiness-iam-policy.json");
+  const broadenedPolicy = JSON.parse(readFileSync(broadenedPath, "utf8"));
+  broadenedPolicy.Statement[0].Action.push("s3:GetObject");
+  writeFileSync(broadenedPath, `${JSON.stringify(broadenedPolicy, null, 2)}\n`);
+  assert.throws(
+    () => validateRenderedProductionManifests(broadened),
+    (error) => error.code === "KUBERNETES_GATEWAY_READINESS_IAM_INVALID",
+  );
 });
 
 test("API trusts the deployed broker CA and the broker projects scanner credentials plus a merged egress CA bundle", (context) => {
@@ -258,13 +321,31 @@ test("rejects mutable/reused images and non-production endpoints", (context) => 
   );
 });
 
-test("static validation rejects a weakened read-only root filesystem", (context) => {
+test("static validation rejects weakened or comment-spoofed restricted workload controls", (context) => {
   const output = temporaryOutput(context);
   renderProductionManifests({ ...validOptions(), output });
   const path = join(output, "api.yaml");
-  writeFileSync(path, readFileSync(path, "utf8").replace("readOnlyRootFilesystem: true", "readOnlyRootFilesystem: false"));
+  writeFileSync(
+    path,
+    readFileSync(path, "utf8").replace(
+      "readOnlyRootFilesystem: true",
+      "readOnlyRootFilesystem: false\n            # readOnlyRootFilesystem: true",
+    ),
+  );
   assert.throws(
     () => validateRenderedProductionManifests(output),
+    (error) => error instanceof KubernetesProductionError && error.code === "KUBERNETES_RESTRICTED_WORKLOAD_INVALID",
+  );
+
+  const privileged = temporaryOutput(context);
+  renderProductionManifests({ ...validOptions(), output: privileged });
+  const privilegedPath = join(privileged, "migration-job.yaml");
+  writeFileSync(
+    privilegedPath,
+    readFileSync(privilegedPath, "utf8").replace("privileged: false", "privileged: true\n            # privileged: false"),
+  );
+  assert.throws(
+    () => validateRenderedProductionManifests(privileged),
     (error) => error instanceof KubernetesProductionError && error.code === "KUBERNETES_RESTRICTED_WORKLOAD_INVALID",
   );
 });

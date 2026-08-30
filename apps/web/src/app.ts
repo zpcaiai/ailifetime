@@ -1,4 +1,10 @@
 import { BrowserOidcClient, EphemeralBrowserAuthentication, type BrowserOidcConfiguration } from "./auth.js";
+import {
+  StableCapabilityIdempotency,
+  parseCapabilityInput,
+  readBoundedJsonResponse,
+  validateCapabilityExecutionResponse,
+} from "./capability-execution.js";
 import { localized, normalizeLocale, portalById, translate, type CopyKey, type PortalId, type SupportedLocale } from "./surface.js";
 
 interface Capability {
@@ -56,6 +62,7 @@ if (initialUrl.pathname === "/auth/callback" && initialUrl.search !== "") {
 }
 const authentication = new EphemeralBrowserAuthentication();
 const oidc = new BrowserOidcClient();
+const capabilityIdempotency = new StableCapabilityIdempotency();
 
 let capabilities: Capability[] = [];
 let visiblePortals: VisiblePortal[] = [];
@@ -110,6 +117,8 @@ for (const container of [list, workspaceContent]) {
   });
 }
 capabilityDialog.addEventListener("close", () => {
+  capabilityIdempotency.reset();
+  capabilityDialogContent.replaceChildren();
   const url = new URL(window.location.href);
   url.searchParams.delete("capability");
   window.history.replaceState(null, "", url);
@@ -550,12 +559,44 @@ function openCapability(batchId: string): void {
     return;
   }
   const requirements = capability.requirements.map((item) => `<li><code>${escapeHtml(item)}</code></li>`).join("");
-  capabilityDialogContent.innerHTML = `<p class="eyebrow">${escapeHtml(capability.batchId)} · ${escapeHtml(capability.skill)}</p><h2 id="capability-dialog-title">${escapeHtml(capability.operation)}</h2><p>${escapeHtml(translate(locale, "executionMode"))}：<code>${escapeHtml(capability.mode)}</code></p><p>${escapeHtml(translate(locale, "stableEndpoint"))}：<code>POST /v1/capabilities/${escapeHtml(capability.batchId)}</code></p><h3>${escapeHtml(translate(locale, "atomicRequirements"))}</h3><ul class="requirement-list">${requirements}</ul>${capability.requiresExternalEvidence ? `<p class="evidence-status"><strong>${escapeHtml(translate(locale, "externalRequired"))}</strong> ${escapeHtml(translate(locale, "externalRequiredDescription"))}</p>` : `<p>${escapeHtml(translate(locale, "protectedOperation"))}</p>`}`;
+  capabilityDialogContent.innerHTML = `<p class="eyebrow">${escapeHtml(capability.batchId)} · ${escapeHtml(capability.skill)}</p><h2 id="capability-dialog-title">${escapeHtml(capability.operation)}</h2><p>${escapeHtml(translate(locale, "executionMode"))}：<code>${escapeHtml(capability.mode)}</code></p><p>${escapeHtml(translate(locale, "stableEndpoint"))}：<code>POST /v1/capabilities/${escapeHtml(capability.batchId)}</code></p><h3>${escapeHtml(translate(locale, "atomicRequirements"))}</h3><ul class="requirement-list">${requirements}</ul>${capability.requiresExternalEvidence ? `<p class="evidence-status"><strong>${escapeHtml(translate(locale, "externalRequired"))}</strong> ${escapeHtml(translate(locale, "externalRequiredDescription"))}</p>` : `<p>${escapeHtml(translate(locale, "protectedOperation"))}</p>`}<form id="capability-execution-form" class="capability-execution-form"><label for="capability-input">JSON 请求对象</label><textarea id="capability-input" rows="10" maxlength="65536" spellcheck="false" autocomplete="off" autocapitalize="off">{}</textarea><p class="execution-help">请求仅发送到当前已登录的同源 API。幂等键在相同草稿重试时保持不变；修改草稿后自动轮换。</p><button id="capability-execute" class="primary" type="submit">执行 ${escapeHtml(capability.batchId)}</button></form><div id="capability-execution-output" class="execution-output" role="status" aria-live="polite"><strong>尚未执行</strong></div>`;
+  const executionForm = element<HTMLFormElement>("capability-execution-form");
+  executionForm.addEventListener("submit", (event) => void executeCapability(event, capability));
   const url = new URL(window.location.href);
   url.searchParams.set("capability", capability.batchId);
   url.searchParams.set("portal", capability.portalId);
   window.history.replaceState(null, "", url);
   if (!capabilityDialog.open) capabilityDialog.showModal();
+}
+
+async function executeCapability(event: SubmitEvent, capability: Capability): Promise<void> {
+  event.preventDefault();
+  if (session === undefined) {
+    showToast(translate(locale, "authRequiredDescription"));
+    return;
+  }
+  const inputElement = element<HTMLTextAreaElement>("capability-input");
+  const output = element<HTMLDivElement>("capability-execution-output");
+  const button = element<HTMLButtonElement>("capability-execute");
+  try {
+    const input = parseCapabilityInput(inputElement.value);
+    const idempotencyKey = capabilityIdempotency.forDraft(capability.batchId, inputElement.value);
+    button.disabled = true;
+    output.innerHTML = "<strong>正在执行并等待服务端最终裁决…</strong>";
+    const response = validateCapabilityExecutionResponse(capability.batchId, await api<unknown>(
+      `/v1/capabilities/${capability.batchId}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(input),
+      },
+    ));
+    output.innerHTML = `<strong>服务端已返回</strong><pre class="result-json">${escapeHtml(JSON.stringify(response, null, 2))}</pre>`;
+  } catch (error) {
+    output.innerHTML = `<strong>执行失败并保持关闭</strong><p>${escapeHtml(error instanceof Error ? error.message : String(error))}</p>`;
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function capabilityHref(batchId: string, portalId: string | undefined): string {
@@ -598,7 +639,7 @@ async function api<T>(path: string, init?: RequestInit, authenticated = true): P
     cache: "no-store",
     redirect: "error",
   });
-  const body = await response.json().catch(() => ({ error: { message: response.statusText } })) as { error?: { message?: string } };
+  const body = await readBoundedJsonResponse(response).catch(() => ({ error: { message: response.statusText } })) as { error?: { message?: string } };
   if (!response.ok) throw new Error(body.error?.message ?? `Request failed (${response.status})`);
   return body as T;
 }

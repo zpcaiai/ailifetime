@@ -564,10 +564,26 @@ test("B01 creates one stable architecture resource and rejects identity overwrit
   );
 });
 
-test("B01 and B02 reject consumer control-plane writes even with generic record permission", async (testContext) => {
+test("B00, B01 and B02 reject consumer control-plane writes even with generic record permission", async (testContext) => {
   const runtime = runtimeFor(testContext);
   const registry = createCapabilityRegistry();
   const consumer = actor({ permissions: ["record:create"] });
+  await rejectsDomainCode(
+    registry.execute(runtime, "B00", {
+      actor: consumer,
+      idempotencyKey: "consumer-repository-baseline",
+      input: {
+        repositoryId: "consumer-repository",
+        repositoryKind: "monorepo",
+        baseCommit: "abcdef1",
+        inventoryHash: "a".repeat(64),
+        inventory: { stack: "typescript" },
+        commandResults: { build: "passed" },
+        riskIds: ["risk-1"],
+      },
+    }),
+    "AUTH_FORBIDDEN",
+  );
   await rejectsDomainCode(
     registry.execute(runtime, "B01", {
       actor: consumer,
@@ -595,6 +611,71 @@ test("B01 and B02 reject consumer control-plane writes even with generic record 
       },
     }),
     "AUTH_FORBIDDEN",
+  );
+});
+
+test("B50 terminates local orchestration at factory_attested and cannot mint production certification", async (testContext) => {
+  const runtime = runtimeFor(testContext);
+  const registry = createCapabilityRegistry();
+  const platformActor = actor({
+    actorId: "platform-orchestrator",
+    roles: ["platform_admin"],
+    purpose: "platform_orchestration",
+    requestId: "b50-planned-ready",
+  });
+  const base = {
+    orchestrationId: "full-commercial-orchestration",
+    batchId: "B50",
+    branch: "feat/b50",
+    worktree: "/workspace/b50",
+    leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+    dependencyBatchIds: [],
+    verifiedDependencyIds: [],
+  };
+  const transitions = [
+    ["planned", "ready"],
+    ["ready", "running"],
+    ["running", "review"],
+    ["review", "merged"],
+    ["merged", "factory_attested"],
+  ] as const;
+  for (const [index, [fromState, toState]] of transitions.entries()) {
+    const result = objectResult(await registry.execute(runtime, "B50", {
+      actor: { ...platformActor, requestId: `b50-${index}` },
+      idempotencyKey: `b50-${index}`,
+      input: {
+        ...base,
+        fromState,
+        toState,
+        evidenceIds: ["code-evidence-1"],
+      },
+    }));
+    assert.equal(result.state, toState);
+  }
+  const record = runtime.getRecord(platformActor, "orchestration.batches", "B50");
+  assert.equal(record.data.state, "factory_attested");
+
+  await rejectsDomainCode(
+    registry.execute(runtime, "B50", {
+      actor: { ...platformActor, requestId: "b50-production-word" },
+      idempotencyKey: "b50-production-word",
+      input: { ...base, fromState: "merged", toState: "certified", evidenceIds: ["code-evidence-1"] },
+    }),
+    "VALIDATION_FAILED",
+  );
+  await rejectsDomainCode(
+    registry.execute(runtime, "B50", {
+      actor: { ...platformActor, requestId: "b50-external-evidence-injection" },
+      idempotencyKey: "b50-external-evidence-injection",
+      input: {
+        ...base,
+        fromState: "merged",
+        toState: "factory_attested",
+        evidenceIds: ["code-evidence-1"],
+        externalEvidenceIds: ["fake-production-certificate"],
+      },
+    }),
+    "VALIDATION_FAILED",
   );
 });
 
@@ -1148,31 +1229,7 @@ test("B48 persists certification only after verifying signed external evidence",
   const provider = `e2e-auditor:${auditorProviderId}` as const;
   const providerEnvironment = "staging" as const;
   const certificationArtifactSha256 = "a".repeat(64);
-  const evidenceScope = capabilityEvidenceScope({
-    tenantId: "tenant-1",
-    batchId: "B48",
-    operation: "submitBusinessLoopEvidence",
-    kind: "business-loop-certification",
-    provider,
-    artifactSha256: certificationArtifactSha256,
-    environment: providerEnvironment,
-    subjectId: certificationRunId,
-  });
-  const runtime = new LifeTimeMachineRuntime({
-    databasePath: ":memory:",
-    trustedEvidenceKeys: [{
-      issuer: "certification-auditor",
-      provider,
-      keyId: "certification-key-1",
-      algorithm: "Ed25519",
-      publicKeyPem: String(publicKey.export({ format: "pem", type: "spki" })),
-      allowedScopes: [evidenceScope],
-      allowedEnvironments: ["staging"],
-    }],
-    evidencePolicy: "development",
-    evidenceEnvironment: "staging",
-  });
-  testContext.after(() => runtime.close());
+  const evidenceIds = ["consumer", "family", "studio", "education", "abuse"].map((loop) => `business-loop-${loop}`);
   const registry = createCapabilityRegistry();
   const certificationActor = actor({
     actorId: "release-1",
@@ -1181,8 +1238,48 @@ test("B48 persists certification only after verifying signed external evidence",
     requestId: "signed-certification",
     stepUp: true,
   });
-  const evidenceIds = ["consumer", "family", "studio", "education", "abuse"].map((loop) => {
-    const evidenceId = `business-loop-${loop}`;
+  const certificationInput = {
+    certificationRunId,
+    environment: "isolated_staging",
+    loopEvidence: {
+      consumer: "passed",
+      familyGift: "passed",
+      studio: "passed",
+      educationCrm: "passed",
+      failureAbuse: "passed",
+    },
+    externalEvidenceIds: evidenceIds,
+    abuseFixturesSynthetic: true,
+    auditorProviderId,
+    providerEnvironment,
+    certificationArtifactSha256,
+  };
+  const parsed = registry.get("B48")?.parseInput({
+    actor: certificationActor,
+    idempotencyKey: "request-bound-certification",
+    input: certificationInput,
+  });
+  assert.ok(parsed);
+  const evidenceScope = parsed.evidenceScope;
+  assert.equal(typeof evidenceScope, "string");
+  const runtime = new LifeTimeMachineRuntime({
+    databasePath: ":memory:",
+    trustedEvidenceKeys: [{
+      issuer: "certification-auditor",
+      provider,
+      keyId: "certification-key-1",
+      algorithm: "Ed25519",
+      publicKeyPem: String(publicKey.export({ format: "pem", type: "spki" })),
+      allowedScopes: [evidenceScope as string],
+      allowedEnvironments: ["staging"],
+    }],
+    evidencePolicy: "development",
+    evidenceEnvironment: "staging",
+  });
+  testContext.after(() => runtime.close());
+  evidenceIds.forEach((evidenceId, index) => {
+    const loop = ["consumer", "family", "studio", "education", "abuse"][index];
+    assert.ok(loop);
     const issuedAt = new Date(Date.now() - 60_000).toISOString();
     const expiresAt = new Date(Date.now() + 3_600_000).toISOString();
     const evidence = signExternalEvidence({
@@ -1192,7 +1289,7 @@ test("B48 persists certification only after verifying signed external evidence",
       issuer: "certification-auditor",
       provider,
       environment: providerEnvironment,
-      scope: evidenceScope,
+      scope: evidenceScope as string,
       artifactSha256: certificationArtifactSha256,
       issuedAt,
       expiresAt,
@@ -1205,29 +1302,13 @@ test("B48 persists certification only after verifying signed external evidence",
       evidence,
       idempotencyKey: `register-${evidenceId}`,
     });
-    return evidenceId;
   });
 
   const result = objectResult(
     await registry.execute(runtime, "B48", {
       actor: certificationActor,
       idempotencyKey: "signed-certification-run",
-      input: {
-        certificationRunId,
-        environment: "isolated_staging",
-        loopEvidence: {
-          consumer: "passed",
-          familyGift: "passed",
-          studio: "passed",
-          educationCrm: "passed",
-          failureAbuse: "passed",
-        },
-        externalEvidenceIds: evidenceIds,
-        abuseFixturesSynthetic: true,
-        auditorProviderId,
-        providerEnvironment,
-        certificationArtifactSha256,
-      },
+      input: certificationInput,
     }),
   );
 

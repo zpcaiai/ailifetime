@@ -1,5 +1,6 @@
 const api = require("../../services/api");
 const session = require("../../services/session");
+const policy = require("../../services/policy");
 const consentPolicy = require("../../policies/age-transformation");
 
 Page({
@@ -23,6 +24,7 @@ Page({
     this.setData({ busy: true, error: "" });
     try {
       const activeSession = session.requireSession();
+      policy.requireCapabilities(["B07", "B08", "B14"], activeSession.roles);
       const grantorCapacity = participantId === activeSession.actorId ? "self" : "guardian";
       if (grantorCapacity === "guardian" && !activeSession.roles.includes("guardian")) {
         throw new Error("DURABLE_GUARDIAN_AUTHORITY_REQUIRED");

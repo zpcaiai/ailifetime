@@ -1,0 +1,14 @@
+name: ltm_data_intelligence
+version: 1.0.0
+config-version: 2
+profile: ltm_warehouse
+model-paths: ["models"]
+models:
+  ltm_data_intelligence:
+    staging:
+      +materialized: view
+    core:
+      +materialized: incremental
+      +on_schema_change: fail
+    marts:
+      +materialized: table

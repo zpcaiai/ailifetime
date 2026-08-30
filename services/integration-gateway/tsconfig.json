@@ -15,6 +15,7 @@
   "include": ["src/**/*.ts"],
   "references": [
     { "path": "../../packages/core" },
-    { "path": "../../packages/providers" }
+    { "path": "../../packages/providers" },
+    { "path": "../../packages/capabilities" }
   ]
 }

@@ -1,0 +1,30 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadEvidenceBucketDurabilityMetadata",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket",
+        "s3:GetBucketVersioning",
+        "s3:GetBucketObjectLockConfiguration"
+      ],
+      "Resource": "arn:aws:s3:::${aws:PrincipalTag/ltm-evidence-bucket}"
+    },
+    {
+      "Sid": "ProbeEvidenceKmsWithoutPlaintext",
+      "Effect": "Allow",
+      "Action": [
+        "kms:DescribeKey",
+        "kms:GenerateDataKeyWithoutPlaintext"
+      ],
+      "Resource": "arn:aws:kms:${aws:RequestedRegion}:${aws:PrincipalAccount}:key/${aws:PrincipalTag/ltm-evidence-kms-key-id}",
+      "Condition": {
+        "StringEquals": {
+          "kms:EncryptionContext:ltm:purpose": "integration-gateway-readiness",
+          "kms:EncryptionContext:ltm:tenant": "${aws:PrincipalTag/ltm-tenant}"
+        }
+      }
+    }
+  ]
+}

@@ -12,7 +12,12 @@ import {
   normalizeConsentScope,
   participantEvidenceScope,
 } from "./consent-scope.js";
-import { evidenceScopeAllowed, validateTrustedEvidenceKey, verifyExternalEvidenceSignature } from "./evidence.js";
+import {
+  assertB127ProductionReleaseAuthority,
+  evidenceScopeAllowed,
+  validateTrustedEvidenceKey,
+  verifyExternalEvidenceSignature,
+} from "./evidence.js";
 import { DomainError } from "./errors.js";
 import {
   assertExternalCommandTransition,
@@ -24,6 +29,11 @@ import {
   normalizeExternalBusinessReduction,
   normalizeTransitionExternalCommandInput,
 } from "./external-business-events.js";
+import {
+  frozenExternalCommandReconciliationBridge,
+  validateFrozenExternalCommandReconciliation,
+  type FrozenExternalCommandReconciliation,
+} from "./external-command-callbacks.js";
 import { authorize as enforceAuthorization, hasPermission, validateContext } from "./policy.js";
 import {
   RIGHTS_REQUEST_COLLECTION,
@@ -1078,6 +1088,9 @@ export class LifeTimeMachineRuntime {
     const operation = `evidence-gated.mutate:${normalized.mutation.kind}`;
     const requestFingerprint = fingerprint(operation, normalized);
     return this.#transaction(() => {
+      if (this.#evidencePolicy === "production" && actionMatch[1] === "B127") {
+        this.#assertB127ProductionReleaseEvidence(context, requirement.scope, requirement.ids);
+      }
       this.#requireExternalEvidenceInternal(context, requirement.scope, requirement.ids);
       const result = this.#idempotentValueInternal(
         context,
@@ -1398,8 +1411,21 @@ export class LifeTimeMachineRuntime {
             details: { previousState: previousState ?? "absent", nextState: reduction.nextState },
           });
         }
+        let reconciliation: FrozenExternalCommandReconciliation | null = null;
         if (current?.data._externalDecisionState === "frozen") {
-          throw new DomainError("EVIDENCE_REVOKED", "The aggregate is frozen pending reconciliation");
+          if (reduction.commandTransition === undefined) {
+            throw new DomainError(
+              "EVIDENCE_REVOKED",
+              "A frozen aggregate accepts only an exact terminal external-command reconciliation event",
+            );
+          }
+          reconciliation = validateFrozenExternalCommandReconciliation(
+            this.#requiredExternalCommand(context.tenantId, reduction.commandTransition.commandId),
+            current,
+            event,
+            evidence,
+            reduction.commandTransition.toState,
+          );
         }
         this.#assertExternalEventOrder(current, event);
         const aggregate = this.#persistExternalAggregate(context, target, reduction, current, event);
@@ -1423,7 +1449,7 @@ export class LifeTimeMachineRuntime {
                 ? {}
                 : { details: reduction.commandTransition.details }),
               idempotencyKey: `external-event:${event.provider}:${event.eventId}`,
-            });
+            }, reconciliation);
         const finalAggregate = command === null
           ? aggregate
           : this.#requiredRecord(context.tenantId, target.collection, target.aggregateId, true);
@@ -3418,6 +3444,7 @@ export class LifeTimeMachineRuntime {
       if (current.decisionState === "active" && current.reconciliationState === "clear") {
         const details = jsonObject({
           ...current.details,
+          reconciliationReason: "outbox_dead_letter",
           deadLetterEventId: eventId,
           deadLetteredAt: now,
           deliveryAttempts: event.attempts,
@@ -3729,12 +3756,16 @@ export class LifeTimeMachineRuntime {
     context: ActorContext,
     event: ApplyExternalBusinessEventInput["event"],
     input: TransitionExternalCommandInput,
+    reconciliation: FrozenExternalCommandReconciliation | null = null,
   ): ExternalCommandRecord {
     if (input.commandId !== event.subjectId || event.correlationId !== event.subjectId) {
       throw new DomainError(
         "EVENT_FINGERPRINT_CONFLICT",
         "External-command callback must bind its exact subject and correlation to the command ID",
       );
+    }
+    if (reconciliation !== null) {
+      return this.#reconcileFrozenExternalCommandFromBusinessEvent(context, event, input, reconciliation);
     }
     const current = this.#requiredExternalCommand(context.tenantId, input.commandId);
     if (input.toState === "succeeded" && current.state === "dispatched") {
@@ -3749,6 +3780,211 @@ export class LifeTimeMachineRuntime {
       }, randomUUID());
     }
     return this.#transitionExternalCommandInternal(context, input, randomUUID());
+  }
+
+  #reconcileFrozenExternalCommandFromBusinessEvent(
+    context: ActorContext,
+    event: ApplyExternalBusinessEventInput["event"],
+    input: TransitionExternalCommandInput,
+    reconciliation: FrozenExternalCommandReconciliation,
+  ): ExternalCommandRecord {
+    if (!isExternalCommandTerminal(input.toState) || input.toState !== reconciliation.terminalState ||
+        input.evidenceId !== event.evidenceId) {
+      throw new DomainError(
+        "EVIDENCE_REVOKED",
+        "Frozen external command can only reconcile through its exact terminal signed event",
+      );
+    }
+    const reconciledAt = this.#now();
+    let current = this.#requiredExternalCommand(context.tenantId, input.commandId);
+    let bridgeState = frozenExternalCommandReconciliationBridge(current.state, reconciliation.terminalState);
+    while (bridgeState !== null) {
+      this.#applyFrozenExternalCommandTransition(context, event, {
+        ...input,
+        toState: bridgeState,
+        details: {
+          ...(input.details ?? {}),
+          reconciliationSyntheticEdge: true,
+          inferredFromTerminalState: reconciliation.terminalState,
+          providerResultSha256: event.artifactSha256,
+        },
+      }, reconciliation, reconciledAt, false);
+      current = this.#requiredExternalCommand(context.tenantId, input.commandId);
+      bridgeState = frozenExternalCommandReconciliationBridge(current.state, reconciliation.terminalState);
+    }
+    assertExternalCommandTransition(current.state, input.toState);
+    return this.#applyFrozenExternalCommandTransition(context, event, input, reconciliation, reconciledAt, true);
+  }
+
+  #applyFrozenExternalCommandTransition(
+    context: ActorContext,
+    event: ApplyExternalBusinessEventInput["event"],
+    input: TransitionExternalCommandInput,
+    reconciliation: FrozenExternalCommandReconciliation,
+    reconciledAt: string,
+    completeReconciliation: boolean,
+  ): ExternalCommandRecord {
+    const current = this.#requiredExternalCommand(context.tenantId, input.commandId);
+    if (current.decisionState !== "frozen" || current.reconciliationState !== "reconciliation_required" ||
+        current.batchId !== input.batchId || current.operation !== input.operation ||
+        current.aggregateCollection !== input.aggregateCollection || current.aggregateId !== input.aggregateId) {
+      throw new DomainError("EVENT_FINGERPRINT_CONFLICT", "Frozen external command reconciliation binding changed");
+    }
+    if ((completeReconciliation && input.toState !== reconciliation.terminalState) ||
+        (!completeReconciliation && input.toState === reconciliation.terminalState)) {
+      throw new DomainError("EVIDENCE_REVOKED", "Frozen external command reconciliation transition is not terminal-safe");
+    }
+    assertExternalCommandTransition(current.state, input.toState);
+    const requestedProviderOperationId = input.providerOperationId ?? null;
+    if (current.providerOperationId !== null && requestedProviderOperationId !== null &&
+        current.providerOperationId !== requestedProviderOperationId) {
+      throw new DomainError("EVENT_FINGERPRINT_CONFLICT", "External command provider operation ID changed");
+    }
+    const reconciliationEvidenceId = input.evidenceId ?? null;
+    if (reconciliationEvidenceId === null || reconciliationEvidenceId !== event.evidenceId) {
+      throw new DomainError("EXTERNAL_EVIDENCE_UNVERIFIED", "Terminal reconciliation requires its event evidence");
+    }
+    const evidence = this.#requiredEvidence(context.tenantId, reconciliationEvidenceId);
+    if (evidence.status !== "verified" || evidence.provider !== event.provider ||
+        evidence.businessEventSha256 !== event.businessEventSha256) {
+      throw new DomainError("EVIDENCE_REVOKED", "Terminal reconciliation evidence is not active or event-bound");
+    }
+    const providerOperationId = current.providerOperationId ?? requestedProviderOperationId;
+    const commandEvidenceId = current.evidenceId ?? reconciliationEvidenceId;
+    const now = this.#now();
+    const reconciliationDetails = {
+      originalFreezeReason: reconciliation.originalFreezeReason,
+      reconciledAt,
+      reconciliationEventId: event.eventId,
+      reconciliationEvidenceId,
+      reconciliationProvider: event.provider,
+      reconciliationBusinessEventSha256: event.businessEventSha256,
+      previousState: reconciliation.previousState,
+    };
+    const details = jsonObject({
+      ...current.details,
+      ...(input.details ?? {}),
+      ...reconciliationDetails,
+      ...(completeReconciliation ? { reconciliationReason: "reconciled_outbox_dead_letter" } : {}),
+    }, "external command reconciliation details");
+    const updated = this.#database.prepare(
+      `UPDATE external_commands SET state=?,provider_operation_id=?,evidence_id=?,
+         decision_state=?,reconciliation_state=?,version=version+1,updated_at=?,terminal_at=?,details_json=?
+       WHERE tenant_id=? AND command_id=? AND version=? AND state=?
+         AND decision_state='frozen' AND reconciliation_state='reconciliation_required'`,
+    ).run(
+      input.toState,
+      providerOperationId,
+      commandEvidenceId,
+      completeReconciliation ? "active" : "frozen",
+      completeReconciliation ? "clear" : "reconciliation_required",
+      now,
+      isExternalCommandTerminal(input.toState) ? now : current.terminalAt,
+      canonicalJson(details),
+      context.tenantId,
+      input.commandId,
+      current.version,
+      current.state,
+    );
+    if (updated.changes !== 1) throw new DomainError("VERSION_CONFLICT", "Frozen external command changed concurrently");
+    this.#database.prepare(
+      `INSERT INTO external_command_transitions(
+        tenant_id,transition_id,command_id,from_state,to_state,provider_operation_id,evidence_id,details_json,occurred_at
+      ) VALUES (?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      context.tenantId,
+      randomUUID(),
+      input.commandId,
+      current.state,
+      input.toState,
+      providerOperationId,
+      reconciliationEvidenceId,
+      canonicalJson({ ...(input.details ?? {}), ...reconciliationDetails }),
+      now,
+    );
+    const aggregate = this.#requiredRecord(context.tenantId, current.aggregateCollection, current.aggregateId, false);
+    const aggregateData = jsonObject({
+      ...aggregate.data,
+      externalCommandId: current.commandId,
+      commandState: input.toState,
+      executionState: input.toState,
+      externalReceipt: {
+        providerOperationId,
+        evidenceId: reconciliationEvidenceId,
+        state: input.toState,
+        updatedAt: now,
+      },
+      ...(completeReconciliation ? {
+        externalReconciliation: {
+          ...reconciliationDetails,
+          terminalState: input.toState,
+        },
+        _externalDecisionState: "active",
+        _externalReconciliationState: "clear",
+      } : {
+        _externalDecisionState: "frozen",
+        _externalReconciliationState: "reconciliation_required",
+      }),
+    }, "external command reconciliation aggregate data");
+    const recordUpdate = this.#database.prepare(
+      `UPDATE records SET data_json=?,version=version+1,updated_at=?
+       WHERE tenant_id=? AND collection=? AND id=? AND version=? AND deleted_at IS NULL`,
+    ).run(
+      canonicalJson(aggregateData),
+      now,
+      context.tenantId,
+      current.aggregateCollection,
+      current.aggregateId,
+      aggregate.version,
+    );
+    if (recordUpdate.changes !== 1) throw new DomainError("VERSION_CONFLICT", "External command aggregate changed concurrently");
+    const command = this.#requiredExternalCommand(context.tenantId, input.commandId);
+    const record = this.#requiredRecord(context.tenantId, current.aggregateCollection, current.aggregateId, false);
+    this.#appendAuditInternal(context, {
+      action: "external_command.transitioned",
+      resourceType: current.aggregateCollection,
+      resourceId: current.aggregateId,
+      details: {
+        commandId: input.commandId,
+        fromState: current.state,
+        toState: input.toState,
+        providerOperationId,
+        evidenceId: reconciliationEvidenceId,
+        ...reconciliationDetails,
+      },
+    });
+    this.#emitOutbox(
+      context.tenantId,
+      current.aggregateCollection,
+      current.aggregateId,
+      `external_command.${input.toState}`,
+      { command: jsonObject(command) },
+    );
+    if (completeReconciliation) {
+      this.#appendAuditInternal(context, {
+        action: "external_command.reconciled",
+        resourceType: current.aggregateCollection,
+        resourceId: current.aggregateId,
+        details: {
+          commandId: input.commandId,
+          terminalState: input.toState,
+          ...reconciliationDetails,
+        },
+      });
+      this.#emitOutbox(
+        context.tenantId,
+        current.aggregateCollection,
+        current.aggregateId,
+        "external_command.reconciled",
+        {
+          command: jsonObject(command),
+          record: jsonObject(record),
+          terminalState: input.toState,
+          ...reconciliationDetails,
+        },
+      );
+    }
+    return command;
   }
 
   #assertBusinessEvidenceBinding(event: ApplyExternalBusinessEventInput["event"], evidence: SignedExternalEvidence): void {
@@ -4948,6 +5184,33 @@ export class LifeTimeMachineRuntime {
       details: { scope, evidenceIds: [...ids] },
     });
     return verified;
+  }
+
+  #assertB127ProductionReleaseEvidence(
+    context: ActorContext,
+    scope: string,
+    ids: readonly string[],
+  ): void {
+    for (const evidenceId of ids) {
+      let evidence: RegisteredExternalEvidence;
+      try {
+        evidence = this.#requiredEvidence(context.tenantId, evidenceId);
+      } catch (error) {
+        if (error instanceof DomainError && error.code === "RESOURCE_NOT_FOUND") {
+          throw new DomainError("EXTERNAL_EVIDENCE_UNVERIFIED", "External evidence is not registered", {
+            details: { evidenceId, scope },
+          });
+        }
+        throw error;
+      }
+      if (evidence.scope !== scope) {
+        throw new DomainError("EVIDENCE_SCOPE_MISMATCH", "External evidence scope does not match this operation", {
+          details: { evidenceId, requiredScope: scope },
+        });
+      }
+      const key = this.#matchingEvidenceKey(evidence);
+      assertB127ProductionReleaseAuthority(key, evidence, scope);
+    }
   }
 
   #evidenceSelectSql(suffix: string): string {

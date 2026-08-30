@@ -43,7 +43,8 @@ function request(path, options = {}) {
 }
 
 function requestForPurpose(path, purpose, options = {}) {
-  if (purpose !== "sharing" && purpose !== "privacy_rights" && purpose !== "age_transformation") {
+  if (purpose !== "sharing" && purpose !== "privacy_rights" && purpose !== "age_transformation" &&
+      purpose !== "commerce" && purpose !== "notifications" && purpose !== "customer_support") {
     return Promise.reject(new Error("UNSUPPORTED_EXPLICIT_PURPOSE"));
   }
   const authenticatedSession = session.requireSession();

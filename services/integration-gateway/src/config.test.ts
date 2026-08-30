@@ -20,6 +20,8 @@ function baseEnvironment(): NodeJS.ProcessEnv {
     LTM_COMMERCE_BINDING_RESPONSE_KEY_REFERENCE: "secret-manager:ltm/sandbox/commerce-response",
     LTM_COMMERCE_BINDING_RESPONSE_SIGNATURE_SCHEME: "hmac-sha256",
     LTM_PARTNER_WEBHOOK_POLICIES_REFERENCE: "secret-manager:ltm/sandbox/partner-policies",
+    LTM_SUPPLY_EVENT_AUTHORITIES_REFERENCE: "secret-manager:ltm/sandbox/supply-event-authorities",
+    LTM_DIRECT_EVIDENCE_AUTHORITIES_REFERENCE: "secret-manager:ltm/sandbox/direct-evidence-authorities",
   };
 }
 
@@ -69,6 +71,30 @@ test("production gateway requires the managed 19-route external-command policy i
   assert.throws(
     () => loadIntegrationGatewayConfiguration(environment),
     /complete managed external-command partner policy inventory/,
+  );
+});
+
+test("production gateway requires the managed B99/B100/B102 supply-event authority inventory", () => {
+  const environment = baseEnvironment();
+  environment.APP_ENV = "production";
+  environment.LTM_EVIDENCE_ISSUER = "prod:integration-gateway";
+  environment.LTM_REDIS_URL = "rediss://redis.example.test:6380";
+  delete environment.LTM_SUPPLY_EVENT_AUTHORITIES_REFERENCE;
+  assert.throws(
+    () => loadIntegrationGatewayConfiguration(environment),
+    /complete managed supply-event authority inventory/,
+  );
+});
+
+test("production gateway requires the managed 30-route direct-evidence authority inventory", () => {
+  const environment = baseEnvironment();
+  environment.APP_ENV = "production";
+  environment.LTM_EVIDENCE_ISSUER = "prod:integration-gateway";
+  environment.LTM_REDIS_URL = "rediss://redis.example.test:6380";
+  delete environment.LTM_DIRECT_EVIDENCE_AUTHORITIES_REFERENCE;
+  assert.throws(
+    () => loadIntegrationGatewayConfiguration(environment),
+    /complete managed direct-evidence authority inventory/,
   );
 });
 

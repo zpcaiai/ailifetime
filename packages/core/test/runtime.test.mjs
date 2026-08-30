@@ -10,11 +10,32 @@ import {
   canonicalBusinessEventSha256,
   DomainError,
   LifeTimeMachineRuntime,
+  PostgresLifeTimeMachineRuntime,
   participantEvidenceScope,
   signConsentPolicyCatalog,
   signExternalEvidence,
   verifyDatabaseBackup,
 } from "../dist/index.js";
+
+test("PostgreSQL runtime rejects connection URL startup options before connecting", async () => {
+  for (const parameter of [
+    "options=-c%20search_path%3Dltm",
+    "OPTIONS=-c%20search_path%3Dpublic",
+    "Options=-c%20role%3Dpostgres&options=-c%20search_path%3Dpg_catalog",
+    "%6fptions=-c%20search_path%3Dltm",
+  ]) {
+    await assert.rejects(
+      PostgresLifeTimeMachineRuntime.connect({
+        connectionString: `postgresql://runtime:secret@127.0.0.1:1/ltm?${parameter}`,
+        evidencePolicy: "disabled",
+      }),
+      (error) => error instanceof DomainError &&
+        error.code === "CONFIGURATION_INVALID" &&
+        /startup options/.test(error.message),
+      parameter,
+    );
+  }
+});
 
 const temporaryDirectories = [];
 
@@ -616,8 +637,12 @@ test("external evidence is signed, tenant/scope bound, durable, and replay resis
   );
 
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const releaseAuthorityKeyPair = generateKeyPairSync("ed25519");
   const publicKeyPem = publicKey.export({ type: "spki", format: "pem" }).toString();
   const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const releaseAuthorityPrivateKeyPem = releaseAuthorityKeyPair.privateKey
+    .export({ type: "pkcs8", format: "pem" }).toString();
+  const exactB127Scope = `ltm-evidence:v1:${"b".repeat(64)}`;
   const policyIssuedAt = new Date(Date.now() - 60_000).toISOString();
   const policyExpiresAt = new Date(Date.now() + 24 * 60 * 60_000).toISOString();
   const consentPolicyCatalog = signConsentPolicyCatalog({
@@ -664,8 +689,17 @@ test("external evidence is signed, tenant/scope bound, durable, and replay resis
     keyId: "key-2026-01",
     algorithm: "Ed25519",
     publicKeyPem,
-    allowedScopes: ["B127:*"],
+    allowedScopes: ["B127:*", exactB127Scope],
     allowedEnvironments: ["production"],
+  }, {
+    issuer: "independent-release-control",
+    provider: "release-control:independent-board",
+    keyId: "release-authority-key-2026-01",
+    algorithm: "Ed25519",
+    publicKeyPem: releaseAuthorityKeyPair.publicKey.export({ type: "spki", format: "pem" }).toString(),
+    allowedScopes: [exactB127Scope],
+    allowedEnvironments: ["production"],
+    authorityRoles: ["b127-production-release-authority"],
   }];
   expectDomainError(
     () => new LifeTimeMachineRuntime({
@@ -729,6 +763,60 @@ test("external evidence is signed, tenant/scope bound, durable, and replay resis
   assert.equal(registered.value.status, "verified");
   assert.equal(registered.value.artifactSha256, "a".repeat(64));
   assert.equal(runtime.readiness().evidenceTrust, "ok");
+
+  const ordinaryExactEvidence = signExternalEvidence({
+    ...unsigned,
+    evidenceId: "evidence-b127-ordinary-exact",
+    scope: exactB127Scope,
+    nonce: "nonce-b127-ordinary-exact-2026",
+  }, privateKeyPem);
+  runtime.registerExternalEvidence(context, {
+    evidence: ordinaryExactEvidence,
+    idempotencyKey: "register-b127-ordinary-exact",
+  });
+  const releaseMutation = (evidenceId, idempotencyKey, recordId) => ({
+    scope: exactB127Scope,
+    evidenceIds: [evidenceId],
+    idempotencyKey,
+    mutation: {
+      kind: "record.create",
+      input: {
+        collection: "release.authorizations",
+        id: recordId,
+        data: { batchId: "B127", state: "approved" },
+      },
+    },
+    audit: { action: "capability.B127.execute", details: { operation: "approveProductionRelease" } },
+  });
+  expectDomainError(
+    () => runtime.executeEvidenceGatedMutation(context, releaseMutation(
+      ordinaryExactEvidence.evidenceId,
+      "reject-ordinary-b127-authority",
+      "rejected-ordinary-authority",
+    )),
+    "EVIDENCE_TRUST_KEY_NOT_FOUND",
+  );
+  assert.equal(runtime.getExternalEvidence(context, ordinaryExactEvidence.evidenceId).consumedAt, null);
+  const privilegedEvidence = signExternalEvidence({
+    ...unsigned,
+    evidenceId: "evidence-b127-release-authority",
+    issuer: "independent-release-control",
+    provider: "release-control:independent-board",
+    keyId: "release-authority-key-2026-01",
+    scope: exactB127Scope,
+    nonce: "nonce-b127-release-authority-2026",
+  }, releaseAuthorityPrivateKeyPem);
+  runtime.registerExternalEvidence(context, {
+    evidence: privilegedEvidence,
+    idempotencyKey: "register-b127-release-authority",
+  });
+  const authorizedRelease = runtime.executeEvidenceGatedMutation(context, releaseMutation(
+    privilegedEvidence.evidenceId,
+    "accept-independent-b127-authority",
+    "accepted-independent-authority",
+  ));
+  assert.equal(authorizedRelease.kind, "record.create");
+  assert.notEqual(runtime.getExternalEvidence(context, privilegedEvidence.evidenceId).consumedAt, null);
 
   const verified = runtime.requireExternalEvidence(context, unsigned.scope, ["evidence-1"]);
   assert.equal(verified[0].consumedAt !== null, true);
@@ -1192,6 +1280,321 @@ test("external business events atomically drive commands, reject tampering and o
   assert.equal(frozen.data._externalDecisionState, "frozen");
   assert.equal(frozen.data._externalReconciliationState, "reconciliation_required");
   assert.equal(runtime.getExternalCommand(context, "payment-1").decisionState, "frozen");
+  runtime.close();
+});
+
+test("a single-use signed terminal event is the only path that reconciles a frozen external command", () => {
+  const now = new Date("2026-08-20T02:00:00.000Z");
+  const vendorKeys = generateKeyPairSync("ed25519");
+  const wrongKeys = generateKeyPairSync("ed25519");
+  const trusted = (provider, keyId, publicKey) => ({
+    issuer: `${provider}-gateway`,
+    provider,
+    keyId,
+    algorithm: "Ed25519",
+    publicKeyPem: publicKey.export({ type: "spki", format: "pem" }).toString(),
+    allowedScopes: ["B98:*"],
+    allowedEnvironments: ["sandbox"],
+  });
+  const runtime = new LifeTimeMachineRuntime({
+    databasePath: databasePath(),
+    clock: { now: () => now },
+    trustedEvidenceKeys: [
+      trusted("vendor:vendor-1", "vendor-key-1", vendorKeys.publicKey),
+      trusted("vendor:wrong-vendor", "wrong-key-1", wrongKeys.publicKey),
+    ],
+    evidencePolicy: "development",
+    evidenceEnvironment: "sandbox",
+  });
+  const service = actor({
+    actorId: "integration-service",
+    roles: ["platform_admin", "service_account"],
+    requestId: "frozen-reconciliation-request",
+  });
+  const privateKeys = {
+    "vendor:vendor-1": vendorKeys.privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    "vendor:wrong-vendor": wrongKeys.privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+  };
+  const bundle = ({
+    eventId,
+    evidenceId,
+    eventType,
+    sequence,
+    provider = "vendor:vendor-1",
+    subjectId = "vendor-command-1",
+    replayPolicy = "single_use",
+  }) => {
+    const claims = { providerOperationId: "vendor-operation-1", vendorId: "vendor-1" };
+    const canonicalClaimsSha256 = canonicalBusinessClaimsSha256(claims);
+    const unsignedEvent = {
+      version: "ltm.external-business-event.v1",
+      eventId,
+      tenantId: service.tenantId,
+      batchId: "B98",
+      operation: "createVendorProductionJob",
+      provider,
+      subjectType: "vendor-job",
+      subjectId,
+      eventType,
+      providerOccurredAt: new Date(now.getTime() - 20_000 + sequence).toISOString(),
+      sequence,
+      correlationId: subjectId,
+      artifactSha256: "9".repeat(64),
+      evidenceId,
+      evidenceScope: `B98:vendor-job:${subjectId}`,
+      canonicalClaims: claims,
+      canonicalClaimsSha256,
+    };
+    const event = { ...unsignedEvent, businessEventSha256: canonicalBusinessEventSha256(unsignedEvent) };
+    const keyId = provider === "vendor:vendor-1" ? "vendor-key-1" : "wrong-key-1";
+    const evidence = signExternalEvidence({
+      version: "ltm.external-evidence.v1",
+      evidenceId,
+      tenantId: event.tenantId,
+      issuer: `${provider}-gateway`,
+      provider,
+      environment: "sandbox",
+      scope: event.evidenceScope,
+      artifactSha256: event.artifactSha256,
+      canonicalClaimsSha256,
+      businessEventSha256: event.businessEventSha256,
+      issuedAt: new Date(now.getTime() - 30_000).toISOString(),
+      expiresAt: new Date(now.getTime() + 60_000).toISOString(),
+      nonce: `nonce-${evidenceId}-0000000000`,
+      replayPolicy,
+      algorithm: "Ed25519",
+      keyId,
+    }, privateKeys[provider]);
+    return { event, evidence };
+  };
+  const reducer = (eventType, commandState, commandId = "vendor-command-1") => ({
+    name: `vendor-reconciliation-${eventType}`,
+    locate: () => ({ collection: "supply.vendor-production-commands", aggregateId: commandId }),
+    reduce: () => ({
+      stateField: "providerState",
+      allowedPriorStates: [null, "accepted", "succeeded", "failed"],
+      nextState: eventType === "vendor-job.accepted" ? "accepted" : commandState ?? "production",
+      patch: { providerOperationId: "vendor-operation-1", vendorId: "vendor-1" },
+      decisionType: "vendor-job-provider-decision",
+      decisionId: `decision-${eventType.replaceAll(".", "-")}`,
+      ...(commandState === undefined ? {} : {
+        commandTransition: {
+          commandId,
+          toState: commandState,
+          providerOperationId: "vendor-operation-1",
+        },
+      }),
+    }),
+  });
+  const deadLetter = (commandId, workerId) => {
+    const requestEvent = runtime.listOutbox(service, { limit: 200 }).find((event) =>
+      event.eventType === "external_command.requested" && event.aggregateId === commandId);
+    assert.notEqual(requestEvent, undefined);
+    for (let attempt = 1; attempt <= 10; attempt += 1) {
+      const claimed = runtime.claimOutbox(service, workerId, 200, 30_000);
+      for (const event of claimed) {
+        if (event.id !== requestEvent.id) {
+          runtime.markOutboxPublished(service, event.id, workerId);
+        } else if (attempt < 10) {
+          runtime.markOutboxFailed(service, event.id, workerId, "provider result unknown", {
+            retryAt: new Date(now.getTime() - 1_000).toISOString(),
+          });
+        }
+      }
+      if (attempt === 10) {
+        runtime.deadLetterExternalCommand(service, {
+          eventId: requestEvent.id,
+          workerId,
+          error: "provider result remained unknown after ten attempts",
+        });
+      }
+    }
+  };
+
+  runtime.createExternalCommand(service, {
+    record: {
+      id: "vendor-command-1",
+      collection: "supply.vendor-production-commands",
+      data: {
+        operationMode: "external-command",
+        batchId: "B98",
+        operation: "createVendorProductionJob",
+        vendorId: "vendor-1",
+      },
+    },
+    commandId: "vendor-command-1",
+    batchId: "B98",
+    operation: "createVendorProductionJob",
+    idempotencyKey: "create-vendor-command-for-reconciliation",
+  });
+  const accepted = bundle({
+    eventId: "vendor-accepted-event",
+    evidenceId: "vendor-accepted-evidence",
+    eventType: "vendor-job.accepted",
+    sequence: 10,
+  });
+  runtime.applyExternalBusinessEvent(service, {
+    ...accepted,
+    reducer: reducer("vendor-job.accepted"),
+    idempotencyKey: "apply-vendor-accepted-before-freeze",
+  });
+
+  deadLetter("vendor-command-1", "reconciliation-worker");
+  assert.equal(runtime.getExternalCommand(service, "vendor-command-1").decisionState, "frozen");
+  expectDomainError(() => runtime.transitionExternalCommand(service, {
+    commandId: "vendor-command-1",
+    batchId: "B98",
+    operation: "createVendorProductionJob",
+    aggregateCollection: "supply.vendor-production-commands",
+    aggregateId: "vendor-command-1",
+    toState: "acknowledged",
+    idempotencyKey: "direct-frozen-transition-denied",
+  }), "EVIDENCE_REVOKED");
+
+  const rejected = [
+    {
+      value: bundle({ eventId: "nonterminal-reconcile", evidenceId: "nonterminal-reconcile-evidence", eventType: "vendor-job.production", sequence: 11 }),
+      state: "acknowledged",
+      code: "EVIDENCE_REVOKED",
+    },
+    {
+      value: bundle({ eventId: "wrong-provider-reconcile", evidenceId: "wrong-provider-reconcile-evidence", eventType: "external-command.failed", sequence: 11, provider: "vendor:wrong-vendor" }),
+      state: "failed",
+      code: "TENANT_SCOPE_MISMATCH",
+    },
+    {
+      value: bundle({ eventId: "wrong-subject-reconcile", evidenceId: "wrong-subject-reconcile-evidence", eventType: "external-command.failed", sequence: 11, subjectId: "other-command" }),
+      state: "failed",
+      code: "EVENT_FINGERPRINT_CONFLICT",
+    },
+    {
+      value: bundle({ eventId: "stale-sequence-reconcile", evidenceId: "stale-sequence-reconcile-evidence", eventType: "external-command.failed", sequence: 9 }),
+      state: "failed",
+      code: "VERSION_CONFLICT",
+    },
+    {
+      value: bundle({ eventId: "reusable-evidence-reconcile", evidenceId: "reusable-evidence-reconcile-evidence", eventType: "external-command.failed", sequence: 11, replayPolicy: "reusable" }),
+      state: "failed",
+      code: "EVIDENCE_REPLAY_DETECTED",
+    },
+  ];
+  for (const candidate of rejected) {
+    expectDomainError(() => runtime.applyExternalBusinessEvent(service, {
+      ...candidate.value,
+      reducer: reducer(candidate.value.event.eventType, candidate.state),
+      idempotencyKey: `reject-${candidate.value.event.eventId}`,
+    }), candidate.code);
+    expectDomainError(
+      () => runtime.getExternalEvidence(service, candidate.value.evidence.evidenceId),
+      "RESOURCE_NOT_FOUND",
+    );
+  }
+
+  const terminal = bundle({
+    eventId: "terminal-reconciliation-event",
+    evidenceId: "terminal-reconciliation-evidence",
+    eventType: "external-command.failed",
+    sequence: 11,
+  });
+  const applied = runtime.applyExternalBusinessEvent(service, {
+    ...terminal,
+    reducer: reducer(terminal.event.eventType, "failed"),
+    idempotencyKey: "apply-terminal-reconciliation",
+  });
+  assert.equal(applied.value.command.state, "failed");
+  assert.equal(applied.value.command.decisionState, "active");
+  assert.equal(applied.value.command.reconciliationState, "clear");
+  assert.equal(applied.value.command.details.originalFreezeReason, "outbox_dead_letter");
+  assert.equal(applied.value.command.details.reconciliationEventId, terminal.event.eventId);
+  assert.equal(applied.value.command.details.reconciliationEvidenceId, terminal.evidence.evidenceId);
+  assert.equal(applied.value.command.details.reconciliationProvider, terminal.event.provider);
+  assert.equal(applied.value.command.details.previousState, "requested");
+  assert.equal(applied.value.command.details.reconciledAt, now.toISOString());
+  assert.equal(applied.value.aggregate.data._externalDecisionState, "active");
+  assert.equal(applied.value.aggregate.data._externalReconciliationState, "clear");
+  assert.equal(applied.value.aggregate.data.externalReconciliation.reconciliationEventId, terminal.event.eventId);
+  assert.equal(runtime.applyExternalBusinessEvent(service, {
+    ...terminal,
+    reducer: reducer(terminal.event.eventType, "failed"),
+    idempotencyKey: "apply-terminal-reconciliation-replay",
+  }).replayed, true);
+  assert.equal(runtime.listAudit(service, 200).some((entry) => entry.action === "external_command.reconciled"), true);
+  const reconciliationOutbox = runtime.listOutbox(service, { limit: 200 })
+    .find((event) => event.eventType === "external_command.reconciled");
+  assert.equal(reconciliationOutbox?.payload.reconciliationEventId, terminal.event.eventId);
+  assert.equal(reconciliationOutbox?.payload.reconciliationEvidenceId, terminal.evidence.evidenceId);
+
+  runtime.createExternalCommand(service, {
+    record: {
+      id: "vendor-command-success-1",
+      collection: "supply.vendor-production-commands",
+      data: {
+        operationMode: "external-command",
+        batchId: "B98",
+        operation: "createVendorProductionJob",
+        vendorId: "vendor-1",
+      },
+    },
+    commandId: "vendor-command-success-1",
+    batchId: "B98",
+    operation: "createVendorProductionJob",
+    idempotencyKey: "create-requested-success-reconciliation-command",
+  });
+  deadLetter("vendor-command-success-1", "requested-success-reconciliation-worker");
+  const succeededTerminal = bundle({
+    eventId: "requested-success-reconciliation-event",
+    evidenceId: "requested-success-reconciliation-evidence",
+    eventType: "external-command.succeeded",
+    sequence: 1,
+    subjectId: "vendor-command-success-1",
+  });
+  const succeeded = runtime.applyExternalBusinessEvent(service, {
+    ...succeededTerminal,
+    reducer: reducer(succeededTerminal.event.eventType, "succeeded", "vendor-command-success-1"),
+    idempotencyKey: "apply-requested-success-reconciliation",
+  });
+  assert.equal(succeeded.value.command.state, "succeeded");
+  assert.equal(succeeded.value.command.decisionState, "active");
+  assert.equal(succeeded.value.command.reconciliationState, "clear");
+  assert.equal(succeeded.value.command.details.previousState, "requested");
+  assert.equal(succeeded.value.command.details.reconciliationSyntheticEdge, true);
+  assert.equal(succeeded.value.aggregate.data.executionState, "succeeded");
+  const successTransitions = runtime.listAudit(service, 500).filter((entry) =>
+    entry.action === "external_command.transitioned" && entry.details.commandId === "vendor-command-success-1");
+  assert.deepEqual(successTransitions.map((entry) => entry.details.toState).reverse(), [
+    "dispatched",
+    "acknowledged",
+    "succeeded",
+  ]);
+
+  runtime.revokeExternalEvidence(service, {
+    evidenceId: succeededTerminal.evidence.evidenceId,
+    expectedVersion: 1,
+    reason: "provider signing authority revoked the terminal assertion",
+    idempotencyKey: "revoke-reconciled-terminal-evidence",
+  });
+  assert.equal(runtime.getExternalCommand(service, "vendor-command-success-1").decisionState, "frozen");
+  const compensationAfterRevocation = bundle({
+    eventId: "revoked-evidence-auto-reconciliation-event",
+    evidenceId: "revoked-evidence-auto-reconciliation-evidence",
+    eventType: "external-command.compensated",
+    sequence: 2,
+    subjectId: "vendor-command-success-1",
+  });
+  expectDomainError(() => runtime.applyExternalBusinessEvent(service, {
+    ...compensationAfterRevocation,
+    reducer: reducer(
+      compensationAfterRevocation.event.eventType,
+      "compensated",
+      "vendor-command-success-1",
+    ),
+    idempotencyKey: "reject-evidence-revocation-auto-reconciliation",
+  }), "EVIDENCE_REVOKED");
+  expectDomainError(
+    () => runtime.getExternalEvidence(service, compensationAfterRevocation.evidence.evidenceId),
+    "RESOURCE_NOT_FOUND",
+  );
+  assert.equal(runtime.verifyAuditChain(service).valid, true);
   runtime.close();
 });
 

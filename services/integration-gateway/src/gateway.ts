@@ -18,6 +18,13 @@ export interface GatewayCallbackRequest {
 export type GatewayCallbackResult =
   | { readonly disposition: "ignored"; readonly providerEventId: string }
   | {
+      /** Signed provider evidence that is registered for a later evidence-gated capability mutation. */
+      readonly disposition: "evidence";
+      readonly providerEventId: string;
+      readonly evidence: SignedCapabilityEvidence;
+      readonly receipt: Readonly<Record<string, unknown>>;
+    }
+  | {
       readonly disposition: "attested";
       readonly providerEventId: string;
       readonly evidence: SignedCapabilityEvidence;
@@ -35,8 +42,8 @@ export interface EvidenceOutput {
     readonly requestId: string;
     readonly providerEventId: string;
     readonly evidence: SignedCapabilityEvidence;
-    readonly businessEvent: VerifiedBusinessEvent;
     readonly receipt: Readonly<Record<string, unknown>>;
+    readonly businessEvent?: VerifiedBusinessEvent;
   }): Promise<void>;
 }
 
@@ -162,7 +169,7 @@ async function processCallbackDelivery(
     throw new ProductionIntegrationError("PROVIDER_REJECTED", "callback delivery is already in progress", true);
   }
   if (begin.state === "deliver") {
-    let cached: Extract<GatewayCallbackResult, { disposition: "attested" }>;
+    let cached: DeliverableGatewayCallbackResult;
     try {
       cached = decodeCachedResult(begin.payload, options.clock?.() ?? new Date());
     } catch (error) {
@@ -200,15 +207,15 @@ async function deliver(
   requestId: string,
   lease: CallbackDeliveryLease,
   payload: Uint8Array,
-  result: Extract<GatewayCallbackResult, { disposition: "attested" }>,
+  result: DeliverableGatewayCallbackResult,
 ): Promise<GatewayCallbackResult> {
   try {
     await options.evidenceOutput.publish({
       requestId,
       providerEventId: result.providerEventId,
       evidence: result.evidence,
-      businessEvent: result.businessEvent,
       receipt: result.receipt,
+      ...(result.disposition === "attested" ? { businessEvent: result.businessEvent } : {}),
     });
   } catch (error) {
     await bestEffort(() => options.callbackState.releaseForRetry(lease, payload));
@@ -218,7 +225,9 @@ async function deliver(
   return result;
 }
 
-function encodeCachedResult(result: Extract<GatewayCallbackResult, { disposition: "attested" }>): Buffer {
+type DeliverableGatewayCallbackResult = Exclude<GatewayCallbackResult, { disposition: "ignored" }>;
+
+function encodeCachedResult(result: DeliverableGatewayCallbackResult): Buffer {
   const payload = Buffer.from(JSON.stringify(result), "utf8");
   if (payload.byteLength === 0 || payload.byteLength > 1_048_576) {
     throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", "verified callback result exceeds the durable cache limit");
@@ -226,7 +235,7 @@ function encodeCachedResult(result: Extract<GatewayCallbackResult, { disposition
   return payload;
 }
 
-function decodeCachedResult(payload: Uint8Array, now: Date): Extract<GatewayCallbackResult, { disposition: "attested" }> {
+function decodeCachedResult(payload: Uint8Array, now: Date): DeliverableGatewayCallbackResult {
   let value: unknown;
   try {
     value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(payload)) as unknown;
@@ -237,10 +246,10 @@ function decodeCachedResult(payload: Uint8Array, now: Date): Extract<GatewayCall
     throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", "cached callback result must be an object");
   }
   const record = value as Record<string, unknown>;
-  if (record.disposition !== "attested" || typeof record.providerEventId !== "string" ||
+  if ((record.disposition !== "attested" && record.disposition !== "evidence") ||
+      typeof record.providerEventId !== "string" ||
       record.providerEventId.length === 0 || record.providerEventId.length > 256 ||
       record.receipt === null || typeof record.receipt !== "object" || Array.isArray(record.receipt) ||
-      record.businessEvent === null || typeof record.businessEvent !== "object" || Array.isArray(record.businessEvent) ||
       record.evidence === null || typeof record.evidence !== "object" || Array.isArray(record.evidence)) {
     throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", "cached callback result fields are invalid");
   }
@@ -253,6 +262,17 @@ function decodeCachedResult(payload: Uint8Array, now: Date): Extract<GatewayCall
   }
   try {
     assertSignedCapabilityEvidence(record.evidence as SignedCapabilityEvidence, now);
+    if (record.disposition === "evidence") {
+      const directEvidence = record.evidence as SignedCapabilityEvidence;
+      if (Object.prototype.hasOwnProperty.call(record, "businessEvent") ||
+          directEvidence.canonicalClaimsSha256 !== undefined || directEvidence.businessEventSha256 !== undefined) {
+        throw new Error("direct evidence cache contains a business-event projection");
+      }
+      return record as unknown as DeliverableGatewayCallbackResult;
+    }
+    if (record.businessEvent === null || typeof record.businessEvent !== "object" || Array.isArray(record.businessEvent)) {
+      throw new Error("cached business event is missing");
+    }
     const businessEvent = normalizeVerifiedBusinessEvent(record.businessEvent as VerifiedBusinessEvent);
     const evidence = record.evidence as SignedCapabilityEvidence;
     if (evidence.evidenceId !== businessEvent.evidenceId || evidence.scope !== businessEvent.evidenceScope ||
@@ -265,7 +285,7 @@ function decodeCachedResult(payload: Uint8Array, now: Date): Extract<GatewayCall
   } catch {
     throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", "cached callback evidence is invalid");
   }
-  return record as unknown as Extract<GatewayCallbackResult, { disposition: "attested" }>;
+  return record as unknown as DeliverableGatewayCallbackResult;
 }
 
 class CachedEvidenceExpiredError extends ProductionIntegrationError {

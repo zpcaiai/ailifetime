@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
-import { deriveRecordConsentRequirementScope, DomainError } from "@ltm/core";
+import {
+  decisionRequestSha256,
+  deriveRecordConsentRequirementScope,
+  DomainError,
+  requestBoundEvidenceScope,
+} from "@ltm/core";
 import type {
   ConsentRequirement,
   GrantorCapacity,
@@ -54,6 +59,12 @@ export interface DomainCapabilityOptions {
   readonly trustedExternalEventOnly?: boolean;
   readonly requiresExternalEvidence?: boolean;
   readonly externalEvidenceScope?: ExternalEvidenceScopeResolver;
+  /**
+   * Primary callback artifact digest. Direct authority evidence excludes this
+   * one late-bound field from its canonical decision request and binds every
+   * other validated business field into the signed evidence scope.
+   */
+  readonly evidenceRequestArtifactField?: string;
   readonly prerequisite?: CapabilityPrerequisite;
   readonly consent?: ConsentResolver;
   readonly mode: CapabilityMode;
@@ -81,14 +92,40 @@ export function defineCapability(
   validate: DomainValidator,
   options: DomainCapabilityOptions,
 ): DomainCapabilityDefinition {
+  const validatorId = validate.name;
+  if (!/^[a-z][A-Za-z0-9]+$/.test(validatorId)) {
+    throw new Error(`${batchId} requires a named batch-specific domain validator`);
+  }
+  if (options.evidenceRequestArtifactField !== undefined &&
+      (options.requiresExternalEvidence !== true || options.externalEvidenceScope === undefined)) {
+    throw new Error(`${batchId} request-bound evidence requires an external evidence scope`);
+  }
+  if (options.evidenceRequestArtifactField !== undefined &&
+      !/^[A-Za-z][A-Za-z0-9]{0,127}$/.test(options.evidenceRequestArtifactField)) {
+    throw new Error(`${batchId} request-bound evidence artifact field is invalid`);
+  }
+  const parseInput = (invocation: CapabilityInvocation): JsonObject => {
+    assertInvocation(invocation);
+    assertActorTenant(invocation.input, invocation);
+    return bindDecisionRequest(
+      validate(invocation.input, invocation),
+      invocation,
+      batchId,
+      operation,
+      options,
+    );
+  };
   return {
     batchId,
     skill,
     operation,
+    validatorId,
+    executionPath: options.trustedExternalEventOnly === true ? "signed-external-event" : "capability",
     permission: options.permission ?? "record:create",
     mode: options.mode,
     requirements: requirementIds(batchId),
     ...(options.requiresExternalEvidence ? { requiresExternalEvidence: true } : {}),
+    parseInput,
     async execute(runtime, invocation) {
       assertInvocation(invocation);
       assertActorTenant(invocation.input, invocation);
@@ -96,16 +133,20 @@ export function defineCapability(
         tenantId: invocation.actor.tenantId,
         sensitive: options.sensitive ?? false,
       });
+      const validatedData = parseInput(invocation);
 
+      // Keep the legacy direct endpoint permanently closed, while still
+      // executing its side-effect-free, batch-specific parser. This prevents
+      // the parser from becoming dead code and preserves one closed schema for
+      // migration diagnostics. Provider facts are persisted only by the
+      // compile-time reducer selected by signed external-event.apply.
       if (options.trustedExternalEventOnly === true) {
         throw new DomainError(
           "AUTH_FORBIDDEN",
           `${batchId} provider facts can only be written through the signed external-event.apply path`,
-          { details: { batchId, operation } },
+          { details: { batchId, operation, validatorId } },
         );
       }
-
-      const validatedData = validate(invocation.input, invocation);
       const data = options.serverConsentPolicyMetadata === true
         ? consentPolicyMetadataData(await runtime.getConsentPolicyCatalogMetadata(invocation.actor))
         : validatedData;
@@ -140,6 +181,35 @@ export function defineCapability(
   };
 }
 
+function bindDecisionRequest(
+  data: JsonObject,
+  invocation: CapabilityInvocation,
+  batchId: CapabilityDefinition["batchId"],
+  operation: string,
+  options: DomainCapabilityOptions,
+): JsonObject {
+  const artifactField = options.evidenceRequestArtifactField;
+  if (artifactField === undefined) return data;
+  const artifactDigest = data[artifactField];
+  if (typeof artifactDigest !== "string" || !/^[a-f0-9]{64}$/.test(artifactDigest)) {
+    throw new DomainError("VALIDATION_FAILED", `${artifactField} must be a lowercase SHA-256 digest`);
+  }
+  const baseScope = options.externalEvidenceScope?.(data, invocation);
+  if (baseScope === undefined || baseScope.trim() === "") {
+    throw new DomainError("CONFIGURATION_INVALID", `${batchId} request-bound evidence scope is unavailable`);
+  }
+  const request = Object.fromEntries(
+    Object.entries(data).filter(([field]) =>
+      field !== "evidenceScope" && field !== "externalEvidenceIds" && field !== artifactField),
+  ) as JsonObject;
+  const requestSha256 = decisionRequestSha256(batchId, operation, request as CoreJsonObject);
+  return {
+    ...data,
+    decisionRequestSha256: requestSha256,
+    evidenceScope: requestBoundEvidenceScope(baseScope, requestSha256),
+  };
+}
+
 export function registerDefinitions(
   registry: CapabilityRegistry,
   definitions: readonly DomainCapabilityDefinition[],
@@ -165,7 +235,13 @@ export function assertKnownState<T extends string>(value: string, allowed: reado
 }
 
 export function assertISODate(value: string, field: string): string {
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value) || !Number.isFinite(Date.parse(value))) {
+  const exactSeconds = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value);
+  const exactMilliseconds = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value);
+  const parsed = Date.parse(value);
+  const canonical = Number.isFinite(parsed) ? new Date(parsed).toISOString() : "";
+  if ((!exactSeconds && !exactMilliseconds) ||
+      (exactSeconds && canonical !== value.replace(/Z$/, ".000Z")) ||
+      (exactMilliseconds && canonical !== value)) {
     throw new DomainError("VALIDATION_FAILED", `${field} must be an ISO-8601 UTC timestamp`, { details: { field } });
   }
   return value;

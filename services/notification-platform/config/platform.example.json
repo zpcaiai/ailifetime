@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "ltm.notification-platform-config.v1",
+  "environment": "sandbox",
+  "state": { "adapter": "file", "path": "/var/lib/ltm-notification/state.json" },
+  "signing": {
+    "callbackSecretReference": "secret-manager:ltm/notification/provider-callback-hmac",
+    "unsubscribeSecretReference": "secret-manager:ltm/notification/unsubscribe-hmac",
+    "controlledLinkSecretReference": "secret-manager:ltm/notification/controlled-link-hmac"
+  },
+  "providers": [
+    { "providerId": "email-primary", "channel": "email", "endpoint": "https://email-provider.example/v1/messages", "credentialReference": "secret-manager:ltm/notification/email", "senderReference": "provider-config:ltm/notification/email-sender", "certificateReference": "secret-manager:ltm/notification/email-signing", "regions": ["us"] },
+    { "providerId": "sms-primary", "channel": "sms", "endpoint": "https://sms-provider.example/v1/messages", "credentialReference": "secret-manager:ltm/notification/sms", "senderReference": "provider-config:ltm/notification/sms-sender", "certificateReference": "secret-manager:ltm/notification/sms-signing", "regions": ["us"] },
+    { "providerId": "push-primary", "channel": "push", "endpoint": "https://push-provider.example/v1/messages", "credentialReference": "secret-manager:ltm/notification/push", "senderReference": "provider-config:ltm/notification/push-app", "certificateReference": "secret-manager:ltm/notification/push-certificate", "regions": ["us"] },
+    { "providerId": "wechat-primary", "channel": "wechat", "endpoint": "https://wechat-provider.example/v1/messages", "credentialReference": "secret-manager:ltm/notification/wechat", "senderReference": "provider-config:ltm/notification/wechat-account", "certificateReference": "secret-manager:ltm/notification/wechat-certificate", "regions": ["cn"] },
+    { "providerId": "inapp-primary", "channel": "inapp", "endpoint": "https://inapp-provider.example/v1/messages", "credentialReference": "secret-manager:ltm/notification/inapp", "senderReference": "provider-config:ltm/notification/inapp", "certificateReference": "secret-manager:ltm/notification/inapp-signing", "regions": ["us", "cn"] }
+  ],
+  "certification": {
+    "providerDeliveryReceipts": { "status": "NOT_CERTIFIED", "evidencePath": null, "evidenceSha256": null },
+    "senderVerification": { "status": "NOT_CERTIFIED", "evidencePath": null, "evidenceSha256": null },
+    "legalReview": { "status": "NOT_CERTIFIED", "evidencePath": null, "evidenceSha256": null },
+    "productionLoadTest": { "status": "NOT_CERTIFIED", "evidencePath": null, "evidenceSha256": null }
+  }
+}

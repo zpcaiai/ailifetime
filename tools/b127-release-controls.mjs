@@ -269,7 +269,7 @@ export function validateRollbackForwardDrill(bytes, expected) {
     "deploymentId", "repositoryCommit", "componentSetSha256", "startedAt", "completedAt",
     "scopes", "scopeSetSha256", "conclusion", "producer",
   ], "ROLLBACK_DRILL_FIELDS_INVALID");
-  if (report.schemaVersion !== "ltm.rollback-forward-drill.v1") {
+  if (report.schemaVersion !== "ltm.rollback-forward-drill.v2") {
     invalid("ROLLBACK_DRILL_SCHEMA_INVALID", "Rollback-forward drill schemaVersion is unsupported");
   }
   identifier(report.reportId, "reportId");
@@ -304,7 +304,7 @@ export function validateRollbackForwardDrill(bytes, expected) {
   }
 
   const scopes = array(report.scopes, "scopes", REQUIRED_B127_ROLLBACK_SCOPES.length, REQUIRED_B127_ROLLBACK_SCOPES.length)
-    .map((entry, index) => validateRollbackScope(entry, index, { startedAt, completedAt }));
+    .map((entry, index) => validateRollbackScope(entry, index, { ...expected, startedAt, completedAt }));
   const scopeNames = scopes.map((entry) => entry.scope);
   if (!sameArray(scopeNames, REQUIRED_B127_ROLLBACK_SCOPES) || new Set(scopeNames).size !== scopeNames.length) {
     invalid(
@@ -314,9 +314,9 @@ export function validateRollbackForwardDrill(bytes, expected) {
     );
   }
   const evidenceDigests = scopes.flatMap((entry) => [
-    entry.rollback.evidenceSha256,
-    entry.forward.evidenceSha256,
-    ...entry.verifications.map((verification) => verification.evidenceSha256),
+    entry.rollback.evidenceArtifact.sha256,
+    entry.forward.evidenceArtifact.sha256,
+    ...entry.verifications.map((verification) => verification.evidenceArtifact.sha256),
   ]);
   if (new Set(evidenceDigests).size !== evidenceDigests.length) {
     invalid("ROLLBACK_DRILL_EVIDENCE_REUSED", "Every rollback, forward, and verification result requires a distinct raw evidence digest");
@@ -806,7 +806,7 @@ function validateRollbackScope(value, index, window) {
   const scope = identifier(item.scope, `scopes[${index}].scope`);
   const requiredChecks = REQUIRED_B127_ROLLBACK_VERIFICATIONS[scope];
   if (requiredChecks === undefined) invalid("ROLLBACK_DRILL_SCOPE_INCOMPLETE", `Rollback scope ${scope} is unsupported`);
-  identifier(item.targetId, `scopes[${index}].targetId`);
+  const targetId = identifier(item.targetId, `scopes[${index}].targetId`);
   const fromVersion = releaseVersion(item.fromVersion, `scopes[${index}].fromVersion`);
   const rollbackVersion = releaseVersion(item.rollbackVersion, `scopes[${index}].rollbackVersion`);
   const forwardVersion = releaseVersion(item.forwardVersion, `scopes[${index}].forwardVersion`);
@@ -814,29 +814,55 @@ function validateRollbackScope(value, index, window) {
     invalid("ROLLBACK_DRILL_VERSION_INVALID", `Rollback scope ${scope} must roll back to a distinct version and forward to the release version`);
   }
   const baselineStateSha256 = digest(item.baselineStateSha256, `scopes[${index}].baselineStateSha256`);
-  const rollback = validateDrillStep(item.rollback, `scopes[${index}].rollback`, window);
-  const forward = validateDrillStep(item.forward, `scopes[${index}].forward`, window);
+  const rollback = validateDrillStep(item.rollback, `scopes[${index}].rollback`, window, {
+    scope,
+    targetId,
+    phase: "rollback",
+    version: rollbackVersion,
+  });
+  const forward = validateDrillStep(item.forward, `scopes[${index}].forward`, window, {
+    scope,
+    targetId,
+    phase: "forward",
+    version: forwardVersion,
+  });
   if (
     Date.parse(forward.startedAt) < Date.parse(rollback.completedAt) ||
     rollback.stateSha256 === baselineStateSha256 ||
     forward.stateSha256 !== baselineStateSha256 ||
-    rollback.evidenceSha256 === forward.evidenceSha256
+    rollback.evidenceArtifact.sha256 === forward.evidenceArtifact.sha256
   ) {
     invalid("ROLLBACK_DRILL_STATE_INVALID", `Rollback scope ${scope} does not prove a distinct rollback state and restored forward state`);
   }
   const verifications = array(item.verifications, `scopes[${index}].verifications`, requiredChecks.length, requiredChecks.length)
     .map((entry, verificationIndex) => {
       const verification = exactObject(entry, `scopes[${index}].verifications[${verificationIndex}]`, [
-        "checkId", "expectedSha256", "observedSha256", "evidenceSha256", "conclusion",
+        "checkId", "expectedSha256", "observedSha256", "evidenceArtifact", "conclusion",
       ], "ROLLBACK_DRILL_FIELDS_INVALID");
-      identifier(verification.checkId, `scopes[${index}].verifications[${verificationIndex}].checkId`);
+      const checkId = identifier(verification.checkId, `scopes[${index}].verifications[${verificationIndex}].checkId`);
       digest(verification.expectedSha256, `scopes[${index}].verifications[${verificationIndex}].expectedSha256`);
       digest(verification.observedSha256, `scopes[${index}].verifications[${verificationIndex}].observedSha256`);
-      digest(verification.evidenceSha256, `scopes[${index}].verifications[${verificationIndex}].evidenceSha256`);
+      const evidenceArtifact = rollbackEvidenceArtifactReference(
+        verification.evidenceArtifact,
+        `scopes[${index}].verifications[${verificationIndex}].evidenceArtifact`,
+      );
       if (verification.expectedSha256 !== verification.observedSha256 || verification.conclusion !== "passed") {
         invalid("ROLLBACK_DRILL_VERIFICATION_FAILED", `Rollback scope ${scope} verification ${verification.checkId} failed`, "BLOCKED_EXTERNAL");
       }
-      return { ...verification };
+      const evidenceBytes = readRollbackArtifact(
+        window,
+        evidenceArtifact,
+        `rollback scope ${scope} verification ${checkId}`,
+      );
+      validateRollbackVerificationEvidence(evidenceBytes, {
+        ...window,
+        scope,
+        targetId,
+        checkId,
+        expectedSha256: verification.expectedSha256,
+        observedSha256: verification.observedSha256,
+      });
+      return { ...verification, evidenceArtifact };
     });
   if (!sameArray(verifications.map((entry) => entry.checkId), requiredChecks)) {
     invalid("ROLLBACK_DRILL_SCOPE_INCOMPLETE", `Rollback scope ${scope} does not contain its exact verification set`, "BLOCKED_EXTERNAL");
@@ -853,15 +879,15 @@ function validateRollbackScope(value, index, window) {
   };
 }
 
-function validateDrillStep(value, label, window) {
+function validateDrillStep(value, label, window, expected) {
   const step = exactObject(value, label, [
-    "operationId", "startedAt", "completedAt", "result", "stateSha256", "evidenceSha256",
+    "operationId", "startedAt", "completedAt", "result", "stateSha256", "evidenceArtifact",
   ], "ROLLBACK_DRILL_FIELDS_INVALID");
-  identifier(step.operationId, `${label}.operationId`);
+  const operationId = identifier(step.operationId, `${label}.operationId`);
   const startedAt = timestamp(step.startedAt, `${label}.startedAt`);
   const completedAt = timestamp(step.completedAt, `${label}.completedAt`);
-  digest(step.stateSha256, `${label}.stateSha256`);
-  digest(step.evidenceSha256, `${label}.evidenceSha256`);
+  const stateSha256 = digest(step.stateSha256, `${label}.stateSha256`);
+  const evidenceArtifact = rollbackEvidenceArtifactReference(step.evidenceArtifact, `${label}.evidenceArtifact`);
   if (
     Date.parse(startedAt) < Date.parse(window.startedAt) ||
     Date.parse(completedAt) <= Date.parse(startedAt) ||
@@ -870,7 +896,114 @@ function validateDrillStep(value, label, window) {
   ) {
     invalid("ROLLBACK_DRILL_STEP_FAILED", `${label} has no valid passed operation window`, "BLOCKED_EXTERNAL");
   }
-  return { ...step };
+  const evidenceBytes = readRollbackArtifact(window, evidenceArtifact, `${label} raw operation evidence`);
+  validateRollbackOperationEvidence(evidenceBytes, {
+    ...window,
+    ...expected,
+    operationId,
+    startedAt,
+    completedAt,
+    stateSha256,
+  });
+  return { ...step, evidenceArtifact };
+}
+
+function rollbackEvidenceArtifactReference(value, label) {
+  const reference = exactObject(value, label, ["path", "sha256"], "ROLLBACK_DRILL_EVIDENCE_REFERENCE_INVALID");
+  visible(reference.path, `${label}.path`, 1_024);
+  digest(reference.sha256, `${label}.sha256`);
+  return { path: reference.path, sha256: reference.sha256 };
+}
+
+function readRollbackArtifact(context, reference, label) {
+  if (typeof context.readArtifact !== "function") {
+    invalid("ROLLBACK_DRILL_EVIDENCE_READER_MISSING", `No stable artifact reader is configured for ${label}`);
+  }
+  const result = context.readArtifact(reference, label);
+  const bytes = Buffer.isBuffer(result) ? result : result?.bytes;
+  if (!Buffer.isBuffer(bytes) || sha256(bytes) !== reference.sha256) {
+    invalid("ROLLBACK_DRILL_EVIDENCE_DIGEST_MISMATCH", `${label} bytes do not match the declared SHA-256 digest`);
+  }
+  return bytes;
+}
+
+function validateRollbackOperationEvidence(bytes, expected) {
+  const value = parseJson(bytes, "rollback operation evidence", "ROLLBACK_DRILL_EVIDENCE_JSON_INVALID");
+  exactObject(value, "rollback operation evidence", [
+    "schemaVersion", "evidenceId", "exerciseId", "releaseId", "tenantId", "launchId", "deploymentId",
+    "repositoryCommit", "componentSetSha256", "scope", "targetId", "phase", "operationId", "version",
+    "startedAt", "completedAt", "result", "stateSha256",
+  ], "ROLLBACK_DRILL_EVIDENCE_FIELDS_INVALID");
+  if (value.schemaVersion !== "ltm.rollback-operation-evidence.v1") {
+    invalid("ROLLBACK_DRILL_EVIDENCE_SCHEMA_INVALID", "Rollback operation evidence schemaVersion is unsupported");
+  }
+  identifier(value.evidenceId, "rollback operation evidence.evidenceId");
+  validateRollbackEvidenceCommon(value, expected, "rollback operation evidence");
+  for (const [field, expectedValue] of Object.entries({
+    phase: expected.phase,
+    operationId: expected.operationId,
+    version: expected.version,
+    startedAt: expected.startedAt,
+    completedAt: expected.completedAt,
+    result: "passed",
+    stateSha256: expected.stateSha256,
+  })) {
+    if (value[field] !== expectedValue) {
+      invalid("ROLLBACK_DRILL_EVIDENCE_BINDING_MISMATCH", `Rollback operation evidence ${field} is not bound to the reported operation`);
+    }
+  }
+}
+
+function validateRollbackVerificationEvidence(bytes, expected) {
+  const value = parseJson(bytes, "rollback verification evidence", "ROLLBACK_DRILL_EVIDENCE_JSON_INVALID");
+  exactObject(value, "rollback verification evidence", [
+    "schemaVersion", "evidenceId", "exerciseId", "releaseId", "tenantId", "launchId", "deploymentId",
+    "repositoryCommit", "componentSetSha256", "scope", "targetId", "checkId", "expectedSha256",
+    "observedSha256", "verifiedAt", "conclusion",
+  ], "ROLLBACK_DRILL_EVIDENCE_FIELDS_INVALID");
+  if (value.schemaVersion !== "ltm.rollback-verification-evidence.v1") {
+    invalid("ROLLBACK_DRILL_EVIDENCE_SCHEMA_INVALID", "Rollback verification evidence schemaVersion is unsupported");
+  }
+  identifier(value.evidenceId, "rollback verification evidence.evidenceId");
+  validateRollbackEvidenceCommon(value, expected, "rollback verification evidence");
+  const verifiedAt = timestamp(value.verifiedAt, "rollback verification evidence.verifiedAt");
+  if (
+    value.checkId !== expected.checkId ||
+    value.expectedSha256 !== expected.expectedSha256 ||
+    value.observedSha256 !== expected.observedSha256 ||
+    value.conclusion !== "passed" ||
+    Date.parse(verifiedAt) < Date.parse(expected.startedAt) ||
+    Date.parse(verifiedAt) > Date.parse(expected.completedAt)
+  ) {
+    invalid("ROLLBACK_DRILL_EVIDENCE_BINDING_MISMATCH", "Rollback verification evidence is not bound to the reported check and drill window");
+  }
+}
+
+function validateRollbackEvidenceCommon(value, expected, label) {
+  for (const [field, expectedValue] of Object.entries({
+    exerciseId: expected.exerciseId,
+    releaseId: expected.launchId,
+    tenantId: expected.tenantId,
+    launchId: expected.launchId,
+    deploymentId: expected.deploymentId,
+    repositoryCommit: expected.repositoryCommit,
+    componentSetSha256: expected.componentSetSha256,
+    scope: expected.scope,
+    targetId: expected.targetId,
+  })) {
+    if (value[field] !== expectedValue) {
+      invalid("ROLLBACK_DRILL_EVIDENCE_BINDING_MISMATCH", `${label} ${field} is not bound to this release exercise`);
+    }
+  }
+  identifier(value.exerciseId, `${label}.exerciseId`);
+  identifier(value.releaseId, `${label}.releaseId`);
+  identifier(value.tenantId, `${label}.tenantId`);
+  identifier(value.launchId, `${label}.launchId`);
+  identifier(value.deploymentId, `${label}.deploymentId`);
+  commit(value.repositoryCommit, `${label}.repositoryCommit`);
+  digest(value.componentSetSha256, `${label}.componentSetSha256`);
+  identifier(value.scope, `${label}.scope`);
+  identifier(value.targetId, `${label}.targetId`);
 }
 
 function validateProducer(value, label) {

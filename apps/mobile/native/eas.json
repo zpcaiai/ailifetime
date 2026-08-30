@@ -1,0 +1,15 @@
+{
+  "cli": { "version": ">= 18.0.0", "appVersionSource": "remote", "requireCommit": true },
+  "build": {
+    "development": { "developmentClient": true, "distribution": "internal", "channel": "development", "environment": "development", "env": { "MOBILE_FLAVOR": "development" } },
+    "test": { "distribution": "internal", "channel": "test", "environment": "preview", "env": { "MOBILE_FLAVOR": "test" }, "android": { "buildType": "apk", "withoutCredentials": true }, "ios": { "simulator": true } },
+    "staging": { "distribution": "internal", "channel": "staging", "environment": "preview", "autoIncrement": true, "env": { "MOBILE_FLAVOR": "staging" } },
+    "production": { "distribution": "store", "channel": "production", "environment": "production", "autoIncrement": true, "credentialsSource": "remote", "env": { "MOBILE_FLAVOR": "production" } }
+  },
+  "submit": {
+    "production": {
+      "ios": { "ascAppId": "$ASC_APP_ID" },
+      "android": { "track": "internal", "releaseStatus": "draft", "serviceAccountKeyPath": "$GOOGLE_SERVICE_ACCOUNT_KEY_PATH" }
+    }
+  }
+}

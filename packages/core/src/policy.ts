@@ -12,6 +12,7 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, readonly string[]>> = {
     "consent:read:self",
     "rights-request:create",
     "rights-request:read:self",
+    "support.ticket.create",
     "audit:append",
   ],
   household_admin: ["record:*", "consent:read", "audit:append"],

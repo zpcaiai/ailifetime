@@ -2,6 +2,7 @@ import { isAbsolute } from "node:path";
 import { readFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { DomainError, type ActorContext, type Role } from "@ltm/core";
+import type { WechatPlatformPort } from "./wechat-platform.js";
 
 const MAX_BROKER_RESPONSE_BYTES = 512 * 1024;
 const CLIENT_ROLES = new Set<Role>([
@@ -137,6 +138,7 @@ export interface MediaIntakeProjection {
 
 export interface ClientIntegrationPorts {
   readonly wechatIdentity?: WechatIdentityPort;
+  readonly wechatPlatform?: WechatPlatformPort;
   readonly resumableUploads?: ResumableUploadPort;
 }
 
@@ -384,7 +386,7 @@ export class HttpResumableUploadBroker implements ResumableUploadPort {
   readiness(): Promise<{ ready: boolean; dependency: string }> { return this.#broker.readiness("resumable-upload"); }
 }
 
-class BrokerClient {
+export class BrokerClient {
   readonly #baseUrl: string;
   readonly #tokenFile: string;
   readonly #timeoutMs: number;

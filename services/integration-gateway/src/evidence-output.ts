@@ -1,5 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
+import { createHash } from "node:crypto";
 import {
   FetchHttpTransport,
   ProductionIntegrationError,
@@ -53,7 +54,17 @@ export interface ApiEvidenceOutputOptions {
   readonly purpose: string;
 }
 
-/** Direct, authenticated atomic external-event.apply adapter for the LTM API command surface. */
+export interface EvidenceSinkPermissionPreflight {
+  readonly actorId: string;
+  readonly tenantId: string;
+  readonly permissions: readonly ["evidence:register", "external-event:apply"];
+}
+
+/**
+ * Authenticated API output for both atomic provider business events and direct
+ * signed evidence registration. The callback lease keeps the exact envelope
+ * durable across transient API failures.
+ */
 export class ApiExternalBusinessEventOutput implements EvidenceOutput {
   constructor(
     private readonly options: ApiEvidenceOutputOptions,
@@ -71,10 +82,18 @@ export class ApiExternalBusinessEventOutput implements EvidenceOutput {
 
   async publish(input: Parameters<EvidenceOutput["publish"]>[0]): Promise<void> {
     const evidence = toRuntimeExternalEvidence(input.evidence);
-    const body = Buffer.from(JSON.stringify({
-      command: "external-event.apply",
-      input: { evidence, event: input.businessEvent },
-    }), "utf8");
+    const businessEvent = input.businessEvent;
+    if (businessEvent === undefined &&
+        (evidence.canonicalClaimsSha256 !== undefined || evidence.businessEventSha256 !== undefined)) {
+      throw new ProductionIntegrationError(
+        "PROVIDER_RESPONSE_INVALID",
+        "direct evidence registration cannot contain an unattached business event digest",
+      );
+    }
+    const command = businessEvent === undefined ? "evidence.register" : "external-event.apply";
+    const body = Buffer.from(JSON.stringify(businessEvent === undefined
+      ? { command, input: { evidence } }
+      : { command, input: { evidence, event: businessEvent } }), "utf8");
     const token = await this.tokens.getToken();
     const response = await this.transport.request({
       url: this.options.endpoint,
@@ -83,7 +102,10 @@ export class ApiExternalBusinessEventOutput implements EvidenceOutput {
         accept: "application/json",
         "content-type": "application/json",
         authorization: `Bearer ${token}`,
-        "idempotency-key": input.businessEvent.eventId,
+        "idempotency-key": businessEvent?.eventId ?? directEvidenceSemanticIdempotencyKey(
+          input.evidence,
+          input.providerEventId,
+        ),
         "x-purpose": this.options.purpose,
       },
       body,
@@ -91,17 +113,78 @@ export class ApiExternalBusinessEventOutput implements EvidenceOutput {
       maximumResponseBytes: 1_048_576,
       acceptedStatuses: [200],
     });
-    const receipt = parseJsonObject(response.body, "external event API response");
-    const meta = objectField(receipt.meta, "external event API response meta");
-    if (meta.command !== "external-event.apply") {
-      throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", "external event API response command binding is invalid");
+    const receipt = parseJsonObject(response.body, "evidence API response");
+    const meta = objectField(receipt.meta, "evidence API response meta");
+    if (meta.command !== command) {
+      throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", "evidence API response command binding is invalid");
     }
-    const data = objectField(receipt.data, "external event API response data");
-    const value = objectField(data.value, "external event API response value");
-    if (requiredString(value.eventId, "applied eventId", 128) !== input.businessEvent.eventId) {
+    const data = objectField(receipt.data, "evidence API response data");
+    const value = objectField(data.value, "evidence API response value");
+    if (businessEvent === undefined) {
+      if (requiredString(value.evidenceId, "registered evidenceId", 128) !== input.evidence.evidenceId) {
+        throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", "evidence API registered a different evidence ID");
+      }
+    } else if (requiredString(value.eventId, "applied eventId", 128) !== businessEvent.eventId) {
       throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", "external event API applied a different event ID");
     }
   }
+
+  /** Proves that this exact rotating bearer identity owns both sink permissions. */
+  async preflightPermissions(): Promise<EvidenceSinkPermissionPreflight> {
+    const token = await this.tokens.getToken();
+    const endpoint = new URL("/v1/integrations/evidence-sink/preflight", this.options.endpoint);
+    const response = await this.transport.request({
+      url: endpoint,
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+        "x-purpose": this.options.purpose,
+      },
+      body: Buffer.from("{}", "utf8"),
+      timeoutMs: 10_000,
+      maximumResponseBytes: 16_384,
+      acceptedStatuses: [200],
+    });
+    const receipt = parseJsonObject(response.body, "evidence sink preflight response");
+    if (receipt.schemaVersion !== "ltm.evidence-sink-preflight.v1" ||
+        !Array.isArray(receipt.permissions) || receipt.permissions.length !== 2 ||
+        receipt.permissions[0] !== "evidence:register" || receipt.permissions[1] !== "external-event:apply") {
+      throw new ProductionIntegrationError(
+        "PROVIDER_RESPONSE_INVALID",
+        "evidence sink preflight did not prove both required permissions",
+      );
+    }
+    const principal = objectField(receipt.principal, "evidence sink preflight principal");
+    return {
+      actorId: requiredString(principal.actorId, "evidence sink principal actorId", 128),
+      tenantId: requiredString(principal.tenantId, "evidence sink principal tenantId", 128),
+      permissions: ["evidence:register", "external-event:apply"],
+    };
+  }
+}
+
+/**
+ * One provider decision event has one permanent API idempotency identity,
+ * independent of a newly generated LTM evidenceId or webhook nonce.
+ */
+export function directEvidenceSemanticIdempotencyKey(
+  evidence: Parameters<EvidenceOutput["publish"]>[0]["evidence"],
+  providerEventId: string,
+): string {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(providerEventId)) {
+    throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", "direct evidence provider event ID is invalid");
+  }
+  const values = [
+    evidence.tenantId,
+    evidence.binding.batchId,
+    evidence.binding.operation,
+    evidence.provider,
+    providerEventId,
+  ];
+  const canonical = values.map((value) => `${Buffer.byteLength(value, "utf8")}:${value}`).join("|");
+  return createHash("sha256").update(canonical).digest("hex");
 }
 
 function objectField(value: unknown, label: string): Record<string, unknown> {

@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ai-life-time-machine/command-receipt.schema.json",
+  "title": "Trusted acceptance command receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "batch_id", "execution_nonce", "command_index", "argv",
+    "argv_sha256", "base_commit", "source_commit", "source_tree", "cwd",
+    "environment_policy", "environment_sha256", "environment_keys", "executable",
+    "started_at", "completed_at", "duration_ms", "timeout_seconds", "timed_out",
+    "exit_code", "status", "stdout", "stderr", "producer"
+  ],
+  "properties": {
+    "schema_version": { "const": "ltm.command-receipt.v1" },
+    "batch_id": { "type": "string", "pattern": "^B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])$" },
+    "execution_nonce": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "command_index": { "type": "integer", "minimum": 0 },
+    "argv": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+    "argv_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "base_commit": { "type": "string", "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$" },
+    "source_commit": { "type": "string", "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$" },
+    "source_tree": { "type": "string", "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$" },
+    "cwd": { "const": "." },
+    "environment_policy": { "const": "ltm.clean-environment.v1" },
+    "environment_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "environment_keys": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "executable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path", "sha256"],
+      "properties": {
+        "kind": { "enum": ["system", "repository"] },
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 3600 },
+    "timed_out": { "type": "boolean" },
+    "exit_code": { "type": "integer" },
+    "status": { "enum": ["passed", "failed"] },
+    "stdout": { "$ref": "#/$defs/rawStream" },
+    "stderr": { "$ref": "#/$defs/rawStream" },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["orchestrator", "orchestrator_sha256", "trusted_execution_sha256"],
+      "properties": {
+        "orchestrator": { "type": "string", "minLength": 1 },
+        "orchestrator_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "trusted_execution_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    }
+  },
+  "$defs": {
+    "rawStream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "size"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "size": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

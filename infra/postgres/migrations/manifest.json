@@ -1,7 +1,7 @@
 {
   "schemaVersion": "ltm.postgres-migration-manifest.v1",
   "database": "postgresql",
-  "runtimeSchemaVersion": "5",
+  "runtimeSchemaVersion": "7",
   "migrations": [
     {
       "id": "001",
@@ -27,6 +27,16 @@
       "id": "005",
       "path": "005_participant_authority_and_processing_purpose.sql",
       "sha256": "cacd667b8057a1a66ddbc69f9bb286dad4b55bc9070ba7e56e2283d65fec80a5"
+    },
+    {
+      "id": "006",
+      "path": "006_data_intelligence_durability.sql",
+      "sha256": "b6479c213f78bc5da0905840de3969f45db6e6cbf1dc7909be8c6db571b1d834"
+    },
+    {
+      "id": "007",
+      "path": "007_commerce_partner_growth.sql",
+      "sha256": "7a21a99cf765f8b35f544e57ddcde646116cd1fd28d02a63a405ca6728b87290"
     }
   ]
 }

@@ -11,7 +11,11 @@ import {
   type SecretReference,
   type SecretResolver,
 } from "@ltm/providers";
-import { ApiExternalBusinessEventOutput, RotatingFileBearerTokenProvider } from "./evidence-output.js";
+import {
+  ApiExternalBusinessEventOutput,
+  RotatingFileBearerTokenProvider,
+  directEvidenceSemanticIdempotencyKey,
+} from "./evidence-output.js";
 
 test("signed callback event and evidence become one atomic external-event.apply command envelope", async () => {
   const pair = generateKeyPairSync("ed25519");
@@ -86,6 +90,76 @@ test("signed callback event and evidence become one atomic external-event.apply 
   assert.match(observed?.headers?.authorization ?? "", /^Bearer rotated-workload-identity-token/);
 });
 
+test("direct authority evidence becomes an authenticated idempotent evidence.register command", async () => {
+  const pair = generateKeyPairSync("ed25519");
+  const reference: SecretReference = "secret-manager:test/direct-evidence-key";
+  const secrets: SecretResolver = {
+    async resolve(value) {
+      assert.equal(value, reference);
+      return Buffer.from(pair.privateKey.export({ type: "pkcs8", format: "pem" }));
+    },
+  };
+  const artifact = Buffer.from("exact signed payment dispute authority bytes", "utf8");
+  const attestor = new Ed25519EvidenceAttestor({
+    issuer: "test:gateway",
+    keyId: "test-direct-key-1",
+    privateKeyReference: reference,
+    clock: () => new Date(),
+  }, secrets);
+  const evidence = await attestor.attest({
+    tenantId: "tenant-1",
+    batchId: "B91",
+    operation: "recordDisputeDecision",
+    kind: "payment-dispute",
+    provider: "payment:processor-1",
+    artifactSha256: sha256(artifact),
+    environment: "test",
+    subjectId: "dispute-1",
+  }, artifact);
+  let observed: HardenedHttpRequest | undefined;
+  const output = new ApiExternalBusinessEventOutput({
+    endpoint: new URL("https://api.example.test/v1/commands"),
+    purpose: "external_evidence_registration",
+  }, { getToken: async () => "rotated-workload-identity-token-value-123456789" }, {
+    async request(input) {
+      observed = input;
+      return {
+        status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
+        body: Buffer.from(JSON.stringify({
+          data: { value: { evidenceId: evidence.evidenceId }, replayed: false },
+          meta: { command: "evidence.register", requestId: "api-request-direct-1" },
+        })),
+      };
+    },
+  });
+  await output.publish({
+    requestId: "gateway-request-direct-1",
+    providerEventId: "processor-decision-1",
+    evidence,
+    receipt: { state: "verified" },
+  });
+  const body = JSON.parse(Buffer.from(observed?.body ?? []).toString("utf8")) as Record<string, unknown>;
+  assert.equal(body.command, "evidence.register");
+  const input = body.input as Record<string, unknown>;
+  assert.equal("event" in input, false);
+  assert.equal((input.evidence as Record<string, unknown>).evidenceId, evidence.evidenceId);
+  assert.equal(
+    observed?.headers?.["idempotency-key"],
+    directEvidenceSemanticIdempotencyKey(evidence, "processor-decision-1"),
+  );
+  assert.match(observed?.headers?.["idempotency-key"] ?? "", /^[a-f0-9]{64}$/);
+  assert.equal(
+    directEvidenceSemanticIdempotencyKey({ ...evidence, evidenceId: "replacement-envelope-id" }, "processor-decision-1"),
+    observed?.headers?.["idempotency-key"],
+  );
+  assert.notEqual(
+    directEvidenceSemanticIdempotencyKey(evidence, "processor-decision-2"),
+    observed?.headers?.["idempotency-key"],
+  );
+  assert.equal(observed?.headers?.["x-purpose"], "external_evidence_registration");
+});
+
 test("workload identity token provider re-reads a safely permissioned token file after rotation", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "ltm-gateway-token-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -98,4 +172,52 @@ test("workload identity token provider re-reads a safely permissioned token file
   assert.equal(await provider.getToken(), first);
   await writeFile(path, `${second}\n`, { mode: 0o600 });
   assert.equal(await provider.getToken(), second);
+});
+
+test("API sink preflight uses the same bearer principal and requires both closed permissions", async () => {
+  const requests: HardenedHttpRequest[] = [];
+  const output = new ApiExternalBusinessEventOutput({
+    endpoint: new URL("https://api.example.test/v1/commands"),
+    purpose: "external_business_event_projection",
+  }, { getToken: async () => "same-rotating-workload-identity-token-123456789" }, {
+    async request(input) {
+      requests.push(input);
+      return {
+        status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
+        body: Buffer.from(JSON.stringify({
+          schemaVersion: "ltm.evidence-sink-preflight.v1",
+          principal: { actorId: "integration-gateway", tenantId: "tenant-1" },
+          permissions: ["evidence:register", "external-event:apply"],
+          requestId: "preflight-request-1",
+        })),
+      };
+    },
+  });
+  assert.deepEqual(await output.preflightPermissions(), {
+    actorId: "integration-gateway",
+    tenantId: "tenant-1",
+    permissions: ["evidence:register", "external-event:apply"],
+  });
+  assert.equal(requests[0]?.url.pathname, "/v1/integrations/evidence-sink/preflight");
+  assert.match(requests[0]?.headers?.authorization ?? "", /^Bearer same-rotating/);
+  assert.equal(Buffer.from(requests[0]?.body ?? []).toString("utf8"), "{}");
+
+  const incomplete = new ApiExternalBusinessEventOutput({
+    endpoint: new URL("https://api.example.test/v1/commands"),
+    purpose: "external_business_event_projection",
+  }, { getToken: async () => "same-rotating-workload-identity-token-123456789" }, {
+    async request() {
+      return {
+        status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
+        body: Buffer.from(JSON.stringify({
+          schemaVersion: "ltm.evidence-sink-preflight.v1",
+          principal: { actorId: "integration-gateway", tenantId: "tenant-1" },
+          permissions: ["evidence:register"],
+        })),
+      };
+    },
+  });
+  await assert.rejects(incomplete.preflightPermissions(), /did not prove both required permissions/);
 });

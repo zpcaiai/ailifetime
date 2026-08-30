@@ -235,6 +235,7 @@ const definitions: readonly DomainCapabilityDefinition[] = [
     permission: "notification.deliverability.manage",
     requiresExternalEvidence: true,
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "deliverabilityArtifactSha256",
     mode: "attestation",
   }),
   defineCapability("B78", SKILL, "registerNotificationExperiment", notificationExperiment, {

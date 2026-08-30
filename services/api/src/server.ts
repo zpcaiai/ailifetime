@@ -6,12 +6,14 @@ import { fileURLToPath } from "node:url";
 import { externalBusinessEventReducerRegistry, type CapabilityRegistry } from "@ltm/capabilities";
 import {
   DomainError,
+  hasPermission,
   isDomainError,
   type ActorContext,
   type ExternalBusinessEventReducerRegistry,
   type LifeTimeMachineRuntimePort,
 } from "@ltm/core";
 import type { RequestAuthenticator } from "./auth.js";
+import type { ProductionDomainRuntime } from "./domain-runtime.js";
 import type { BrowserOidcPublicConfiguration } from "./browser-oidc.js";
 import type { ClientIntegrationPorts, MediaDeletionProjection } from "./client-integrations.js";
 import {
@@ -51,6 +53,8 @@ export interface ApiServerOptions {
   /** SHA-256 of a bearer token protecting /metrics. Required in production. */
   readonly metricsTokenSha256?: string;
   readonly clientIntegrations?: ClientIntegrationPorts;
+  /** Production bounded-context composition; omitted only for local/test fixtures. */
+  readonly domainRuntime?: ProductionDomainRuntime;
   readonly browserOidcConfiguration?: BrowserOidcPublicConfiguration;
   readonly logger?: (entry: ApiLogEntry) => void;
 }
@@ -187,8 +191,9 @@ async function handleRequest(
     if (method === "GET" && path === "/health/ready") {
       const readiness = await options.runtime.readiness();
       const integrations = await clientIntegrationReadiness(options.clientIntegrations);
-      const ready = readiness.ready && integrations.every((item) => item.ready);
-      sendJson(response, ready ? 200 : 503, { ...readiness, ready, integrations, requestId });
+      const domain = options.domainRuntime === undefined ? { ready: true, database: "embedded", schemaVersion: null } : await options.domainRuntime.readiness();
+      const ready = readiness.ready && integrations.every((item) => item.ready) && domain.ready;
+      sendJson(response, ready ? 200 : 503, { ...readiness, ready, integrations, domain, requestId });
       return;
     }
     if (method === "GET" && path === "/metrics") {
@@ -305,6 +310,127 @@ async function handleRequest(
       return;
     }
 
+    if (method === "POST" && path === "/v1/integrations/evidence-sink/preflight") {
+      const context = await authenticate(options, request, requestId);
+      assertEmptyObject(await readJsonBody(request, bodyLimit), "request body");
+      const permissions = ["evidence:register", "external-event:apply"] as const;
+      if (!context.roles.includes("service_account") || permissions.some((permission) => !hasPermission(context, permission))) {
+        throw new DomainError(
+          "AUTH_FORBIDDEN",
+          "Evidence sink preflight requires one service principal authorized for both sink operations",
+        );
+      }
+      sendJson(response, 200, {
+        schemaVersion: "ltm.evidence-sink-preflight.v1",
+        principal: { actorId: context.actorId, tenantId: context.tenantId },
+        permissions,
+        requestId,
+      });
+      return;
+    }
+
+    // Native mobile operational telemetry is persisted through B41 after the
+    // server minimizes fields and pseudonymizes the authenticated actor. The
+    // caller never receives event:receive authority and cannot choose a tenant.
+    if (method === "POST" && path === "/v1/mobile/telemetry") {
+      const authenticated = await authenticate(options, request, requestId);
+      const key = requireIdempotencyKey(request);
+      const event = mobileTelemetryEvent(await readJsonBody(request, bodyLimit));
+      const actorPseudonym = createHash("sha256")
+        .update(`${authenticated.tenantId}\n${authenticated.actorId}`, "utf8")
+        .digest("hex");
+      const serviceContext: ActorContext = {
+        ...authenticated,
+        actorId: `mobile-telemetry:${actorPseudonym.slice(0, 32)}`,
+        roles: ["service_account"],
+        permissions: ["event:receive", "audit:append"],
+        purpose: "product_analytics",
+        operationId: operationContext(authenticated, "mobile.telemetry", key).operationId!,
+      };
+      const data = await options.capabilityRegistry.execute(options.runtime, "B41", {
+        actor: serviceContext,
+        idempotencyKey: key,
+        input: {
+          eventId: event.eventId,
+          eventType: event.name,
+          schemaVersion: "ltm.mobile.telemetry.v1",
+          occurredAt: event.occurredAt,
+          receivedAt: event.occurredAt,
+          actorPseudonym,
+          dimensions: { surface: "native_mobile", ...event.fields },
+          metricNames: [event.name],
+        },
+      });
+      sendJson(response, 200, { data, meta: { requestId, batchId: "B41" } });
+      return;
+    }
+
+    if (method === "POST" && path === "/v1/wechat/payments") {
+      const platform = requireWechatPlatform(options.clientIntegrations);
+      const context = await authenticate(options, request, requestId);
+      assertWechatPurpose(context, "commerce");
+      const body = object(await readJsonBody(request, bodyLimit), "request body");
+      // Price, currency, payer openid, merchant ID, notify URL, and provider
+      // state are deliberately not accepted from the client. The broker resolves
+      // all of them from its trusted checkout and identity stores.
+      assertExactKeys(body, ["checkoutId"], "request body");
+      const data = await platform.createPayment(context, {
+        checkoutId: requestIdentifier(body.checkoutId, "checkoutId"),
+        idempotencyKey: requireIdempotencyKey(request),
+      });
+      sendJson(response, 201, { data, meta: { requestId } });
+      return;
+    }
+
+    const wechatPaymentMatch = /^\/v1\/wechat\/payments\/([A-Za-z0-9][A-Za-z0-9._:-]{7,255})$/.exec(path);
+    if (method === "GET" && wechatPaymentMatch?.[1] !== undefined) {
+      if (url.search !== "") throw new DomainError("VALIDATION_FAILED", "Payment status does not accept query parameters");
+      const platform = requireWechatPlatform(options.clientIntegrations);
+      const context = await authenticate(options, request, requestId);
+      assertWechatPurpose(context, "commerce");
+      const data = await platform.getPayment(context, { orderId: wechatPaymentMatch[1], requestId });
+      sendJson(response, 200, { data, meta: { requestId } });
+      return;
+    }
+
+    if (method === "GET" && path === "/v1/wechat/subscription-offer") {
+      if (url.search !== "") throw new DomainError("VALIDATION_FAILED", "Subscription offer does not accept query parameters");
+      const platform = requireWechatPlatform(options.clientIntegrations);
+      const context = await authenticate(options, request, requestId);
+      assertWechatPurpose(context, "notifications");
+      const data = await platform.getSubscriptionOffer(context, { requestId });
+      sendJson(response, 200, { data, meta: { requestId } });
+      return;
+    }
+
+    if (method === "POST" && path === "/v1/wechat/subscription-authorizations") {
+      const platform = requireWechatPlatform(options.clientIntegrations);
+      const context = await authenticate(options, request, requestId);
+      assertWechatPurpose(context, "notifications");
+      const body = object(await readJsonBody(request, bodyLimit), "request body");
+      assertExactKeys(body, ["offerId", "revision", "acceptedTemplateIds"], "request body");
+      const data = await platform.authorizeSubscriptions(context, {
+        offerId: requestIdentifier(body.offerId, "offerId"),
+        revision: requestInteger(body.revision, "revision", 1, 1_000_000),
+        acceptedTemplateIds: requestTemplateIds(body.acceptedTemplateIds),
+        idempotencyKey: requireIdempotencyKey(request),
+      });
+      sendJson(response, 201, { data, meta: { requestId } });
+      return;
+    }
+
+    if (method === "POST" && path === "/v1/wechat/customer-service-grants") {
+      const platform = requireWechatPlatform(options.clientIntegrations);
+      const context = await authenticate(options, request, requestId);
+      assertWechatPurpose(context, "customer_support");
+      assertEmptyObject(await readJsonBody(request, bodyLimit), "request body");
+      const data = await platform.createCustomerServiceGrant(context, {
+        idempotencyKey: requireIdempotencyKey(request),
+      });
+      sendJson(response, 201, { data, meta: { requestId } });
+      return;
+    }
+
     if (method === "POST" && path === "/v1/uploads") {
       const uploads = requireUploads(options.clientIntegrations);
       const context = await authenticate(options, request, requestId);
@@ -322,7 +448,9 @@ async function handleRequest(
         clientRequestId: requestIdentifier(body.clientRequestId, "clientRequestId"),
         idempotencyKey: requireIdempotencyKey(request),
       });
-      sendJson(response, 201, created);
+      // The broker uses fixed five-MiB multipart parts for every non-final chunk.
+      // Surface that value explicitly so clients never guess a resumability contract.
+      sendJson(response, 201, { ...created, chunkBytes: 5 * 1024 * 1024 });
       return;
     }
 
@@ -331,13 +459,14 @@ async function handleRequest(
       const uploads = requireUploads(options.clientIntegrations);
       const context = await authenticate(options, request, requestId);
       const range = requireContentRange(request);
-      const encoded = (await readBody(request, 8 * 1024 * 1024, "application/octet-stream")).toString("ascii");
-      if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
-        throw new DomainError("VALIDATION_FAILED", "Upload chunk must be canonical base64");
-      }
-      const bytes = Buffer.from(encoded, "base64");
+      const bytes = await readBody(request, 5 * 1024 * 1024, "application/octet-stream");
       if (bytes.byteLength !== range.end - range.start + 1 || bytes.byteLength < 1 || bytes.byteLength > 5 * 1024 * 1024) {
         throw new DomainError("VALIDATION_FAILED", "Upload chunk does not match Content-Range");
+      }
+      const expectedChunkSha256 = requireChunkSha256(request);
+      const actualChunkSha256 = createHash("sha256").update(bytes).digest("hex");
+      if (!timingSafeEqual(Buffer.from(expectedChunkSha256, "ascii"), Buffer.from(actualChunkSha256, "ascii"))) {
+        throw new DomainError("VALIDATION_FAILED", "Upload chunk checksum does not match its bytes");
       }
       const result = await uploads.append(context, {
         uploadId: uploadMatch[1] ?? "",
@@ -426,6 +555,7 @@ async function handleRequest(
         batchId,
         secured.input,
         key,
+        secured.portalAuthorization ?? "portal-manifest",
       );
       const controlledData = secured.mediaDeletion === undefined
         ? data
@@ -481,6 +611,7 @@ async function clientIntegrationReadiness(
 ): Promise<readonly { readonly ready: boolean; readonly dependency: string }[]> {
   const checks: Array<Promise<{ readonly ready: boolean; readonly dependency: string }>> = [];
   if (ports?.wechatIdentity !== undefined) checks.push(ports.wechatIdentity.readiness());
+  if (ports?.wechatPlatform !== undefined) checks.push(ports.wechatPlatform.readiness());
   if (ports?.resumableUploads !== undefined) checks.push(ports.resumableUploads.readiness());
   return Promise.all(checks);
 }
@@ -490,6 +621,22 @@ function requireWechatIdentity(ports: ClientIntegrationPorts | undefined) {
     throw new DomainError("EXTERNAL_ADAPTER_UNAVAILABLE", "WeChat identity integration is not configured");
   }
   return ports.wechatIdentity;
+}
+
+function requireWechatPlatform(ports: ClientIntegrationPorts | undefined) {
+  if (ports?.wechatPlatform === undefined) {
+    throw new DomainError("EXTERNAL_ADAPTER_UNAVAILABLE", "WeChat commerce and messaging integration is not configured");
+  }
+  return ports.wechatPlatform;
+}
+
+function assertWechatPurpose(
+  context: ActorContext,
+  expected: "commerce" | "notifications" | "customer_support",
+): void {
+  if (context.purpose !== expected) {
+    throw new DomainError("AUTH_FORBIDDEN", `WeChat operation requires ${expected} purpose`);
+  }
 }
 
 function requireUploads(ports: ClientIntegrationPorts | undefined) {
@@ -510,6 +657,7 @@ async function secureMediaCapabilityInput(
   readonly input: unknown;
   readonly mediaDeletion?: MediaDeletionProjection;
   readonly authorizedContext?: ActorContext;
+  readonly portalAuthorization?: "b05-data-erasure";
 }> {
   if (batchId === "B05") {
     const request = object(input, "B05 request body");
@@ -548,6 +696,7 @@ async function secureMediaCapabilityInput(
       },
       mediaDeletion,
       authorizedContext,
+      portalAuthorization: "b05-data-erasure",
     };
   }
   if (batchId !== "B07") return { input };
@@ -638,6 +787,48 @@ function requestSha256Digest(value: unknown, label: string): string {
   return value;
 }
 
+function requestTemplateIds(value: unknown): readonly string[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 3 || new Set(value).size !== value.length ||
+      value.some((entry) => typeof entry !== "string" || !/^[A-Za-z0-9_-]{20,80}$/.test(entry))) {
+    throw new DomainError("VALIDATION_FAILED", "acceptedTemplateIds must be a bounded unique WeChat template list");
+  }
+  return [...value] as string[];
+}
+
+function mobileTelemetryEvent(value: unknown): {
+  readonly eventId: string;
+  readonly name: string;
+  readonly occurredAt: string;
+  readonly fields: Record<string, string | number | boolean>;
+} {
+  const body = object(value, "mobile telemetry body");
+  assertExactKeys(body, ["eventId", "name", "occurredAt", "fields"], "mobile telemetry body");
+  const eventId = requestIdentifier(body.eventId, "eventId");
+  const name = requestString(body.name, "name", 128);
+  if (!/^[A-Za-z][A-Za-z0-9._:-]{1,127}$/.test(name)) throw new DomainError("VALIDATION_FAILED", "mobile telemetry name is invalid");
+  const occurredAtRaw = requestString(body.occurredAt, "occurredAt", 64);
+  const occurredAtMs = Date.parse(occurredAtRaw);
+  const now = Date.now();
+  if (!Number.isFinite(occurredAtMs) || occurredAtMs > now + 60_000 || occurredAtMs < now - 7 * 24 * 60 * 60_000) {
+    throw new DomainError("VALIDATION_FAILED", "mobile telemetry time is outside the accepted window");
+  }
+  const fields = object(body.fields, "mobile telemetry fields");
+  const allowed = new Set(["platform", "appVersion", "networkType", "status", "errorCode", "durationMs", "bytes", "attempt", "screen", "operation"]);
+  if (Object.keys(fields).length < 1 || Object.keys(fields).length > allowed.size || Object.keys(fields).some((field) => !allowed.has(field))) {
+    throw new DomainError("VALIDATION_FAILED", "mobile telemetry fields are not allowlisted");
+  }
+  const normalized: Record<string, string | number | boolean> = {};
+  for (const [field, raw] of Object.entries(fields)) {
+    if ((typeof raw !== "string" && typeof raw !== "number" && typeof raw !== "boolean") ||
+        typeof raw === "string" && (raw.length > 128 || /https?:|file:|content:|bearer|token/i.test(raw)) ||
+        typeof raw === "number" && !Number.isFinite(raw)) {
+      throw new DomainError("VALIDATION_FAILED", `mobile telemetry field ${field} is unsafe`);
+    }
+    normalized[field] = raw;
+  }
+  return { eventId, name, occurredAt: new Date(occurredAtMs).toISOString(), fields: normalized };
+}
+
 function assertExactKeys(value: Record<string, unknown>, expected: readonly string[], label: string): void {
   const fields = Object.keys(value);
   if (fields.length !== expected.length || fields.some((field) => !expected.includes(field))) {
@@ -662,6 +853,14 @@ function requireContentRange(request: IncomingMessage): { readonly start: number
     throw new DomainError("VALIDATION_FAILED", "Content-Range is outside upload bounds");
   }
   return { start, end, total };
+}
+
+function requireChunkSha256(request: IncomingMessage): string {
+  const value = headerValue(request, "x-chunk-sha256") ?? "";
+  if (!/^[a-f0-9]{64}$/.test(value)) {
+    throw new DomainError("VALIDATION_FAILED", "A lowercase SHA-256 X-Chunk-Sha256 header is required");
+  }
+  return value;
 }
 
 function requireIdempotencyKey(request: IncomingMessage): string {

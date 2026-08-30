@@ -214,6 +214,7 @@ const definitions: readonly DomainCapabilityDefinition[] = [
     permission: "release.experience.approve",
     requiresExternalEvidence: true,
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "evaluationReportSha256",
     mode: "attestation",
   }),
 ];

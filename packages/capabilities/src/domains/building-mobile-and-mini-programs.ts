@@ -369,12 +369,14 @@ const definitions: readonly DomainCapabilityDefinition[] = [
     permission: "mobile.assurance.approve",
     requiresExternalEvidence: true,
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "assuranceArtifactSha256",
     mode: "attestation",
   }),
   defineCapability("B69", SKILL, "approveMobileStoreRelease", mobileRelease, {
     permission: "release.mobile.approve",
     requiresExternalEvidence: true,
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "artifactDigest",
     mode: "attestation",
   }),
   defineCapability("B70", SKILL, "startMiniProgramJourney", miniProgramJourney, {
@@ -394,6 +396,7 @@ const definitions: readonly DomainCapabilityDefinition[] = [
     permission: "release.mini-program.approve",
     requiresExternalEvidence: true,
     externalEvidenceScope: (data) => requiredString(data, "evidenceScope"),
+    evidenceRequestArtifactField: "releaseArtifactSha256",
     mode: "attestation",
   }),
 ];

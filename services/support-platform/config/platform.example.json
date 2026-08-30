@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "ltm.support-platform-config.v1",
+  "environment": "sandbox",
+  "state": { "adapter": "file", "path": "/var/lib/ltm-support/state.json" },
+  "signing": {
+    "attachmentSecretReference": "secret-manager:ltm/support/attachment-hmac",
+    "supportSessionSecretReference": "secret-manager:ltm/support/session-hmac",
+    "toolConfirmationSecretReference": "secret-manager:ltm/support/tool-confirmation-hmac",
+    "actionConfirmationSecretReference": "secret-manager:ltm/support/action-confirmation-hmac"
+  },
+  "adapters": {
+    "identityVerification": "provider-config:ltm/support/identity-verification",
+    "attachmentScanner": "provider-config:ltm/support/malware-scanner",
+    "objectStore": "provider-config:ltm/support/object-store",
+    "supportDomainCommands": "provider-config:ltm/support/domain-command-bus",
+    "dataRightsWorkflow": "provider-config:ltm/support/data-rights-workflow",
+    "partnerOffboarding": "provider-config:ltm/support/partner-offboarding",
+    "crm": "provider-config:ltm/support/crm"
+  },
+  "certification": {
+    "identityVerificationReceipts": { "status": "NOT_CERTIFIED", "evidencePath": null, "evidenceSha256": null },
+    "malwareScannerReceipts": { "status": "NOT_CERTIFIED", "evidencePath": null, "evidenceSha256": null },
+    "domainActionReceipts": { "status": "NOT_CERTIFIED", "evidencePath": null, "evidenceSha256": null },
+    "dataRightsProcessorReceipts": { "status": "NOT_CERTIFIED", "evidencePath": null, "evidenceSha256": null },
+    "crmProviderReceipts": { "status": "NOT_CERTIFIED", "evidencePath": null, "evidenceSha256": null },
+    "regulatoryReview": { "status": "NOT_CERTIFIED", "evidencePath": null, "evidenceSha256": null },
+    "supportTrainingEvidence": { "status": "NOT_CERTIFIED", "evidencePath": null, "evidenceSha256": null }
+  }
+}

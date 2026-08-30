@@ -71,4 +71,4 @@ When sources conflict, do not silently choose. Preserve current production compa
 - Record exact commands, exit codes, changed files, entrypoints, tests, runtime evidence, migrations, risks, and commit.
 - Use `schemas/completion-report.schema.json` and `schemas/traceability.schema.json`.
 - Keep sensitive media and secrets out of evidence.
-- Run `python3 .ai-life-time-machine/skill-package/scripts/verify_release.py --repo . --batch Bxx` before declaring a Batch passed.
+- Run `python3 skills/certifying-life-time-machine-release/scripts/verify_release.py --repo . --batch Bxx` before declaring a Batch passed.

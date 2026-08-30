@@ -1,0 +1,23 @@
+version: 2
+models:
+  - name: stg_source_records
+    columns:
+      - name: source_fingerprint
+        tests: [not_null, unique]
+  - name: core_commercial_events
+    columns:
+      - name: tenant_id
+        tests: [not_null]
+      - name: currency
+        tests:
+          - accepted_values:
+              values: [CNY, USD, EUR, GBP, JPY, HKD, SGD]
+              quote: true
+  - name: dim_subject_scd
+    columns:
+      - name: subject_key
+        tests: [not_null]
+  - name: mart_control_totals
+    columns:
+      - name: freshness_lag_seconds
+        tests: [not_null]

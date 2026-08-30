@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  requestBoundEvidenceScope,
   externalCommandCallbackProviderAllowed,
   resolveExternalCommandCallbackRoute,
   type ExternalCommandCallbackRouteDefinition,
@@ -21,6 +22,8 @@ type EvidenceBinding<
   readonly artifactSha256: string;
   readonly environment: EvidenceEnvironment;
   readonly subjectId: string;
+  /** Present only for direct authority decisions bound to one canonical request. */
+  readonly requestSha256?: string;
 };
 
 export type StoreTransactionEvidenceBinding = EvidenceBinding<
@@ -182,7 +185,10 @@ export function capabilityEvidenceScope(binding: CapabilityEvidenceBinding): str
     binding.environment,
     binding.subjectId,
   ].map((value) => `${Buffer.byteLength(value, "utf8")}:${value}`).join("|");
-  return `ltm-evidence:v1:${createHash("sha256").update(canonical).digest("hex")}`;
+  const baseScope = `ltm-evidence:v1:${createHash("sha256").update(canonical).digest("hex")}`;
+  return binding.requestSha256 === undefined
+    ? baseScope
+    : requestBoundEvidenceScope(baseScope, binding.requestSha256);
 }
 
 export function assertCapabilityEvidenceBinding(binding: CapabilityEvidenceBinding): void {
@@ -190,6 +196,7 @@ export function assertCapabilityEvidenceBinding(binding: CapabilityEvidenceBindi
   identifier(binding.subjectId, "subjectId");
   identifier(binding.provider, "provider");
   exactSha256(binding.artifactSha256);
+  if (binding.requestSha256 !== undefined) exactSha256(binding.requestSha256);
   assertBindingTuple(binding);
 }
 

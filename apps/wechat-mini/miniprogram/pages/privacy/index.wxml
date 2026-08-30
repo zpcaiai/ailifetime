@@ -1,0 +1,4 @@
+<view class="page"><view class="card"><view class="title">处理所选照片前确认</view>
+  <view class="muted">触发接口：{{referrer}}。仅处理您主动选择的照片，用于生成带 AI 标识的艺术作品；会移除非必要 EXIF，上传会话最长 24 小时，可在账户中撤回或请求删除。</view>
+  <button class="button" bindtap="agree">同意并继续</button><button class="button danger" bindtap="disagree">不同意</button>
+</view></view>

@@ -36,11 +36,19 @@ Run an API smoke test in another terminal:
 pnpm smoke
 ```
 
-Optional infrastructure contract:
+The complete local composition starts PostgreSQL, Redis, object storage, the
+minimal API/web application, and the durable outbox/workflow worker with
+separate liveness/readiness endpoints. It uses only synthetic local identity
+and a shared local SQLite application volume; it never substitutes sandbox
+delivery for a real external-provider result:
 
 ```bash
-docker compose config --quiet
-docker compose up -d postgres redis object-storage
+pnpm local:up
+curl --fail http://127.0.0.1:8080/health/live
+curl --fail http://127.0.0.1:8080/health/ready
+curl --fail http://127.0.0.1:8090/health/live
+curl --fail http://127.0.0.1:8090/health/ready
+pnpm local:down
 ```
 
 Build the API and worker images with:
@@ -80,6 +88,25 @@ The default local profile deliberately uses SQLite so the developer loop does no
 
 `pnpm check` runs strict type checks, package tests, Python SDK tests, Java SDK compilation and production builds. Capability tests compare the executable registry with the factory manifest so missing or duplicate B00-B127 implementations fail the build.
 
+The B00 baseline is an executable read-only inventory and command recorder. A plain inspection never calls a project script and therefore records available commands as `skipped`, not passed. The verification form runs the named package scripts without a shell and writes bounded, secret-redacted artifacts beneath the ignored `.artifacts/repository-baseline/` directory:
+
+```bash
+pnpm baseline:inspect
+pnpm baseline:verify
+```
+
+It emits `inventory.json`, `command-log.ndjson`, `dependency-plan.json`, `risk-register.json`, and both JSON and Markdown baseline reports. The dependency plan resolves every B00-B127 handler back to its actual domain source file.
+
+B02 also exposes deterministic local seed and schema-7 data-dictionary
+generation commands. The dictionary binds every tenant table and sensitive JSON
+surface to classification, retention, encryption, and allowed-purpose policy;
+the seed creates only synthetic B01/B02 control-plane records:
+
+```bash
+pnpm contracts:generate
+pnpm seed:local
+```
+
 Factory state remains available through:
 
 ```bash
@@ -91,11 +118,11 @@ Code-level implementation is not a B127 production certificate. Live AI quality,
 
 ## Production release certification
 
-The production gate reads B126 and B127 directly from PostgreSQL through a dedicated role with only `CONNECT`, schema `USAGE`, and `SELECT` on `ltm.schema_metadata`, `ltm.records`, `ltm.external_evidence`, and `ltm.evidence_consumptions`. The certifier rejects superuser, `BYPASSRLS`, role membership, write/DDL privileges, anything except PostgreSQL 17 with runtime schema 5, a connection that is not TLS verified with `sslmode=verify-full`, or drift in any of the exact 17 schema-5 tenant tables. Every table must enable and force RLS and expose one `PERMISSIVE ALL PUBLIC tenant_isolation` policy with exact `tenant_id = ltm.current_tenant()` `USING` and `WITH CHECK` expressions. It binds `app.tenant_id` inside a repeatable-read, read-only transaction and never treats a SQLite export as production proof.
+The production gate reads B126 and B127 directly from PostgreSQL through a dedicated role with only `CONNECT`, schema `USAGE`, and `SELECT` on `ltm.schema_metadata`, `ltm.records`, `ltm.external_evidence`, and `ltm.evidence_consumptions`. The certifier rejects superuser, `BYPASSRLS`, role membership, write/DDL privileges, anything except PostgreSQL 17 with runtime schema 7, a connection that is not TLS verified with `sslmode=verify-full`, or drift in any of the exact schema-7 tenant tables (including durable commerce, growth, partner, tracking and warehouse state). Every table must enable and force RLS and expose one `PERMISSIVE ALL PUBLIC tenant_isolation` policy with exact tenant or partner context expressions. It binds `app.tenant_id` inside a repeatable-read, read-only transaction and never treats a SQLite export as production proof.
 
 Consent disclosure authority is server-side: production startup requires a signed closed Ed25519 policy catalog, active public trust keys, and server-configured jurisdiction/locale. Each consent persists the catalog digest and resolved disclosure digest, and point-of-use checks fail closed after catalog, trust, policy, participant, or delegated-authority expiry. B127 release subjects bind the exact consent catalog digest together with the media lifecycle and media safety policy digests. The manifest also retains the exact authenticated media-authority response bytes, while the required signed `runtime-policy-authority` deployment report independently probes API readiness and `/v1/consent-policy/authority` plus broker readiness and `/v1/media/lifecycle/authority` over HTTPS workload identity/mTLS; all three observed digests must match the release subject.
 
-A final B127 certificate is reachable only for the `global` wave at exactly 100%. The signed manifest must also bind the `full-commercial` profile; unique B00-B127 report hashes covering all 640 requirements; versioned API, web, TypeScript/Python/Java SDK, iOS, Android, WeChat and production-configuration artifacts; the closed eleven-domain guardrail policy; five completed zero-breach rollout waves; every raw monitoring query/result and automatic-pause command/receipt byte; the rollback-forward drill; an accepted B126 commercial E2E record with its own five consumed trusted Ed25519 envelopes; declared release exceptions; an approved go-live window; and an accepted operations handoff. Every raw rollout-control reference also binds a separate digest-addressed, production-only Ed25519 attestation whose closed claims identify the exact artifact, release, deployment, wave, metric, observation window, value and state. Query/result and pause-command/receipt attestations require their respective independently enrolled authority roles and distinct producer keys. Raw evidence, attestation IDs, nonces, signatures and digests cannot be reused across waves. Production change approval requires independently enrolled risk and operations Ed25519 signers with different issuers and public keys, both independent from the enrolled executor and primary change signer. Canary and regional records remain intermediate and return `BLOCKED_EXTERNAL`.
+A final B127 certificate is reachable only for the `global` wave at exactly 100%. The signed manifest must also bind the `full-commercial` profile; unique B00-B127 report hashes covering all 640 requirements; versioned API, web, TypeScript/Python/Java SDK, iOS, Android, WeChat and production-configuration artifacts; the closed eleven-domain guardrail policy; five completed zero-breach rollout waves; every raw monitoring query/result and automatic-pause command/receipt byte; the rollback-forward drill; an accepted B126 commercial E2E record with its own five consumed trusted Ed25519 envelopes; declared release exceptions; an approved go-live window; and an accepted operations handoff. Every raw rollout-control reference also binds a separate digest-addressed, production-only Ed25519 attestation whose closed claims identify the exact artifact, release, deployment, wave, metric, observation window, value and state. Query/result and pause-command/receipt attestations require their respective independently enrolled authority roles and distinct producer keys. Raw evidence, attestation IDs, nonces, signatures and digests cannot be reused across waves. Primary B127 evidence additionally requires the reserved `b127-production-release-authority` role, a production-only exact scope, independent Ed25519 key material and a `release-control:` identity; ordinary integration-gateway, direct-evidence, supply-event and callback keys cannot authorize B127. Production change approval requires independently enrolled risk and operations Ed25519 signers with different issuers and public keys, both independent from the enrolled executor and primary change signer. Canary and regional records remain intermediate and return `BLOCKED_EXTERNAL`.
 
 Configure `LTM_B127_POSTGRES_URL`, `LTM_RELEASE_MANIFEST_PATH`, `LTM_TRUSTED_EVIDENCE_KEYS_FILE`, `LTM_RELEASE_TENANT_ID`, `LTM_RELEASE_LAUNCH_ID`, and the remaining production deployment evidence, then run:
 

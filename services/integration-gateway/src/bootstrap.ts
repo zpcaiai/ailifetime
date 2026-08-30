@@ -1,4 +1,4 @@
-import { createPrivateKey, createPublicKey, X509Certificate } from "node:crypto";
+import { createPrivateKey, X509Certificate } from "node:crypto";
 import type { VerifiedBusinessEvent } from "@ltm/core";
 import {
   AppleStoreNotificationIntegration,
@@ -18,6 +18,7 @@ import {
   SignedPartnerCommandAdapter,
   WechatPayEvidenceIntegration,
   parseJsonObject,
+  preflightPartnerSignatureKey,
   requiredString,
   type PartnerWebhookSignatureScheme,
   type SecretReference,
@@ -31,11 +32,20 @@ import type {
   IntegrationGatewayOptions,
 } from "./gateway.js";
 import { ApiExternalBusinessEventOutput, RotatingFileBearerTokenProvider } from "./evidence-output.js";
+import { ProductionDependencyReadiness } from "./production-readiness.js";
 import {
   createExternalCommandPartnerCallbackHandler,
   loadExternalCommandPartnerPolicies,
   partnerCallbackPath,
 } from "./partner-callbacks.js";
+import {
+  createSupplyEventCallbackHandlers,
+  loadSupplyEventAuthorities,
+} from "./supply-event-callbacks.js";
+import {
+  createDirectEvidenceCallbackHandlers,
+  loadDirectEvidenceAuthorities,
+} from "./direct-evidence-callbacks.js";
 
 export interface BuiltGateway {
   readonly options: IntegrationGatewayOptions;
@@ -175,11 +185,56 @@ export async function buildIntegrationGateway(configuration: IntegrationGatewayC
       }));
     }
   }
+  if (configuration.supplyEventAuthoritiesReference !== undefined) {
+    const authorities = await loadSupplyEventAuthorities(
+      configuration.supplyEventAuthoritiesReference,
+      secrets,
+      configuration,
+    );
+    await preflightSignatureKeys(secrets, authorities.map((authority) =>
+      [authority.verificationKeyReference, authority.signatureScheme] as const));
+    for (const [path, handler] of createSupplyEventCallbackHandlers(authorities, {
+      secrets,
+      replays: innerReplays,
+      artifacts,
+      attestor,
+    })) {
+      if (routes.has(path)) {
+        throw new ProductionIntegrationError("CONFIGURATION_INVALID", "supply event webhook route is duplicated");
+      }
+      routes.set(path, handler);
+    }
+  }
+  if (configuration.directEvidenceAuthoritiesReference !== undefined) {
+    const authorities = await loadDirectEvidenceAuthorities(
+      configuration.directEvidenceAuthoritiesReference,
+      secrets,
+      configuration,
+    );
+    await preflightSignatureKeys(secrets, authorities.map((authority) =>
+      [authority.verificationKeyReference, authority.signatureScheme] as const));
+    for (const [path, handler] of createDirectEvidenceCallbackHandlers(authorities, {
+      secrets,
+      replays: innerReplays,
+      artifacts,
+      attestor,
+    })) {
+      if (routes.has(path)) {
+        throw new ProductionIntegrationError("CONFIGURATION_INVALID", "direct evidence webhook route is duplicated");
+      }
+      routes.set(path, handler);
+    }
+  }
   const outputTokenProvider = new RotatingFileBearerTokenProvider(configuration.output.bearerTokenFile);
   const evidenceOutput = new ApiExternalBusinessEventOutput({
     endpoint: configuration.output.endpoint,
     purpose: configuration.output.purpose,
   }, outputTokenProvider);
+  const productionDependencies = new ProductionDependencyReadiness({
+    bucket: configuration.artifactStore.bucket,
+    kmsKeyId: configuration.artifactStore.kmsKeyId,
+    tenantId: configuration.tenantId,
+  }, evidenceOutput);
   return {
     options: {
       tenantId: configuration.tenantId,
@@ -188,25 +243,20 @@ export async function buildIntegrationGateway(configuration: IntegrationGatewayC
       callbackState,
       bodyLimitBytes: configuration.bodyLimitBytes,
       readiness: async () => {
-        let apiIdentity = false;
-        try {
-          await outputTokenProvider.getToken();
-          apiIdentity = true;
-        } catch {
-          apiIdentity = false;
-        }
+        const dependencies = await productionDependencies.check();
         return {
-          ready: callbackState.isReady() && evidenceEnvelopes.isReady() && apiIdentity,
+          ready: callbackState.isReady() && evidenceEnvelopes.isReady() && dependencies.ready,
           checks: {
             callbackState: callbackState.isReady(),
             evidenceEnvelopes: evidenceEnvelopes.isReady(),
-            apiWorkloadIdentity: apiIdentity,
+            ...dependencies.checks,
             configuration: true,
           },
         };
       },
     },
     close: async () => {
+      productionDependencies.close();
       await Promise.all([callbackState.close(), evidenceEnvelopes.close()]);
     },
   };
@@ -292,20 +342,7 @@ async function preflightSignatureKeys(
   inputs: readonly (readonly [SecretReference, PartnerWebhookSignatureScheme])[],
 ): Promise<void> {
   for (const [reference, scheme] of inputs) {
-    const bytes = Buffer.from(await secrets.resolve(reference));
-    try {
-      if (scheme === "hmac-sha256") {
-        if (bytes.byteLength < 32) throw new Error("short key");
-      } else {
-        const key = createPublicKey(bytes);
-        if ((scheme === "ed25519" && key.asymmetricKeyType !== "ed25519") ||
-            (scheme === "es256" && key.asymmetricKeyType !== "ec")) throw new Error("wrong key type");
-      }
-    } catch {
-      throw new ProductionIntegrationError("CONFIGURATION_INVALID", "configured signature key is invalid");
-    } finally {
-      bytes.fill(0);
-    }
+    await preflightPartnerSignatureKey(reference, scheme, secrets);
   }
 }
 

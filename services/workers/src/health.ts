@@ -6,6 +6,7 @@ export interface WorkerReadiness {
   readonly database: string;
   readonly auditChain: string;
   readonly evidenceTrust: string;
+  readonly consentPolicy: string;
 }
 
 export interface WorkerHealthOptions {

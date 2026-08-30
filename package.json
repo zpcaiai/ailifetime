@@ -13,8 +13,10 @@
     "test": "pnpm -r --if-present run test && pnpm run test:release-certification && pnpm run test:security && pnpm run test:infra && pnpm run test:sdk-python && pnpm run test:sdk-java",
     "test:release-certification": "node --test tools/b127-certifier.test.mjs tools/b127-postgres.integration.test.mjs",
     "test:security": "node --test tools/security-*.test.mjs",
-    "test:infra": "node --test tools/postgres-migrate.test.mjs tools/kubernetes-production.test.mjs tools/factory-status.test.mjs",
+    "test:infra": "node --test tools/postgres-migrate.test.mjs tools/kubernetes-production.test.mjs tools/factory-status.test.mjs tools/repository-baseline.test.mjs tools/repository-architecture.test.mjs tools/local-seed.test.mjs tools/production-surface-gate.test.mjs",
     "infra:postgres:migrate": "node tools/postgres-migrate.mjs",
+    "contracts:generate": "pnpm --filter @ltm/core run build && node tools/data-dictionary.mjs",
+    "seed:local": "pnpm --filter @ltm/capabilities... run build && node tools/local-seed.mjs",
     "infra:kubernetes": "node tools/kubernetes-production.mjs",
     "security:scan": "node tools/security-scan.mjs",
     "security:dast": "node tools/security-dast.mjs",
@@ -29,10 +31,16 @@
     "dev": "APP_ENV=local LTM_AUTH_MODE=local-synthetic-only LTM_ALLOW_LEGACY_CONSENT_POLICY=true PORT=8080 pnpm --filter @ltm/api run dev",
     "start": "pnpm --filter @ltm/api run start",
     "start:local": "APP_ENV=local LTM_AUTH_MODE=local-synthetic-only LTM_ALLOW_LEGACY_CONSENT_POLICY=true PORT=8080 pnpm --filter @ltm/api run start",
+    "local:up": "docker compose up --build --wait",
+    "local:down": "docker compose down",
     "smoke": "node tools/smoke.mjs",
     "factory:status": "node tools/factory-status.mjs",
     "factory:ready": "node tools/factory-status.mjs --ready",
-    "factory:validate": "python3 .ai-life-time-machine/skill-package/scripts/validate_package.py --root .ai-life-time-machine/skill-package"
+    "factory:trace:public-web": "node tools/public-web-trace.mjs",
+    "factory:trace:production": "node tools/production-surface-gate.mjs",
+    "factory:validate": "python3 .ai-life-time-machine/skill-package/scripts/validate_package.py --root .ai-life-time-machine/skill-package",
+    "baseline:inspect": "node tools/repository-baseline.mjs",
+    "baseline:verify": "node tools/repository-baseline.mjs --run build,lint,typecheck,test"
   },
   "dependencies": {
     "pg": "8.16.3"

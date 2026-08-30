@@ -1,0 +1,10 @@
+<view class="page">
+  <view class="card">
+    <view class="title">受控订单支付</view>
+    <view class="muted">金额、币种和订单状态只从商户服务端读取。微信原生回调不会直接授予权益，必须等待商户服务端验签投影。</view>
+    <input class="field" aria-label="结算引用" placeholder="输入服务端结算引用" value="{{checkoutId}}" bindinput="checkoutChanged" />
+    <button class="button" disabled="{{busy}}" bindtap="pay">由服务端读取订单并调用微信支付</button>
+    <view class="title" wx:if="{{amountText}}">{{amountText}}</view>
+    <view class="status" wx:if="{{stateText}}">{{stateText}}</view><view class="status error" wx:if="{{error}}">{{error}}</view>
+  </view>
+</view>

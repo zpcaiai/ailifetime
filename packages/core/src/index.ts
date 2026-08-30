@@ -1,9 +1,14 @@
 export * from "./errors.js";
+export { canonicalJson } from "./canonical.js";
+export * from "./evidence-request-binding.js";
 export * from "./consent-scope.js";
 export * from "./consent-policy.js";
+export * from "./runtime-consent-policy-config.js";
 export * from "./evidence.js";
 export * from "./external-business-events.js";
 export * from "./external-command-callbacks.js";
+export * from "./data-catalog.js";
+export * from "./postgres-policy-contract.js";
 export * from "./share-grants.js";
 export * from "./rights-requests.js";
 export { effectivePermissions, hasPermission } from "./policy.js";

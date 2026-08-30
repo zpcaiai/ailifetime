@@ -66,6 +66,34 @@ const fakeEvidence = {
   signature: "test-signature-non-empty",
 } satisfies SignedCapabilityEvidence;
 
+const fakeDirectBinding = {
+  tenantId: "tenant-1",
+  batchId: "B91",
+  operation: "recordDisputeDecision",
+  kind: "payment-dispute",
+  provider: "payment:processor-1",
+  artifactSha256: "b".repeat(64),
+  environment: "test",
+  subjectId: "dispute-1",
+} as const;
+const fakeDirectEvidence = {
+  version: "ltm.external-evidence.v1",
+  evidenceId: "evidence-direct-1",
+  tenantId: "tenant-1",
+  binding: fakeDirectBinding,
+  scope: capabilityEvidenceScope(fakeDirectBinding),
+  issuer: "test:gateway",
+  provider: "payment:processor-1",
+  artifactSha256: "b".repeat(64),
+  issuedAt: new Date(Date.now() - 1_000).toISOString(),
+  expiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+  nonce: "gateway-direct-nonce-1",
+  replayPolicy: "single_use",
+  algorithm: "Ed25519",
+  keyId: "test-key-1",
+  signature: "test-signature-non-empty",
+} satisfies SignedCapabilityEvidence;
+
 class MemoryCallbackState implements CallbackDeliveryStateStore {
   readonly values = new Map<string, { state: "processing" | "delivering" | "ready" | "completed"; leaseId: string; payload?: Buffer }>();
   nextLease = 0;
@@ -222,6 +250,52 @@ test("gateway retries cached evidence after API 503 without repeating provider w
   assert.equal((await send()).status, 204);
   assert.equal(providerCalls, 1);
   assert.equal(sinkCalls, 2);
+});
+
+test("gateway durably retries direct evidence registration without re-running authority verification", async (t) => {
+  let providerCalls = 0;
+  let sinkCalls = 0;
+  const observedBusinessEvents: unknown[] = [];
+  const server = createIntegrationGatewayServer({
+    tenantId: "tenant-1",
+    routes: new Map([["/v1/callbacks/partners/evidence-b91-payment-dispute", {
+      async process() {
+        providerCalls += 1;
+        return {
+          disposition: "evidence" as const,
+          providerEventId: "processor-decision-direct-1",
+          evidence: fakeDirectEvidence,
+          receipt: { state: "verified" },
+        };
+      },
+    }]]),
+    callbackState: new MemoryCallbackState(),
+    evidenceOutput: {
+      async publish(input) {
+        sinkCalls += 1;
+        observedBusinessEvents.push(input.businessEvent);
+        if (sinkCalls === 1) throw new ProductionIntegrationError("PROVIDER_REJECTED", "synthetic API 503", true);
+      },
+    },
+    bodyLimitBytes: 1_024,
+    readiness: async () => ({ ready: true, checks: { callbackState: true } }),
+  });
+  t.after(() => server.close());
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address !== null && typeof address === "object");
+  const url = `http://127.0.0.1:${address.port}/v1/callbacks/partners/evidence-b91-payment-dispute`;
+  const send = () => fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{\"event\":\"direct\"}",
+  });
+  assert.equal((await send()).status, 503);
+  assert.equal((await send()).status, 204);
+  assert.equal(providerCalls, 1);
+  assert.equal(sinkCalls, 2);
+  assert.deepEqual(observedBusinessEvents, [undefined, undefined]);
 });
 
 test("gateway discards an expired cached envelope and re-verifies the callback", async (t) => {

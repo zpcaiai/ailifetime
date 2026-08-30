@@ -169,11 +169,14 @@ test("web asset build retains only the current immutable browser modules", () =>
   const names = readdirSync(assets).sort();
   const authenticationModules = names.filter((name) => /^auth-[a-f0-9]{12}\.js$/.test(name));
   const surfaceModules = names.filter((name) => /^surface-[a-f0-9]{12}\.js$/.test(name));
+  const executionModules = names.filter((name) => /^capability-execution-[a-f0-9]{12}\.js$/.test(name));
   assert.equal(authenticationModules.length, 1);
   assert.equal(surfaceModules.length, 1);
+  assert.equal(executionModules.length, 1);
   const app = readFileSync(new URL("app.js", assets), "utf8");
   assert.match(app, new RegExp(`from "\\./${authenticationModules[0]}"`));
   assert.match(app, new RegExp(`from "\\./${surfaceModules[0]}"`));
+  assert.match(app, new RegExp(`from "\\./${executionModules[0]}"`));
 });
 
 test("production web owns the PKCE callback and exposes no manual bearer injection bridge", () => {
@@ -207,6 +210,18 @@ test("B04 web entry submits only the closed rights workflow and renders a minimi
   assert.match(source, /subjectReference/);
   assert.doesNotMatch(source, /collection:\s*"privacy\.rights-requests"/);
   assert.doesNotMatch(source, /ownerActorId/);
+});
+
+test("every server-visible capability has an authenticated executable deep-link surface", () => {
+  const source = readFileSync(new URL("../src/app.ts", import.meta.url), "utf8");
+  const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
+  assert.match(source, /id=\"capability-execution-form\"/);
+  assert.match(source, /parseCapabilityInput/);
+  assert.match(source, /StableCapabilityIdempotency/);
+  assert.match(source, /POST|method:\s*"POST"/);
+  assert.match(source, /Idempotency-Key/);
+  assert.match(source, /validateCapabilityExecutionResponse/);
+  assert.match(html, /capability-execution\.css/);
 });
 
 test("locale negotiation and mandatory copy never return an empty legal surface", () => {

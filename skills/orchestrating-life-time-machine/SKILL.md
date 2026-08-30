@@ -64,7 +64,13 @@ When sources conflict, do not silently choose. Preserve current production compa
 9. Run the Batch verifier. A verbal statement such as “done” is not a state transition.
 10. Open a reviewable commit/PR; after merge, refresh downstream base commits and mark newly unblocked Batches ready.
 
-Use `python3 .ai-life-time-machine/skill-package/scripts/orchestrate_batches.py --repo . ready`
+The product-owned orchestration terminal is `factory_attested`, never
+`certified`. The latter is accepted only as a legacy vendor-state input and is
+normalized when read. Local code evidence cannot consume production approval
+artifacts or promote itself; production certification belongs exclusively to
+the independent B127 release authority.
+
+Use `python3 skills/orchestrating-life-time-machine/scripts/orchestrate_batches.py --repo . ready`
 to inspect readiness after installation.
 
 ## Required completion behavior
@@ -74,4 +80,7 @@ to inspect readiness after installation.
 - Record exact commands, exit codes, changed files, entrypoints, tests, runtime evidence, migrations, risks, and commit.
 - Use `schemas/completion-report.schema.json` and `schemas/traceability.schema.json`.
 - Keep sensitive media and secrets out of evidence.
-- Run `python3 .ai-life-time-machine/skill-package/scripts/verify_release.py --repo . --batch Bxx` before declaring a Batch passed.
+- Run `pnpm factory:status` and require 128 executable batch mappings, 128
+  dedicated validators, and 640 bound requirement IDs before calling the
+  implementation catalog complete.
+- Run `python3 skills/certifying-life-time-machine-release/scripts/verify_release.py --repo . --batch Bxx` before declaring a Batch passed.

@@ -28,7 +28,7 @@ export function generateSupplyChainBundle(options) {
 
   const lockfileSha256 = sha256(lockBytes);
   const sourceRevision = options.sourceRevision ?? detectSourceRevision(root);
-  if (options.trustTier === "production" && !/^[a-f0-9]{40,64}$/.test(sourceRevision)) throw new Error("production provenance requires an exact source revision digest");
+  if (trustTier === "production" && !/^[a-f0-9]{40,64}$/.test(sourceRevision)) throw new Error("production provenance requires an exact source revision digest");
   const artifactManifest = {
     version: "ltm.artifact-manifest.v1",
     algorithm: "sha256",

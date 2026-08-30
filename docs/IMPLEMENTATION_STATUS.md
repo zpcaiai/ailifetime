@@ -1,6 +1,25 @@
 # Implementation status
 
-This repository has executable code for all 128 batches (`B00` through `B127`) and all 640 manifest requirements. It deliberately uses shared, configuration-driven runtimes where the trust and transaction semantics are the same; it does not pretend that every batch needs a separate large service or page. The web surface consumes a versioned server projection of seven role portals and 22 skill workspaces. The projection contains only capabilities allowed by both the verified role boundary and the exact executable permission; unauthenticated production navigation fails closed.
+This repository has an executable entry point for all 128 batches (`B00`
+through `B127`) and binds all 640 manifest requirement IDs to those batch
+entries. It deliberately uses shared transaction runtimes where trust and
+persistence semantics are the same, but every batch has a unique named domain
+validator and operation; the registry rejects duplicate validator reuse. A
+requirement-ID binding is traceability, not independent certification: the
+five acceptance statements still require their named test/evidence in a Batch
+completion report. The web surface consumes a versioned server projection of
+seven role portals and 22 skill workspaces. The projection contains only
+capabilities allowed by both the verified role boundary and the exact
+executable permission; unauthenticated production navigation fails closed.
+
+`pnpm factory:status` reads the canonical skills, vendor manifest, and actual
+TypeScript domain definitions together. It fails closed unless exactly 22
+source modules expose 128 unique batch IDs, operations, and named validators,
+with all 640 requirement IDs and all canonical references present. `pnpm
+check` additionally executes an empty-input negative probe through all 128
+handlers and requires every one to stop before persistence. Positive domain,
+PostgreSQL, callback, and evidence tests remain separate from that reachability
+probe.
 
 ## Exact code coverage
 
@@ -16,6 +35,14 @@ Every capability declares an explicit execution mode; there is no fallback/defau
 | Inbox event | 1 | Deduplicated native inbound event |
 | Ledger post | 1 | Balanced double-entry journal |
 | Partner settlement ledger | 1 | Balanced settlement allocation |
+
+B00 repository-baseline persistence now requires a platform administrator or
+explicitly permissioned service identity; consumer `record:create` permission
+cannot write it. B50 ends at `factory_attested` and rejects both the legacy
+`certified` transition and caller-supplied production evidence. Five
+provider-fact entries retain a closed direct endpoint, run their dedicated
+side-effect-free parser for deterministic diagnostics, and persist facts only
+through the compile-time signed external-event reducer.
 
 The 36 catalog definitions marked `requiresExternalEvidence` are:
 
@@ -34,7 +61,7 @@ This corrects the earlier count of 33. Five provider-fact definitions (`B66`, `B
 - AWS Secrets Manager resolution, S3/KMS/Object-Lock evidence artifacts and a Redis owner-leased `processing -> delivering/ready -> completed` callback state machine that reuses the exact signed envelope after transient delivery failure
 - Deployable five-route outbox worker; production startup requires all routes and all 18 external-command batch mappings (covering 19 fixed callback routes), with least-privilege service identity
 - PostgreSQL runtime for commands, queries and all B00-B127 handlers, with forced RLS, per-transaction tenant context, safe runtime-role checks and real PostgreSQL 17 CI integration
-- Deployable callback gateway that converts native provider verification into a canonical business event plus exact runtime evidence and submits both through one atomic `external-event.apply` transaction using a rotating workload-identity token
+- Deployable callback gateway with two closed outputs: provider facts become a canonical business event plus exact runtime evidence in one atomic `external-event.apply`, while all 30 non-B127 direct evidence gates use fixed managed-authority routes that emit `evidence.register` for later single-use transactional consumption; B127 has no general callback route and remains release-verifier-only
 - WeChat login/session and resumable media HTTP routes backed by explicit HTTPS brokers, per-request projected workload tokens, server-derived principal binding, bounded chunks/digests, dependency readiness and production startup failure when either integration is absent
 - Runnable mobile HTTP application orchestration, a seven-page native WeChat mini-program, and typed session/visible-capability contracts in the TypeScript, Python and Java SDKs
 - Checksum-ledgered PostgreSQL migrator with advisory locking, role/privilege/drift checks, plus immutable restricted Kubernetes release templates and a non-deploying protected release-candidate workflow
@@ -43,7 +70,7 @@ This corrects the earlier count of 33. Five provider-fact definitions (`B66`, `B
 - Closed, versioned operational-report parsers for experience, model, configuration-change, capacity and resilience gates; raw report bytes are hashed before attestation, legacy caller-authored pass/fail booleans are rejected, and production refuses sandbox evidence
 - Tenant/environment/exact-scope Ed25519 evidence, trust-key validity windows, artifact hashes, nonce replay protection, revocation and single-use consumption
 - Online SQLite backup to an independent file, integrity/foreign-key/audit-chain/ledger/evidence checks, content hash and actual restore drill
-- Read-only B127 certifier with a PostgreSQL 17/schema-5 production source, verified TLS, minimal SELECT privileges, transaction-local tenant RLS, and exact catalog inspection of the forced `tenant_isolation` policy on all 17 tenant tables. It verifies a live B126 prerequisite, global/100% rollout, exact profile/B00-B127/component/SBOM/handoff artifacts, a closed eleven-domain unit-bounded guardrail policy, raw query/result and pause command/receipt bytes with cross-wave uniqueness, and the closed eight-surface rollback/forward drill. The release subject and production-change approval bind all three control digests. Production change uses independently enrolled risk and operations Ed25519 approver artifacts and proves their issuer/key separation from the executor and primary signer; client booleans and arbitrary IDs are rejected. SQLite remains local/test-only and cannot certify production.
+- Read-only B127 certifier with a PostgreSQL 17/schema-7 production source, verified TLS, minimal SELECT privileges, transaction-local tenant/partner RLS, and exact catalog inspection of the forced `tenant_isolation` policy on every schema-7 tenant and partner projection table. It verifies a live B126 prerequisite, global/100% rollout, exact profile/B00-B127/component/SBOM/handoff artifacts, a closed eleven-domain unit-bounded guardrail policy, raw query/result and pause command/receipt bytes with cross-wave uniqueness, and the closed eight-surface rollback/forward drill. The release subject and production-change approval bind all three control digests. Production change uses independently enrolled risk and operations Ed25519 approver artifacts and proves their issuer/key separation from the executor and primary signer; client booleans and arbitrary IDs are rejected. SQLite remains local/test-only and cannot certify production.
 
 ## Evidence levels
 
