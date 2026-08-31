@@ -13,7 +13,7 @@
     "test": "pnpm -r --if-present run test && pnpm run test:release-certification && pnpm run test:security && pnpm run test:infra && pnpm run test:sdk-python && pnpm run test:sdk-java",
     "test:release-certification": "node --test tools/b127-certifier.test.mjs tools/b127-postgres.integration.test.mjs",
     "test:security": "node --test tools/security-*.test.mjs",
-    "test:infra": "node --test tools/postgres-migrate.test.mjs tools/kubernetes-production.test.mjs tools/factory-status.test.mjs tools/repository-baseline.test.mjs tools/repository-architecture.test.mjs tools/local-seed.test.mjs tools/production-surface-gate.test.mjs",
+    "test:infra": "node --test tools/postgres-migrate.test.mjs tools/kubernetes-production.test.mjs tools/factory-status.test.mjs tools/repository-baseline.test.mjs tools/repository-architecture.test.mjs tools/local-seed.test.mjs tools/production-surface-gate.test.mjs tools/backup-drill.test.mjs",
     "infra:postgres:migrate": "node tools/postgres-migrate.mjs",
     "contracts:generate": "pnpm --filter @ltm/core run build && node tools/data-dictionary.mjs",
     "seed:local": "pnpm --filter @ltm/capabilities... run build && node tools/local-seed.mjs",

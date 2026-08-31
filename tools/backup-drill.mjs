@@ -35,7 +35,13 @@ try {
   restored = new LifeTimeMachineRuntime({ databasePath: backupPath });
   const restoredRecord = restored.getRecord(actor, "dr.backup-probes", drillId);
   const ready = restored.readiness();
-  if (restoredRecord.data.expectedState !== "restorable" || !ready.ready) {
+  const restoredAuditChain = restored.verifyAuditChain(actor);
+  if (
+    restoredRecord.data.expectedState !== "restorable" ||
+    ready.database !== "ok" ||
+    ready.auditChain !== "ok" ||
+    !restoredAuditChain.valid
+  ) {
     throw new Error("Restored database failed the semantic recovery probe");
   }
   restored.close();
@@ -50,6 +56,9 @@ try {
     sizeBytes: independentVerification.sizeBytes,
     recordCount: independentVerification.recordCount,
     auditEntryCount: independentVerification.auditEntryCount,
+    restoredDatabase: ready.database,
+    restoredAuditChain: ready.auditChain,
+    restoredAuditEntriesChecked: restoredAuditChain.entriesChecked,
     onlineAndIndependentHashMatch: onlineVerification.sha256 === independentVerification.sha256,
     scope: "local-single-node-sqlite",
     productionCertification: false,
@@ -60,6 +69,10 @@ try {
     check: "sqlite-online-backup-restore-drill",
     drillId,
     error: error instanceof Error ? error.name : "UnknownError",
+    code: error !== null && typeof error === "object" && "code" in error && typeof error.code === "string"
+      ? error.code
+      : undefined,
+    message: error instanceof Error ? error.message : "Backup drill failed with an unknown error",
   })}\n`);
   process.exitCode = 1;
 } finally {
