@@ -1,4 +1,4 @@
-import sharp from "sharp";
+import jpeg from "jpeg-js";
 import { createPublicKey, randomUUID, verify, type KeyObject } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import {
@@ -24,7 +24,7 @@ const MAX_PIXELS = 64 * 1024 * 1024;
 const MAX_SCANNER_RESPONSE_BYTES = 64 * 1024;
 
 /** Decodes the entire JPEG and re-encodes pixels without EXIF, XMP, ICC or comments. */
-export class SharpJpegNormalizer implements JpegNormalizerPort {
+export class JpegJsNormalizer implements JpegNormalizerPort {
   async normalize(value: Uint8Array) {
     const bytes = Buffer.from(value);
     if (bytes.byteLength < 4 || bytes.byteLength > MAX_MEDIA_BYTES ||
@@ -33,45 +33,122 @@ export class SharpJpegNormalizer implements JpegNormalizerPort {
       throw invalidMedia("media does not have a complete JPEG byte signature");
     }
     try {
-      const decoder = sharp(bytes, {
-        failOn: "error",
-        limitInputPixels: MAX_PIXELS,
-        sequentialRead: true,
-        animated: false,
+      const orientation = jpegOrientation(bytes);
+      const decoded = jpeg.decode(bytes, {
+        useTArray: true,
+        formatAsRGBA: true,
+        tolerantDecoding: false,
+        maxResolutionInMP: MAX_PIXELS / 1_000_000,
+        maxMemoryUsageInMB: 384,
       });
-      const metadata = await decoder.metadata();
-      if (metadata.format !== "jpeg" || metadata.width === undefined || metadata.height === undefined ||
-          (metadata.pages ?? 1) !== 1 || metadata.width < 1 || metadata.height < 1 ||
-          metadata.width > 8_192 || metadata.height > 8_192) {
-        throw invalidMedia("media is not a supported single-frame JPEG");
+      try {
+        if (!Number.isSafeInteger(decoded.width) || !Number.isSafeInteger(decoded.height) ||
+            decoded.width < 1 || decoded.height < 1 || decoded.width > 8_192 || decoded.height > 8_192 ||
+            decoded.width * decoded.height > MAX_PIXELS || decoded.data.byteLength !== decoded.width * decoded.height * 4) {
+          throw invalidMedia("media is not a supported single-frame JPEG");
+        }
+        const normalized = orientRgba(decoded.data, decoded.width, decoded.height, orientation);
+        try {
+          const output = jpeg.encode(normalized, 92);
+          if (output.data.byteLength < 4 || output.data.byteLength > MAX_MEDIA_BYTES ||
+              output.data[0] !== 0xff || output.data[1] !== 0xd8 || output.data.at(-2) !== 0xff || output.data.at(-1) !== 0xd9 ||
+              output.width < 1 || output.height < 1) {
+            throw invalidMedia("canonical JPEG output is invalid");
+          }
+          return {
+            bytes: output.data,
+            width: output.width,
+            height: output.height,
+            metadataStripped: true as const,
+          };
+        } finally {
+          normalized.data.fill(0);
+        }
+      } finally {
+        decoded.data.fill(0);
       }
-      const output = await decoder
-        .rotate()
-        .jpeg({
-          quality: 92,
-          chromaSubsampling: "4:4:4",
-          progressive: false,
-          optimiseCoding: true,
-          force: true,
-        })
-        .toBuffer({ resolveWithObject: true });
-      if (output.data.byteLength < 4 || output.data.byteLength > MAX_MEDIA_BYTES ||
-          output.data[0] !== 0xff || output.data[1] !== 0xd8 || output.data.at(-2) !== 0xff || output.data.at(-1) !== 0xd9 ||
-          output.info.width < 1 || output.info.height < 1) {
-        throw invalidMedia("canonical JPEG output is invalid");
-      }
-      return {
-        bytes: output.data,
-        width: output.info.width,
-        height: output.info.height,
-        metadataStripped: true as const,
-      };
     } catch (error) {
       if (error instanceof BrokerError) throw error;
       throw invalidMedia("JPEG structure cannot be fully decoded");
     } finally {
       bytes.fill(0);
     }
+  }
+}
+
+function jpegOrientation(bytes: Buffer): number {
+  let offset = 2;
+  while (offset + 4 <= bytes.length) {
+    if (bytes[offset] !== 0xff) throw invalidMedia("JPEG marker framing is invalid");
+    while (bytes[offset] === 0xff) offset += 1;
+    const marker = bytes[offset];
+    offset += 1;
+    if (marker === undefined || marker === 0x00) throw invalidMedia("JPEG marker is invalid");
+    if (marker === 0xd9 || marker === 0xda) return 1;
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8)) continue;
+    if (offset + 2 > bytes.length) throw invalidMedia("JPEG segment length is missing");
+    const length = bytes.readUInt16BE(offset);
+    if (length < 2 || offset + length > bytes.length) throw invalidMedia("JPEG segment exceeds the input");
+    if (marker === 0xe1 && length >= 16 && bytes.subarray(offset + 2, offset + 8).equals(Buffer.from("Exif\0\0"))) {
+      return exifOrientation(bytes.subarray(offset + 8, offset + length));
+    }
+    offset += length;
+  }
+  throw invalidMedia("JPEG scan data is missing");
+}
+
+function exifOrientation(tiff: Buffer): number {
+  if (tiff.length < 8) throw invalidMedia("EXIF TIFF header is incomplete");
+  const littleEndian = tiff.subarray(0, 2).equals(Buffer.from("II"));
+  const bigEndian = tiff.subarray(0, 2).equals(Buffer.from("MM"));
+  if (!littleEndian && !bigEndian) throw invalidMedia("EXIF byte order is invalid");
+  const uint16 = (offset: number) => littleEndian ? tiff.readUInt16LE(offset) : tiff.readUInt16BE(offset);
+  const uint32 = (offset: number) => littleEndian ? tiff.readUInt32LE(offset) : tiff.readUInt32BE(offset);
+  if (uint16(2) !== 42) throw invalidMedia("EXIF TIFF marker is invalid");
+  const directoryOffset = uint32(4);
+  if (directoryOffset > tiff.length - 2) throw invalidMedia("EXIF directory offset is invalid");
+  const entries = uint16(directoryOffset);
+  if (entries > 512 || directoryOffset + 2 + entries * 12 > tiff.length) {
+    throw invalidMedia("EXIF directory is invalid");
+  }
+  for (let index = 0; index < entries; index += 1) {
+    const entry = directoryOffset + 2 + index * 12;
+    if (uint16(entry) !== 0x0112) continue;
+    if (uint16(entry + 2) !== 3 || uint32(entry + 4) !== 1) throw invalidMedia("EXIF orientation type is invalid");
+    const orientation = uint16(entry + 8);
+    if (orientation < 1 || orientation > 8) throw invalidMedia("EXIF orientation value is invalid");
+    return orientation;
+  }
+  return 1;
+}
+
+function orientRgba(data: Uint8Array, width: number, height: number, orientation: number) {
+  const swapsAxes = orientation >= 5;
+  const outputWidth = swapsAxes ? height : width;
+  const outputHeight = swapsAxes ? width : height;
+  if (orientation === 1) return { data: Uint8Array.from(data), width, height };
+  const output = new Uint8Array(data.length);
+  for (let y = 0; y < outputHeight; y += 1) {
+    for (let x = 0; x < outputWidth; x += 1) {
+      const [sourceX, sourceY] = sourcePixel(x, y, width, height, orientation);
+      const source = (sourceY * width + sourceX) * 4;
+      const destination = (y * outputWidth + x) * 4;
+      output.set(data.subarray(source, source + 4), destination);
+    }
+  }
+  return { data: output, width: outputWidth, height: outputHeight };
+}
+
+function sourcePixel(x: number, y: number, width: number, height: number, orientation: number): [number, number] {
+  switch (orientation) {
+    case 2: return [width - 1 - x, y];
+    case 3: return [width - 1 - x, height - 1 - y];
+    case 4: return [x, height - 1 - y];
+    case 5: return [y, x];
+    case 6: return [y, height - 1 - x];
+    case 7: return [width - 1 - y, height - 1 - x];
+    case 8: return [width - 1 - y, x];
+    default: return [x, y];
   }
 }
 

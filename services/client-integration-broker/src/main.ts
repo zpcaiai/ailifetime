@@ -9,7 +9,7 @@ import {
 import { ClientIntegrationBroker } from "./broker.js";
 import { loadBrokerConfiguration } from "./config.js";
 import { DigestBearerAuthenticator, RotatingSecretFile } from "./contracts.js";
-import { FailClosedMediaSafetyScanner, HttpsMediaSafetyScanner, SharpJpegNormalizer } from "./media-security.js";
+import { FailClosedMediaSafetyScanner, HttpsMediaSafetyScanner, JpegJsNormalizer } from "./media-security.js";
 import {
   MediaDownloadAuthorizer,
   loadSignedMediaLifecycleRegistry,
@@ -102,7 +102,7 @@ async function run(): Promise<void> {
     uploads: redis,
     assets: redis,
     objects,
-    jpegNormalizer: new SharpJpegNormalizer(),
+    jpegNormalizer: new JpegJsNormalizer(),
     safetyScanner,
     ...(lifecycleRegistry === undefined ? {} : { lifecycleRegistry }),
     ...(downloadAuthorizer === undefined ? {} : { downloadAuthorizer }),

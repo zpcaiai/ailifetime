@@ -5,7 +5,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import sharp from "sharp";
+import jpeg from "jpeg-js";
 import {
   BrokerError,
   DigestBearerAuthenticator,
@@ -27,7 +27,7 @@ import {
   type WechatCodeExchangePort,
 } from "./contracts.js";
 import { ClientIntegrationBroker } from "./broker.js";
-import { FailClosedMediaSafetyScanner, SharpJpegNormalizer } from "./media-security.js";
+import { FailClosedMediaSafetyScanner, JpegJsNormalizer } from "./media-security.js";
 import { MediaLifecycleRegistry } from "./media-lifecycle.js";
 import { createBrokerHttpServer } from "./server.js";
 
@@ -40,16 +40,31 @@ const PRINCIPAL: Principal = {
 };
 
 async function validJpeg(withMetadata = false): Promise<Buffer> {
-  let image = sharp({
-    create: {
-      width: 64,
-      height: 48,
-      channels: 3,
-      background: { r: 45, g: 96, b: 135 },
-    },
-  });
-  if (withMetadata) image = image.withMetadata({ orientation: 6 });
-  return image.jpeg({ quality: 82 }).toBuffer();
+  const width = 64;
+  const height = 48;
+  const pixels = Buffer.alloc(width * height * 4);
+  for (let offset = 0; offset < pixels.length; offset += 4) {
+    pixels[offset] = 45;
+    pixels[offset + 1] = 96;
+    pixels[offset + 2] = 135;
+    pixels[offset + 3] = 255;
+  }
+  const encoded = jpeg.encode({ data: pixels, width, height }, 82).data;
+  pixels.fill(0);
+  if (!withMetadata) return encoded;
+  const exif = Buffer.from([
+    0xff, 0xe1, 0x00, 0x22,
+    0x45, 0x78, 0x69, 0x66, 0x00, 0x00,
+    0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00,
+    0x01, 0x00,
+    0x12, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+  ]);
+  return Buffer.concat([encoded.subarray(0, 2), exif, encoded.subarray(2)]);
+}
+
+function containsExif(bytes: Uint8Array): boolean {
+  return Buffer.from(bytes).includes(Buffer.from("Exif\0\0"));
 }
 
 function canonicalJson(value: unknown): string {
@@ -406,7 +421,7 @@ function fixture(
       assets: store,
       idempotency: store,
       objects,
-      jpegNormalizer: new SharpJpegNormalizer(),
+      jpegNormalizer: new JpegJsNormalizer(),
       safetyScanner,
       ...(options.lifecycleRegistry === undefined ? {} : { lifecycleRegistry: options.lifecycleRegistry }),
       identity,
@@ -442,7 +457,7 @@ test("multipart upload binds principal and offset and returns only an opaque med
   const scanner = new FakeSafetyScanner();
   const { broker, store, objects } = fixture(scanner);
   const bytes = await validJpeg(true);
-  assert.ok((await sharp(bytes).metadata()).exif);
+  assert.equal(containsExif(bytes), true);
   const fileDigest = createHash("sha256").update(bytes).digest("hex");
   const created = await broker.createUpload(PRINCIPAL, {
     fileSize: bytes.byteLength,
@@ -472,10 +487,10 @@ test("multipart upload binds principal and offset and returns only an opaque med
   assert.ok(state);
   const canonical = objects.objects.get(state.objectKey);
   assert.ok(canonical);
-  const canonicalMetadata = await sharp(canonical).metadata();
-  assert.equal(canonicalMetadata.format, "jpeg");
-  assert.equal(canonicalMetadata.exif, undefined);
-  assert.equal(canonicalMetadata.icc, undefined);
+  const canonicalMetadata = jpeg.decode(canonical, { useTArray: true, tolerantDecoding: false });
+  assert.equal(canonicalMetadata.width, 48);
+  assert.equal(canonicalMetadata.height, 64);
+  assert.equal(containsExif(canonical), false);
   assert.equal(state.sourceSha256, sha256(bytes));
   assert.equal(state.canonicalSha256, sha256(canonical));
   assert.equal(state.lineageSha256, sha256(`ltm-media-lineage-v1\n${state.sourceSha256}\n${state.canonicalSha256}\n`));
