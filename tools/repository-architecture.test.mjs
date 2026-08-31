@@ -93,3 +93,19 @@ test("PostgreSQL CI provisions every schema-7 runtime table and executes every d
     assert.equal(workflow.includes(`pnpm --filter ${workspace} test`), true, `${workspace} is missing from live PostgreSQL CI`);
   }
 });
+
+test("artifact uploads explicitly include evidence stored under hidden directories", async () => {
+  for (const path of [".github/workflows/ci.yml", ".github/workflows/production-release-candidate.yml"]) {
+    const workflow = await source(path);
+    const lines = workflow.split("\n");
+    for (let index = 0; index < lines.length; index += 1) {
+      if (!lines[index]?.includes("uses: actions/upload-artifact@")) continue;
+      let end = index + 1;
+      while (end < lines.length && !/^      - /u.test(lines[end] ?? "")) end += 1;
+      const step = lines.slice(index, end).join("\n");
+      if (/path: \.artifacts(?:\/|$)/mu.test(step)) {
+        assert.match(step, /include-hidden-files: true/u, `${path} excludes its hidden evidence path`);
+      }
+    }
+  }
+});

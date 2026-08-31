@@ -201,6 +201,7 @@ jobs:
         with:
           name: production-release-candidate-${{ github.sha }}-${{ inputs.release_id }}
           path: .artifacts/production-release-candidate
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 14
       - name: Record certification boundary

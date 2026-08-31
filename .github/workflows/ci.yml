@@ -62,6 +62,7 @@ jobs:
         with:
           name: release-gate-evidence
           path: .artifacts/release-gate-ci.json
+          include-hidden-files: true
           if-no-files-found: warn
 
   postgres-runtime:
@@ -145,6 +146,7 @@ jobs:
         with:
           name: postgres-migration-evidence
           path: .artifacts/postgres-migration-*.json
+          include-hidden-files: true
           if-no-files-found: error
 
   b123-security-assurance:
@@ -336,6 +338,7 @@ jobs:
         with:
           name: b123-security-evidence
           path: .artifacts/security
+          include-hidden-files: true
           if-no-files-found: error
 
   b123-github-provenance:
