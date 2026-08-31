@@ -22,14 +22,11 @@ data:
   LTM_OIDC_CLOCK_TOLERANCE_SECONDS: "5"
   LTM_OIDC_STEP_UP_ACR_VALUES: urn:ltm:acr:mfa
   LTM_WECHAT_IDENTITY_BROKER_URL: "https://ltm-client-integration-broker.ltm-production.svc:8443"
-  LTM_WECHAT_IDENTITY_TOKEN_FILE: /var/run/secrets/ltm-client-brokers/wechat-identity-token
   LTM_UPLOAD_BROKER_URL: "https://ltm-client-integration-broker.ltm-production.svc:8443"
-  LTM_UPLOAD_BROKER_TOKEN_FILE: /var/run/secrets/ltm-client-brokers/upload-broker-token
   LTM_POSTGRES_APPLICATION_NAME: ltm-api
   LTM_POSTGRES_WORKER_APPLICATION_NAME: ltm-worker
   LTM_POSTGRES_CONNECTION_TIMEOUT_MS: "5000"
   LTM_POSTGRES_STATEMENT_TIMEOUT_MS: "15000"
-  LTM_CONSENT_POLICY_CATALOG_FILE: /var/run/secrets/ltm-consent-policy/catalog.json
   LTM_CONSENT_POLICY_JURISDICTION: CN
   LTM_CONSENT_POLICY_LOCALE: zh-CN
   LTM_METRICS_PATH: /metrics

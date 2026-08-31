@@ -56,6 +56,12 @@ spec:
             - configMapRef:
                 name: ltm-production-config
           env:
+            - name: LTM_WECHAT_IDENTITY_TOKEN_FILE
+              value: /var/run/secrets/ltm-client-brokers/wechat-identity-token
+            - name: LTM_UPLOAD_BROKER_TOKEN_FILE
+              value: /var/run/secrets/ltm-client-brokers/upload-broker-token
+            - name: LTM_CONSENT_POLICY_CATALOG_FILE
+              value: /var/run/secrets/ltm-consent-policy/catalog.json
             - name: NODE_EXTRA_CA_CERTS
               value: /var/run/secrets/ltm-client-broker-ca/ca.crt
             - name: DATABASE_URL

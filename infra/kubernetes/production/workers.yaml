@@ -61,6 +61,8 @@ spec:
             - secretRef:
                 name: ltm-production-workers
           env:
+            - name: LTM_CONSENT_POLICY_CATALOG_FILE
+              value: /var/run/secrets/ltm-consent-policy/catalog.json
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:

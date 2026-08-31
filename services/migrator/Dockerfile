@@ -10,14 +10,14 @@ COPY . .
 RUN pnpm install --frozen-lockfile \
     && pnpm --filter @ltm/migrator deploy --prod --legacy /runtime/migrator
 
-FROM node:26.0.0-bookworm-slim@sha256:3529ef69feecddd94e9c5ecd3d25a96f2f23ea40661f494f932ae2b12ab1977c AS runtime
+FROM gcr.io/distroless/nodejs26-debian13:nonroot@sha256:10ec8cb93ef461563da50d4eb8dfac7d048783826825bf5b07510c2f34c14315 AS runtime
 
 ENV APP_ENV=production
 WORKDIR /workspace
 
-COPY --from=build --chown=node:node /runtime/migrator ./services/migrator
-COPY --from=build --chown=node:node /workspace/infra/postgres/migrations ./infra/postgres/migrations
+COPY --from=build --chown=10001:10001 /runtime/migrator ./services/migrator
+COPY --from=build --chown=10001:10001 /workspace/infra/postgres/migrations ./infra/postgres/migrations
 
-USER node
-ENTRYPOINT ["node", "services/migrator/src/main.mjs"]
+USER 10001:10001
+ENTRYPOINT ["/nodejs/bin/node", "services/migrator/src/main.mjs"]
 CMD ["--profile=production", "--manifest=/workspace/infra/postgres/migrations/manifest.json"]

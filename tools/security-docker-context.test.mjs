@@ -103,3 +103,13 @@ test("every production Dockerfile copies the repository only behind the shared c
     );
   }
 });
+
+test("every production runtime uses the pinned package-manager-free distroless Node image", () => {
+  const runtimeImage = "gcr.io/distroless/nodejs26-debian13:nonroot@sha256:10ec8cb93ef461563da50d4eb8dfac7d048783826825bf5b07510c2f34c14315";
+  for (const file of PRODUCTION_DOCKERFILES) {
+    const dockerfile = readFileSync(file, "utf8");
+    assert.match(dockerfile, new RegExp(`^FROM ${runtimeImage} AS runtime$`, "mu"));
+    assert.match(dockerfile, /^USER 10001:10001$/mu);
+    assert.doesNotMatch(dockerfile.split(/^FROM .* AS runtime$/mu)[1] ?? "", /\b(?:npm|pnpm|corepack)\b/u);
+  }
+});

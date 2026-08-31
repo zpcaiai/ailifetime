@@ -139,7 +139,7 @@ export function validateRenderedProductionManifests(directoryValue) {
     "LTM_PROVIDER_MODE: external-verified",
     "LTM_WECHAT_IDENTITY_BROKER_URL: \"https://ltm-client-integration-broker.ltm-production.svc:8443\"",
     "LTM_UPLOAD_BROKER_URL: \"https://ltm-client-integration-broker.ltm-production.svc:8443\"",
-    "LTM_CONSENT_POLICY_CATALOG_FILE: /var/run/secrets/ltm-consent-policy/catalog.json",
+    "name: LTM_CONSENT_POLICY_CATALOG_FILE",
     "LTM_CONSENT_POLICY_JURISDICTION: CN",
     "LTM_CONSENT_POLICY_LOCALE: zh-CN",
     "LTM_WEB_OIDC_AUTHORIZATION_ENDPOINT",
@@ -232,6 +232,7 @@ function validateConsentPolicyMount(documents, deploymentName) {
     throw failure("KUBERNETES_CONSENT_POLICY_INVALID", `${deploymentName} deployment is missing`);
   }
   const required = [
+    "name: LTM_CONSENT_POLICY_CATALOG_FILE\n              value: /var/run/secrets/ltm-consent-policy/catalog.json",
     "name: LTM_CONSENT_POLICY_TRUST_KEYS_JSON",
     "name: consent-policy",
     "mountPath: /var/run/secrets/ltm-consent-policy/catalog.json",

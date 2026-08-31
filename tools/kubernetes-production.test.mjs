@@ -41,9 +41,13 @@ test("API and worker mount the same signed consent catalog as a regular subPath 
   renderProductionManifests({ ...validOptions(), output });
   for (const name of ["api.yaml", "workers.yaml"]) {
     const manifest = readFileSync(join(output, name), "utf8");
+    assert.match(manifest, /name: LTM_CONSENT_POLICY_CATALOG_FILE\n\s+value: \/var\/run\/secrets\/ltm-consent-policy\/catalog\.json/);
     assert.match(manifest, /name: LTM_CONSENT_POLICY_TRUST_KEYS_JSON\n\s+valueFrom:\n\s+secretKeyRef:\n\s+name: ltm-production-consent-policy\n\s+key: trust-keys\.json/);
     assert.match(manifest, /name: consent-policy\n\s+mountPath: \/var\/run\/secrets\/ltm-consent-policy\/catalog\.json\n\s+subPath: catalog\.json\n\s+readOnly: true/);
   }
+
+  const configMap = readFileSync(join(output, "configmap.yaml"), "utf8");
+  assert.doesNotMatch(configMap, /(?:TOKEN|CATALOG)_FILE:/u);
 
   const drifted = temporaryOutput(context);
   renderProductionManifests({ ...validOptions(), output: drifted });
