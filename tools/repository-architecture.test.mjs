@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { REQUIRED_SCHEMA7_FORCE_RLS_TABLES } from "./production-evidence-contracts.mjs";
 
 const root = new URL("../", import.meta.url);
 
@@ -53,5 +54,42 @@ test("B01 dependency direction keeps user interfaces away from database drivers"
     for (const dependency of Object.keys(dependencies)) {
       assert.equal(forbidden.has(dependency), false, `${manifest.name} directly depends on database driver ${dependency}`);
     }
+  }
+});
+
+test("PostgreSQL CI provisions every schema-7 runtime table and executes every durable service", async () => {
+  const [workflow, manifest] = await Promise.all([
+    source(".github/workflows/ci.yml"),
+    source("infra/postgres/migrations/manifest.json").then(JSON.parse),
+  ]);
+  assert.equal(
+    workflow.includes(`test "$(jq '.migrations.newlyApplied | length' .artifacts/postgres-migration-first.json)" -eq ${manifest.migrations.length}`),
+    true,
+    "CI first-run migration assertion must follow the checksum-bound manifest",
+  );
+
+  const grant = workflow.match(/GRANT SELECT,INSERT,UPDATE,DELETE ON ([^;]+) TO ltm_runtime;/)?.[1];
+  assert.ok(grant, "CI must explicitly grant the runtime role its table surface");
+  const grantedTables = grant.split(",").map((value) => value.trim().replace(/^ltm\./u, "")).sort();
+  assert.deepEqual(grantedTables, [...REQUIRED_SCHEMA7_FORCE_RLS_TABLES].sort());
+  const orchestrationGrant = workflow.match(/GRANT SELECT,INSERT,UPDATE,DELETE ON ([^;]+) TO ltm_runtime;/g)?.[1];
+  assert.ok(orchestrationGrant, "CI must explicitly grant the orchestration runtime surface");
+  const orchestrationTables = orchestrationGrant.match(/orchestration\.([a-z_]+)/gu)?.map((value) => value.slice("orchestration.".length)).sort();
+  assert.deepEqual(orchestrationTables, [
+    "dead_letters", "inbox", "late_provider_results", "outbox", "provider_executions",
+    "scheduler_jobs", "workflow_history", "workflow_instances",
+  ]);
+
+  for (const workspace of [
+    "@ltm/core",
+    "@ltm/capabilities",
+    "@ltm/api",
+    "@ltm/data-intelligence",
+    "@ltm/commerce-platform",
+    "@ltm/growth-operations-platform",
+    "@ltm/partner-channel-platform",
+    "@ltm/orchestration-platform",
+  ]) {
+    assert.equal(workflow.includes(`pnpm --filter ${workspace} test`), true, `${workspace} is missing from live PostgreSQL CI`);
   }
 });

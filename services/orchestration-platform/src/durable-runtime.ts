@@ -2,84 +2,31 @@ import { createHash, randomUUID } from "node:crypto";
 import { OrchestrationError } from "./provider-control-plane.js";
 import { type WorkflowDefinition, type WorkflowInstance, type WorkflowRepository, workflowStateSha256 } from "./durable-workflow.js";
 
-export const ORCHESTRATION_SCHEMA_SQL = `
-CREATE SCHEMA IF NOT EXISTS orchestration;
-CREATE TABLE IF NOT EXISTS orchestration.workflow_instances (
-  id text PRIMARY KEY,
-  tenant_id text NOT NULL,
-  definition_id text NOT NULL,
-  definition_version integer NOT NULL CHECK (definition_version > 0),
-  idempotency_key text NOT NULL,
-  state jsonb NOT NULL,
-  state_sha256 text NOT NULL CHECK (state_sha256 ~ '^[a-f0-9]{64}$'),
-  updated_at timestamptz NOT NULL,
-  UNIQUE (tenant_id, definition_id, idempotency_key)
-);
-ALTER TABLE orchestration.workflow_instances ENABLE ROW LEVEL SECURITY;
-ALTER TABLE orchestration.workflow_instances FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS workflow_tenant_isolation ON orchestration.workflow_instances;
-CREATE POLICY workflow_tenant_isolation ON orchestration.workflow_instances
-  USING (tenant_id = current_setting('app.tenant_id', true))
-  WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
-CREATE TABLE IF NOT EXISTS orchestration.outbox (
-  id text PRIMARY KEY, tenant_id text NOT NULL, idempotency_key text NOT NULL,
-  request_sha256 text NOT NULL, envelope jsonb NOT NULL, state text NOT NULL,
-  attempt integer NOT NULL DEFAULT 0, next_attempt_at timestamptz NOT NULL,
-  receipt_sha256 text, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL,
-  UNIQUE (tenant_id, idempotency_key)
-);
-CREATE TABLE IF NOT EXISTS orchestration.inbox (
-  tenant_id text NOT NULL, message_id text NOT NULL, payload_sha256 text NOT NULL,
-  processed_at timestamptz NOT NULL, PRIMARY KEY (tenant_id, message_id)
-);
-CREATE TABLE IF NOT EXISTS orchestration.dead_letters (
-  id text PRIMARY KEY, tenant_id text NOT NULL, envelope jsonb NOT NULL,
-  reason_code text NOT NULL, replay_count integer NOT NULL DEFAULT 0,
-  quarantined_at timestamptz NOT NULL, replayed_at timestamptz
-);
-ALTER TABLE orchestration.outbox ENABLE ROW LEVEL SECURITY;
-ALTER TABLE orchestration.outbox FORCE ROW LEVEL SECURITY;
-ALTER TABLE orchestration.inbox ENABLE ROW LEVEL SECURITY;
-ALTER TABLE orchestration.inbox FORCE ROW LEVEL SECURITY;
-ALTER TABLE orchestration.dead_letters ENABLE ROW LEVEL SECURITY;
-ALTER TABLE orchestration.dead_letters FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS outbox_tenant_isolation ON orchestration.outbox;
-DROP POLICY IF EXISTS inbox_tenant_isolation ON orchestration.inbox;
-DROP POLICY IF EXISTS dead_letters_tenant_isolation ON orchestration.dead_letters;
-CREATE POLICY outbox_tenant_isolation ON orchestration.outbox USING (tenant_id = current_setting('app.tenant_id', true)) WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
-CREATE POLICY inbox_tenant_isolation ON orchestration.inbox USING (tenant_id = current_setting('app.tenant_id', true)) WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
-CREATE POLICY dead_letters_tenant_isolation ON orchestration.dead_letters USING (tenant_id = current_setting('app.tenant_id', true)) WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
-ALTER TABLE orchestration.outbox ADD COLUMN IF NOT EXISTS reason_code text;
-ALTER TABLE orchestration.outbox ADD COLUMN IF NOT EXISTS lease_owner text;
-ALTER TABLE orchestration.outbox ADD COLUMN IF NOT EXISTS lease_until timestamptz;
-CREATE TABLE IF NOT EXISTS orchestration.provider_executions (
-  idempotency_key text PRIMARY KEY, tenant_id text NOT NULL, version integer NOT NULL,
-  record jsonb NOT NULL, updated_at timestamptz NOT NULL
-);
-CREATE TABLE IF NOT EXISTS orchestration.late_provider_results (
-  id bigserial PRIMARY KEY, tenant_id text NOT NULL, provider_id text NOT NULL,
-  provider_operation_id text NOT NULL, provider_idempotency_key text NOT NULL,
-  output_artifact_sha256 text NOT NULL, observed_at timestamptz NOT NULL,
-  state text NOT NULL, deletion_receipt_sha256 text
-);
-CREATE TABLE IF NOT EXISTS orchestration.workflow_history (
-  workflow_id text NOT NULL, sequence integer NOT NULL, tenant_id text NOT NULL,
-  event jsonb NOT NULL, event_sha256 text NOT NULL,
-  PRIMARY KEY (workflow_id, sequence)
-);
-CREATE TABLE IF NOT EXISTS orchestration.scheduler_jobs (
-  id text PRIMARY KEY, tenant_id text NOT NULL, kind text NOT NULL,
-  payload_sha256 text NOT NULL, due_at timestamptz NOT NULL,
-  interval_ms bigint, last_enqueued_at timestamptz
-);
-DO $$ DECLARE table_name text; BEGIN
-  FOREACH table_name IN ARRAY ARRAY['provider_executions','late_provider_results','workflow_history','scheduler_jobs'] LOOP
-    EXECUTE format('ALTER TABLE orchestration.%I ENABLE ROW LEVEL SECURITY', table_name);
-    EXECUTE format('ALTER TABLE orchestration.%I FORCE ROW LEVEL SECURITY', table_name);
-    EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON orchestration.%I', table_name);
-    EXECUTE format('CREATE POLICY tenant_isolation ON orchestration.%I USING (tenant_id = current_setting(''app.tenant_id'', true)) WITH CHECK (tenant_id = current_setting(''app.tenant_id'', true))', table_name);
-  END LOOP;
-END $$;
+export const ORCHESTRATION_SCHEMA_VERIFY_SQL = `
+WITH required(name) AS (
+  VALUES ('workflow_instances'),('outbox'),('inbox'),('dead_letters'),
+         ('provider_executions'),('late_provider_results'),('workflow_history'),('scheduler_jobs')
+), table_contract AS (
+  SELECT count(*)::integer AS table_count,
+         count(*) FILTER (WHERE relation.relrowsecurity AND relation.relforcerowsecurity)::integer AS forced_rls_count
+    FROM pg_class relation
+    JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+    JOIN required ON required.name = relation.relname
+   WHERE namespace.nspname = 'orchestration' AND relation.relkind = 'r'
+), policy_contract AS (
+  SELECT count(*)::integer AS policy_count,
+         count(*) FILTER (
+           WHERE policyname = 'tenant_isolation' AND permissive = 'PERMISSIVE' AND cmd = 'ALL'
+             AND roles::text = '{public}'
+             AND qual = '(tenant_id = current_setting(''app.tenant_id''::text, true))'
+             AND with_check = '(tenant_id = current_setting(''app.tenant_id''::text, true))'
+         )::integer AS exact_policy_count
+    FROM pg_policies policy
+    JOIN required ON required.name = policy.tablename
+   WHERE policy.schemaname = 'orchestration'
+)
+SELECT table_count, forced_rls_count, policy_count, exact_policy_count
+  FROM table_contract CROSS JOIN policy_contract
 `;
 
 export interface SqlResult<Row> { readonly rows: readonly Row[]; readonly rowCount: number | null; }
@@ -115,7 +62,17 @@ export class PostgresWorkflowRepository implements WorkflowRepository {
   }
 
   async initialize(): Promise<void> {
-    await this.sql.transaction(async (client) => { await client.query(ORCHESTRATION_SCHEMA_SQL); });
+    const result = await this.sql.transaction((client) => client.query<{
+      table_count: number | string;
+      forced_rls_count: number | string;
+      policy_count: number | string;
+      exact_policy_count: number | string;
+    }>(ORCHESTRATION_SCHEMA_VERIFY_SQL));
+    const contract = result.rows[0];
+    if (contract === undefined || Number(contract.table_count) !== 8 || Number(contract.forced_rls_count) !== 8 ||
+        Number(contract.policy_count) !== 8 || Number(contract.exact_policy_count) !== 8) {
+      throw new OrchestrationError("DEPENDENCY_FAILED", "orchestration schema 7 or its FORCE-RLS policy contract is incomplete");
+    }
   }
 
   async load(id: string): Promise<WorkflowInstance | undefined> {

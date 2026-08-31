@@ -160,6 +160,23 @@ test("PostgreSQL 17 B127 source proves SELECT-only FORCE-RLS evidence and reject
     await admin.query("ALTER POLICY tenant_isolation ON ltm.participants USING (tenant_id = ltm.current_tenant()) WITH CHECK (tenant_id = ltm.current_tenant())");
   }
 
+  await admin.query("ALTER POLICY tenant_isolation ON orchestration.workflow_instances USING (true) WITH CHECK (tenant_id = current_setting('app.tenant_id', true))");
+  try {
+    await assert.rejects(
+      () => new PostgresB127CertificationSource(readerUrl, {
+        certificationProfile: "test",
+        allowInsecureTestConnection: true,
+      }).load({
+        tenantId: fixture.tenantId,
+        launchId: fixture.launchId,
+        b126CertificationId: fixture.b126Record.certificationId,
+      }),
+      (error) => error instanceof CertificationError && error.code === "B127_POSTGRES_ORCHESTRATION_RLS_POLICY_INVALID",
+    );
+  } finally {
+    await admin.query("ALTER POLICY tenant_isolation ON orchestration.workflow_instances USING (tenant_id = current_setting('app.tenant_id', true)) WITH CHECK (tenant_id = current_setting('app.tenant_id', true))");
+  }
+
   const currentTenantFunction = await admin.query(
     "SELECT pg_get_functiondef('ltm.current_tenant()'::regprocedure) AS definition",
   );

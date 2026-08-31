@@ -130,11 +130,12 @@ test("B12 quarantines and deletes a primary provider success that arrives after 
 
 test("B13 PostgreSQL repository pins tenant scope and uses digest compare-and-swap", async () => {
   const calls: Array<{ text: string; values?: readonly unknown[] }> = [];
-  const client = { query: async <Row extends Record<string, unknown>>(text: string, values?: readonly unknown[]) => { calls.push({ text, ...(values === undefined ? {} : { values }) }); return { rows: [] as Row[], rowCount: text.startsWith("UPDATE") ? 0 : 1 }; } };
+  const client = { query: async <Row extends Record<string, unknown>>(text: string, values?: readonly unknown[]) => { calls.push({ text, ...(values === undefined ? {} : { values }) }); const rows = text.includes("WITH required(name)") ? [{ table_count: 8, forced_rls_count: 8, policy_count: 8, exact_policy_count: 8 }] : []; return { rows: rows as unknown as Row[], rowCount: text.startsWith("UPDATE") ? 0 : 1 }; } };
   const sql = { transaction: async <T>(operation: (value: typeof client) => Promise<T>) => operation(client) };
   const repository = new PostgresWorkflowRepository(sql, "tenant-1");
   await repository.initialize();
-  assert.match(calls[0]?.text ?? "", /FORCE ROW LEVEL SECURITY/);
+  assert.match(calls[0]?.text ?? "", /pg_policies/);
+  assert.doesNotMatch(calls[0]?.text ?? "", /CREATE|ALTER|DROP/);
   await repository.load("workflow-1");
   assert.equal(calls.at(-2)?.text, "SELECT set_config('app.tenant_id', $1, true)");
   const instance = workflowInstance();

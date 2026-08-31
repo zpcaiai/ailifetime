@@ -106,7 +106,7 @@ jobs:
         run: |
           node tools/postgres-migrate.mjs --profile=test --allow-insecure-loopback=true --output=.artifacts/postgres-migration-first.json
           node tools/postgres-migrate.mjs --profile=test --allow-insecure-loopback=true --output=.artifacts/postgres-migration-idempotent.json
-          test "$(jq '.migrations.newlyApplied | length' .artifacts/postgres-migration-first.json)" -eq 5
+          test "$(jq '.migrations.newlyApplied | length' .artifacts/postgres-migration-first.json)" -eq 7
           test "$(jq '.migrations.newlyApplied | length' .artifacts/postgres-migration-idempotent.json)" -eq 0
       - name: Provision a non-privileged FORCE-RLS runtime role
         env:
@@ -116,9 +116,12 @@ jobs:
           "CREATE ROLE ltm_runtime LOGIN PASSWORD 'postgres' NOSUPERUSER NOBYPASSRLS NOINHERIT;
           GRANT CONNECT ON DATABASE ltm_integration TO ltm_runtime;
           GRANT USAGE ON SCHEMA ltm TO ltm_runtime;
+          GRANT USAGE ON SCHEMA orchestration TO ltm_runtime;
           GRANT SELECT ON ltm.schema_metadata TO ltm_runtime;
-          GRANT SELECT,INSERT,UPDATE,DELETE ON ltm.records,ltm.consents,ltm.idempotency,ltm.inbox,ltm.outbox,ltm.audit_log,ltm.ledger_transactions,ltm.ledger_lines,ltm.external_evidence,ltm.evidence_consumptions,ltm.external_commands,ltm.external_command_transitions,ltm.evidence_decisions,ltm.external_business_events,ltm.participants,ltm.guardian_authorizations,ltm.authorized_agent_authorizations TO ltm_runtime;
-          GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA ltm TO ltm_runtime;"
+          GRANT SELECT,INSERT,UPDATE,DELETE ON ltm.records,ltm.consents,ltm.idempotency,ltm.inbox,ltm.outbox,ltm.audit_log,ltm.ledger_transactions,ltm.ledger_lines,ltm.external_evidence,ltm.evidence_consumptions,ltm.external_commands,ltm.external_command_transitions,ltm.evidence_decisions,ltm.external_business_events,ltm.participants,ltm.guardian_authorizations,ltm.authorized_agent_authorizations,ltm.data_tracking_queue,ltm.data_warehouse_state,ltm.commerce_finance_state,ltm.growth_operations_state,ltm.partner_settlement_state,ltm.referral_rewards,ltm.lifecycle_deliveries,ltm.partner_usage_events,ltm.partner_rate_contracts,ltm.partner_settlement_statements,ltm.partner_anomaly_decisions TO ltm_runtime;
+          GRANT SELECT,INSERT,UPDATE,DELETE ON orchestration.workflow_instances,orchestration.outbox,orchestration.inbox,orchestration.dead_letters,orchestration.provider_executions,orchestration.late_provider_results,orchestration.workflow_history,orchestration.scheduler_jobs TO ltm_runtime;
+          GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA ltm TO ltm_runtime;
+          GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA orchestration TO ltm_runtime;"
       - name: Verify PostgreSQL core and HTTP integration
         env:
           PGPASSWORD: postgres
@@ -129,6 +132,11 @@ jobs:
           pnpm --filter @ltm/core test
           pnpm --filter @ltm/capabilities test
           pnpm --filter @ltm/api test
+          pnpm --filter @ltm/data-intelligence test
+          pnpm --filter @ltm/commerce-platform test
+          pnpm --filter @ltm/growth-operations-platform test
+          pnpm --filter @ltm/partner-channel-platform test
+          pnpm --filter @ltm/orchestration-platform test
           pnpm run test:release-certification
           pnpm run test:infra
       - name: Upload PostgreSQL migration evidence

@@ -3,13 +3,13 @@ import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 import { Pool } from "pg";
 import {
-  ORCHESTRATION_SCHEMA_SQL,
   OutboxInboxRuntime,
   PostgresDurableScheduler,
   PostgresLateProviderResultJournal,
   PostgresMessageJournalStore,
   PostgresProviderExecutionStore,
   PostgresTransactionExecutor,
+  PostgresWorkflowRepository,
   ScopedRateLimiter,
   type DurableEnvelope,
 } from "./index.js";
@@ -26,7 +26,7 @@ test("orchestration PostgreSQL stores provide fenced outbox, provider CAS, late 
   const sql = new PostgresTransactionExecutor(pool);
   const tenantId = `tenant-orch-${randomUUID()}`;
   try {
-    await sql.transaction((client) => client.query(ORCHESTRATION_SCHEMA_SQL).then(() => undefined));
+    await new PostgresWorkflowRepository(sql, tenantId).initialize();
     const store = new PostgresMessageJournalStore(sql, tenantId);
     const envelope: Omit<DurableEnvelope, "id" | "requestSha256" | "createdAt"> & { request: unknown } = {
       tenantId, kind: "integration.test", idempotencyKey: "orchestration-idem-0001", payloadSha256: digest("payload"), consentArtifactSha256: digest("consent"), resourceRevision: 1, request: { value: 1 },

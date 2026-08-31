@@ -112,6 +112,10 @@ const B127_POSTGRES_TABLES = Object.freeze([
   "evidence_consumptions",
 ]);
 const B127_POSTGRES_TENANT_TABLES = REQUIRED_SCHEMA7_FORCE_RLS_TABLES;
+const B127_ORCHESTRATION_TABLES = Object.freeze([
+  "workflow_instances", "outbox", "inbox", "dead_letters", "provider_executions",
+  "late_provider_results", "workflow_history", "scheduler_jobs",
+].sort((left, right) => left.localeCompare(right)));
 const B127_POSTGRES_COLUMNS = Object.freeze({
   schema_metadata: ["key:text:NO", "value:text:NO"],
   records: [
@@ -740,6 +744,35 @@ async function verifyPostgresCertificationContract(client, certificationProfile)
     })
   ) {
     throw new CertificationError("B127_POSTGRES_RLS_POLICY_INVALID", "Every schema-7 tenant table must have exactly one PERMISSIVE ALL PUBLIC tenant_isolation policy bound to its tenant or partner context");
+  }
+  const orchestrationRls = await client.query(
+    `SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity
+       FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='orchestration' AND c.relname=ANY($1::text[])
+      ORDER BY c.relname`,
+    [B127_ORCHESTRATION_TABLES],
+  );
+  if (
+    orchestrationRls.rows.length !== B127_ORCHESTRATION_TABLES.length ||
+    orchestrationRls.rows.some((table) => table.relrowsecurity !== true || table.relforcerowsecurity !== true)
+  ) {
+    throw new CertificationError("B127_POSTGRES_ORCHESTRATION_RLS_NOT_FORCED", "Every schema-7 orchestration table must enable and force row-level security");
+  }
+  const orchestrationPolicies = await client.query(
+    `SELECT tablename,policyname,permissive,cmd,roles::text AS roles,qual,with_check
+       FROM pg_policies
+      WHERE schemaname='orchestration' AND tablename=ANY($1::text[])
+      ORDER BY tablename,policyname`,
+    [B127_ORCHESTRATION_TABLES],
+  );
+  const orchestrationExpression = "(tenant_id = current_setting('app.tenant_id'::text, true))";
+  if (
+    orchestrationPolicies.rows.length !== B127_ORCHESTRATION_TABLES.length ||
+    orchestrationPolicies.rows.some((policy) =>
+      policy.policyname !== "tenant_isolation" || policy.permissive !== "PERMISSIVE" || policy.cmd !== "ALL" ||
+      policy.roles !== "{public}" || policy.qual !== orchestrationExpression || policy.with_check !== orchestrationExpression)
+  ) {
+    throw new CertificationError("B127_POSTGRES_ORCHESTRATION_RLS_POLICY_INVALID", "Every schema-7 orchestration table must have exactly one closed tenant policy");
   }
   const functions = await client.query(
     `SELECT p.proname,l.lanname,p.provolatile,p.prosecdef,p.proleakproof,p.proparallel,
