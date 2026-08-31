@@ -421,7 +421,7 @@ function validateBrowserOidcConfig(content) {
   const issuer = httpsUrl(configMapValue(content, "LTM_OIDC_ISSUER"), "oidcIssuer", false);
   oidcJwksEndpoint(configMapValue(content, "LTM_OIDC_JWKS_URL"), issuer);
   oidcBrowserEndpoint(configMapValue(content, "LTM_WEB_OIDC_AUTHORIZATION_ENDPOINT"), "oidcAuthorizationEndpoint", issuer);
-  oidcBrowserEndpoint(configMapValue(content, "LTM_WEB_OIDC_TOKEN_ENDPOINT"), "oidcTokenEndpoint", issuer);
+  oidcBrowserEndpoint(deploymentEnvironmentValue(content, "LTM_WEB_OIDC_TOKEN_ENDPOINT"), "oidcTokenEndpoint", issuer);
   oidcClientId(configMapValue(content, "LTM_WEB_OIDC_CLIENT_ID"));
   exactBrowserRedirect(configMapValue(content, "LTM_WEB_OIDC_REDIRECT_URI"), publicBase.hostname);
   oidcScopes(configMapValue(content, "LTM_WEB_OIDC_SCOPES"));
@@ -434,6 +434,14 @@ function configMapValue(content, name) {
   const matches = [...content.matchAll(new RegExp(`^\\s{2}${name}:\\s+"([^"]+)"\\s*$`, "gm"))];
   if (matches.length !== 1 || matches[0][1] === undefined) {
     throw failure("KUBERNETES_OIDC_BROWSER_INVALID", `${name} must occur exactly once as a quoted ConfigMap value`);
+  }
+  return matches[0][1];
+}
+
+function deploymentEnvironmentValue(content, name) {
+  const matches = [...content.matchAll(new RegExp(`^\\s*- name: ${name}\\n\\s+value: "([^"]+)"\\s*$`, "gm"))];
+  if (matches.length !== 1 || matches[0][1] === undefined) {
+    throw failure("KUBERNETES_OIDC_BROWSER_INVALID", `${name} must occur exactly once as a quoted Deployment environment value`);
   }
   return matches[0][1];
 }

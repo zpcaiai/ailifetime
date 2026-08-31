@@ -56,6 +56,10 @@ spec:
             - configMapRef:
                 name: ltm-production-config
           env:
+            - name: LTM_WEB_OIDC_TOKEN_ENDPOINT
+              value: "__LTM_WEB_OIDC_TOKEN_ENDPOINT__"
+            - name: LTM_OIDC_MAX_TOKEN_AGE_SECONDS
+              value: "900"
             - name: LTM_WECHAT_IDENTITY_TOKEN_FILE
               value: /var/run/secrets/ltm-client-brokers/wechat-identity-token
             - name: LTM_UPLOAD_BROKER_TOKEN_FILE

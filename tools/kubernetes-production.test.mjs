@@ -213,8 +213,11 @@ test("production SPA OIDC is complete, issuer-bound, exact-redirect, and refresh
   const output = temporaryOutput(context);
   renderProductionManifests({ ...validOptions(), output });
   const config = readFileSync(join(output, "configmap.yaml"), "utf8");
+  const api = readFileSync(join(output, "api.yaml"), "utf8");
   assert.match(config, /LTM_WEB_OIDC_AUTHORIZATION_ENDPOINT: "https:\/\/identity\.example\.com\/oauth2\/authorize"/);
-  assert.match(config, /LTM_WEB_OIDC_TOKEN_ENDPOINT: "https:\/\/identity\.example\.com\/oauth2\/token"/);
+  assert.match(api, /name: LTM_WEB_OIDC_TOKEN_ENDPOINT\n\s+value: "https:\/\/identity\.example\.com\/oauth2\/token"/);
+  assert.match(api, /name: LTM_OIDC_MAX_TOKEN_AGE_SECONDS\n\s+value: "900"/);
+  assert.doesNotMatch(config, /(?:TOKEN|SECRET|PASSWORD|PRIVATE_KEY)/u);
   assert.match(config, /LTM_WEB_OIDC_CLIENT_ID: "ltm-production-spa"/);
   assert.match(config, /LTM_WEB_OIDC_REDIRECT_URI: "https:\/\/ltm\.example\.com\/auth\/callback"/);
   assert.match(config, /LTM_WEB_OIDC_SCOPES: "openid profile email"/);
@@ -246,7 +249,7 @@ test("production SPA OIDC is complete, issuer-bound, exact-redirect, and refresh
 
   const drifted = temporaryOutput(context);
   renderProductionManifests({ ...validOptions(), output: drifted });
-  const driftedConfig = join(drifted, "configmap.yaml");
+  const driftedConfig = join(drifted, "api.yaml");
   writeFileSync(
     driftedConfig,
     readFileSync(driftedConfig, "utf8").replace(
