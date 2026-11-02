@@ -330,11 +330,15 @@ function terminalCallbackFromVerifiedPayload(
   if (sequence !== null && (!Number.isSafeInteger(sequence) || (sequence as number) < 0)) {
     throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", "partner sequence must be null or a non-negative integer");
   }
+  if (payload.resultManifest !== undefined && policy.routeDefinition.batchId !== "B14") {
+    throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", "resultManifest is reserved for the B14 timeline route");
+  }
   return {
     eventId: identifier(requiredString(pathValue(payload, policy.eventIdField), "partner eventId", 128), "partner eventId"),
     terminalState,
     providerOccurredAt: new Date(occurredMilliseconds).toISOString(),
     sequence: sequence as number | null,
+    ...(payload.resultManifest === undefined ? {} : { resultManifest: payload.resultManifest }),
     providerOperationId: identifier(
       requiredString(pathValue(payload, policy.providerOperationIdField), "partner providerOperationId", 128),
       "partner providerOperationId",

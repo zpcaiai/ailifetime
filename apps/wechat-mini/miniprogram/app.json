@@ -9,28 +9,30 @@
     "pages/account/index",
     "pages/commerce/index",
     "pages/service/index",
-    "pages/privacy/index"
+    "pages/privacy/index",
+    "pages/wardrobe/index"
   ],
+  "resizable": true,
   "window": {
-    "navigationBarTitleText": "生命时光机",
-    "navigationBarBackgroundColor": "#12263a",
-    "navigationBarTextStyle": "white",
-    "backgroundColor": "#f4f7fa",
+    "pageOrientation": "auto",
+    "navigationBarTitleText": "人生时光机",
+    "navigationBarBackgroundColor": "#f7f3ec",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f7f3ec",
     "backgroundTextStyle": "dark"
   },
   "tabBar": {
-    "color": "#526271",
-    "selectedColor": "#0b6b63",
-    "backgroundColor": "#ffffff",
+    "color": "#746e66",
+    "selectedColor": "#26384a",
+    "backgroundColor": "#fffdfa",
     "list": [
-      { "pagePath": "pages/home/index", "text": "首页" },
+      { "pagePath": "pages/home/index", "text": "时光" },
       { "pagePath": "pages/capture/index", "text": "创作" },
-      { "pagePath": "pages/library/index", "text": "作品" },
-      { "pagePath": "pages/account/index", "text": "账户" }
+      { "pagePath": "pages/library/index", "text": "相册" },
+      { "pagePath": "pages/account/index", "text": "我的" }
     ]
   },
   "networkTimeout": { "request": 15000, "uploadFile": 30000, "downloadFile": 30000 },
   "lazyCodeLoading": "requiredComponents",
-  "sitemapLocation": "sitemap.json",
-  "requiredPrivateInfos": ["chooseMedia"]
+  "sitemapLocation": "sitemap.json"
 }

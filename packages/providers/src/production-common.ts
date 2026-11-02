@@ -7,6 +7,7 @@ import {
   canonicalBusinessEventSha256,
   EXTERNAL_COMMAND_TERMINAL_EVENT_TYPES,
   resolveExternalCommandCallbackRoute,
+  parseTimelineResultManifest,
   signExternalEvidence,
   type ExternalCommandTerminalState,
   type JsonObject,
@@ -114,6 +115,7 @@ export interface ExternalCommandTerminalCallbackDraft {
   readonly providerOperationId: string;
   /** Route-owned provider identifiers extracted only from the verified body. */
   readonly requiredClaims?: JsonObject;
+  readonly resultManifest?: unknown;
 }
 
 /**
@@ -143,6 +145,14 @@ export function externalCommandTerminalBusinessEventDraft(
     }
     return [field, identifier(value, field)];
   }));
+  if (callback.resultManifest !== undefined && route.batchId !== "B14") {
+    throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", "only B14 callbacks may carry timeline results");
+  }
+  let resultManifest: JsonObject | undefined;
+  if (callback.resultManifest !== undefined) {
+    try { resultManifest = parseTimelineResultManifest(callback.resultManifest) as unknown as JsonObject; }
+    catch { throw new ProductionIntegrationError("PROVIDER_RESPONSE_INVALID", "timeline result manifest is invalid"); }
+  }
   return {
     eventId: callback.eventId,
     subjectType: route.subjectType,
@@ -151,7 +161,8 @@ export function externalCommandTerminalBusinessEventDraft(
     providerOccurredAt: callback.providerOccurredAt,
     sequence: callback.sequence,
     correlationId: binding.subjectId,
-    canonicalClaims: { providerOperationId: callback.providerOperationId, ...requiredClaims },
+    canonicalClaims: { providerOperationId: callback.providerOperationId, ...requiredClaims,
+      ...(resultManifest === undefined ? {} : { resultManifest }) },
   };
 }
 

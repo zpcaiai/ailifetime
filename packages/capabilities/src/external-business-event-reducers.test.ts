@@ -97,6 +97,43 @@ test("external business registry covers every first-wave authoritative reducer e
   assert.deepEqual(listExternalBusinessEventReducerRoutes(), expected);
 });
 
+test("B14 publishes only exact-plan images with separate stored source/output-bound quality and safety", () => {
+  const route = callbackRoute("B14"), id = "timeline-1";
+  const current = commandRecord(route, id, { sourceAssetId: "source", targetAges: [5], generationPlan: { schemaVersion: "age-portrait-plan.v1" } });
+  const binding = { sourceAssetId: "source", assetId: "image", targetAge: 5, outputSha256: digest };
+  const scores = Object.fromEntries(["identity", "ageRange", "facialDrift", "pose", "artifacts", "clarity", "background", "handsTeethEyes", "photorealism"].map(d => [d, .9]));
+  const quality = record("media.quality-decisions", "q", { batchId: "B15", executionState: "persisted", artifactBinding: binding, decision: "pass", scores, thresholds: scores });
+  const safety = record("media.safety-certificates", "s", { batchId: "B17", executionState: "persisted", artifactBinding: binding, inputSafety: "allowed", outputSafety: "allowed", aiLabel: true });
+  const resultManifest = { schemaVersion: "ltm.timeline-results.v1", sourceAssetId: "source", planVersion: "age-portrait-plan.v1", aiLabel: true,
+    nodes: [{ nodeId: "age-5", targetAge: 5, status: "ready", qualityResultId: "q", safetyResultId: "s", asset: { id: "image", sha256: digest, mimeType: "image/png", width: 1024, height: 1024, byteLength: 1000 } }] };
+  const ev = event({ batchId: "B14", operation: route.operation, provider: "generation-engine", subjectType: route.subjectType, subjectId: id, eventType: "external-command.succeeded", canonicalClaims: { providerOperationId: "op", resultManifest } });
+  const context = { current, relatedRecords: { "quality-5": quality, "safety-5": safety } };
+  const good = reduceVerifiedBusinessEvent(ev, context);
+  assert.equal(good.reduction.patch.deliveryState, "ready");
+  assert.equal(good.target.relatedRecords?.length, 2);
+  assert.throws(() => reduceVerifiedBusinessEvent(ev, { current, relatedRecords: {} }), /evidence is missing/);
+  assert.throws(() => reduceVerifiedBusinessEvent(ev, { ...context, relatedRecords: { ...context.relatedRecords, "quality-5": { ...quality, data: { ...quality.data, decision: "reject" } } } }), /quality and safety/);
+  assert.throws(() => reduceVerifiedBusinessEvent({ ...ev, canonicalClaims: { ...ev.canonicalClaims, resultManifest: { ...resultManifest, sourceAssetId: "wrong" } } }, context), /original plan/);
+});
+
+test("B14 couple publication requires both stored participant assessments", () => {
+  const route = callbackRoute("B14"), id = "pair-timeline", participantIds = ["left", "right"];
+  const current = { ...commandRecord(route, id, { sourceAssetId: "source", targetAges: [37], generationPlan: { schemaVersion: "age-portrait-plan.v1" } }), participantIds };
+  const binding = { sourceAssetId: "source", assetId: "image", targetAge: 37, outputSha256: digest };
+  const scores = Object.fromEntries(["identity", "ageRange", "facialDrift", "pose", "artifacts", "clarity", "background", "handsTeethEyes", "photorealism"].map(d => [d, .9]));
+  const assessments = participantIds.map(participantId => ({ participantId, scores: { identity: .9, ageRange: .9, facialDrift: .9 }, thresholds: { identity: .8, ageRange: .8, facialDrift: .8 } }));
+  const quality = { ...record("media.quality-decisions", "q", { batchId: "B15", executionState: "persisted", artifactBinding: binding, decision: "pass", scores, thresholds: scores, participantAssessments: assessments }), participantIds };
+  const safety = { ...record("media.safety-certificates", "s", { batchId: "B17", executionState: "persisted", artifactBinding: binding, inputSafety: "allowed", outputSafety: "allowed", aiLabel: true }), participantIds };
+  const resultManifest = { schemaVersion: "ltm.timeline-results.v1", sourceAssetId: "source", planVersion: "age-portrait-plan.v1", aiLabel: true,
+    nodes: [{ nodeId: "age-37", targetAge: 37, status: "ready", qualityResultId: "q", safetyResultId: "s", asset: { id: "image", sha256: digest, mimeType: "image/png", width: 1024, height: 1024, byteLength: 1000 } }] };
+  const ev = event({ batchId: "B14", operation: route.operation, provider: "generation-engine", subjectType: route.subjectType, subjectId: id, eventType: "external-command.succeeded", canonicalClaims: { providerOperationId: "pair-op", resultManifest } });
+  const context = { current, relatedRecords: { "quality-37": quality, "safety-37": safety } };
+  assert.equal(reduceVerifiedBusinessEvent(ev, context).reduction.patch.deliveryState, "ready");
+  for (const participantAssessments of [[], assessments.slice(0, 1), [assessments[0]!, { ...assessments[1]!, scores: { ...assessments[1]!.scores, identity: .2 } }]]) {
+    assert.throws(() => reduceVerifiedBusinessEvent(ev, { ...context, relatedRecords: { ...context.relatedRecords, "quality-37": { ...quality, data: { ...quality.data, participantAssessments } } } }), /participant/);
+  }
+});
+
 test("all 19 external command operations expose fixed signed terminal reducers and reject callback-authored authority", () => {
   assert.equal(EXTERNAL_COMMAND_CALLBACK_ROUTES.length, 19);
   const terminalCases = Object.entries(EXTERNAL_COMMAND_TERMINAL_EVENT_TYPES) as readonly [

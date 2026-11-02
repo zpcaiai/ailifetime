@@ -1,11 +1,16 @@
-<view class="page">
+<view class="page auth-page">
+  <view class="login-emblem" aria-hidden="true"><view>时</view></view>
+  <view class="page-header"><view class="page-title">和每一个自己<text>重新相遇</text></view><view class="muted">使用微信，开启属于你的私密创作空间。</view></view>
   <view class="card">
-    <view class="title">微信安全登录</view>
-    <view class="muted">openid 仅作为当前小程序的渠道标识。账户主体、租户和权限由服务端确认，不会在客户端自行合并。</view>
-    <checkbox-group bindchange="consentChanged">
-      <label class="row"><checkbox value="accepted" checked="{{accepted}}" />我已阅读隐私指引、AI 标识和人物授权说明</label>
+    <view class="section-title">安心，把此刻交给时光</view>
+    <view class="login-promise"><text>01</text><view>作品默认私密<view class="caption">分享是你的选择，不会自动公开。</view></view></view>
+    <view class="login-promise"><text>02</text><view>每个人物都需要授权<view class="caption">人物授权可撤回，未成年人需有效监护授权。</view></view></view>
+    <view class="login-promise"><text>03</text><view>年龄影像带有 AI 标识<view class="caption">艺术化想象，不是真实容貌预测。</view></view></view>
+    <checkbox-group class="consent-panel" bindchange="consentChanged">
+      <label class="row"><checkbox color="#26384a" value="accepted" checked="{{accepted}}" /><text>我已阅读隐私指引、AI 标识和人物授权说明。</text></label>
     </checkbox-group>
-    <button class="button" disabled="{{!accepted || busy}}" bindtap="login">{{busy ? '正在验证' : '同意并登录'}}</button>
+    <button class="button" disabled="{{!accepted || busy}}" bindtap="login">{{busy ? '正在安全验证' : '同意并使用微信登录'}}</button>
     <view class="status error" wx:if="{{error}}">{{error}}</view>
   </view>
+  <view class="privacy-foot">不会默认获取手机号。账户身份与可用功能会在登录时安全核验。</view>
 </view>

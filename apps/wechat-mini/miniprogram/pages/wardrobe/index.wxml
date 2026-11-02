@@ -1,0 +1,31 @@
+<view class="page wardrobe-page">
+  <view class="page-header wardrobe-heading"><view class="wardrobe-eyebrow">人生时光机 · 衣着篇</view><view class="page-title">一生衣橱</view><view class="wardrobe-subtitle">岁月有迹，衣着有新。</view><view class="muted">为这张 {{targetAge}} 岁的照片挑一套衣着，原片会保留。</view><view class="wardrobe-count">8 个系列 · 31 款衣着</view></view>
+  <view class="wardrobe-comparison" wx:if="{{sourcePath || resultPath}}">
+    <view class="wardrobe-frame"><image wx:if="{{sourcePath}}" class="wardrobe-photo" src="{{sourcePath}}" mode="aspectFit" aria-label="换装前原年龄照片" /><view class="frame-caption">原年龄照片</view></view>
+    <view class="wardrobe-frame" wx:if="{{commandId}}"><image wx:if="{{resultPath}}" class="wardrobe-photo" src="{{resultPath}}" mode="aspectFit" aria-label="{{targetAge}}岁换装结果，AI生成照片" /><view class="wardrobe-photo waiting-photo" wx:else><view>{{result.status === 'failed' ? '换装未完成' : result.status === 'review' ? '照片需要复核' : result.status === 'reconciliation_required' ? '结果待核对' : '正在换装'}}</view><text>原片不会被覆盖</text></view><view class="frame-caption">换装照片 · {{targetAge}} 岁</view></view>
+  </view>
+  <view class="card" wx:if="{{context}}">
+    <view class="section-title">这一岁，想穿什么</view><view class="muted wardrobe-tip">只更换衣着，保留人物、年龄与构图。幼年使用适龄款式；纪念系列会标明适用范围。</view>
+    <view class="person-outfit" wx:for="{{people}}" wx:for-item="person" wx:key="participantId">
+      <view class="section-head"><view class="person-label">{{person.label}}{{person.self ? ' · 本人' : ''}}</view><text class="caption">{{person.authorized ? '已确认换装用途' : '待本人确认'}}</text></view>
+      <view class="series-options"><button wx:for="{{series}}" wx:for-item="seriesItem" wx:key="id" class="series-option {{person.seriesId === seriesItem.id ? 'active' : ''}}" data-participant="{{person.participantId}}" data-series="{{seriesItem.id}}" bindtap="chooseSeries" disabled="{{busy}}">{{seriesItem.label}}</button></view>
+      <view class="outfit-selection">已选 · {{person.selectedLabel}}{{person.seriesId === 'legacy' ? '（原有基础款）' : ''}}</view>
+      <view class="outfit-options"><button class="outfit-option {{person.styleId === styleItem.id ? 'selected' : ''}}" wx:for="{{person.options}}" wx:for-item="styleItem" wx:key="id" data-participant="{{person.participantId}}" data-style="{{styleItem.id}}" bindtap="chooseStyle" disabled="{{busy || !styleItem.available}}"><text class="outfit-swatch {{styleItem.seriesId}}" aria-hidden="true"></text><view>{{styleItem.label}}</view><text class="outfit-choice">{{!styleItem.available ? styleItem.unavailableReason : person.styleId === styleItem.id ? '已选择' : '选择这款'}}</text></button></view>
+      <button class="button secondary" wx:if="{{!person.self && !person.authorized}}" open-type="share" data-participant="{{person.participantId}}">邀请对方确认换装</button>
+    </view>
+    <checkbox-group class="consent-panel" bindchange="consentChanged"><label class="row"><checkbox value="accepted" color="#26384a" checked="{{accepted}}" disabled="{{busy}}" /><text>我同意对本原照衍生的年龄照片换装，不含公开分享。可单独撤回；对方需要本人确认。</text></label></checkbox-group>
+    <button class="button" disabled="{{busy || !accepted || !sourcePath}}" bindtap="submit">{{busy ? '正在处理' : people.length === 2 ? '生成双人换装照片' : '换这套衣服'}}</button>
+    <view class="field-hint">这会生成一张独立照片，原年龄照片和时间轴都会保留。</view>
+    <button class="button ghost" wx:if="{{people.length}}" disabled="{{busy}}" bindtap="revoke">撤回我对本原照的换装授权</button>
+  </view>
+  <view class="card" wx:if="{{result}}">
+    <view class="section-head"><view class="section-title">换装结果</view><text class="tag">{{targetAge}} 岁 · 1 张</text></view>
+    <view wx:if="{{result.status === 'ready'}}"><view class="muted">{{result.asset.width}} × {{result.asset.height}} · 原始画质</view><button class="button" bindtap="save" disabled="{{busy || !result.downloadPath}}">保存换装原图</button></view>
+    <view wx:elif="{{result.canRetry}}"><view class="muted">这次未完成，可以保留原选择恢复。已重试 {{result.attempts}} / 3 次。</view><button class="button" bindtap="retry" disabled="{{busy}}">恢复这张换装照片</button></view>
+    <view class="muted" wx:else>{{result.status === 'pending' || result.status === 'retrying' ? '已保存请求，可以稍后从相册继续查看。' : '结果需要核对或复核，暂不重复生成。'}}</view>
+  </view>
+  <button class="button secondary" bindtap="refresh" disabled="{{busy}}">{{busy ? '正在处理' : '刷新授权与结果'}}</button>
+  <button class="button secondary" bindtap="library">返回相册</button>
+  <view class="status error" wx:if="{{error}}">{{error}}</view><view class="status" wx:if="{{message}}">{{message}}</view>
+  <view class="privacy-foot">换装照片保留 AI 生成标识。离开页面会清理临时图片；保存和下载会再次校验授权。</view>
+</view>

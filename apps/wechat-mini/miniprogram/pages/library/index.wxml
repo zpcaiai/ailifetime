@@ -1,15 +1,39 @@
-<view class="page">
-  <view class="card">
-    <view class="title">私密作品库</view>
-    <view class="muted">预览使用短期签名 URL，页面隐藏后立即从客户端状态清除。分享前会重新向服务端校验每位参与者授权。</view>
-    <button class="button secondary" bindtap="load">刷新</button>
+<view class="page library-page">
+  <view class="page-header">
+
+    <view class="section-head"><view class="page-title">岁月相册</view><button class="button secondary compact" bindtap="load">刷新</button></view>
+    <view class="muted">收藏每个年龄的你。照片默认私密，随时回来翻阅。</view>
   </view>
-  <view class="card" wx:for="{{items}}" wx:key="id">
+  <view class="empty-state" wx:if="{{!items.length && !activeCommandId && !error}}"><view class="section-title">还没有照片</view><view class="muted">选一张照片，生成完整时间轴或指定年龄的照片。</view><navigator class="button" url="/pages/capture/index" open-type="switchTab">选照片，开始创作</navigator></view>
+  <view class="card album-card" wx:if="{{activeCommandId}}">
+    <view class="section-head"><view class="section-title">{{delivery.expectedCount === 1 ? '指定年龄照片' : '年龄时间轴'}}</view><text class="tag" wx:if="{{delivery}}">{{delivery.readyCount}} / {{delivery.expectedCount}} 已就绪</text></view>
+    <view class="album-progress" wx:if="{{delivery}}"><view style="width: {{delivery.readyCount / delivery.expectedCount * 100}}%;"></view></view>
+    <view class="photo-mat">
+      <image wx:if="{{previewPath}}" class="preview album-photo" src="{{previewPath}}" mode="aspectFit" aria-label="{{selectedAge}}岁 AI 年龄创作照片" />
+      <view class="photo-placeholder" wx:else><view class="placeholder-age">{{selectedAge}}<text>岁</text></view><view>{{timelineBusy ? '正在加载照片' : selectedNode.status === 'failed' ? '这张照片生成失败' : selectedNode.status === 'ready' ? '等待加载原图' : '等待照片生成'}}</view><view class="caption" wx:if="{{selectedNode.canRetry}}">可以只重试这个年龄，其他照片会保留。</view></view>
+      <view class="photo-footer"><view class="photo-age">{{selectedAge}}<text>岁</text></view><view class="photo-footer-copy"><view>年龄照片</view><text>{{selectedNode.status === 'ready' ? 'AI 年龄创作 · 非真实容貌预测' : selectedNode.status === 'failed' ? '未完成 · 可以查看恢复状态' : '年龄影像 · 等待交付'}}</text></view></view>
+    </view>
+    <view class="rail-heading"><text>选择年龄</text><text>{{delivery.expectedCount === 1 ? '1 张' : '0–100 岁'}}</text></view>
+    <scroll-view class="age-rail" scroll-x="true" wx:if="{{delivery}}"><button class="age-chip {{selectedAge === ageNode.targetAge ? 'is-selected' : ''}}" wx:for="{{delivery.nodes}}" wx:for-item="ageNode" wx:key="nodeId" size="mini" data-age="{{ageNode.targetAge}}" bindtap="selectAge" disabled="{{timelineBusy}}" aria-label="{{ageNode.targetAge}}岁，{{ageNode.status === 'ready' ? '已就绪' : ageNode.status === 'failed' ? '待重试' : '待完成'}}"><view>{{ageNode.targetAge}}<text>岁</text></view><text class="age-chip-state">{{ageNode.status === 'ready' ? '已就绪' : ageNode.status === 'failed' ? '待重试' : '待完成'}}</text></button></scroll-view>
+    <view class="caption" wx:if="{{selectedNode.status === 'ready' && !selectedNode.downloadPath}}">原图存储暂不可用，请稍后刷新。</view>
+    <button class="button" wx:if="{{selectedNode.status === 'ready' && selectedNode.downloadPath}}" bindtap="saveOriginal" disabled="{{timelineBusy}}">保存 {{selectedAge}} 岁原图</button>
+    <view class="original-caption" wx:if="{{selectedNode.status === 'ready' && selectedNode.downloadPath}}">{{selectedNode.asset.width}} × {{selectedNode.asset.height}} · 保留原始画质</view>
+    <button class="button secondary" wx:if="{{selectedNode.status === 'ready' && selectedNode.downloadPath && delivery.creationKind !== 'wardrobe'}}" bindtap="changeClothes" disabled="{{timelineBusy}}">一生衣橱 · 为这张照片换装</button>
+    <button class="button" wx:if="{{selectedNode.canRetry}}" bindtap="retryAge" disabled="{{timelineBusy}}">重新生成 {{selectedAge}} 岁的照片 ↻</button>
+    <view class="original-caption" wx:if="{{selectedNode.canRetry}}">这个年龄已重试 {{selectedNode.attempts}} / 3 次</view>
+    <view class="status" wx:if="{{selectedNode.status === 'reconciliation_required'}}">结果尚待核对，暂不重复生成。</view>
+    <button class="button secondary" bindtap="refreshTimeline" disabled="{{timelineBusy}}">{{timelineBusy ? '正在处理' : '刷新时间轴 / 重试下载'}}</button>
+    <view class="status" wx:if="{{timelineMessage}}">{{timelineMessage}}</view>
+  </view>
+  <view class="section-head album-list-title" wx:if="{{items.length}}"><view class="section-title">我的时光记录</view><text class="caption">{{items.length}} 次创作</text></view>
+  <view class="card archive-card" wx:for="{{items}}" wx:key="id">
     <image class="preview" wx:if="{{item.previewUrl}}" src="{{item.previewUrl}}" mode="aspectFit" />
-    <view>{{item.id}}</view><view class="muted">{{item.state}}</view>
-    <button class="button secondary" data-id="{{item.id}}" bindtap="prepareShare">生成可撤销分享授权</button>
+    <view class="section-head"><view class="section-title">{{item.creationKind === 'wardrobe' ? '一生衣橱' : '年龄照片'}}</view><text class="tag">{{item.state === 'succeeded' ? '查看交付' : item.state === 'failed' ? '可查看恢复' : item.state === 'cancelled' ? '已取消' : '处理中'}}</text></view><view class="record-reference">作品编号 · {{item.id}}</view>
+    <button class="button" data-id="{{item.id}}" bindtap="openTimeline">查看照片 / 恢复任务</button>
+    <button class="button secondary" data-id="{{item.id}}" bindtap="prepareShare">创建可撤销的分享授权</button>
     <button class="button" wx:if="{{item.shareReady}}" open-type="share" data-id="{{item.id}}">分享带 AI 标识的卡片</button>
     <button class="button danger" wx:if="{{item.shareReady}}" data-id="{{item.id}}" bindtap="revoke">撤回分享</button>
   </view>
   <view class="status error" wx:if="{{error}}">{{error}}</view>
+  <view class="privacy-foot">预览和下载会重新校验授权，离开页面会清理临时图片。{{delivery ? delivery.aiLabel : 'AI 年龄影像是艺术想象，不代表真实容貌预测。'}}</view>
 </view>

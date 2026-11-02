@@ -435,6 +435,33 @@ test("B14 persists an authorized illustrative timeline", async (testContext) => 
   assert.equal(records[0]?.data.jobId, "job-1");
   assert.equal(records[0]?.data.illustrativeLabel, true);
   assert.equal(records[0]?.data.operationMode, "external-command");
+  const fullInput: JsonObject = {
+    jobId: "job-full-21", sourceAssetId: "asset-1", participantIds: [consumer.actorId],
+    targetAges: [0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100],
+    currentAge: 35, timelineProfile: "lifespan-21-v1", templateId: "portrait-selected-v2",
+    seed: "full-seed", promptPolicyVersion: "prompt-v1", illustrativeLabel: true,
+  };
+  const full = objectResult(await registry.execute(runtime, "B14", {
+    actor: consumer, idempotencyKey: "full-21-key", input: fullInput,
+  }));
+  const replay = objectResult(await registry.execute(runtime, "B14", {
+    actor: consumer, idempotencyKey: "full-21-key", input: fullInput,
+  }));
+  assert.equal(replay.replayed, true);
+  assert.equal(replay.externalCommandId, full.externalCommandId);
+  const persisted = runtime.listRecords(consumer, { collection: "generation.timeline-commands" });
+  assert.equal(persisted.length, 2);
+  const fullRecord = persisted.find((record) => record.data.jobId === "job-full-21");
+  assert.ok(fullRecord);
+  const plan = objectResult(fullRecord.data.generationPlan as JsonValue);
+  assert.equal(plan.expectedImageCount, 21);
+  assert.equal(plan.currentAge, 35);
+  assert.equal(plan.templateId, "portrait-selected-v2");
+  assert.ok(Array.isArray(plan.nodes));
+  assert.equal(plan.nodes.length, 21);
+  assert.deepEqual(plan.nodes.map((node) => objectResult(node).targetAge), fullInput.targetAges);
+  assert.ok(plan.nodes.every((node) => objectResult(node).sourceAssetId === "asset-1"));
+  assert.equal(fullRecord.data.commandState, "requested");
 });
 
 test("B09 applies stateful generation transitions, replays, and rejects stale state", async (testContext) => {

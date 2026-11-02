@@ -1,4 +1,10 @@
-<view class="page"><view class="card"><view class="title">处理所选照片前确认</view>
-  <view class="muted">触发接口：{{referrer}}。仅处理您主动选择的照片，用于生成带 AI 标识的艺术作品；会移除非必要 EXIF，上传会话最长 24 小时，可在账户中撤回或请求删除。</view>
-  <button class="button" bindtap="agree">同意并继续</button><button class="button danger" bindtap="disagree">不同意</button>
-</view></view>
+<view class="page" wx:if="{{invitation}}"><view class="page-header"><view class="page-title">{{inviteKind === 'wardrobe' ? '共同换装授权' : '共同创作授权'}}</view><view class="muted">{{inviteKind === 'wardrobe' ? '对方邀请你为年龄照片更换衣着。' : '对方邀请你用一张合照创作不同年龄的照片。'}}</view></view><view class="card"><view class="section-title">请本人确认</view><view class="note" wx:if="{{inviteKind === 'wardrobe'}}">同意对本张原照衍生的年龄照片换装，衣着风格可选择。仅替换衣服，保持人物、年龄、体型、姿态和背景；不包含公开分享。可单独撤回换装授权，原年龄照片授权另行管理。</view><view class="note" wx:else>仅对这张合照授权年龄创作。两人会在同一画面中变为相同目标年龄；童年形象只保留自然、日常的双人构图。此授权不包含公开分享，可随时撤回。</view><view class="record-reference">原照编号：{{assetId}}</view><view class="record-reference">受邀人物编号：{{participantId}}</view><view class="note">请先与邀请者核对原照和人物编号，不要为陌生照片授权。未成年人需要监护人另行完成有效授权。</view><button class="button" disabled="{{busy || agreed || !inviteValid}}" bindtap="agree">{{agreed ? '已确认，请通知对方继续' : busy ? '正在提交' : inviteKind === 'wardrobe' ? '本人同意换装用途' : '本人同意本次创作'}}</button><button class="button secondary" bindtap="disagree">返回</button><view class="status error" wx:if="{{error}}">{{error}}</view></view><view class="privacy-foot">生成照片带 AI 标识，不代表真实容貌预测。</view></view>
+<view class="page" wx:else><view class="page-header"><view class="page-title">照片使用说明</view><view class="muted">处理照片前，向你说清楚每一件事。</view></view><view class="card">
+  <view class="section-head"><view class="section-title">这一次，我们只会</view><text class="tag">照片隐私</text></view>
+  <view class="detail-row"><text class="caption">照片范围</text><text class="detail-value">仅处理你主动选择的照片</text></view>
+  <view class="detail-row"><text class="caption">使用用途</text><text class="detail-value">生成带 AI 标识的年龄艺术作品</text></view>
+  <view class="detail-row"><text class="caption">数据保护</text><text class="detail-value">移除非必要 EXIF 元数据</text></view>
+  <view class="detail-row"><text class="caption">上传会话</text><text class="detail-value">最长保留 24 小时</text></view>
+  <view class="note">本次照片能力 · {{referrer}}</view>
+  <button class="button" bindtap="agree">同意并继续</button><button class="button secondary" bindtap="disagree">暂不同意</button>
+</view><view class="privacy-foot">你可以拒绝，本次操作将停止。AI 年龄影像是艺术想象，不代表真实容貌预测。</view></view>

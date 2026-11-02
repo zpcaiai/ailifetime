@@ -39,6 +39,8 @@ const EXTERNAL_COMMAND_COLLECTIONS = new Set<string>(
 const SERVER_MANAGED_MUTATION_COLLECTIONS = new Set<string>([
   ...EXTERNAL_COMMAND_COLLECTIONS,
   ...EXTERNAL_EVENT_REDUCER_TARGET_COLLECTIONS,
+  "media.quality-decisions",
+  "media.safety-certificates",
   RIGHTS_REQUEST_COLLECTION,
 ]);
 const SHARE_COMMAND_COLLECTIONS = new Set<string>(

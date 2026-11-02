@@ -9,6 +9,7 @@ import {
 import { loadApiConfiguration } from "./config.js";
 import { createApiServer, type ApiLogEntry } from "./server.js";
 import { ProductionDomainRuntime } from "./domain-runtime.js";
+import { configuredTimelineArtifacts } from "./timeline-artifacts.js";
 
 const PRODUCT_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 
@@ -37,6 +38,7 @@ async function run(): Promise<void> {
     })
     : undefined;
   domainRuntimeForCleanup = domainRuntime;
+  const timelineArtifacts = configuredTimelineArtifacts(process.env, configuration.appEnvironment);
   const server = createApiServer({
     runtime,
     authenticator: configuration.authenticator,
@@ -46,6 +48,7 @@ async function run(): Promise<void> {
     allowSandboxStepUpHeader: configuration.allowSandboxStepUpHeader,
     appEnvironment: configuration.appEnvironment,
     clientIntegrations: configuration.clientIntegrations,
+    ...(timelineArtifacts === undefined ? {} : { timelineArtifacts }),
     ...(domainRuntime === undefined ? {} : { domainRuntime }),
     ...(configuration.browserOidcConfiguration === undefined
       ? {}

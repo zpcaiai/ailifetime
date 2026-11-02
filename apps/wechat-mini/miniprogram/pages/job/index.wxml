@@ -1,10 +1,13 @@
 <view class="page">
-  <view class="card">
-    <view class="title">{{title}}</view>
-    <view class="muted">{{description}}</view>
-    <view class="status">状态：{{state}}</view>
-    <button class="button secondary" bindtap="refresh">刷新</button>
-    <button class="button" wx:if="{{complete}}" bindtap="library">查看作品库</button>
+  <view class="page-header"><view class="page-title">{{complete ? '处理结果' : '正在生成照片'}}</view><view class="muted">可以离开页面，稍后从相册查看。</view></view>
+  <view class="card job-card">
+    <view class="job-state tag">{{state === 'requested' ? '等待处理' : state === 'dispatched' ? '已开始准备' : state === 'acknowledged' ? '创作处理中' : state === 'succeeded' ? '处理已结束' : state === 'failed' ? '需要恢复' : state === 'cancelled' ? '已取消' : '正在核对'}}</view>
+    <view class="section-title job-title">{{title}}</view>
+    <view class="muted job-description">{{description}}</view>
+    <view class="job-track"><view><text class="track-dot filled"></text><text>保存创作请求</text></view><view><text class="track-dot {{state !== 'requested' ? 'filled' : ''}}"></text><text>等待生成回执</text></view><view><text class="track-dot"></text><text>逐张照片核验与交付</text></view></view>
+    <button class="button" wx:if="{{canOpenLibrary}}" bindtap="library">查看照片 / 恢复任务</button>
+    <button class="button secondary" bindtap="refresh">查看最新进展</button>
     <view class="status error" wx:if="{{error}}">{{error}}</view>
   </view>
+  <view class="privacy-foot">可以稍后从相册继续查看。已完成的照片会保留，单个年龄失败时可在相册中恢复。</view>
 </view>

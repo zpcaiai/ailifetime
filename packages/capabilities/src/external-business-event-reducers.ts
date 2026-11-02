@@ -3,7 +3,11 @@ import {
   EXTERNAL_COMMAND_CALLBACK_ROUTES,
   EXTERNAL_COMMAND_TERMINAL_EVENT_TYPES,
   externalCommandCallbackProviderAllowed,
+  parseTimelineResultManifest,
+  bindTimelineResultManifest,
 } from "@ltm/core";
+import { participantQuality } from "./participant-quality.js";
+import { parseWardrobeBinding, wardrobeBinding } from "./wardrobe-plan.js";
 import type {
   ExternalBusinessAggregateTarget,
   ExternalBusinessEventReducer,
@@ -515,7 +519,13 @@ function commandReducer(options: CommandReducerOptions): RoutedReducer {
     operation: options.route.operation,
     locate(event) {
       commandRoute(event, options);
-      return target(options.route.collection, event.subjectId);
+      const base = target(options.route.collection, event.subjectId);
+      if (options.route.batchId !== "B14" || event.canonicalClaims.resultManifest === undefined) return base;
+      const manifest = parseTimelineResultManifest(event.canonicalClaims.resultManifest);
+      return { ...base, relatedRecords: manifest.nodes.filter(node => node.status === "ready").flatMap(node => [
+        { key: `quality-${node.targetAge}`, collection: "media.quality-decisions", id: node.qualityResultId!, required: true, lock: "share" as const },
+        { key: `safety-${node.targetAge}`, collection: "media.safety-certificates", id: node.safetyResultId!, required: true, lock: "share" as const },
+      ]) };
     },
     reduce(event, context) {
       commandRoute(event, options);
@@ -525,8 +535,10 @@ function commandReducer(options: CommandReducerOptions): RoutedReducer {
       const claimPatch = Object.fromEntries(
         (options.route.requiredClaimIdentifiers ?? []).map((field) => [field, claimIdentifier(event, field)]),
       );
+      const timelinePatch = options.route.batchId === "B14" ? timelineResultPatch(event, context) : {};
       const base = reduction(event, transition.allowed, transition.next, options.decisionType, {
         ...claimPatch,
+        ...timelinePatch,
         providerOperationId,
         providerStatus: transition.next,
         providerResultSha256: event.artifactSha256,
@@ -548,6 +560,46 @@ function commandReducer(options: CommandReducerOptions): RoutedReducer {
       };
     },
   };
+}
+
+function timelineResultPatch(event: VerifiedBusinessEvent, context: ExternalBusinessReducerContext): JsonObject {
+  const value = event.canonicalClaims.resultManifest;
+  if (value === undefined) return { deliveryState: "awaiting_results" };
+  const current = context.current!;
+  const plan = current.data.generationPlan;
+  if (plan === null || typeof plan !== "object" || Array.isArray(plan)) throw invalid("timeline plan is missing");
+  const manifest = bindTimelineResultManifest(value, { sourceAssetId: current.data.sourceAssetId,
+    targetAges: current.data.targetAges, planVersion: plan.schemaVersion });
+  const wardrobe = plan.operation === "wardrobe-edit";
+  const editBinding = wardrobe ? parseWardrobeBinding(plan.wardrobeBinding) : undefined;
+  if (wardrobe && JSON.stringify(editBinding) !== JSON.stringify(wardrobeBinding(current.data.wardrobeEdit))) throw invalid("wardrobe plan and original edit binding changed");
+  for (const node of manifest.nodes.filter(node => node.status === "ready")) {
+    if (editBinding && (node.asset!.id === editBinding.sourceImageId || node.asset!.sha256 === editBinding.sourceImageSha256 || node.targetAge !== editBinding.targetAge)) throw invalid("wardrobe result must be a new image at the source age");
+    const quality = context.relatedRecords[`quality-${node.targetAge}`];
+    const safety = context.relatedRecords[`safety-${node.targetAge}`];
+    for (const [record, batch] of [[quality, "B15"], [safety, "B17"]] as const) {
+      const binding = record?.data.artifactBinding;
+      if (!record || record.deletedAt !== null || record.tenantId !== current.tenantId || record.data.batchId !== batch ||
+          record.data.executionState !== "persisted" || JSON.stringify([...record.participantIds].sort()) !== JSON.stringify([...current.participantIds].sort()) ||
+          binding === null || typeof binding !== "object" || Array.isArray(binding) ||
+          binding.sourceAssetId !== manifest.sourceAssetId || binding.assetId !== node.asset!.id ||
+          binding.outputSha256 !== node.asset!.sha256 || binding.targetAge !== node.targetAge) throw invalid("timeline publication evidence is missing or bound to another image/person/age");
+      if (wardrobe && (binding.wardrobeBinding === undefined || JSON.stringify(parseWardrobeBinding(binding.wardrobeBinding)) !== JSON.stringify(editBinding))) throw invalid("wardrobe publication evidence is not bound to the selected source photo and clothing");
+    }
+    const scores = quality!.data.scores as JsonObject, thresholds = quality!.data.thresholds as JsonObject;
+    if ((wardrobe || current.participantIds.length > 1) && participantQuality(quality!.data.participantAssessments, current.participantIds, true, wardrobe).failedDimensions.length > 0) {
+      throw invalid("timeline image has not passed every participant identity and age gate");
+    }
+    const dimensions = ["identity", "ageRange", "facialDrift", "pose", "artifacts", "clarity", "background", "handsTeethEyes", "photorealism", ...(wardrobe ? ["garmentMatch", "regionPreservation"] : [])];
+    if (quality!.data.decision !== "pass" || !scores || !thresholds ||
+        dimensions.some(d => typeof scores[d] !== "number" || !Number.isFinite(scores[d]) || (scores[d] as number) > 1 ||
+          typeof thresholds[d] !== "number" || !Number.isFinite(thresholds[d]) || (thresholds[d] as number) <= 0 ||
+          (thresholds[d] as number) > 1 || (scores[d] as number) < (thresholds[d] as number)) ||
+        safety!.data.inputSafety !== "allowed" || safety!.data.outputSafety !== "allowed" || safety!.data.aiLabel !== true) throw invalid("timeline image has not passed every quality and safety gate");
+  }
+  const ready = manifest.nodes.filter(node => node.status === "ready").length;
+  return { resultManifest: manifest as unknown as JsonObject,
+    deliveryState: ready === manifest.nodes.length ? "ready" : ready > 0 ? "partial" : "blocked" };
 }
 
 function assertCommandProviderBinding(

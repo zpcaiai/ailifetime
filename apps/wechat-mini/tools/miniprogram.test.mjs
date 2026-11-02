@@ -1,14 +1,37 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, cpSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { MiniProgramValidationError, validateMiniProgram } from "./validate-miniprogram.mjs";
 
 test("the checked-in mini-program has complete pages and fail-closed controls", () => {
   const result = validateMiniProgram();
-  assert.equal(result.pages, 10);
+  assert.equal(result.pages, 11);
+  assert.ok(JSON.parse(readFileSync(new URL("../miniprogram/app.json", import.meta.url))).pages.includes("pages/wardrobe/index"));
+  const cover = readFileSync(new URL("../miniprogram/assets/wardrobe-invite.png", import.meta.url));
+  assert.deepEqual([...cover.subarray(0,8)], [137,80,78,71,13,10,26,10]);
+  assert.equal(cover.readUInt32BE(16),500);assert.equal(cover.readUInt32BE(20),400);
   assert.equal(result.release, false);
   assert.equal(result.appIdMode, "development");
+});
+
+test("manifest rejects compiler-invalid private-info entries while keeping platform privacy mandatory", () => {
+  const root = mkdtempSync(join(tmpdir(), "ltm-mini-manifest-"));
+  try {
+    cpSync(fileURLToPath(new URL("..", import.meta.url)), root, { recursive: true, filter: (path) => !path.includes("node_modules") && !path.includes("/dist") });
+    const appPath = join(root, "miniprogram/app.json"), app = JSON.parse(readFileSync(appPath, "utf8"));
+    for (const requiredPrivateInfos of [["chooseMedia"], ["saveImageToPhotosAlbum"], ["getLocation", "getLocation"], "getLocation"]) {
+      writeFileSync(appPath, JSON.stringify({ ...app, requiredPrivateInfos }));
+      assert.throws(() => validateMiniProgram(root), (error) => error.code === "PRIVATE_INFO_DECLARATION_INVALID");
+    }
+    writeFileSync(appPath, JSON.stringify(app));
+    const projectPath = join(root, "project.config.json"), project = JSON.parse(readFileSync(projectPath, "utf8"));
+    writeFileSync(projectPath, JSON.stringify({ ...project, __usePrivacyCheck__: false }));
+    assert.throws(() => validateMiniProgram(root), (error) => error.code === "PRIVACY_PLATFORM_GATE_MISSING");
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test("mini-program capability policy validates the closed portalId projection", () => {
@@ -370,6 +393,7 @@ test("editor overrides a product-operation session with age transformation and r
     participantId: "consumer-1",
     consentAccepted: true,
     ages: "18,35,80",
+    currentAge: "35",
   });
   await successful.page.generate();
   const ageConsent = successfulCalls.find(({ options }) => options.data?.command === "consent.grant");
@@ -387,6 +411,7 @@ test("editor overrides a product-operation session with age transformation and r
   assert.deepEqual(Object.keys(capabilityCalls[0].options.data).sort(), ["assetId", "participantIds"]);
   assert.equal(capabilityCalls[1].options.data.sourceAssetId, "media-1");
   assert.equal(capabilityCalls[2].options.data.sourceAssetId, "media-1");
+  assert.equal(capabilityCalls[2].options.data.templateId, capabilityCalls[1].options.data.templateId);
   assert.equal(successful.redirects.length, 1);
 
   const blockedCalls = [];
@@ -400,6 +425,7 @@ test("editor overrides a product-operation session with age transformation and r
     participantId: "consumer-1",
     consentAccepted: true,
     ages: "18,80",
+    currentAge: "35",
   });
   await blocked.page.generate();
   assert.deepEqual(
@@ -418,7 +444,7 @@ test("generation job polling uses the same age-transformation purpose as the cre
     require: () => ({
       requestForPurpose: async (path, purpose, options) => {
         calls.push({ path, purpose, options });
-        return { data: { state: "succeeded", reconciliationState: "reconciled" } };
+        return { data: { commandState: "succeeded", state: "pending", reconciliationState: "clear" } };
       },
     }),
     wx: { switchTab() {} },
@@ -434,9 +460,9 @@ test("generation job polling uses the same age-transformation purpose as the cre
   page.setData({ commandId: "generation-command-1" });
   await page.refresh();
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].path, "/v1/queries");
+  assert.equal(calls[0].path, "/v1/timelines/generation-command-1");
   assert.equal(calls[0].purpose, "age_transformation");
-  assert.equal(calls[0].options.data.query, "external-command.get");
+  assert.equal(calls[0].options.method, "GET");
   assert.equal(page.data.complete, true);
 });
 
@@ -534,8 +560,133 @@ test("privacy gate drives official exposure, agree and disagree events before ch
   const denied = privacy.requireAuthorization(); privacy.decide(false); await assert.rejects(denied, /PRIVACY_AUTHORIZATION_DENIED/); assert.equal(current !== undefined, true);
 });
 
+test("editor defaults to 21 ages, binds original age and blocks duplicate in-flight submissions", async () => {
+  const calls = [];
+  let release;
+  const wait = new Promise((resolve) => { release = resolve; });
+  const editor = loadEditorPage(async (path, options) => {
+    calls.push({ path, options });
+    if (path === "/v1/commands") await wait;
+    if (path === "/v1/capabilities/B07") return { data: { state: "persisted" } };
+    if (path === "/v1/capabilities/B14") return { data: { externalCommandId: "generation-21" } };
+    return { data: {} };
+  });
+  assert.equal(editor.page.data.ages, Array.from({ length: 21 }, (_, index) => index * 5).join(","));
+  editor.page.setData({ assetId: "media-1", participantId: "consumer-1", consentAccepted: true, currentAge: "35" });
+  const first = editor.page.generate();
+  await editor.page.generate();
+  assert.equal(calls.length, 1);
+  release();
+  await first;
+  const request = calls.find((call) => call.path === "/v1/capabilities/B14");
+  assert.ok(request);
+  assert.equal(request.options.data.timelineProfile, "lifespan-21-v1");
+  assert.equal(request.options.data.currentAge, 35);
+  assert.deepEqual(Array.from(request.options.data.targetAges), Array.from({ length: 21 }, (_, index) => index * 5));
+  assert.equal(editor.redirects.length, 1);
+});
+
+test("editor rejects empty age tokens and missing or invalid source age before granting consent", async () => {
+  for (const delta of [{ ages: "5,,10" }, { ages: ",5,10" }, { ages: "0,5," }, { currentAge: "" }, { currentAge: "101" }, { currentAge: "-1" }, { currentAge: "3.5" }]) {
+    let calls = 0;
+    const editor = loadEditorPage(async () => { calls++; return { data: {} }; });
+    editor.page.setData({ assetId: "media-1", participantId: "consumer-1", consentAccepted: true, currentAge: "35", ...delta });
+    await editor.page.generate();
+    assert.equal(calls, 0);
+    assert.equal(editor.page.data.error, "PARTICIPANT_OR_AGES_INVALID");
+  }
+});
+
+test("job page resumes polling after foregrounding and ignores a late hidden-page response", async () => {
+  let resolvePending;
+  let calls = 0;
+  const pending = new Promise((resolve) => { resolvePending = resolve; });
+  const job = loadJobPage(async () => {
+    calls++;
+    if (calls === 1) return pending;
+    return { data: { commandState: "acknowledged", reconciliationState: "clear" } };
+  });
+  job.page.setData({ commandId: "generation-1" });
+  const first = job.page.refresh();
+  job.page.onHide();
+  resolvePending({ data: { commandState: "succeeded", reconciliationState: "clear" } });
+  await first;
+  assert.equal(job.page.data.state, "requested");
+  assert.equal(job.timers.size, 0);
+  job.page.onShow();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls, 2);
+  assert.equal(job.page.data.state, "acknowledged");
+  assert.equal(job.timers.size, 1);
+  job.page.onUnload();
+  assert.equal(job.timers.size, 0);
+});
+
+test("job provider success is not photo acceptance and terminal jobs expose the recovery library", async () => {
+  for (const state of ["succeeded", "failed", "cancelled", "compensated"]) {
+    const job = loadJobPage(async () => ({ data: { commandState: state, state: "pending", reconciliationState: "clear" } }));
+    job.page.setData({ commandId: "generation-1" });
+    await job.page.refresh();
+    assert.equal(job.page.data.complete, true);
+    assert.equal(job.page.data.canOpenLibrary, true);
+    assert.equal(job.timers.size, 0);
+    if (state === "succeeded") assert.match(job.page.data.title, /待核验/);
+  }
+  const frozen = loadJobPage(async () => ({ data: { commandState: "acknowledged", reconciliationState: "reconciliation_required" } }));
+  frozen.page.setData({ commandId: "generation-1" });
+  await frozen.page.refresh();
+  assert.equal(frozen.timers.size, 0);
+  assert.equal(frozen.page.data.canOpenLibrary, false);
+});
+
+test("editor replays an uncertain B14 intent with the same body and keys, and blocks changed parameters", async () => {
+  const calls = [];
+  let generationAttempts = 0;
+  const editor = loadEditorPage(async (path, options) => {
+    calls.push({ path, options });
+    if (path === "/v1/capabilities/B07") return { data: { state: "persisted" } };
+    if (path === "/v1/capabilities/B14") {
+      if (++generationAttempts === 1) throw new Error("NETWORK_UNAVAILABLE");
+      return { data: { externalCommandId: "original-command" } };
+    }
+    return { data: {} };
+  });
+  editor.page.setData({ assetId: "media-1", participantId: "consumer-1", consentAccepted: true, currentAge: "35" });
+  await editor.page.generate();
+  assert.equal(editor.page.data.error, "NETWORK_UNAVAILABLE");
+  editor.page.setData({ currentAge: "40" });
+  await editor.page.generate();
+  assert.equal(editor.page.data.error, "GENERATION_RECONCILIATION_REQUIRED");
+  assert.equal(generationAttempts, 1);
+  editor.page.setData({ currentAge: "35" });
+  await editor.page.generate();
+  const generations = calls.filter((call) => call.path === "/v1/capabilities/B14");
+  assert.equal(generations.length, 2);
+  assert.deepEqual(generations[1].options, generations[0].options);
+  const consents = calls.filter((call) => call.path === "/v1/commands");
+  assert.deepEqual(consents[1].options, consents[0].options);
+  assert.equal(editor.redirects.length, 1);
+});
+
+function loadJobPage(request) {
+  let page;
+  let timerId = 0;
+  const timers = new Map();
+  runInNewContext(readFileSync(new URL("../miniprogram/pages/job/index.js", import.meta.url), "utf8"), {
+    Page: (definition) => { page = definition; },
+    require: () => ({ requestForPurpose: request }),
+    wx: { switchTab() {} },
+    setTimeout: (callback) => { timers.set(++timerId, callback); return timerId; },
+    clearTimeout: (id) => timers.delete(id),
+  });
+  assert.ok(page);
+  page.setData = function setData(update) { Object.assign(this.data, update); };
+  return { page, timers };
+}
+
 function loadEditorPage(request) {
   let page;
+  let nextId = 0;
   const redirects = [];
   const activeSession = {
     accessToken: "session-access-token-value-1",
@@ -545,7 +696,7 @@ function loadEditorPage(request) {
     purpose: "product_operation",
   };
   const api = {
-    idempotencyKey: (prefix) => `${prefix}-test-id`,
+    idempotencyKey: (prefix) => `${prefix}-test-${++nextId}`,
     request: (path, options) => request(path, options, undefined),
     requestForPurpose: (path, purpose, options) => request(path, options, purpose),
   };
@@ -577,8 +728,51 @@ function loadEditorPage(request) {
   return { page, redirects };
 }
 
-function loadLibraryPage(request) {
+test("a late timeline fetch after hide cannot restore private image metadata", async () => {
+  let resolvePending;
+  const pending = new Promise(resolve => { resolvePending = resolve; });
+  const library = loadLibraryPage(async () => pending);
+  const opening = library.page.openTimeline({currentTarget:{dataset:{id:"root"}}});
+  await Promise.resolve(); await Promise.resolve();
+  library.page.onHide();
+  resolvePending({data:{commandId:"root",expectedCount:1,nodes:[{targetAge:0,status:"ready"}]}});
+  await opening;
+  assert.equal(library.page.data.delivery,null);assert.equal(library.page.data.previewPath,"");assert.equal(library.page.data.activeCommandId,"");
+});
+
+test("authorization failure clears previously cached timeline photos", async () => {
+  let cleared = 0;
+  const library = loadLibraryPage(async () => { throw new Error("CONSENT_WITHDRAWN"); }, { clearAll: async () => { cleared++; }, remove: async () => {}, download: async () => "", save: async () => {} });
+  library.page.setData({ activeCommandId: "root", previewPath: "private-temp", selectedNode: { status: "ready" }, delivery: { nodes: [] } });
+  await library.page.refreshTimeline();
+  assert.equal(cleared,1);assert.equal(library.page.data.previewPath,"");assert.equal(library.page.data.delivery,null);
+});
+
+test("library renders21 ages, selects original, retries one failed age and clears private state on hide", async () => {
+  const calls = [], removed = [], saves = [];
+  const view = { commandId: "root", expectedCount: 21, readyCount: 20, state: "partial", aiLabel: "AI 创作",
+    nodes: Array.from({ length: 21 }, (_, i) => ({ nodeId: `age-${i*5}`, targetAge: i*5, status: i === 20 ? "failed" : "ready", attempts: 0, canRetry: i === 20,
+      downloadPath: i === 20 ? null : `/v1/timelines/root/nodes/${i*5}/image`, asset: { sha256: `${i}`.padStart(64,"0"), width: 1024, height: 1024 } })) };
+  const media = { clearAll: async () => { removed.push("all"); }, remove: async path => { removed.push(path); }, download: async node => `temp-${node.targetAge}`, save: async node => { saves.push(node.targetAge); } };
+  const library = loadLibraryPage(async (path, options, purpose) => {
+    calls.push({path, options, purpose});
+    if (path.endsWith("/retry")) { view.nodes[20].status = "retrying"; view.nodes[20].canRetry = false; return {data:{commandId:"retry"}}; }
+    if (path === "/v1/timelines/root") return {data: structuredClone(view)};
+    throw new Error(path);
+  }, media);
+  await library.page.openTimeline({currentTarget:{dataset:{id:"root"}}});
+  assert.equal(library.page.data.delivery.nodes.length,21);assert.equal(library.page.data.previewPath,"temp-0");
+  await library.page.saveOriginal();assert.deepEqual(saves,[0]);
+  await library.page.selectAge({currentTarget:{dataset:{age:100}}});await library.page.retryAge();
+  const retry = calls.find(call => call.path.endsWith("/retry"));
+  assert.deepEqual(JSON.parse(JSON.stringify(retry.options.data)),{targetAge:100,attempt:1});assert.equal(retry.purpose,"age_transformation");
+  assert.equal(library.page.data.selectedNode.status,"retrying");assert.equal(library.timers.size,1);
+  library.page.onHide();assert.equal(library.page.data.delivery,null);assert.equal(library.page.data.previewPath,"");assert.equal(library.timers.size,0);assert.ok(removed.includes("all"));
+});
+
+function loadLibraryPage(request, media = { clearAll: async () => {}, remove: async () => {}, download: async () => "test-temp-path", save: async () => {} }) {
   let page;
+  const navigations = [];
   let nextTimer = 0;
   const timers = new Map();
   const activeSession = {
@@ -608,11 +802,12 @@ function loadLibraryPage(request) {
       if (specifier === "../../policies/sharing") {
         return { version: "sharing-v1", text: "单独确认本作品的分享授权" };
       }
+      if (specifier === "../../services/timeline-media") return media;
       if (specifier === "../../services/policy") return { requireCapabilities() {} };
       throw new Error(`unexpected library dependency: ${specifier}`);
     },
     wx: {
-      navigateTo() {},
+      navigateTo(input) { navigations.push(input); },
       stopPullDownRefresh() {},
       showModal: (input) => input.success({ confirm: true, cancel: false }),
     },
@@ -629,7 +824,7 @@ function loadLibraryPage(request) {
   }, { filename: "miniprogram/pages/library/index.js" });
   assert.ok(page);
   page.setData = function setData(update) { Object.assign(this.data, update); };
-  return { page, timers };
+  return { page, timers, navigations };
 }
 
 function loadMiniCommonJs(relative, globals) {
@@ -651,3 +846,31 @@ function loadMiniCommonJs(relative, globals) {
   }, { filename: relative });
   return module.exports;
 }
+
+test("editor supports both subjects and both play modes without granting partner consent", async () => {
+  for (const subjectMode of ["single", "couple"]) for (const playMode of ["lifespan", "age"]) for (const targetAge of ["0", "37", "100"]) {
+    const calls=[]; const editor=loadEditorPage(async(path,options)=>{calls.push({path,options});if(path.endsWith('B07'))return{data:{state:'persisted'}};if(path.endsWith('B14'))return{data:{externalCommandId:'mode-command'}};return{data:{}};});
+    editor.page.setData({assetId:'source',participantId:'consumer-1',currentAge:'35',consentAccepted:true,subjectMode,playMode,targetAge,partnerParticipantId:'partner',partnerCurrentAge:'32'});
+    await editor.page.generate();
+    const grants=calls.filter(c=>c.options.data.command==='consent.grant');assert.equal(grants.length,1);assert.equal(grants[0].options.data.input.participantId,'consumer-1');
+    const request=calls.find(c=>c.path.endsWith('B14')).options.data;
+    assert.deepEqual(Array.from(request.participantIds),subjectMode==='couple'?['consumer-1','partner']:['consumer-1']);
+    assert.equal(request.targetAges.length,playMode==='age'?1:21);if(playMode==='age')assert.equal(request.targetAges[0],Number(targetAge));
+    assert.equal(request.timelineProfile,`${playMode==='age'?'single-age':'lifespan-21'}${subjectMode==='couple'?'-couple':''}-v1`);
+    if(subjectMode==='couple'){assert.deepEqual(Array.from(request.participantAges),[35,32]);assert.equal('imageUrl' in editor.page.onShareAppMessage(),false);assert.match(editor.page.onShareAppMessage().path,/participantId=partner/);}
+  }
+});
+
+test("library opens wardrobe only from ready age photos and restores wardrobe jobs through their original source",async()=>{
+  const f=loadLibraryPage(async(path,options)=>({data:options.data.query==='record.list'?[{id:'outfit-job',participantIds:['consumer-1'],data:{commandState:'failed',wardrobeEdit:{sourceRootCommandId:'original-root',targetAge:0}}}]:[]}));
+  await f.page.load();assert.equal(f.page.data.items[0].creationKind,'wardrobe');
+  await f.page.openTimeline({currentTarget:{dataset:{id:'outfit-job'}}});assert.equal(f.navigations.at(-1).url,'/pages/wardrobe/index?rootId=original-root&age=0&commandId=outfit-job');
+  f.page.setData({activeCommandId:'original-root',selectedNode:{status:'ready',targetAge:100},delivery:{creationKind:'age'}});f.page.changeClothes();assert.equal(f.navigations.at(-1).url,'/pages/wardrobe/index?rootId=original-root&age=100');
+  const count=f.navigations.length;f.page.setData({selectedNode:{status:'failed',targetAge:100}});f.page.changeClothes();assert.equal(f.navigations.length,count);
+  f.page.setData({selectedNode:{status:'ready',targetAge:100},delivery:{creationKind:'wardrobe'}});f.page.changeClothes();assert.equal(f.navigations.length,count);
+});
+test("editor rejects invalid single targets and incomplete couple before any request", async()=>{
+  for(const delta of [{playMode:'age',targetAge:''},{playMode:'age',targetAge:'101'},{playMode:'age',targetAge:'3.5'},{subjectMode:'couple',partnerParticipantId:'consumer-1',partnerCurrentAge:'32'},{subjectMode:'couple',partnerParticipantId:'partner',partnerCurrentAge:''}]){
+    let calls=0;const e=loadEditorPage(async()=>calls++);e.page.setData({assetId:'source',participantId:'consumer-1',currentAge:'35',consentAccepted:true,...delta});await e.page.generate();assert.equal(calls,0);assert.equal(e.page.data.error,'PARTICIPANT_OR_AGES_INVALID');
+  }
+});

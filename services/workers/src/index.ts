@@ -1,4 +1,4 @@
-import { DomainError, resolveExternalCommandCallbackRoute } from "@ltm/core";
+import { bindTimelineResultManifest, DomainError, resolveExternalCommandCallbackRoute } from "@ltm/core";
 import type {
   ActorContext,
   LifeTimeMachineRuntimePort,
@@ -172,6 +172,7 @@ export class ProductionExternalCommandPublisher implements OutboxPublisher {
         details: { commandId, collection: current.collection, aggregateId: current.id },
       });
     }
+    if (batchId === "B14" && current.data.wardrobeEdit !== undefined) await revalidateWardrobeEgress(this.runtime, this.actor, current);
     const receipt = await sender.send({
       tenantId: event.tenantId,
       batchId: batchId as `B${string}`,
@@ -369,6 +370,24 @@ async function revalidateRecordSnapshot(
     });
   }
   return true;
+}
+
+async function revalidateWardrobeEgress(runtime: LifeTimeMachineRuntimePort, actor: ActorContext, current: RecordEnvelope): Promise<void> {
+  const edit = objectValue(current.data.wardrobeEdit);
+  if (edit?.schemaVersion !== "ltm.wardrobe-edit.v1" || typeof edit.sourceRootCommandId !== "string" || typeof edit.sourceCommandId !== "string") throw new DomainError("VALIDATION_FAILED", "wardrobe source contract invalid before egress");
+  const root = await runtime.getRecord(actor, "generation.timeline-commands", edit.sourceRootCommandId);
+  const source = root.id === edit.sourceCommandId ? root : await runtime.getRecord(actor, "generation.timeline-commands", edit.sourceCommandId);
+  for (const record of [root,source]) {
+    if (record.ownerActorId !== current.ownerActorId || record.data.sourceAssetId !== current.data.sourceAssetId || record.data.wardrobeEdit !== undefined ||
+        record.data._externalDecisionState === "frozen" || record.data._externalReconciliationState === "reconciliation_required") throw new DomainError("VERSION_CONFLICT", "wardrobe source unavailable before egress");
+  }
+  const plan = objectValue(source.data.generationPlan);
+  if (root.data.retryOfCommandId !== undefined || (source.id !== root.id && source.data.retryOfCommandId !== root.id) || source.data.commandState !== "succeeded" || source.data.lastProvider !== "generation-engine" || typeof source.data.lastEvidenceId !== "string") throw new DomainError("VALIDATION_FAILED", "wardrobe source delivery invalid before egress");
+  const manifest = bindTimelineResultManifest(source.data.resultManifest, {sourceAssetId: current.data.sourceAssetId, targetAges: source.data.targetAges, planVersion: plan?.schemaVersion});
+  const node = manifest.nodes.find(node => node.targetAge === edit.targetAge);
+  if (node?.status !== "ready" || !isDeepStrictEqual(node.asset, edit.sourceImage) || !isDeepStrictEqual([...source.participantIds].sort(), [...current.participantIds].sort())) throw new DomainError("EVENT_FINGERPRINT_CONFLICT", "wardrobe source image or people changed before egress");
+  await runtime.assertConsent(actor, { participantIds: current.participantIds, purpose: "age_transformation", scope: { resource: `media.asset:${current.data.sourceAssetId}`, action: "transform" } });
+  await runtime.assertConsent(actor, { participantIds: current.participantIds, purpose: "age_transformation", scope: { resource: `media.asset:${current.data.sourceAssetId}`, action: "wardrobe" } });
 }
 
 function externalCommandSnapshot(event: OutboxEvent): {

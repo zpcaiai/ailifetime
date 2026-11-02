@@ -1,6 +1,9 @@
 import { DomainError } from "@ltm/core";
 import type { CapabilityRegistry, JsonObject, JsonValue } from "../registry.js";
 import { requiredBoolean, requiredNumber, requiredString, stringList } from "../validation.js";
+import { buildAgeGenerationPlan } from "../age-generation-plan.js";
+import { participantQuality } from "../participant-quality.js";
+import { buildWardrobePlan, parseWardrobeBinding, parseWardrobeEdit, requireWardrobeSource } from "../wardrobe-plan.js";
 import {
   assertKnownState,
   defineCapability,
@@ -19,8 +22,8 @@ function createTimeline(input: JsonObject): JsonObject {
   const sourceAssetId = requiredString(input, "sourceAssetId");
   const participantIds = stringList(input, "participantIds", { min: 1, unique: true });
   const targetAgesValue = input.targetAges;
-  if (!Array.isArray(targetAgesValue) || targetAgesValue.length < 2 || targetAgesValue.some((age) => typeof age !== "number")) {
-    throw new DomainError("VALIDATION_FAILED", "targetAges must contain at least two numeric age nodes");
+  if (!Array.isArray(targetAgesValue) || targetAgesValue.length < 1 || targetAgesValue.length > 101 || targetAgesValue.some((age) => typeof age !== "number")) {
+    throw new DomainError("VALIDATION_FAILED", "targetAges must contain one through 101 numeric age nodes");
   }
   const targetAges = targetAgesValue.map((age) => requireInteger(age as number, "targetAges", 0, 100));
   if (new Set(targetAges).size !== targetAges.length) throw new DomainError("VALIDATION_FAILED", "target age nodes must be unique");
@@ -28,10 +31,47 @@ function createTimeline(input: JsonObject): JsonObject {
   const promptPolicyVersion = requiredString(input, "promptPolicyVersion");
   const illustrativeLabel = requiredBoolean(input, "illustrativeLabel");
   if (!illustrativeLabel) throw new DomainError("VALIDATION_FAILED", "timeline output must be labeled illustrative, not predictive");
-  return { jobId, sourceAssetId, participantIds, targetAges, seed, promptPolicyVersion, illustrativeLabel, purpose: "age_transformation" };
+  if (input.wardrobeEdit !== undefined || input.timelineProfile === "wardrobe-edit-v1") {
+    if (input.timelineProfile !== "wardrobe-edit-v1") throw new DomainError("VALIDATION_FAILED", "wardrobe requires its explicit versioned profile");
+    const wardrobeEdit = parseWardrobeEdit(input.wardrobeEdit);
+    const generationPlan = buildWardrobePlan({ sourceAssetId, participantIds, targetAges, seed, promptPolicyVersion, wardrobeEdit });
+    return { jobId, sourceAssetId, participantIds, targetAges, seed, promptPolicyVersion, illustrativeLabel, timelineProfile: "wardrobe-edit-v1",
+      wardrobeEdit, currentAge: wardrobeEdit.targetAge!, generationPlan, purpose: "age_transformation" };
+  }
+  const currentAge = input.currentAge === undefined ? undefined : requiredNumber(input, "currentAge", 0);
+  const timelineProfile = input.timelineProfile === undefined ? undefined : requiredString(input, "timelineProfile");
+  const templateId = input.templateId === undefined ? undefined : requiredString(input, "templateId");
+  const participantAges = input.participantAges;
+  if (participantAges !== undefined && (!Array.isArray(participantAges) || participantAges.some(age => typeof age !== "number"))) throw new DomainError("VALIDATION_FAILED", "participantAges must be a numeric array");
+  const generationPlan = buildAgeGenerationPlan({
+    sourceAssetId, participantIds, targetAges, seed, promptPolicyVersion,
+    ...(currentAge === undefined ? {} : { currentAge }),
+    ...(timelineProfile === undefined ? {} : { timelineProfile }),
+    ...(templateId === undefined ? {} : { templateId }),
+    ...(participantAges === undefined ? {} : { participantAges: participantAges as number[] }),
+  });
+  return { jobId, sourceAssetId, participantIds, targetAges, seed, promptPolicyVersion, illustrativeLabel,
+    ...(currentAge === undefined ? {} : { currentAge }),
+    ...(timelineProfile === undefined ? {} : { timelineProfile }),
+    ...(templateId === undefined ? {} : { templateId }),
+    ...(participantAges === undefined ? {} : { participantAges }),
+    generationPlan, purpose: "age_transformation" };
 }
 
 const QUALITY_DIMENSIONS = ["identity", "ageRange", "facialDrift", "pose", "artifacts", "clarity"] as const;
+function artifactBinding(input: JsonObject): JsonObject | undefined {
+  if (input.artifactBinding === undefined) return undefined;
+  const binding = requireNonEmptyObject(input, "artifactBinding");
+  const keys = ["sourceAssetId", "assetId", "outputSha256", "targetAge", ...(binding.wardrobeBinding === undefined ? [] : ["wardrobeBinding"])];
+  if (Object.keys(binding).length !== keys.length || Object.keys(binding).some(key => !keys.includes(key))) throw new DomainError("VALIDATION_FAILED", "artifactBinding must use the closed source/output/age schema");
+  const sourceAssetId = requiredString(binding, "sourceAssetId"), assetId = requiredString(binding, "assetId");
+  const outputSha256 = requiredString(binding, "outputSha256");
+  if (!/^[a-f0-9]{64}$/.test(outputSha256)) throw new DomainError("VALIDATION_FAILED", "outputSha256 is invalid");
+  const targetAge = requireInteger(requiredNumber(binding, "targetAge", 0), "targetAge", 0, 100);
+  const wardrobe = binding.wardrobeBinding === undefined ? undefined : parseWardrobeBinding(binding.wardrobeBinding);
+  if (wardrobe && (wardrobe.targetAge !== targetAge || wardrobe.sourceImageId === assetId || wardrobe.sourceImageSha256 === outputSha256)) throw new DomainError("VALIDATION_FAILED", "wardrobe output must be a new image at the unchanged age");
+  return { sourceAssetId, assetId, outputSha256, targetAge, ...(wardrobe === undefined ? {} : { wardrobeBinding: wardrobe }) };
+}
 
 function qualityGate(input: JsonObject): JsonObject {
   const workId = requiredString(input, "workId");
@@ -42,10 +82,14 @@ function qualityGate(input: JsonObject): JsonObject {
   const normalizedScores: Record<string, JsonValue> = {};
   const normalizedThresholds: Record<string, JsonValue> = {};
   const failed: string[] = [];
-  for (const dimension of QUALITY_DIMENSIONS) {
+  const binding = artifactBinding(input);
+  const wardrobe = binding?.wardrobeBinding !== undefined;
+  const dimensions = binding === undefined ? QUALITY_DIMENSIONS : [...QUALITY_DIMENSIONS, "background", "handsTeethEyes", "photorealism", ...(wardrobe ? ["garmentMatch", "regionPreservation"] : [])];
+  for (const dimension of dimensions) {
     const score = scores[dimension];
     const threshold = thresholds[dimension];
-    if (typeof score !== "number" || score < 0 || score > 1 || typeof threshold !== "number" || threshold < 0 || threshold > 1) {
+    if (typeof score !== "number" || !Number.isFinite(score) || score < 0 || score > 1 ||
+        typeof threshold !== "number" || !Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
       throw new DomainError("VALIDATION_FAILED", `quality ${dimension} score and threshold must be between zero and one`);
     }
     normalizedScores[dimension] = score;
@@ -53,7 +97,12 @@ function qualityGate(input: JsonObject): JsonObject {
     if (score < threshold) failed.push(dimension);
   }
   const decision = assertKnownState(requiredString(input, "decision"), ["pass", "retry", "review", "reject"] as const, "decision");
-  const overrideReason = typeof input.overrideReason === "string" ? input.overrideReason : undefined;
+  const people = participantQuality(input.participantAssessments, participantIds, wardrobe || (binding !== undefined && participantIds.length > 1), wardrobe);
+  failed.push(...people.failedDimensions);
+  const overrideReason = input.overrideReason === undefined ? undefined : requiredString(input, "overrideReason");
+  if (decision === "pass" && failed.some((dimension) => dimension.startsWith("participant:") || ["identity", "ageRange", "facialDrift", "artifacts", "handsTeethEyes", "photorealism", "garmentMatch", "regionPreservation"].includes(dimension))) {
+    throw new DomainError("VALIDATION_FAILED", "critical identity, age or artifact failures cannot be overridden");
+  }
   if ((decision === "pass") !== (failed.length === 0) && !overrideReason) {
     throw new DomainError("VALIDATION_FAILED", "quality decision conflicts with dimension thresholds and has no audited override reason");
   }
@@ -61,6 +110,8 @@ function qualityGate(input: JsonObject): JsonObject {
     workId,
     participantIds,
     modelVersion,
+    ...(people.assessments === undefined ? {} : { participantAssessments: people.assessments }),
+    ...(binding === undefined ? {} : { artifactBinding: binding }),
     scores: normalizedScores,
     thresholds: normalizedThresholds,
     failedDimensions: failed,
@@ -100,6 +151,7 @@ function renderVideo(input: JsonObject): JsonObject {
 }
 
 function certifySafety(input: JsonObject): JsonObject {
+  const binding = artifactBinding(input);
   const workId = requiredString(input, "workId");
   const participantIds = stringList(input, "participantIds", { min: 1, unique: true });
   const inputSafety = assertKnownState(requiredString(input, "inputSafety"), ["allowed", "blocked", "review", "unknown"] as const, "inputSafety");
@@ -118,6 +170,7 @@ function certifySafety(input: JsonObject): JsonObject {
   if (!aiLabel || manifestSignature.length < 16) throw new DomainError("VALIDATION_FAILED", "signed provenance and AI labels are mandatory");
   return {
     workId,
+    ...(binding === undefined ? {} : { artifactBinding: binding }),
     participantIds,
     inputSafety,
     outputSafety,
@@ -149,16 +202,21 @@ function reserveGenerationBudget(input: JsonObject): JsonObject {
 const definitions: readonly DomainCapabilityDefinition[] = [
   defineCapability("B14", SKILL, "createTimeline", createTimeline, {
     consent: participantConsent({ resourcePrefix: "media.asset", resourceIdField: "sourceAssetId", action: "transform" }),
-    prerequisite: (runtime, invocation, data) => requireAcceptedMediaIntake(runtime, invocation, data),
+    prerequisite: async (runtime, invocation, data) => {
+      await requireAcceptedMediaIntake(runtime, invocation, data);
+      if (data.wardrobeEdit !== undefined) await requireWardrobeSource(runtime, invocation.actor, data);
+    },
     mode: "external-command", collection: "generation.timeline-commands", recordIdField: "jobId",
   }),
   defineCapability("B15", SKILL, "evaluateQuality", qualityGate, {
+    permission: "media.quality.evaluate",
     consent: participantConsent(), mode: "resource", collection: "media.quality-decisions", recordIdField: "workId",
   }),
   defineCapability("B16", SKILL, "renderVideo", renderVideo, {
     consent: participantConsent(), mode: "external-command", collection: "media.video-render-commands", recordIdField: "renderId",
   }),
   defineCapability("B17", SKILL, "certifySafetyAndProvenance", certifySafety, {
+    permission: "media.safety.certify",
     consent: participantConsent(), mode: "resource", collection: "media.safety-certificates", recordIdField: "workId",
   }),
   defineCapability("B18", SKILL, "reserveGenerationBudget", reserveGenerationBudget, {

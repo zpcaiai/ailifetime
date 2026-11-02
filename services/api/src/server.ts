@@ -16,6 +16,9 @@ import type { RequestAuthenticator } from "./auth.js";
 import type { ProductionDomainRuntime } from "./domain-runtime.js";
 import type { BrowserOidcPublicConfiguration } from "./browser-oidc.js";
 import type { ClientIntegrationPorts, MediaDeletionProjection } from "./client-integrations.js";
+import { TimelineDeliveryService } from "./timeline-delivery.js";
+import { WardrobeService } from "./wardrobe.js";
+import { FileTimelineArtifactStore, type TimelineArtifactReader } from "./timeline-artifacts.js";
 import {
   COMMANDS,
   QUERIES,
@@ -53,6 +56,7 @@ export interface ApiServerOptions {
   /** SHA-256 of a bearer token protecting /metrics. Required in production. */
   readonly metricsTokenSha256?: string;
   readonly clientIntegrations?: ClientIntegrationPorts;
+  readonly timelineArtifacts?: TimelineArtifactReader;
   /** Production bounded-context composition; omitted only for local/test fixtures. */
   readonly domainRuntime?: ProductionDomainRuntime;
   readonly browserOidcConfiguration?: BrowserOidcPublicConfiguration;
@@ -101,6 +105,9 @@ const MIME_TYPES: Readonly<Record<string, string>> = {
 };
 
 export function createApiServer(options: ApiServerOptions): Server {
+  if (options.appEnvironment === "production" && options.timelineArtifacts instanceof FileTimelineArtifactStore) {
+    throw new DomainError("CONFIGURATION_INVALID", "local timeline file storage cannot run in production");
+  }
   const bodyLimit = options.bodyLimitBytes ?? DEFAULT_BODY_LIMIT;
   if (!Number.isSafeInteger(bodyLimit) || bodyLimit < 1_024 || bodyLimit > 10 * 1024 * 1024) {
     throw new DomainError("VALIDATION_FAILED", "bodyLimitBytes must be between 1024 and 10485760");
@@ -499,6 +506,48 @@ async function handleRequest(
       await uploads.cancel(context, { uploadId: uploadMatch[1] ?? "", idempotencyKey: requireIdempotencyKey(request) });
       sendJson(response, 200, { cancelled: true, requestId });
       return;
+    }
+    const wardrobeMatch = /^\/v1\/timelines\/([A-Za-z0-9](?:[A-Za-z0-9._:-]|%3[Aa]){0,127})\/nodes\/(\d{1,3})\/wardrobe$/.exec(path);
+    if (wardrobeMatch && (method === "GET" || method === "POST")) {
+      const actor = await authenticate(options, request, requestId), rootId = decodeURIComponent(wardrobeMatch[1]!), age = Number(wardrobeMatch[2]);
+      if (String(age) !== wardrobeMatch[2]) throw new DomainError("VALIDATION_FAILED", "wardrobe age path must be canonical");
+      const wardrobe = new WardrobeService(options.runtime, options.capabilityRegistry, options.timelineArtifacts);
+      const data = method === "GET" ? await wardrobe.context(actor, rootId, age) : await wardrobe.create(operationContext(actor, "wardrobe.create", requireIdempotencyKey(request)), rootId, age, object(await readJsonBody(request, bodyLimit), "wardrobe request"), requireIdempotencyKey(request));
+      sendJson(response, 200, {data, requestId}); return;
+    }
+    const timelineMatch = /^\/v1\/timelines\/([A-Za-z0-9](?:[A-Za-z0-9._:-]|%3[Aa]){0,127})(?:\/(retry|nodes\/(\d{1,3})\/image))?$/.exec(path);
+    if (timelineMatch?.[1] !== undefined && ((method === "GET" && timelineMatch[2] !== "retry") || (method === "POST" && timelineMatch[2] === "retry"))) {
+      const actor = await authenticate(options, request, requestId);
+      const delivery = new TimelineDeliveryService(options.runtime), commandId = decodeURIComponent(timelineMatch[1]);
+      if (method === "POST") {
+        const input = object(await readJsonBody(request, bodyLimit), "timeline retry");
+        if (Object.keys(input).length !== 2 || Object.keys(input).some(key => !["targetAge", "attempt"].includes(key)) ||
+            typeof input.targetAge !== "number" || typeof input.attempt !== "number") throw new DomainError("VALIDATION_FAILED", "retry requires only targetAge and attempt");
+        const key = requireIdempotencyKey(request);
+        const result = await delivery.retry(operationContext(actor, "timeline.retry", key), commandId, input.targetAge, input.attempt);
+        sendJson(response, 200, { data: result, requestId }); return;
+      }
+      const view = await delivery.get(actor, commandId);
+      if (timelineMatch[3] !== undefined) {
+        const age = Number(timelineMatch[3]), node = view.nodes.find(node => node.targetAge === age);
+        if (String(age) !== timelineMatch[3]) throw new DomainError("VALIDATION_FAILED", "timeline age path must be canonical");
+        if (node?.status !== "ready" || !node.asset) throw new DomainError("RESOURCE_NOT_FOUND", "timeline image is not publishable");
+        if (!options.timelineArtifacts) throw new DomainError("DEPENDENCY_UNAVAILABLE", "timeline image reader is not configured");
+        const bytes = await options.timelineArtifacts.read(node.asset);
+        if (bytes.byteLength !== node.asset.byteLength || createHash("sha256").update(bytes).digest("hex") !== node.asset.sha256) throw new DomainError("DEPENDENCY_UNAVAILABLE", "timeline image storage binding failed");
+        const fresh = (await delivery.get(actor, commandId)).nodes.find(item => item.targetAge === age);
+        if (fresh?.status !== "ready" || fresh.asset?.sha256 !== node.asset.sha256) throw new DomainError("VERSION_CONFLICT", "timeline image changed during download");
+        response.statusCode = 200;
+        response.setHeader("cache-control", "private, no-store");
+        response.setHeader("content-type", node.asset.mimeType);
+        response.setHeader("content-length", bytes.byteLength);
+        response.setHeader("content-disposition", `attachment; filename="ai-age-${age}.${node.asset.mimeType === "image/png" ? "png" : "jpg"}"`);
+        response.setHeader("x-ltm-image-sha256", node.asset.sha256);
+        response.setHeader("x-ltm-ai-generated", "true");
+        response.end(bytes); return;
+      }
+      sendJson(response, 200, { data: { ...view, mediaAvailable: options.timelineArtifacts !== undefined,
+        nodes: view.nodes.map(node => ({ ...node, downloadPath: node.status === "ready" && options.timelineArtifacts ? `/v1/timelines/${commandId}/nodes/${node.targetAge}/image` : null })) }, requestId }); return;
     }
     const capabilityMatch = /^\/v1\/capabilities\/(B(?:0[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7]))$/.exec(path);
     if (method === "GET" && capabilityMatch?.[1] !== undefined) {

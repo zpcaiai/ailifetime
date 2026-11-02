@@ -132,6 +132,20 @@ function parsePolicies(document: unknown = policyDocument()) {
   });
 }
 
+test("signed B14 callback preserves the manifest in cryptographically bound business claims", async () => {
+  const policy = parsePolicies().find(policy => policy.routeDefinition.batchId === "B14")!;
+  const handler = createExternalCommandPartnerCallbackHandler(policy, testDependencies());
+  const resultManifest = { schemaVersion: "ltm.timeline-results.v1", sourceAssetId: "source", planVersion: "age-portrait-plan.v1", aiLabel: true,
+    nodes: [{ nodeId: "age-5", targetAge: 5, status: "failed", errorCode: "PROVIDER_TRANSIENT" }] };
+  const raw = Buffer.from(canonicalJson(callbackPayload({ resultManifest })));
+  const result = await handler.process(signedRequest(raw, "manifest-nonce-1"));
+  assert.equal(result.disposition, "attested");
+  if (result.disposition !== "attested") assert.fail("expected attested callback");
+  assert.deepEqual(result.businessEvent.canonicalClaims.resultManifest, resultManifest);
+  assert.equal(result.businessEvent.artifactSha256, sha256(raw));
+  assert.equal(result.evidence.canonicalClaimsSha256, result.businessEvent.canonicalClaimsSha256);
+});
+
 function callbackPayload(overrides: Readonly<Record<string, unknown>> = {}) {
   return {
     command: { id: "command-1" },

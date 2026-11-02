@@ -2,9 +2,13 @@ const api = require("../../services/api");
 const session = require("../../services/session");
 const policy = require("../../services/policy");
 const sharingPolicy = require("../../policies/sharing");
+const media = require("../../services/timeline-media");
 
 Page({
-  data: { items: [], shareReadyIds: [], error: "" },
+  data: { items: [], shareReadyIds: [], error: "", activeCommandId: "", delivery: null, selectedAge: 0, selectedNode: null, previewPath: "", timelineBusy: false, timelineMessage: "" },
+  timelineEpoch: 0,
+  timelineTimer: null,
+  loadEpoch: 0,
   shareGrants: Object.create(null),
   shareTimers: Object.create(null),
   onShow() { if (!session.get()) wx.navigateTo({ url: "/pages/auth/index" }); else this.load(); },
@@ -12,14 +16,16 @@ Page({
   onUnload() { this.clearPrivateState(); },
   onPullDownRefresh() { this.load().finally(() => wx.stopPullDownRefresh()); },
   async load() {
+    const loadEpoch = ++this.loadEpoch;
     this.stopAllSharePolling();
     try {
       const [result, grantResult] = await Promise.all([
-        api.requestForPurpose("/v1/queries", "age_transformation", { data: { query: "record.list", input: { collection: "generation.timeline-commands", limit: 50 } } }),
+        api.requestForPurpose("/v1/queries", "age_transformation", { data: { query: "record.list", input: { collection: "generation.timeline-commands", limit: 200 } } }),
         api.requestForPurpose("/v1/queries", "sharing", { data: { query: "share-grant.list", input: { limit: 50 } } }),
       ]);
       const records = result && Array.isArray(result.data) ? result.data : [];
-      const items = await Promise.all(records.map(async (record) => {
+      if (loadEpoch !== this.loadEpoch) return;
+      const items = await Promise.all(records.filter(record => !(record.data && record.data.retryOfCommandId)).map(async (record) => {
         let previewUrl = "";
         if (record.data && typeof record.data.previewUrl === "string" && /^https:\/\//.test(record.data.previewUrl) && Date.parse(record.data.previewExpiresAt) > Date.now()) {
           previewUrl = record.data.previewUrl;
@@ -27,6 +33,9 @@ Page({
         }
         return {
           id: record.id,
+          creationKind: record.data && record.data.wardrobeEdit ? "wardrobe" : "age",
+          wardrobeRootId: record.data && record.data.wardrobeEdit && record.data.wardrobeEdit.sourceRootCommandId || "",
+          wardrobeAge: record.data && record.data.wardrobeEdit ? record.data.wardrobeEdit.targetAge : null,
           state: record.data && (record.data.state || record.data.commandState) || "processing",
           previewUrl,
           participantIds: record.participantIds || record.data && record.data.participantIds || [],
@@ -34,6 +43,7 @@ Page({
         };
       }));
       const workIds = new Set(items.map((item) => item.id));
+      if (loadEpoch !== this.loadEpoch) return;
       const grants = grantResult && Array.isArray(grantResult.data) ? grantResult.data : [];
       const shareGrants = Object.create(null);
       const shareReadyIds = new Set();
@@ -67,10 +77,99 @@ Page({
         }
       }
     } catch (error) {
+      if (loadEpoch !== this.loadEpoch) return;
       this.stopAllSharePolling();
       this.shareGrants = Object.create(null);
       this.setData({ items: [], shareReadyIds: [], error: error instanceof Error ? error.message : "LIBRARY_UNAVAILABLE" });
     }
+  },
+  async openTimeline(event) {
+    if (this.data.timelineBusy) return;
+    const commandId = event.currentTarget.dataset.id;
+    if (!validReference(commandId)) return;
+    const item = this.data.items.find(item => item.id === commandId);
+    if (item && item.creationKind === "wardrobe") {
+      if (!validReference(item.wardrobeRootId) || !Number.isInteger(item.wardrobeAge) || item.wardrobeAge < 0 || item.wardrobeAge > 100) { this.setData({ error: "换装来源信息无效，请刷新相册。" }); return; }
+      wx.navigateTo({ url: `/pages/wardrobe/index?rootId=${encodeURIComponent(item.wardrobeRootId)}&age=${item.wardrobeAge}&commandId=${encodeURIComponent(commandId)}` }); return;
+    }
+    const epoch = ++this.timelineEpoch;
+    await media.clearAll();
+    if (epoch !== this.timelineEpoch) return;
+    this.setData({ activeCommandId: commandId, delivery: null, selectedNode: null, previewPath: "", selectedAge: 0, timelineMessage: "" });
+    await this.refreshTimeline();
+  },
+  changeClothes() {
+    if (this.data.timelineBusy || !validReference(this.data.activeCommandId) || this.data.selectedNode?.status !== "ready" || this.data.delivery?.creationKind === "wardrobe") return;
+    wx.navigateTo({ url: `/pages/wardrobe/index?rootId=${encodeURIComponent(this.data.activeCommandId)}&age=${this.data.selectedNode.targetAge}` });
+  },
+  async refreshTimeline() {
+    if (!this.data.activeCommandId) return;
+    if (this.timelineTimer) clearTimeout(this.timelineTimer);
+    this.timelineTimer = null;
+    const epoch = ++this.timelineEpoch, commandId = this.data.activeCommandId;
+    this.setData({ timelineBusy: true, timelineMessage: "" });
+    try {
+      const result = await api.requestForPurpose(`/v1/timelines/${encodeURIComponent(commandId)}`, "age_transformation", { method: "GET" });
+      if (epoch !== this.timelineEpoch) return;
+      const view = result && result.data;
+      if (!view || view.commandId !== commandId || !Array.isArray(view.nodes) || view.nodes.length !== view.expectedCount ||
+          new Set(view.nodes.map(node => node.targetAge)).size !== view.nodes.length ||
+          view.nodes.some(node => !Number.isInteger(node.targetAge) || node.targetAge < 0 || node.targetAge > 100)) throw new Error("TIMELINE_PROJECTION_INVALID");
+      const selectedNode = view.nodes.find(node => node.targetAge === this.data.selectedAge) || view.nodes[0];
+      const keepPreview = selectedNode && selectedNode.status === "ready" && selectedNode.asset && this.data.selectedNode && this.data.selectedNode.asset && selectedNode.asset.sha256 === this.data.selectedNode.asset.sha256;
+      if (!keepPreview && this.data.previewPath) await media.remove(this.data.previewPath);
+      if (epoch !== this.timelineEpoch) return;
+      this.setData({ delivery: view, selectedAge: selectedNode.targetAge, selectedNode, previewPath: keepPreview ? this.data.previewPath : "" });
+      if (!keepPreview && selectedNode.status === "ready" && selectedNode.downloadPath) {
+        const path = await media.download(selectedNode);
+        if (epoch !== this.timelineEpoch) { await media.remove(path); return; }
+        this.setData({ previewPath: path });
+      }
+      if (view.nodes.some(node => node.status === "pending" || node.status === "retrying")) this.timelineTimer = setTimeout(() => this.refreshTimeline(), 3000);
+    } catch (error) {
+      if (epoch !== this.timelineEpoch) return;
+      if (authorizationFailure(error)) {
+        await media.clearAll();
+        if (epoch !== this.timelineEpoch) return;
+        this.setData({ delivery: null, selectedNode: null, previewPath: "" });
+      }
+      this.setData({ timelineMessage: timelineError(error) });
+    } finally { if (epoch === this.timelineEpoch) this.setData({ timelineBusy: false }); }
+  },
+  async selectAge(event) {
+    if (this.data.timelineBusy || !this.data.delivery) return;
+    const age = Number(event.currentTarget.dataset.age), node = this.data.delivery.nodes.find(node => node.targetAge === age);
+    if (!node) return;
+    const epoch = this.timelineEpoch;
+    if (this.data.previewPath) await media.remove(this.data.previewPath);
+    if (epoch !== this.timelineEpoch) return;
+    this.setData({ selectedAge: age, selectedNode: node, previewPath: "", timelineMessage: "" });
+    await this.refreshTimeline();
+  },
+  async saveOriginal() {
+    if (this.data.timelineBusy || !this.data.selectedNode || this.data.selectedNode.status !== "ready") return;
+    const epoch = this.timelineEpoch;
+    this.setData({ timelineBusy: true, timelineMessage: "" });
+    try { await media.save(this.data.selectedNode); if (epoch === this.timelineEpoch) this.setData({ timelineMessage: "原图已保存到相册" }); }
+    catch (error) {
+      if (epoch !== this.timelineEpoch) return;
+      if (authorizationFailure(error)) { await media.clearAll(); if (epoch !== this.timelineEpoch) return; this.setData({ delivery: null, selectedNode: null, previewPath: "" }); }
+      this.setData({ timelineMessage: timelineError(error) });
+    }
+    finally { if (epoch === this.timelineEpoch) this.setData({ timelineBusy: false }); }
+  },
+  async retryAge() {
+    const node = this.data.selectedNode;
+    if (this.data.timelineBusy || !node || !node.canRetry) return;
+    const epoch = this.timelineEpoch;
+    this.setData({ timelineBusy: true, timelineMessage: "" });
+    try {
+      await api.requestForPurpose(`/v1/timelines/${encodeURIComponent(this.data.activeCommandId)}/retry`, "age_transformation", {
+        data: { targetAge: node.targetAge, attempt: node.attempts + 1 }, headers: { "Idempotency-Key": api.idempotencyKey("timeline-retry") },
+      });
+      if (epoch !== this.timelineEpoch) return;
+      this.setData({ timelineBusy: false }); await this.refreshTimeline();
+    } catch (error) { if (epoch === this.timelineEpoch) this.setData({ timelineBusy: false, timelineMessage: timelineError(error) }); }
   },
   async prepareShare(event) {
     const workId = event.currentTarget.dataset.id;
@@ -295,12 +394,27 @@ Page({
     for (const commandId of Object.keys(this.shareTimers)) this.stopSharePolling(commandId);
   },
   clearPrivateState() {
+    this.loadEpoch++;
+    this.timelineEpoch++;
+    if (this.timelineTimer) clearTimeout(this.timelineTimer);
+    this.timelineTimer = null;
+    void media.clearAll();
     this.stopAllSharePolling();
     session.clearPrivateUrls();
     this.shareGrants = Object.create(null);
-    this.setData({ items: [], shareReadyIds: [] });
+    this.setData({ items: [], shareReadyIds: [], activeCommandId: "", delivery: null, selectedNode: null, previewPath: "", timelineBusy: false, timelineMessage: "" });
   },
 });
+
+function authorizationFailure(error) { return /CONSENT|AUTH|TIMELINE_DOWNLOAD_HTTP_(401|403|409)/.test(error instanceof Error ? error.message : ""); }
+function timelineError(error) {
+  const code = error instanceof Error ? error.message : "";
+  if (code === "ALBUM_PERMISSION_REQUIRED") return "请在微信设置中允许保存到相册，然后重试。";
+  if (authorizationFailure(error) || /PURPOSE/.test(code)) return "授权已失效，请重新登录或确认本次照片授权。";
+  if (/DIGEST|SIZE|DIMENSIONS/.test(code)) return "图片校验未通过，请刷新后重新下载。";
+  if (/VERSION_CONFLICT/.test(code)) return "任务状态已变化，请刷新；正在处理的任务不会重复提交。";
+  return "暂时无法完成，请刷新或重试；已生成的年龄照片会保留。";
+}
 
 function validGrantProjection(projection) {
   return projection && typeof projection === "object" &&

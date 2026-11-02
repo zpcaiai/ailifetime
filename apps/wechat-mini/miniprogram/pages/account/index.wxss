@@ -1,1 +1,9 @@
-.title { margin-bottom: 24rpx; }
+.profile-heading { display: flex; align-items: center; gap: 12px; }
+.profile-monogram { width: 50px; height: 50px; border: 0.5px solid #d9c6a5; border-radius: 50%; background: #eee3d0; color: #8f6744; text-align: center; line-height: 49px; font-family: "Songti SC", serif; font-size: 22px; flex-shrink: 0; }
+.profile-heading .caption { margin-top: 5px; }
+.profile-badge { margin-top: 14px; }
+.account-menu { padding-top: 4px; }
+.account-menu-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 68px; margin: 0; padding: 13px 0; border-bottom: 0.5px solid #e9e1d4; border-radius: 0; background: transparent; color: #26384a; text-align: left; font-size: 14px; line-height: 1.6; }
+.account-menu-item::after { border: 0; }
+.account-menu-item > view > text { display: block; margin-top: 4px; color: #746e66; font-size: 11.5px; }
+.menu-arrow { color: #8f6744; font-size: 18px; }
