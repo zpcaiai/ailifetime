@@ -1,26 +1,119 @@
-import { sign, verify } from "node:crypto";
+import { createHash, sign, verify } from "node:crypto";
 import { clone, digest, ExperienceError, minor, required, unique } from "./common.js";
 
 export interface GenerationNode {readonly id:string;readonly targetAge:number;readonly qualityTier:"standard"|"premium";readonly templateVariant:string;}
 export interface GenerationPlan {readonly id:string;readonly version:number;readonly projectId:string;readonly participantId:string;readonly currentAge:number;readonly sourceAssetId:string;readonly consentId:string;readonly nodes:readonly GenerationNode[];readonly identityPolicyVersion:string;readonly posePolicyVersion:string;readonly backgroundPolicyVersion:string;readonly wardrobePolicyVersion:string;readonly lightingPolicyVersion:string;readonly negativePolicyVersion:string;readonly compositionStrategy:string;readonly creativeBackcastDisclosure:boolean;}
-export interface NodeOutput {readonly id:string;readonly planId:string;readonly nodeId:string;readonly sourceAssetId:string;readonly consentId:string;readonly modelVersion:string;readonly seed:string;readonly replayParametersSha256:string;readonly promptPolicyVersion:string;readonly costMinor:number;readonly qualityResultId:string;readonly traceId:string;readonly state:"publishable"|"blocked";readonly blockReason?:string;}
+export interface NodeOutput {readonly id:string;readonly planId:string;readonly planVersion?:number;readonly nodeId:string;readonly sourceAssetId:string;readonly consentId:string;readonly modelVersion:string;readonly seed:string;readonly replayParametersSha256:string;readonly promptPolicyVersion:string;readonly costMinor:number;readonly qualityResultId:string;readonly traceId:string;readonly state:"publishable"|"blocked";readonly blockReason?:string;}
 export class AgeTimelineService{
   readonly #plans=new Map<string,GenerationPlan>();readonly #outputs=new Map<string,NodeOutput>();
-  create(plan:GenerationPlan):GenerationPlan{required(plan.id,"plan id");required(plan.participantId,"participantId");required(plan.sourceAssetId,"sourceAssetId");required(plan.consentId,"consentId");required(plan.compositionStrategy,"composition strategy");if(!Number.isInteger(plan.version)||plan.version<1||!Number.isInteger(plan.currentAge)||plan.currentAge<0||plan.currentAge>120)throw new ExperienceError("VALIDATION_FAILED","generation plan version or current age is invalid");unique(plan.nodes.map((node)=>node.id),"generation nodes");for(const node of plan.nodes)if(!Number.isInteger(node.targetAge)||node.targetAge<0||node.targetAge>120)throw new ExperienceError("VALIDATION_FAILED","target age is invalid");if(plan.nodes.some((node)=>node.targetAge<plan.currentAge)&&!plan.creativeBackcastDisclosure)throw new ExperienceError("POLICY_BLOCKED","creative backcast requires an explicit illustrative disclosure");for(const version of [plan.identityPolicyVersion,plan.posePolicyVersion,plan.backgroundPolicyVersion,plan.wardrobePolicyVersion,plan.lightingPolicyVersion,plan.negativePolicyVersion])required(version,"generation policy version");const key=`${plan.id}@${plan.version}`;if(this.#plans.has(key))throw new ExperienceError("CONFLICT","generation plan version already exists");const value=Object.freeze(clone(plan));this.#plans.set(key,value);return value;}
-  recordOutput(output:NodeOutput):NodeOutput{const plan=[...this.#plans.values()].find((value)=>value.id===output.planId);if(plan===undefined||!plan.nodes.some((node)=>node.id===output.nodeId))throw new ExperienceError("NOT_FOUND","generation node does not exist");if(output.sourceAssetId!==plan.sourceAssetId||output.consentId!==plan.consentId)throw new ExperienceError("CONSENT_REQUIRED","output is not bound to the plan source and authorization");for(const value of [output.modelVersion,output.seed,output.promptPolicyVersion,output.qualityResultId,output.traceId])required(value,"output provenance");if(!/^[a-f0-9]{64}$/u.test(output.replayParametersSha256))throw new ExperienceError("VALIDATION_FAILED","replay parameter digest is invalid");minor(output.costMinor,"output cost");if(output.state==="blocked"&&output.blockReason===undefined)throw new ExperienceError("VALIDATION_FAILED","blocked output requires a reason");if(this.#outputs.has(output.id))throw new ExperienceError("CONFLICT","output id already exists");const value=Object.freeze(clone(output));this.#outputs.set(output.id,value);return value;}
-  delivery(planId:string):Readonly<{ready:readonly string[];missing:readonly {nodeId:string;remedy:"retry"|"refund"}[];state:"ready"|"partial"|"blocked"}>{const plan=[...this.#plans.values()].find((value)=>value.id===planId);if(plan===undefined)throw new ExperienceError("NOT_FOUND","generation plan does not exist");const outputs=[...this.#outputs.values()].filter((value)=>value.planId===planId);const ready=outputs.filter((value)=>value.state==="publishable").map((value)=>value.nodeId);const missing=plan.nodes.filter((node)=>!ready.includes(node.id)).map((node)=>({nodeId:node.id,remedy:outputs.some((output)=>output.nodeId===node.id&&output.state==="blocked")?"refund" as const:"retry" as const}));return Object.freeze({ready:Object.freeze(ready),missing:Object.freeze(missing),state:ready.length===plan.nodes.length?"ready":ready.length>0?"partial":"blocked"});}
+  create(plan:GenerationPlan):GenerationPlan {
+    required(plan.id,"plan id");required(plan.participantId,"participantId");required(plan.sourceAssetId,"sourceAssetId");required(plan.consentId,"consentId");required(plan.compositionStrategy,"composition strategy");
+    if(!Number.isSafeInteger(plan.version)||plan.version<1||!Number.isInteger(plan.currentAge)||plan.currentAge<0||plan.currentAge>120)throw new ExperienceError("VALIDATION_FAILED","generation plan version or current age is invalid");
+    unique(plan.nodes.map((node)=>node.id),"generation nodes");
+    if(new Set(plan.nodes.map((node)=>node.targetAge)).size!==plan.nodes.length)throw new ExperienceError("VALIDATION_FAILED","target ages must be unique");
+    for(const node of plan.nodes)if(!Number.isInteger(node.targetAge)||node.targetAge<0||node.targetAge>100)throw new ExperienceError("VALIDATION_FAILED","target age is invalid");
+    if(plan.nodes.some((node)=>node.targetAge<plan.currentAge)&&!plan.creativeBackcastDisclosure)throw new ExperienceError("POLICY_BLOCKED","creative backcast requires an explicit illustrative disclosure");
+    for(const version of [plan.identityPolicyVersion,plan.posePolicyVersion,plan.backgroundPolicyVersion,plan.wardrobePolicyVersion,plan.lightingPolicyVersion,plan.negativePolicyVersion])required(version,"generation policy version");
+    const key=`${plan.id}@${plan.version}`;
+    if(this.#plans.has(key))throw new ExperienceError("CONFLICT","generation plan version already exists");
+    const value=Object.freeze(clone(plan));this.#plans.set(key,value);
+    return Object.freeze(clone(value));
+  }
+  recordOutput(output:NodeOutput):NodeOutput {
+    const plan=this.#plan(output.planId,output.planVersion);
+    if(!plan.nodes.some((node)=>node.id===output.nodeId))throw new ExperienceError("NOT_FOUND","generation node does not exist");
+    if(output.sourceAssetId!==plan.sourceAssetId||output.consentId!==plan.consentId)throw new ExperienceError("CONSENT_REQUIRED","output is not bound to the plan source and authorization");
+    for(const value of [output.id,output.modelVersion,output.seed,output.promptPolicyVersion,output.qualityResultId,output.traceId])required(value,"output provenance");
+    if(!/^[a-f0-9]{64}$/u.test(output.replayParametersSha256))throw new ExperienceError("VALIDATION_FAILED","replay parameter digest is invalid");
+    minor(output.costMinor,"output cost");
+    if(output.state!=="publishable"&&output.state!=="blocked")throw new ExperienceError("VALIDATION_FAILED","output state is invalid");
+    if(output.state==="blocked")required(output.blockReason??"","blocked output reason");
+    if(this.#outputs.has(output.id))throw new ExperienceError("CONFLICT","output id already exists");
+    const value=Object.freeze({...clone(output),planVersion:plan.version});
+    this.#outputs.set(output.id,value);return value;
+  }
+  delivery(planId:string,planVersion?:number):Readonly<{ready:readonly string[];missing:readonly {nodeId:string;remedy:"retry"|"refund"}[];state:"ready"|"partial"|"blocked"}> {
+    const plan=this.#plan(planId,planVersion);
+    const latest=new Map<string,NodeOutput>();
+    for(const output of this.#outputs.values())if(output.planId===planId&&output.planVersion===plan.version)latest.set(output.nodeId,output);
+    const ready=plan.nodes.filter((node)=>latest.get(node.id)?.state==="publishable").map((node)=>node.id);
+    const missing=plan.nodes.filter((node)=>latest.get(node.id)?.state!=="publishable").map((node)=>({nodeId:node.id,remedy:latest.get(node.id)?.state==="blocked"?"refund" as const:"retry" as const}));
+    return Object.freeze({ready:Object.freeze(ready),missing:Object.freeze(missing),state:missing.length===0?"ready":ready.length>0?"partial":"blocked"});
+  }
+  #plan(planId:string,version?:number):GenerationPlan {
+    if(version!==undefined&&(!Number.isSafeInteger(version)||version<1))throw new ExperienceError("VALIDATION_FAILED","plan version is invalid");
+    const plans=[...this.#plans.values()].filter((plan)=>plan.id===planId&&(version===undefined||plan.version===version));
+    if(plans.length===0)throw new ExperienceError("NOT_FOUND","generation plan does not exist");
+    if(plans.length!==1)throw new ExperienceError("CONFLICT","planVersion is required when multiple plan versions exist");
+    return plans[0] as GenerationPlan;
+  }
 }
 
-export type QualityDimension="identity_similarity"|"target_age"|"feature_drift"|"pose_consistency"|"background_consistency"|"artifact"|"hands_teeth_eyes"|"sharpness"|"aesthetic_usability";
-export interface QualityScores{readonly identity_similarity:number;readonly target_age:number;readonly feature_drift:number;readonly pose_consistency:number;readonly background_consistency:number;readonly artifact:number;readonly hands_teeth_eyes:number;readonly sharpness:number;readonly aesthetic_usability:number;}
+export type QualityDimension="identity_similarity"|"target_age"|"feature_drift"|"pose_consistency"|"background_consistency"|"artifact"|"hands_teeth_eyes"|"sharpness"|"aesthetic_usability"|"photorealism";
+export interface QualityScores{readonly identity_similarity:number;readonly target_age:number;readonly feature_drift:number;readonly pose_consistency:number;readonly background_consistency:number;readonly artifact:number;readonly hands_teeth_eyes:number;readonly sharpness:number;readonly aesthetic_usability:number;readonly photorealism:number;}
 export interface QualityContext{readonly participantMode:"single"|"multi";readonly ageSpan:"short"|"long";readonly provider:string;readonly template:string;readonly channel:string;}
-export interface QualityEvaluator{evaluate(artifact:Uint8Array):Promise<{readonly scores:QualityScores;readonly modelVersion:string}>;}
+export interface QualityReference {readonly referenceArtifact:Uint8Array;readonly targetAge:number;}
+export interface QualityEvaluator{evaluate(artifact:Uint8Array,reference:QualityReference):Promise<{readonly scores:QualityScores;readonly modelVersion:string}>;}
 export interface QualityThreshold{readonly context:QualityContext;readonly minimums:QualityScores;readonly maxRetries:number;readonly retryCostCapMinor:number;}
-export interface QualityDecision{readonly id:string;readonly passed:boolean;readonly failedDimensions:readonly QualityDimension[];readonly route:"publish"|"retry"|"alternate_provider"|"local_repair"|"human_review"|"stop_model_template";readonly modelVersion:string;readonly override?:Readonly<{actorId:string;reason:string}>;}
+export interface QualityDecision{readonly id:string;readonly passed:boolean;readonly failedDimensions:readonly QualityDimension[];readonly route:"publish"|"retry"|"alternate_provider"|"local_repair"|"human_review"|"stop_model_template";readonly modelVersion:string;readonly scores:QualityScores;readonly minimums:QualityScores;readonly referenceSha256:string;readonly outputSha256:string;readonly targetAge:number;readonly override?:Readonly<{actorId:string;reason:string}>;}
+const QUALITY_DIMENSIONS:readonly QualityDimension[]=["identity_similarity","target_age","feature_drift","pose_consistency","background_consistency","artifact","hands_teeth_eyes","sharpness","aesthetic_usability","photorealism"];
+function validateQualityScores(scores:QualityScores):void {
+  if(scores===null||typeof scores!=="object"||Object.keys(scores).length!==QUALITY_DIMENSIONS.length||
+    QUALITY_DIMENSIONS.some((dimension)=>!Object.hasOwn(scores,dimension)||!Number.isFinite(scores[dimension])||scores[dimension]<0||scores[dimension]>1)) {
+    throw new ExperienceError("VALIDATION_FAILED","every quality dimension must be present, finite and between zero and one");
+  }
+}
 export class QualityGateService{
   readonly #thresholds=new Map<string,QualityThreshold>();readonly #regressions=new Map<string,number[]>();constructor(readonly evaluator:QualityEvaluator){}
-  calibrate(threshold:QualityThreshold):void{const key=contextKey(threshold.context);if(Object.values(threshold.minimums).some((value)=>!Number.isFinite(value)||value<0||value>1)||!Number.isSafeInteger(threshold.maxRetries)||threshold.maxRetries<0||threshold.maxRetries>5)throw new ExperienceError("VALIDATION_FAILED","quality calibration is invalid");minor(threshold.retryCostCapMinor,"quality retry cap");this.#thresholds.set(key,Object.freeze(clone(threshold)));}
-  async evaluate(input:{readonly id:string;readonly artifact:Uint8Array;readonly context:QualityContext;readonly attempt:number;readonly spentMinor:number;readonly override?:{readonly actorId:string;readonly reason:string}}):Promise<QualityDecision>{const threshold=this.#thresholds.get(contextKey(input.context));if(threshold===undefined)throw new ExperienceError("POLICY_BLOCKED","quality context is not calibrated");const result=await this.evaluator.evaluate(input.artifact);const failed=(Object.keys(result.scores) as QualityDimension[]).filter((dimension)=>result.scores[dimension]<threshold.minimums[dimension]);let route:QualityDecision["route"]=failed.length===0?"publish":input.attempt<threshold.maxRetries&&input.spentMinor<threshold.retryCostCapMinor?"retry":failed.includes("identity_similarity")?"alternate_provider":failed.includes("artifact")||failed.includes("hands_teeth_eyes")?"local_repair":"human_review";const regressionKey=`${input.context.provider}:${input.context.template}:${input.context.channel}`;const history=this.#regressions.get(regressionKey)??[];history.push(failed.length===0?1:0);if(history.length>20)history.shift();this.#regressions.set(regressionKey,history);if(history.length>=10&&history.reduce((sum,value)=>sum+value,0)/history.length<.7)route="stop_model_template";if(input.override!==undefined){required(input.override.actorId,"quality override actor");required(input.override.reason,"quality override reason");if(failed.includes("identity_similarity")||failed.includes("hands_teeth_eyes"))throw new ExperienceError("POLICY_BLOCKED","critical identity or anatomy failures cannot be overridden");route="publish";}return Object.freeze({id:input.id,passed:route==="publish",failedDimensions:Object.freeze(failed),route,modelVersion:result.modelVersion,...(input.override===undefined?{}:{override:Object.freeze(clone(input.override))})});}
+  calibrate(threshold:QualityThreshold):void {
+    validateQualityScores(threshold.minimums);
+    const key=contextKey(threshold.context);
+    if(!Number.isSafeInteger(threshold.maxRetries)||threshold.maxRetries<0||threshold.maxRetries>5)throw new ExperienceError("VALIDATION_FAILED","quality calibration is invalid");
+    minor(threshold.retryCostCapMinor,"quality retry cap");
+    this.#thresholds.set(key,Object.freeze(clone(threshold)));
+  }
+  async evaluate(input:QualityReference & {readonly id:string;readonly artifact:Uint8Array;readonly context:QualityContext;readonly attempt:number;readonly spentMinor:number;readonly override?:{readonly actorId:string;readonly reason:string}}):Promise<QualityDecision> {
+    required(input.id,"quality decision id");
+    if(!Number.isSafeInteger(input.attempt)||input.attempt<0||!Number.isInteger(input.targetAge)||input.targetAge<0||input.targetAge>100||
+       !(input.artifact instanceof Uint8Array)||input.artifact.byteLength===0||!(input.referenceArtifact instanceof Uint8Array)||input.referenceArtifact.byteLength===0) {
+      throw new ExperienceError("VALIDATION_FAILED","quality evaluation requires output, original reference, target age and non-negative attempt");
+    }
+    minor(input.spentMinor,"quality spent cost");
+    const {id,targetAge,attempt,spentMinor}=input;
+    const context=clone(input.context);
+    const override=input.override===undefined?undefined:clone(input.override);
+    const threshold=this.#thresholds.get(contextKey(context));
+    if(threshold===undefined)throw new ExperienceError("POLICY_BLOCKED","quality context is not calibrated");
+    // Snapshot bytes before asynchronous inference so caller/evaluator mutation cannot rebind evidence.
+    const artifact=Uint8Array.from(input.artifact), referenceArtifact=Uint8Array.from(input.referenceArtifact);
+    const referenceSha256=createHash("sha256").update(referenceArtifact).digest("hex");
+    const outputSha256=createHash("sha256").update(artifact).digest("hex");
+    const result=await this.evaluator.evaluate(artifact,{referenceArtifact,targetAge});
+    if(createHash("sha256").update(referenceArtifact).digest("hex")!==referenceSha256||
+       createHash("sha256").update(artifact).digest("hex")!==outputSha256) {
+      throw new ExperienceError("VALIDATION_FAILED","quality evaluator mutated the bound input bytes");
+    }
+    validateQualityScores(result.scores);
+    if(typeof result.modelVersion!=="string")throw new ExperienceError("VALIDATION_FAILED","quality model version is missing");
+    required(result.modelVersion,"quality model version");
+    const failed=QUALITY_DIMENSIONS.filter((dimension)=>result.scores[dimension]<threshold.minimums[dimension]);
+    const retryAvailable=attempt<threshold.maxRetries&&spentMinor<threshold.retryCostCapMinor;
+    let route:QualityDecision["route"]=failed.length===0?"publish":retryAvailable?"retry":"human_review";
+    const regressionKey=contextKey(context);
+    const history=this.#regressions.get(regressionKey)??[];
+    history.push(failed.length===0?1:0);if(history.length>20)history.shift();this.#regressions.set(regressionKey,history);
+    if(history.length>=10&&history.reduce((sum,value)=>sum+value,0)/history.length<.7)route="stop_model_template";
+    if(override!==undefined) {
+      required(override.actorId,"quality override actor");required(override.reason,"quality override reason");
+      if(route==="stop_model_template"||failed.some((dimension)=>["identity_similarity","target_age","feature_drift","artifact","hands_teeth_eyes","photorealism"].includes(dimension))) {
+        throw new ExperienceError("POLICY_BLOCKED","critical quality failures or an open quality circuit cannot be overridden");
+      }
+      route="publish";
+    }
+    return Object.freeze({id,passed:route==="publish",failedDimensions:Object.freeze(failed),route,modelVersion:result.modelVersion,
+      scores:Object.freeze(clone(result.scores)),minimums:Object.freeze(clone(threshold.minimums)),referenceSha256,outputSha256,targetAge,
+      ...(override===undefined?{}:{override:Object.freeze(override)})});
+  }
 }
 
 export interface VideoRenderGraph{readonly id:string;readonly keyframeIds:readonly string[];readonly transition:"interpolate"|"fade";readonly cameraMotion:"none"|"pan"|"zoom";readonly durationSeconds:number;readonly coverAssetId:string;readonly endingCard:string;readonly brandId:string;readonly aiLabel:string;readonly narration?:Readonly<{voiceId:string;voiceClone:boolean;consentId?:string}>;readonly musicAssetId?:string;readonly captionTrackIds:readonly string[];readonly locales:readonly string[];readonly outputs:readonly("mobile_share"|"hd_download"|"studio_screen"|"print_qr")[];readonly masterAssetId:string;readonly licenses:readonly {assetId:string;licenseId:string;regions:readonly string[]}[];}

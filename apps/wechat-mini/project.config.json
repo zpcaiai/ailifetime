@@ -1,22 +1,22 @@
 {
-  "description": "AI Life Time Machine WeChat mini program",
-  "miniprogramRoot": "miniprogram/",
-  "projectname": "ai-life-time-machine",
-  "appid": "touristappid",
-  "setting": {
-    "urlCheck": true,
-    "es6": true,
-    "enhance": true,
-    "postcss": true,
-    "minified": true,
-    "compileHotReLoad": false,
-    "checkInvalidKey": true,
-    "checkSiteMap": true,
-    "uploadWithSourceMap": false,
-    "useStaticServer": true
-  },
-  "compileType": "miniprogram",
-  "libVersion": "3.7.12",
-  "__usePrivacyCheck__": true,
-  "condition": {}
+    "description": "AI Life Time Machine WeChat mini program",
+    "miniprogramRoot": "miniprogram/",
+    "projectname": "ai-life-time-machine",
+    "appid": "wx51db2dc9c38f9956",
+    "setting": {
+        "urlCheck": true,
+        "es6": true,
+        "enhance": true,
+        "postcss": true,
+        "minified": true,
+        "compileHotReLoad": false,
+        "checkInvalidKey": true,
+        "checkSiteMap": true,
+        "uploadWithSourceMap": false,
+        "useStaticServer": true
+    },
+    "compileType": "miniprogram",
+    "libVersion": "3.7.12",
+    "__usePrivacyCheck__": true,
+    "condition": {}
 }

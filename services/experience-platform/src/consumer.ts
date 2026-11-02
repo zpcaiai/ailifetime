@@ -63,7 +63,7 @@ export class PhotoIntakeService{
   }
 }
 
-export const DEFAULT_AGE_NODES=Object.freeze([0,5,10,18,25,35,45,55,65,75,85,100]);
+export const DEFAULT_AGE_NODES=Object.freeze(Array.from({length:21},(_,index)=>index*5));
 export interface ExperienceTemplate{readonly id:string;readonly version:number;readonly participantRange:readonly[number,number];readonly ageRange:readonly[number,number];readonly outputRatios:readonly string[];readonly authorizationPurposes:readonly string[];readonly providerCapabilities:readonly string[];readonly costTier:"low"|"medium"|"high";readonly channelLicenses:readonly string[];readonly illustrativeCopy:string;}
 export interface TemplateReview{readonly samplePassed:boolean;readonly copyrightPassed:boolean;readonly safetyPassed:boolean;readonly costPassed:boolean;readonly latencyPassed:boolean;readonly diversityPassed:boolean;readonly reviewerIds:readonly string[];}
 export interface Composition{readonly id:string;readonly accountId:string;readonly version:number;readonly kind:"photo"|"video"|"grid"|"card"|"family_scene";readonly currentAge:number;readonly ageNodes:readonly number[];readonly templateId:string;readonly content:string;readonly savedAt:string;}

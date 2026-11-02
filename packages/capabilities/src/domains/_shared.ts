@@ -357,7 +357,7 @@ export async function requireAcceptedMediaIntake(
     ? jsonStringList(intake.data.participantIds, "B07 participantIds", 1)
     : [];
   const sameParticipants = participants.length === intakeParticipants.length &&
-    participants.every((value, index) => value === intakeParticipants[index]) &&
+    participants.every((value) => intakeParticipants.includes(value)) &&
     participants.every((value, index) => value === storedParticipants[index]);
   const canonicalSha256 = intake.data.canonicalSha256;
   const sourceSha256 = intake.data.sourceSha256;

@@ -4,6 +4,14 @@ import { test } from "node:test";
 import { COMMANDS, QUERIES } from "../dist/index.js";
 
 const specification = readFileSync(new URL("../openapi.yaml", import.meta.url), "utf8");
+test("OpenAPI publishes closed owner-bound age timeline, retry and original-byte download contracts", () => {
+  for (const path of ["/v1/timelines/{commandId}:", "/v1/timelines/{commandId}/retry:", "/v1/timelines/{commandId}/nodes/{targetAge}/image:"]) assert.ok(specification.includes(path));
+  for (const schema of ["TimelineImageAsset", "TimelineResultManifest", "TimelineDeliveryResponse"]) assert.ok(specification.includes(`    ${schema}:`));
+  assert.match(specification, /required: \[targetAge, attempt\]/);
+  assert.match(specification, /schema: \{ const: age_transformation \}/);
+  assert.match(specification, /X-Ltm-Image-Sha256:/);
+  assert.match(specification, /No media URL is accepted here/);
+});
 
 test("OpenAPI discriminates every executable command and query", () => {
   assert.match(specification, /CommandEnvelope:\n\s+oneOf:/);
@@ -96,4 +104,18 @@ test("OpenAPI publishes the closed server-policy B05 deletion and per-target rec
   assert.match(specification, /MediaDeletionProjection:[\s\S]*?additionalProperties: false[\s\S]*?targetReceipts/);
   assert.match(specification, /MediaDeletionTargetReceipt:[\s\S]*?ltm\.media-deletion-target-receipt\.v1[\s\S]*?policySha256/);
   assert.match(specification, /Caller-supplied policy or deletion-target fields are rejected/);
+});
+
+test("OpenAPI exposes separate wardrobe consent, closed clothing choices and immutable accepted-source edit contract",()=>{
+  assert.match(specification,/\/v1\/timelines\/\{commandId\}\/nodes\/\{targetAge\}\/wardrobe:/);
+  assert.match(specification,/operationId: getWardrobeContext/);assert.match(specification,/operationId: createWardrobeEdit/);
+  assert.match(specification,/wardrobe-edit-consent-v1/);assert.match(specification,/required: \[selections\]/);
+  assert.match(specification,/styleId: \{ \$ref: "#\/components\/schemas\/WardrobeStyleId" \}/);
+  assert.match(specification,/catalogVersion: \{ const: lifetime-wardrobe.v1 \}/);
+  const ids=specification.match(/    WardrobeStyleId:[\s\S]*?enum: \[([^\]]+)\]/)[1].split(', ');
+  assert.equal(ids.length,34);assert.equal(new Set(ids).size,34);
+  assert.deepEqual(ids.slice(0,3),['casual','formal','traditional']);
+  for(const prefix of ['east','retro','together','daily','wedding','milestone','winter','newyear'])assert.ok(ids.some(id=>id.startsWith(prefix+'-')));
+  assert.match(specification,/creationKind: \{ enum: \[age, wardrobe\] \}/);
+  assert.match(specification,/WardrobeContextResponse:[\s\S]*?required: \[participantId, position, authorized\]/);
 });

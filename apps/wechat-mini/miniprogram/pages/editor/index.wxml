@@ -1,15 +1,15 @@
 <view class="page">
-  <view class="card">
-    <view class="title">设置年龄主题</view>
-    <view class="muted">参与者必须已有有效的人物授权。年龄节点只是艺术化想象，不代表真实未来。</view>
-    <input class="field" value="{{participantId}}" placeholder="服务端参与者 ID" bindinput="participantChanged" />
-    <input class="field" value="{{ages}}" placeholder="年龄节点，例如 8,18,35,60" bindinput="agesChanged" />
-    <input class="field" value="{{templateId}}" placeholder="模板 ID" bindinput="templateChanged" />
-    <view class="muted">未成年人状态与监护关系由服务端人物登记和外部签名证据判定，客户端不能自行声明。</view>
-    <checkbox-group bindchange="consentChanged">
-      <label class="row"><checkbox value="accepted" checked="{{consentAccepted}}" />我同意本次 AI 年龄主题构图与生成，可随时撤回；原始上传会话最长保留 24 小时</label>
-    </checkbox-group>
-    <button class="button" disabled="{{busy || !consentAccepted}}" bindtap="generate">{{busy ? '正在提交' : '授权、保存草稿并开始生成'}}</button>
-    <view class="status error" wx:if="{{error}}">{{error}}</view>
+  <view class="page-header"><view class="page-title">想看见几岁的你？</view><view class="muted">选好人物和年龄，就可以开始。</view></view>
+  <view class="card"><view class="section-title">照片里的人</view><view class="choice-row"><button class="choice {{subjectMode === 'single' ? 'selected' : ''}}" data-value="single" bindtap="subjectChanged">一个人</button><button class="choice {{subjectMode === 'couple' ? 'selected' : ''}}" data-value="couple" bindtap="subjectChanged">一对情侣</button></view>
+    <view class="note" wx:if="{{subjectMode === 'couple'}}">请使用双人清晰合照。原照左侧为你，右侧为对方；两人将变为相同的目标年龄。童年照片使用自然、日常的双人构图。</view>
+    <label class="field-label">{{subjectMode === 'couple' ? '原照左侧 · 你的年龄' : '拍这张照片时，你几岁？'}}</label><view class="age-focus"><input class="age-input" type="number" value="{{currentAge}}" aria-label="原照片拍摄时的年龄" placeholder="0–100" bindinput="currentAgeChanged" /><text>岁</text></view>
+    <view wx:if="{{subjectMode === 'couple'}}"><label class="field-label">原照右侧 · 对方的年龄</label><input class="field" type="number" value="{{partnerCurrentAge}}" placeholder="0–100" bindinput="partnerAgeChanged" /><label class="field-label">对方的人物编号</label><input class="field" value="{{partnerParticipantId}}" placeholder="由对方在「我的」页面查看并提供" bindinput="partnerChanged" /><view class="field-hint">双方须分别确认同一张合照的授权。发送邀请后，等对方确认再生成。</view><button class="button secondary" open-type="share" disabled="{{!partnerParticipantId || partnerParticipantId === participantId}}">邀请对方确认</button></view>
   </view>
+  <view class="card"><view class="section-title">生成方式</view><view class="choice-row"><button class="choice {{playMode === 'lifespan' ? 'selected' : ''}}" data-value="lifespan" bindtap="playChanged"><view>走过一生</view><text>0–100 岁 · 21 张</text></button><button class="choice {{playMode === 'age' ? 'selected' : ''}}" data-value="age" bindtap="playChanged"><view>指定年龄</view><text>选一个年龄 · 1 张</text></button></view>
+    <view wx:if="{{playMode === 'lifespan'}}"><view class="age-route" aria-hidden="true"><text>0</text><view></view><text>25</text><view></view><text>50</text><view></view><text>75</text><view></view><text>100</text></view><view class="muted">每 5 年一张，按年龄排成完整时间轴。</view></view>
+    <view wx:else><label class="field-label">你想看几岁？</label><view class="age-focus"><input class="age-input" type="number" value="{{targetAge}}" aria-label="想生成的年龄" placeholder="0–100" bindinput="targetAgeChanged" /><text>岁</text></view><view class="field-hint">可填写 0 到 100 之间任意整数年龄。</view></view>
+  </view>
+  <checkbox-group class="consent-panel" bindchange="consentChanged"><label class="row"><checkbox color="#26384a" value="accepted" checked="{{consentAccepted}}" /><text>我本人同意使用这张照片创作年龄影像，可随时撤回。{{subjectMode === 'couple' ? '对方须另行确认，此处不能代为授权。' : ''}}</text></label></checkbox-group>
+  <button class="button" disabled="{{busy || !consentAccepted}}" bindtap="generate">{{busy ? '正在提交' : playMode === 'lifespan' ? '生成 21 张年龄照片' : '生成 ' + targetAge + ' 岁的照片'}}</button>
+  <view class="status error" wx:if="{{error}}">{{error}}</view><view class="privacy-foot">照片带 AI 生成标识。年龄变化是艺术想象，不代表真实容貌预测。</view>
 </view>

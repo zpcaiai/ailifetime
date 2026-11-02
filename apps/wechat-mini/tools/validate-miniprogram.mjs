@@ -19,8 +19,17 @@ export function validateMiniProgram(root = DEFAULT_ROOT, options = {}) {
   const app = json(programRoot, "app.json");
   if (project.compileType !== "miniprogram") fail("PROJECT_TYPE_INVALID", "compileType must be miniprogram");
   if (project.setting?.urlCheck !== true) fail("DOMAIN_CHECK_DISABLED", "urlCheck must remain enabled");
-  if (project.__usePrivacyCheck__ !== true || !Array.isArray(app.requiredPrivateInfos) || !app.requiredPrivateInfos.includes("chooseMedia")) {
-    fail("PRIVACY_PLATFORM_GATE_MISSING", "WeChat privacy checks and chooseMedia declaration are required");
+  if (project.__usePrivacyCheck__ !== true) {
+    fail("PRIVACY_PLATFORM_GATE_MISSING", "WeChat privacy checks are required");
+  }
+  // This compiler field declares only the address/location APIs. Media access
+  // remains protected by requirePrivacyAuthorize and the privacy event handler.
+  const declaredPrivateInfos = app.requiredPrivateInfos;
+  const supportedPrivateInfos = new Set(["chooseAddress", "chooseLocation", "choosePoi", "getFuzzyLocation", "getLocation", "onLocationChange", "startLocationUpdate", "startLocationUpdateBackground"]);
+  if (declaredPrivateInfos !== undefined && (!Array.isArray(declaredPrivateInfos) ||
+      new Set(declaredPrivateInfos).size !== declaredPrivateInfos.length ||
+      declaredPrivateInfos.some((name) => !supportedPrivateInfos.has(name)))) {
+    fail("PRIVATE_INFO_DECLARATION_INVALID", "requiredPrivateInfos accepts only supported address/location interfaces");
   }
   if (!Array.isArray(app.pages) || app.pages.length < 4) fail("PAGES_INVALID", "app.json must declare product pages");
   const pageFiles = [];
@@ -42,6 +51,8 @@ export function validateMiniProgram(root = DEFAULT_ROOT, options = {}) {
   required(programRoot, "services/messaging.js");
   required(programRoot, "services/privacy.js");
   required(programRoot, "policies/age-transformation.js");
+  required(programRoot, "policies/wardrobe.js");
+  required(programRoot, "assets/wardrobe-invite.png");
   required(programRoot, "policies/sharing.js");
   required(programRoot, "sitemap.json");
 

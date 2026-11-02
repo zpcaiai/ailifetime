@@ -47,6 +47,163 @@ paths:
                 type: string
         "401":
           $ref: "#/components/responses/Error"
+  /v1/timelines/{commandId}:
+    get:
+      operationId: getAgeTimelineDelivery
+      description: Owner/purpose/participant-consent checked projection. Generator success alone never publishes an image. Retry children are merged by age; media paths are authenticated API paths, never bearer-bearing URLs.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TimelineCommandId"
+        - $ref: "#/components/parameters/TimelinePurpose"
+      responses:
+        "200":
+          description: Ordered age nodes with missing and failed ages retained.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimelineDeliveryResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/timelines/{commandId}/nodes/{targetAge}/wardrobe:
+    parameters:
+      - $ref: "#/components/parameters/TimelineCommandId"
+      - $ref: "#/components/parameters/TimelinePurpose"
+      - name: targetAge
+        in: path
+        required: true
+        schema: { type: integer, minimum: 0, maximum: 100 }
+    get:
+      operationId: getWardrobeContext
+      description: Owned, accepted generated age photo only. Returns ordered people, current separate wardrobe consent flags and an age-appropriate closed catalog. This is not model execution.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Context for a separate wardrobe-edit copy.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WardrobeContextResponse" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createWardrobeEdit
+      description: Creates a B14 wardrobe-edit-v1 request. Source bytes, original/root command, age and people are server-derived; each person must separately grant action wardrobe under wardrobe-edit-consent-v1. Existing age/transform consent alone is insufficient. Caller cannot provide source URLs, arbitrary prompts, quality claims or prices. Original age photo remains unchanged. No model is run by this HTTP handler.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [selections]
+              properties:
+                selections:
+                  type: array
+                  minItems: 1
+                  maxItems: 2
+                  uniqueItems: true
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [participantId, styleId]
+                    properties:
+                      participantId: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' }
+                      styleId: { $ref: "#/components/schemas/WardrobeStyleId" }
+      responses:
+        "200":
+          description: Durable command receipt, not an accepted output. Results, bounded retry and original-byte download use the existing timeline paths with the returned commandId.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data, requestId]
+                properties:
+                  requestId: { type: string }
+                  data:
+                    type: object
+                    additionalProperties: false
+                    required: [commandId, replayed]
+                    properties:
+                      commandId: { type: string }
+                      replayed: { type: boolean }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/timelines/{commandId}/retry:
+    post:
+      operationId: retryAgeTimelineNode
+      description: Explicit per-age attempt 1..3. Replaying an existing attempt returns its durable command. Active, uncertain, policy-blocked and exhausted nodes cannot start a new attempt. Does not itself execute a model.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TimelineCommandId"
+        - $ref: "#/components/parameters/TimelinePurpose"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [targetAge, attempt]
+              properties:
+                targetAge: { type: integer, minimum: 0, maximum: 100 }
+                attempt: { type: integer, minimum: 1, maximum: 3 }
+      responses:
+        "200":
+          description: Durable retry command identity.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data, requestId]
+                properties:
+                  requestId: { type: string }
+                  data:
+                    type: object
+                    additionalProperties: false
+                    required: [commandId, attempt, reused]
+                    properties:
+                      commandId: { type: string }
+                      attempt: { type: integer, minimum: 1, maximum: 3 }
+                      reused: { type: boolean }
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/timelines/{commandId}/nodes/{targetAge}/image:
+    get:
+      operationId: downloadAgeTimelineOriginal
+      description: Reauthorizes before and after storage read; returns original bytes only for an image bound to accepted quality/safety records. No redirects or remote URL input. Native image quality and storage deployment require independent acceptance.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TimelineCommandId"
+        - $ref: "#/components/parameters/TimelinePurpose"
+        - name: targetAge
+          in: path
+          required: true
+          schema: { type: integer, minimum: 0, maximum: 100 }
+      responses:
+        "200":
+          description: Original PNG/JPEG, SHA256 and no-store privacy headers.
+          headers:
+            Cache-Control:
+              schema: { const: "private, no-store" }
+            X-Ltm-Image-Sha256:
+              schema: { type: string, pattern: '^[a-f0-9]{64}$' }
+            X-Ltm-Ai-Generated:
+              schema: { const: "true" }
+          content:
+            image/png:
+              schema: { type: string, format: binary }
+            image/jpeg:
+              schema: { type: string, format: binary }
+        default:
+          $ref: "#/components/responses/Error"
   /v1/auth/browser/config:
     get:
       operationId: getBrowserOidcConfiguration
@@ -584,6 +741,16 @@ components:
       type: http
       scheme: bearer
   parameters:
+    TimelineCommandId:
+      name: commandId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' }
+    TimelinePurpose:
+      name: X-Purpose
+      in: header
+      required: true
+      schema: { const: age_transformation }
     Purpose:
       name: X-Purpose
       in: header
@@ -610,6 +777,179 @@ components:
         maxLength: 256
         pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$'
   schemas:
+    TimelineImageAsset:
+      type: object
+      additionalProperties: false
+      required: [id, sha256, mimeType, width, height, byteLength]
+      properties:
+        id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' }
+        sha256: { type: string, pattern: '^[a-f0-9]{64}$' }
+        mimeType: { enum: [image/jpeg, image/png] }
+        width: { type: integer, minimum: 1, maximum: 8192 }
+        height: { type: integer, minimum: 1, maximum: 8192 }
+        byteLength: { type: integer, minimum: 1, maximum: 26214400 }
+    TimelineResultManifest:
+      description: Optional resultManifest on a verified B14 partner callback only. Runtime additionally enforces unique ages/assets/digests, exact source/plan age coverage and per-output quality/safety bindings. No media URL is accepted here.
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, sourceAssetId, planVersion, aiLabel, nodes]
+      properties:
+        schemaVersion: { const: ltm.timeline-results.v1 }
+        sourceAssetId: { type: string }
+        planVersion: { type: string }
+        aiLabel: { const: true }
+        nodes:
+          type: array
+          minItems: 1
+          maxItems: 101
+          items:
+            oneOf:
+              - type: object
+                additionalProperties: false
+                required: [nodeId, targetAge, status, asset, qualityResultId, safetyResultId]
+                properties:
+                  nodeId: { type: string }
+                  targetAge: { type: integer, minimum: 0, maximum: 100 }
+                  status: { const: ready }
+                  asset: { $ref: "#/components/schemas/TimelineImageAsset" }
+                  qualityResultId: { type: string }
+                  safetyResultId: { type: string }
+              - type: object
+                additionalProperties: false
+                required: [nodeId, targetAge, status, errorCode]
+                properties:
+                  nodeId: { type: string }
+                  targetAge: { type: integer, minimum: 0, maximum: 100 }
+                  status: { enum: [failed, review] }
+                  errorCode: { enum: [PROVIDER_TRANSIENT, QUALITY_REJECTED, POLICY_BLOCKED, CANCELLED] }
+    WardrobeStyleId:
+      description: Immutable catalog v1 IDs. The three legacy IDs retain their original instructions; new IDs enforce target-age and participant-count eligibility on the server.
+      enum: [casual, formal, traditional, east-pankou-v1, east-song-v1, east-qipao-v1, east-hanfu-v1, retro-eighties-v1, retro-hongkong-v1, retro-denim-v1, retro-white-v1, together-knit-v1, together-white-v1, together-trench-v1, together-silver-v1, daily-white-v1, daily-cream-v1, daily-linen-v1, daily-suit-v1, wedding-simple-v1, wedding-vintage-v1, wedding-chinese-v1, wedding-anniversary-v1, milestone-graduation-v1, milestone-career-v1, milestone-birthday-v1, milestone-retirement-v1, winter-wool-v1, winter-scarf-v1, winter-knit-v1, winter-puffer-v1, newyear-chinese-v1, newyear-red-v1, newyear-pair-v1]
+    WardrobeContextResponse:
+      type: object
+      additionalProperties: false
+      required: [data, requestId]
+      properties:
+        requestId: { type: string }
+        data:
+          type: object
+          additionalProperties: false
+          required: [sourceAssetId, sourceRootCommandId, sourceCommandId, targetAge, sourceNode, participants, styles, policyVersion, catalogVersion]
+          properties:
+            sourceAssetId: { type: string }
+            sourceRootCommandId: { type: string }
+            sourceCommandId: { type: string }
+            targetAge: { type: integer, minimum: 0, maximum: 100 }
+            policyVersion: { const: wardrobe-edit-consent-v1 }
+            catalogVersion: { const: lifetime-wardrobe.v1 }
+            sourceNode:
+              type: object
+              additionalProperties: false
+              required: [nodeId, targetAge, status, attempts, canRetry, errorCode, commandId, asset, downloadPath]
+              properties:
+                nodeId: { type: string }
+                targetAge: { type: integer, minimum: 0, maximum: 100 }
+                status: { const: ready }
+                attempts: { type: integer, minimum: 0, maximum: 3 }
+                canRetry: { const: false }
+                errorCode: { type: "null" }
+                commandId: { type: string }
+                asset: { $ref: "#/components/schemas/TimelineImageAsset" }
+                downloadPath: { type: [string, "null"] }
+            participants:
+              type: array
+              minItems: 1
+              maxItems: 2
+              items:
+                type: object
+                additionalProperties: false
+                required: [participantId, position, authorized]
+                properties:
+                  participantId: { type: string }
+                  position: { enum: [single, left, right] }
+                  authorized: { type: boolean }
+            styles:
+              type: array
+              minItems: 34
+              maxItems: 34
+              items:
+                type: object
+                additionalProperties: false
+                required: [id, label, seriesId, seriesLabel, minAge, maxAge, minPeople, available, unavailableReason, legacy]
+                properties:
+                  id: { $ref: "#/components/schemas/WardrobeStyleId" }
+                  label: { type: string }
+                  seriesId: { enum: [east, retro, together, daily, wedding, milestone, winter, newyear, legacy] }
+                  seriesLabel: { type: string }
+                  minAge: { type: integer, minimum: 0, maximum: 100 }
+                  maxAge: { const: 100 }
+                  minPeople: { enum: [1, 2] }
+                  available: { type: boolean }
+                  unavailableReason: { type: string }
+                  legacy: { type: boolean }
+    TimelineDeliveryResponse:
+      type: object
+      additionalProperties: false
+      required: [data, requestId]
+      properties:
+        requestId: { type: string }
+        data:
+          type: object
+          additionalProperties: false
+          required: [commandId, sourceAssetId, commandState, creationKind, wardrobeSource, reconciliationState, state, expectedCount, readyCount, missingAges, aiLabel, mediaAvailable, nodes]
+          properties:
+            commandId: { type: string }
+            sourceAssetId: { type: string }
+            creationKind: { enum: [age, wardrobe] }
+            wardrobeSource:
+              oneOf:
+                - type: "null"
+                - type: object
+                  additionalProperties: false
+                  required: [sourceRootCommandId, targetAge, selections]
+                  properties:
+                    sourceRootCommandId: { type: string }
+                    targetAge: { type: integer, minimum: 0, maximum: 100 }
+                    selections:
+                      type: array
+                      minItems: 1
+                      maxItems: 2
+                      items:
+                        type: object
+                        additionalProperties: false
+                        required: [participantId, styleId]
+                        properties:
+                          participantId: { type: string }
+                          styleId: { $ref: "#/components/schemas/WardrobeStyleId" }
+            commandState: { enum: [requested, dispatched, acknowledged, succeeded, failed, cancelled, compensated] }
+            reconciliationState: { type: string }
+            state: { enum: [ready, partial, pending, blocked] }
+            expectedCount: { type: integer, minimum: 1, maximum: 101 }
+            readyCount: { type: integer, minimum: 0, maximum: 101 }
+            missingAges:
+              type: array
+              uniqueItems: true
+              items: { type: integer, minimum: 0, maximum: 100 }
+            aiLabel: { type: string }
+            mediaAvailable: { type: boolean }
+            nodes:
+              type: array
+              minItems: 1
+              maxItems: 101
+              items:
+                type: object
+                additionalProperties: false
+                required: [nodeId, targetAge, status, attempts, canRetry, errorCode, commandId, downloadPath]
+                properties:
+                  nodeId: { type: string }
+                  targetAge: { type: integer, minimum: 0, maximum: 100 }
+                  status: { enum: [pending, ready, failed, review, retrying, reconciliation_required] }
+                  attempts: { type: integer, minimum: 0, maximum: 3 }
+                  canRetry: { type: boolean }
+                  errorCode: { type: [string, "null"] }
+                  commandId: { type: string }
+                  downloadPath: { type: [string, "null"], pattern: '^/v1/timelines/[A-Za-z0-9._:-]+/nodes/[0-9]{1,3}/image$' }
+                  asset: { $ref: "#/components/schemas/TimelineImageAsset" }
     MobileTelemetryEvent:
       type: object
       additionalProperties: false

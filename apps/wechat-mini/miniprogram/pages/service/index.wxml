@@ -1,8 +1,9 @@
-<view class="page"><view class="card">
-  <view class="title">消息订阅与微信客服</view><view class="muted">订阅消息由您逐次选择；客户端不能发送消息或扩大模板范围。客服入口必须使用服务端短时授权。</view>
-  <button class="button secondary" disabled="{{busy}}" bindtap="loadOffer">读取可订阅模板</button>
-  <button class="button" wx:if="{{offer}}" disabled="{{busy}}" bindtap="subscribe">调用微信订阅消息授权</button>
-  <button class="button secondary" disabled="{{busy}}" bindtap="customerService">打开微信客服会话</button>
-  <button class="button secondary" open-type="contact">使用小程序客服组件</button>
+<view class="page"><view class="page-header"><view class="page-title">每段旅程，都有回应</view><view class="muted">想收到进展提醒，或有问题想聊聊？</view></view><view class="card">
+  <view class="section-head"><view class="section-title">不错过时光的新进展</view><text class="tag">由你选择</text></view><view class="muted">先查看可订阅的提醒，再由你逐次选择是否接收微信订阅消息。</view>
+  <button class="button secondary" disabled="{{busy}}" bindtap="loadOffer">查看可订阅的提醒</button>
+  <button class="button" wx:if="{{offer}}" disabled="{{busy}}" bindtap="subscribe">设置微信消息提醒</button>
+  <view class="divider"></view><view class="section-title">需要一点帮助？</view><view class="note">客服入口会重新校验授权，协助处理创作与订单问题。</view>
+  <button class="button secondary" disabled="{{busy}}" bindtap="customerService">联系微信客服</button>
+  <button class="button ghost" open-type="contact">通过小程序客服咨询</button>
   <view class="status" wx:if="{{stateText}}">{{stateText}}</view><view class="status error" wx:if="{{error}}">{{error}}</view>
-</view></view>
+</view><view class="privacy-foot">订阅是可选项，不影响你继续使用其他已授权功能。</view></view>

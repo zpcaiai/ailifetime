@@ -835,6 +835,8 @@ test("generic record mutations cannot alter server-managed provider aggregates",
   const { baseUrl } = await fixture();
   const protectedCollections = [
     "media.intake-results",
+    "media.quality-decisions",
+    "media.safety-certificates",
     "sharing.export-commands",
     "generation.timeline-commands",
     "notification.delivery-commands",
@@ -871,6 +873,19 @@ test("generic record mutations cannot alter server-managed provider aggregates",
   });
   assert.equal(safeBusinessProjection.status, 200);
   assert.deepEqual((await json(safeBusinessProjection)).data, []);
+});
+
+test("consumers cannot submit authoritative quality or safety claims through capabilities", async () => {
+  const { baseUrl } = await fixture();
+  for (const batchId of ["B15", "B17"]) {
+    const response = await fetch(`${baseUrl}/v1/capabilities/${batchId}`, {
+      method: "POST",
+      headers: consumerAuthHeaders({ "idempotency-key": `consumer-forged-${batchId}` }),
+      body: JSON.stringify({ workId: "forged-work", decision: "pass" }),
+    });
+    assert.equal(response.status, 403);
+    assert.equal((await json(response)).error.code, "AUTH_FORBIDDEN");
+  }
 });
 
 test("WeChat identity and resumable upload routes bind broker work to the verified principal", async () => {

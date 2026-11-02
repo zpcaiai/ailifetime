@@ -1,11 +1,21 @@
 <view class="page">
+  <view class="page-header"><view class="page-title">我的</view><view class="muted">查看账户、人物编号和授权状态。</view></view>
   <view class="card" wx:if="{{authenticated}}">
-    <view class="title">账户与隐私</view>
-    <view>主体 {{actorId}}</view><view class="muted">租户 {{tenantId}} · 权限 {{roles}}</view>
-    <button class="button secondary" bindtap="support">联系受控人工支持</button>
-    <button class="button secondary" bindtap="refresh">刷新会话与权限</button>
+    <view class="profile-heading"><view class="profile-monogram">我</view><view class="grow"><view class="section-title">我的账户</view><view class="caption">情侣创作时，将你的人物编号提供给对方。</view></view></view>
+    <view class="profile-badge tag">已登录 · 私密创作空间</view>
+    <view class="divider"></view>
+    <view class="detail-row"><text class="caption">人物编号</text><text class="detail-value">{{actorId}}</text></view>
+    <view class="detail-row"><text class="caption">所属空间</text><text class="detail-value">{{tenantId}}</text></view>
+    <view class="detail-row"><text class="caption">账户角色</text><text class="detail-value">{{roles}}</text></view>
+  </view>
+  <view class="card account-menu" wx:if="{{authenticated}}">
+    <button class="account-menu-item" bindtap="support"><view><view>帮助与反馈</view><text>提交问题与使用反馈</text></view><text class="menu-arrow">↗</text></button>
+    <button class="account-menu-item" bindtap="refresh"><view><view>同步账户状态</view><text>更新当前会话与可用功能</text></view><text class="menu-arrow">↻</text></button>
     <button class="button danger" bindtap="logout">退出并清除本机临时数据</button>
   </view>
-  <view class="card" wx:else><button class="button" bindtap="login">登录</button></view>
+  <view class="empty-state" wx:else>
+    <view class="empty-symbol">时</view><view class="section-title">登录后开始创作</view><view class="muted">登录后可生成照片、查看结果和管理授权。</view><button class="button" bindtap="login">微信安全登录</button>
+  </view>
   <view class="status error" wx:if="{{error}}">{{error}}</view>
+  <view class="privacy-foot">人物照片需要有效授权，AI 年龄影像不是实际容貌预测。请只上传你有权使用的照片。</view>
 </view>

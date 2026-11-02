@@ -1,2 +1,12 @@
-checkbox-group { margin: 24rpx 0; }
-.preview { margin-top: 24rpx; }
+.photo-guides { display: flex; gap: 7px; flex-wrap: wrap; }
+.photo-guides text { color: #746e66; font-size: 12px; padding-right: 7px; border-right: 0.5px solid #d9cebc; }
+.photo-guides text:last-child { border: 0; }
+.upload-picker { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-height: 140px; margin: 14px 0 0; padding: 15px; border: 1px dashed #b9a27c; border-radius: 12px; background: #f8f4ec; color: #4e4d46; font-size: 14px; line-height: 1.8; }
+.upload-picker::after { border: 0; }
+.upload-picker[disabled] { opacity: .55; }
+.upload-picker.has-photo { min-height: 44px; padding: 9px; border-style: solid; font-size: 12.5px; }
+.upload-plus { margin-bottom: 6px; color: #8f6744; font-size: 30px; font-weight: 300; line-height: 1.2; }
+.portrait-mat { margin-top: 14px; padding: 8px 8px 11px; background: #fff; border: 0.5px solid #e7decd; border-radius: 9px; box-shadow: 0 5px 15px rgba(57, 45, 29, .06); }
+.portrait-mat .preview { height: 260px; }
+.photo-caption { margin-top: 9px; text-align: center; color: #746e66; font-size: 11.5px; letter-spacing: 1px; }
+.upload-details { margin-top: 9px; word-break: break-all; }

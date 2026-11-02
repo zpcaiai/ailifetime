@@ -1,0 +1,39 @@
+.wardrobe-comparison { display: flex; gap: 9px; margin-bottom: 13px; }
+.wardrobe-frame { flex: 1; min-width: 0; overflow: hidden; border: 0.5px solid #e4dbce; border-radius: 10px; background: #fffdfa; }
+.wardrobe-photo { display: block; width: 100%; height: 230px; background: #eee8de; }
+.frame-caption { padding: 9px 5px; text-align: center; color: #746e66; font-size: 11.5px; }
+.waiting-photo { display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 9px; text-align: center; font-size: 12.5px; }
+.waiting-photo text { margin-top: 6px; font-size: 10.5px; color: #746e66; }
+.wardrobe-tip { margin-top: 7px; font-size: 12px; }
+.person-outfit { margin-top: 15px; padding-top: 13px; border-top: 0.5px solid #e9e2d7; }
+.person-outfit .section-head { gap: 6px; margin-bottom: 9px; }
+.person-label { font-size: 13.5px; font-weight: 600; }
+.person-outfit .caption { font-size: 10.5px; text-align: right; }
+.wardrobe-heading { padding: 8px 0 6px; }
+.wardrobe-eyebrow { margin-bottom: 12px; font-size: 10px; letter-spacing: 2px; color: #8f6744; }
+.wardrobe-heading .page-title { font-family: 'Songti SC', 'STSong', serif; font-size: 33px; letter-spacing: 3px; }
+.wardrobe-subtitle { margin: 10px 0; font-size: 16px; color: #63584c; font-family: 'Songti SC', 'STSong', serif; }
+.wardrobe-count { display: inline-block; margin-top: 14px; padding: 6px 11px; border: 0.5px solid #ded5c7; border-radius: 20px; color: #8f6744; font-size: 11px; letter-spacing: 1px; }
+.series-options { display: flex; flex-wrap: wrap; gap: 5px; margin: 12px 0; }
+.series-option { flex: 0 0 calc(25% - 4px); min-width: 0; min-height: 44px; margin: 0; padding: 9px 1px; border-radius: 7px; background: #f3eee6; color: #746e66; font-size: 11.5px; line-height: 25px; }
+.series-option::after { border: 0; }
+.series-option.active { background: #26384a; color: #fffdfa; }
+.outfit-selection { margin: 12px 0 9px; font-size: 12px; color: #8f6744; }
+.outfit-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.outfit-option { flex: 0 0 calc(50% - 4px); box-sizing: border-box; min-width: 0; min-height: 44px; margin: 0; padding: 15px 5px 12px; border: 0.5px solid #ded5c7; border-radius: 8px; background: #faf7f1; color: #746e66; font-size: 13px; line-height: 1.5; }
+.outfit-option::after { border: 0; }
+.outfit-option.selected { border-color: #26384a; color: #26384a; background: #edf0ef; }
+.outfit-swatch { display: block; width: 23px; height: 23px; margin: 0 auto 7px; border-radius: 6px; border: 0.5px solid rgba(38,56,74,.12); }
+.outfit-swatch { width: 34px; height: 34px; background: #c8c8b5; border-radius: 50% 50% 6px 6px; }
+.outfit-swatch.east { background: #b49578; }
+.outfit-swatch.retro { background: #7b8b90; }
+.outfit-swatch.together { background: #b9afa1; }
+.outfit-swatch.daily { background: #d6cbb9; }
+.outfit-swatch.wedding { background: #e5d7c7; }
+.outfit-swatch.milestone { background: #52616b; }
+.outfit-swatch.winter { background: #b4a28c; }
+.outfit-swatch.newyear { background: #9d5549; }
+.outfit-option[disabled] { color: #8a8278; background: #f2eee8; border-color: #e4ded5; }
+.outfit-option[disabled] .outfit-swatch { opacity: .4; }
+.outfit-choice { display: block; margin-top: 5px; font-size: 10.5px; color: #8f6744; }
+.wardrobe-page .field-hint { text-align: center; margin-top: 9px; }

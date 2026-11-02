@@ -21,6 +21,18 @@ import {
   type StoreTransactionEvidenceBinding,
 } from "./index.js";
 
+test("B14 terminal drafts bind closed result manifests without permitting other callback routes to carry them", () => {
+  const route = EXTERNAL_COMMAND_CALLBACK_ROUTES.find(route => route.batchId === "B14")!;
+  const binding = { tenantId: "tenant", batchId: "B14", operation: route.operation, kind: route.evidenceKind, provider: "generation-engine", artifactSha256: "a".repeat(64), environment: "sandbox", subjectId: "command" } as ExternalCommandCallbackEvidenceBinding;
+  const callback = { eventId: "event", terminalState: "succeeded" as const, providerOccurredAt: "2026-11-02T00:00:00.000Z", sequence: 1, providerOperationId: "provider-op",
+    resultManifest: { schemaVersion: "ltm.timeline-results.v1", sourceAssetId: "source", planVersion: "age-portrait-plan.v1", aiLabel: true, nodes: [{ nodeId: "age-5", targetAge: 5, status: "failed", errorCode: "PROVIDER_TRANSIENT" }] } };
+  const draft = externalCommandTerminalBusinessEventDraft(binding, callback);
+  assert.deepEqual(draft.canonicalClaims.resultManifest, callback.resultManifest);
+  assert.throws(() => externalCommandTerminalBusinessEventDraft(binding, { ...callback, resultManifest: { patch: {} } }), /manifest is invalid/);
+  const other = EXTERNAL_COMMAND_CALLBACK_ROUTES.find(route => route.batchId === "B16")!;
+  assert.throws(() => externalCommandTerminalBusinessEventDraft({ ...binding, batchId: "B16", operation: other.operation, kind: other.evidenceKind, provider: "video-renderer" } as ExternalCommandCallbackEvidenceBinding, callback), /only B14/);
+});
+
 test("all 19 external-command callback evidence tuples bind exact routes, commands, providers, and result digests", () => {
   assert.equal(EXTERNAL_COMMAND_CALLBACK_ROUTES.length, 19);
   for (const route of EXTERNAL_COMMAND_CALLBACK_ROUTES) {

@@ -199,8 +199,14 @@ test("PostgreSQL 17 runtime rejects broadened, duplicated, restrictive, scoped-r
     assert.equal(hasExactTenantIsolationPolicySet(policies.rows), true);
   } finally {
     if (databaseAdmin !== undefined) await databaseAdmin.end();
-    await control.query(`DROP DATABASE IF EXISTS ${quoteIdentifier(databaseName)} WITH (FORCE)`);
-    await control.end();
+    // Pool shutdown can precede the backend's final disconnect. A forced drop
+    // can race it and emit a late fatal error into an otherwise passing test.
+    // Normal DROP waits for closing clients and refuses other active owners.
+    try {
+      await control.query(`DROP DATABASE IF EXISTS ${quoteIdentifier(databaseName)}`);
+    } finally {
+      await control.end();
+    }
   }
 });
 

@@ -1,1 +1,23 @@
-.title { line-height: 1.35; }
+.home-page { padding-top: 12px; }
+.home-brand { display: flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 600; }
+.brand-seal { width: 24px; height: 24px; border: 0.5px solid #b99a6c; border-radius: 6px; color: #8f6744; text-align: center; line-height: 23px; font-family: "Songti SC", serif; }
+.home-hero { padding: 29px 0 22px; }
+.hero-title { font-family: "Songti SC", "STSong", serif; font-size: 32px; line-height: 1.45; font-weight: 700; letter-spacing: 0.5px; }
+.hero-title text, .hero-description text { display: block; }
+.hero-description { margin-top: 12px; color: #746e66; font-size: 13px; line-height: 1.9; }
+.mode-card { display: flex; gap: 9px; padding: 15px 13px; margin-bottom: 10px; border: 0.5px solid #e4dbce; border-radius: 10px; background: #fffdfa; }
+.mode-number { color: #a08868; font-family: Georgia, serif; font-size: 12.5px; padding-top: 2px; }
+.mode-content { flex: 1; min-width: 0; }
+.mode-content .muted { margin-top: 5px; font-size: 12px; }
+.mode-count { font-family: Georgia, serif; font-size: 22.5px; line-height: 1.2; color: #8f6744; text-align: right; }
+.mode-count text { display: block; font-size: 11px; font-family: sans-serif; margin-top: 4px; }
+.mini-years { display: flex; gap: 4px; align-items: center; margin-top: 11px; color: #8f6744; font-size: 10.5px; }
+.mini-years view { flex: 1; height: 0.5px; background: #d6c7b1; }
+.mode-note { margin-top: 10px; color: #8f6744; font-size: 11.5px; }
+.hero-button { margin-top: 17px; }
+.hero-trust { margin-top: 9px; text-align: center; color: #746e66; font-size: 11.5px; }
+.home-section { padding: 16px 0; margin-top: 14px; border-top: 0.5px solid #e4dbce; }
+.home-steps { display: flex; justify-content: space-between; color: #746e66; font-size: 12px; }
+.home-steps text { display: inline-block; margin-right: 6px; color: #8f6744; font-family: Georgia, serif; }
+.home-account { display: flex; gap: 8px; }
+.home-account button { flex: 1; min-width: 0; margin-top: 0; }

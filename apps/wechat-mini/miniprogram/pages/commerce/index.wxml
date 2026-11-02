@@ -1,10 +1,12 @@
 <view class="page">
+  <view class="page-header"><view class="page-title">订单与支付</view><view class="muted">把值得珍藏的时光，安排妥当。</view></view>
   <view class="card">
-    <view class="title">受控订单支付</view>
-    <view class="muted">金额、币种和订单状态只从商户服务端读取。微信原生回调不会直接授予权益，必须等待商户服务端验签投影。</view>
-    <input class="field" aria-label="结算引用" placeholder="输入服务端结算引用" value="{{checkoutId}}" bindinput="checkoutChanged" />
-    <button class="button" disabled="{{busy}}" bindtap="pay">由服务端读取订单并调用微信支付</button>
-    <view class="title" wx:if="{{amountText}}">{{amountText}}</view>
+    <view class="section-head"><view class="section-title">确认你的订单</view><text class="tag">微信支付</text></view>
+    <view class="muted">订单金额、币种与状态会在支付前安全核验，支付结果以核验后的订单状态为准。</view>
+    <label class="field-label">结算编号</label><input class="field" aria-label="结算引用" placeholder="填写本次订单的结算编号" value="{{checkoutId}}" bindinput="checkoutChanged" />
+    <button class="button" disabled="{{busy}}" bindtap="pay">{{busy ? '正在核对订单' : '核对订单并发起支付'}}</button>
+    <view class="divider" wx:if="{{amountText}}"></view><view class="page-title" wx:if="{{amountText}}">{{amountText}}</view>
     <view class="status" wx:if="{{stateText}}">{{stateText}}</view><view class="status error" wx:if="{{error}}">{{error}}</view>
   </view>
+  <view class="privacy-foot">支付完成后仍需核验订单结果。请勿重复支付，遇到问题可从“我的”联系支持。</view>
 </view>
