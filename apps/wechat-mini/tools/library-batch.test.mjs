@@ -16,3 +16,6 @@ test('permission denial keeps successful progress and settings never saves autom
  const g=fixture(async()=>{throw Error('PRIVACY_AUTHORIZATION_DENIED');});g.p.data.previewPath='/private';await g.p.saveAll();assert.equal(g.p.data.delivery,null);assert.equal(g.p.data.previewPath,'');assert.equal(g.cleared.length,1);
  const h=fixture(null,()=>({data:{commandId:'root',expectedCount:0,nodes:[]}}));h.p.data.previewPath='/private';await h.p.refreshTimeline();assert.equal(h.p.data.delivery,null);assert.equal(h.p.data.previewPath,'');
 });
+test('archive list authorization failure also clears an already-open private timeline and batch progress',async()=>{
+ const f=fixture(null,()=>{throw Error('AUTHENTICATION_REQUIRED');});f.p.data.previewPath='/private';f.p.data.batchSaved=3;f.p.data.batchTotal=21;await f.p.load();assert.equal(f.p.data.delivery,null);assert.equal(f.p.data.previewPath,'');assert.equal(f.p.data.activeCommandId,'');assert.equal(f.p.data.batchSaved,0);assert.equal(f.p.data.batchTotal,0);assert.equal(f.cleared.length,1);
+});

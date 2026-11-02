@@ -82,6 +82,7 @@ Page({
       if (loadEpoch !== this.loadEpoch) return;
       this.stopAllSharePolling();
       this.shareGrants = Object.create(null);
+      if (authorizationFailure(error)) { this.clearPrivateState(); this.batchState = null; }
       this.setData({ items: [], shareReadyIds: [], error: error instanceof Error ? error.message : "LIBRARY_UNAVAILABLE" });
     }
   },
