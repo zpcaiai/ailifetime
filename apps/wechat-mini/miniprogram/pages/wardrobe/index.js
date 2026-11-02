@@ -11,7 +11,7 @@ const dressPerson = (person, styles, seriesId) => {
 };
 
 Page({
-  data: { rootId: "", targetAge: 0, context: null, people: [], styles: [], series: [], sourcePath: "", resultPath: "", commandId: "", result: null, accepted: false, busy: false, error: "", message: "" },
+  data: { rootId: "", targetAge: 0, context: null, people: [], styles: [], series: [], sourcePath: "", resultPath: "", commandId: "", result: null, accepted: false, busy: false, albumPermissionDenied: false, error: "", message: "" },
   active: false, epoch: 0, timer: null, intent: null,
   async onLoad(options) {
     if (!validId(options.rootId) || typeof options.age !== "string" || !/^(?:0|[1-9][0-9]?|100)$/.test(options.age) || (options.commandId !== undefined && !validId(options.commandId))) { this.setData({ error: "请选择已完成的年龄照片再换装。" }); return; }
@@ -31,7 +31,7 @@ Page({
   async clearViews() {
     const paths = [this.data.sourcePath, this.data.resultPath];
     this.loadedCommandId = "";
-    this.setData({ context: null, people: [], styles: [], series: [], sourcePath: "", resultPath: "", result: null, accepted: false, busy: false });
+    this.setData({ context: null, people: [], styles: [], series: [], sourcePath: "", resultPath: "", result: null, accepted: false, busy: false, albumPermissionDenied: false });
     await Promise.all(paths.filter(Boolean).map(path => media.remove(path)));
   },
   async refresh() {
@@ -138,10 +138,16 @@ Page({
   },
   async save() {
     if (this.data.busy || this.data.result?.status !== "ready") return;
-    const epoch = this.epoch; this.setData({ busy: true, error: "", message: "" });
+    const epoch = this.epoch; this.setData({ busy: true, error: "", message: "", albumPermissionDenied: false });
     try { await media.save(this.data.result); if (epoch === this.epoch && this.active) this.setData({ message: "换装原图已保存到相册。" }); }
-    catch (error) { if (epoch === this.epoch && this.active) await this.showError(error); }
+    catch (error) { if (epoch === this.epoch && this.active) { if (codeOf(error) === "ALBUM_PERMISSION_REQUIRED") this.setData({albumPermissionDenied: true}); await this.showError(error); } }
     finally { if (epoch === this.epoch && this.active) this.setData({ busy: false }); }
+  },
+  async albumSettings() {
+    if (this.data.busy || !this.active) return;
+    const epoch = this.epoch;
+    try { const allowed = await media.openAlbumSettings(); if (this.active && epoch === this.epoch) this.setData({albumPermissionDenied: !allowed, message: allowed ? "已允许保存，请再次点击保存原图；会重新校验授权。" : "尚未允许保存，可以稍后再设置。", error: ""}); }
+    catch (error) { if (this.active && epoch === this.epoch) await this.showError(error); }
   },
   async retry() {
     if (this.data.busy || !this.data.result?.canRetry) return;

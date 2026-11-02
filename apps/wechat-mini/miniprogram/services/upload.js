@@ -22,6 +22,7 @@ async function sanitize(path) {
 }
 
 async function resumableUpload(file, onProgress, signal = { cancelled: false }) {
+  if (signal.cancelled) throw new Error("UPLOAD_CANCELLED");
   const created = await api.requestForPurpose("/v1/uploads", "age_transformation", {
     data: {
       fileSize: file.size,
@@ -32,7 +33,7 @@ async function resumableUpload(file, onProgress, signal = { cancelled: false }) 
     },
     headers: { "Idempotency-Key": api.idempotencyKey("upload-create") },
   });
-  if (!created || typeof created.uploadId !== "string" || !Number.isSafeInteger(created.nextOffset)) throw new Error("UPLOAD_SESSION_INVALID");
+  if (!created || typeof created.uploadId !== "string" || !Number.isSafeInteger(created.nextOffset) || created.nextOffset < 0 || created.nextOffset > file.size) throw new Error("UPLOAD_SESSION_INVALID");
   let offset = created.nextOffset;
   const filesystem = wx.getFileSystemManager();
   while (offset < file.size) {
@@ -41,7 +42,8 @@ async function resumableUpload(file, onProgress, signal = { cancelled: false }) 
       throw new Error("UPLOAD_CANCELLED");
     }
     const length = Math.min(CHUNK_BYTES, file.size - offset);
-    const bytes = await readChunk(filesystem, file.path, offset, length);
+    const bytes = await readChunk(filesystem, file.path, offset, length).catch(async error => { await checkCancelled(created.uploadId, signal); throw error; });
+    await checkCancelled(created.uploadId, signal);
     const result = await api.requestForPurpose(`/v1/uploads/${encodeURIComponent(created.uploadId)}/chunks`, "age_transformation", {
       data: wx.arrayBufferToBase64(bytes),
       headers: {
@@ -55,10 +57,16 @@ async function resumableUpload(file, onProgress, signal = { cancelled: false }) 
     offset = result.nextOffset;
     onProgress(Math.floor(offset * 100 / file.size));
   }
+  await checkCancelled(created.uploadId, signal);
   return api.requestForPurpose(`/v1/uploads/${encodeURIComponent(created.uploadId)}/complete`, "age_transformation", {
     data: { fileDigest: file.digest, digestAlgorithm: file.digestAlgorithm },
     headers: { "Idempotency-Key": `${created.uploadId}-complete` },
   });
+}
+async function checkCancelled(uploadId, signal) {
+  if (!signal.cancelled) return;
+  await api.requestForPurpose(`/v1/uploads/${encodeURIComponent(uploadId)}/cancel`, "age_transformation", { data: {}, headers: { "Idempotency-Key": api.idempotencyKey("upload-cancel") } });
+  throw new Error("UPLOAD_CANCELLED");
 }
 
 function imageInfo(src) { return call(wx.getImageInfo, { src }); }
@@ -80,13 +88,18 @@ async function fileSha256(path, size) {
   while (position < size) {
     const length = Math.min(CHUNK_BYTES, size - position);
     const bytes = await readChunk(filesystem, path, position, length);
-    if (!(bytes instanceof ArrayBuffer) || bytes.byteLength !== length) throw new Error("MEDIA_READ_LENGTH_MISMATCH");
-    hasher.update(bytes);
+    hasher.update(new Uint8Array(bytes));
     position += length;
   }
   return hasher.digestHex();
 }
 function call(fn, options) { return new Promise((resolve, reject) => fn({ ...options, success: resolve, fail: () => reject(new Error("MEDIA_OPERATION_FAILED")) })); }
-function readChunk(filesystem, filePath, position, length) { return new Promise((resolve, reject) => filesystem.readFile({ filePath, position, length, success: (value) => resolve(value.data), fail: () => reject(new Error("MEDIA_READ_FAILED")) })); }
+function readChunk(filesystem, filePath, position, length) { return new Promise((resolve, reject) => filesystem.readFile({ filePath, position, length, success: (value) => {
+  try {
+    const size = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "byteLength").get.call(value.data);
+    if (size !== length) throw new Error("INVALID_LENGTH");
+    resolve(value.data);
+  } catch { reject(new Error("MEDIA_READ_LENGTH_MISMATCH")); }
+}, fail: () => reject(new Error("MEDIA_READ_FAILED")) })); }
 
 module.exports = { preflight, sanitize, resumableUpload, CHUNK_BYTES, MAX_BYTES };

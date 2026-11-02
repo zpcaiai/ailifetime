@@ -74,3 +74,8 @@ test('reopened modern and legacy jobs restore exact per-person choices; invalid 
  const view=result();view.wardrobeSource.selections[0].styleId='wedding-anniversary-v1';const f=page(async path=>({data:path.endsWith('/wardrobe')?context():view}));await f.p.onLoad({rootId:'root',age:'37',commandId:'outfit'});assert.equal(f.p.data.resultPath,'');assert.match(f.p.data.error,/校验/);
  const g=page(async()=>({data:{...context(),catalogVersion:'unknown'}}));await g.p.onLoad({rootId:'root',age:'37'});assert.equal(g.p.data.context,null);
 });
+test('wardrobe offers explicit album settings after denial, never auto saves and ignores settings after hide',async()=>{
+ let settings=0,release;const f=page(async path=>({data:path.endsWith('/wardrobe')?context():result()}),{save:async()=>{throw Error('ALBUM_PERMISSION_REQUIRED');},openAlbumSettings:async()=>{settings++;return true;}});
+ await f.p.onLoad({rootId:'root',age:'37',commandId:'outfit'});await f.p.save();assert.equal(f.p.data.albumPermissionDenied,true);await f.p.albumSettings();assert.equal(settings,1);assert.equal(f.p.data.albumPermissionDenied,false);assert.match(f.p.data.message,/再次点击/);assert.equal(f.saves.length,0);
+ const g=page(async path=>({data:path.endsWith('/wardrobe')?context():result()}),{openAlbumSettings:()=>new Promise(r=>release=r)});await g.p.onLoad({rootId:'root',age:'37',commandId:'outfit'});const pending=g.p.albumSettings();g.p.onHide();release(true);await pending;assert.equal(g.p.data.context,null);assert.equal(g.p.data.resultPath,'');assert.equal(g.p.data.message,'');
+});
