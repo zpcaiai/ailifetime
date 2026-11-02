@@ -24,6 +24,7 @@
     <view wx:elif="{{result.canRetry}}"><view class="muted">这次未完成，可以保留原选择恢复。已重试 {{result.attempts}} / 3 次。</view><button class="button" bindtap="retry" disabled="{{busy}}">恢复这张换装照片</button></view>
     <view class="muted" wx:else>{{result.status === 'pending' || result.status === 'retrying' ? '已保存请求，可以稍后从相册继续查看。' : '结果需要核对或复核，暂不重复生成。'}}</view>
   </view>
+  <button class="button secondary" wx:if="{{albumPermissionDenied}}" bindtap="albumSettings" disabled="{{busy}}">前往设置，允许保存到相册</button>
   <button class="button secondary" bindtap="refresh" disabled="{{busy}}">{{busy ? '正在处理' : '刷新授权与结果'}}</button>
   <button class="button secondary" bindtap="library">返回相册</button>
   <view class="status error" wx:if="{{error}}">{{error}}</view><view class="status" wx:if="{{message}}">{{message}}</view>

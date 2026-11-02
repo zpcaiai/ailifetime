@@ -18,6 +18,9 @@
     <view class="caption" wx:if="{{selectedNode.status === 'ready' && !selectedNode.downloadPath}}">原图存储暂不可用，请稍后刷新。</view>
     <button class="button" wx:if="{{selectedNode.status === 'ready' && selectedNode.downloadPath}}" bindtap="saveOriginal" disabled="{{timelineBusy}}">保存 {{selectedAge}} 岁原图</button>
     <view class="original-caption" wx:if="{{selectedNode.status === 'ready' && selectedNode.downloadPath}}">{{selectedNode.asset.width}} × {{selectedNode.asset.height}} · 保留原始画质</view>
+    <view wx:if="{{batchTotal > 1}}"><button class="button secondary" bindtap="saveAll" disabled="{{timelineBusy || batchSaved >= batchTotal}}">{{batchSaved >= batchTotal ? '本次就绪原图已保存' : batchSaved > 0 ? '继续保存剩余原图' : '保存全部就绪原图'}}</button><view class="original-caption">本次页面内已保存 {{batchSaved}} / {{batchTotal}} 张 · 每张重新校验授权与画质</view></view>
+    <button class="button danger" wx:if="{{batchSaving}}" bindtap="cancelBatch">停止后续保存</button>
+    <button class="button secondary" wx:if="{{albumPermissionDenied}}" bindtap="albumSettings" disabled="{{timelineBusy}}">前往设置，允许保存到相册</button>
     <button class="button secondary" wx:if="{{selectedNode.status === 'ready' && selectedNode.downloadPath && delivery.creationKind !== 'wardrobe'}}" bindtap="changeClothes" disabled="{{timelineBusy}}">一生衣橱 · 为这张照片换装</button>
     <button class="button" wx:if="{{selectedNode.canRetry}}" bindtap="retryAge" disabled="{{timelineBusy}}">重新生成 {{selectedAge}} 岁的照片 ↻</button>
     <view class="original-caption" wx:if="{{selectedNode.canRetry}}">这个年龄已重试 {{selectedNode.attempts}} / 3 次</view>

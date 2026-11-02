@@ -58,16 +58,25 @@ async function download(node) {
     return path;
   } catch (error) { await remove(path); throw error; }
 }
-async function save(node) {
+async function save(node, signal = {cancelled: false}) {
   const generation = epoch;
+  if (signal.cancelled) throw new Error("MEDIA_REQUEST_CANCELLED");
   await privacy.requireAuthorization();
+  if (generation !== epoch || signal.cancelled) throw new Error("MEDIA_REQUEST_CANCELLED");
   const path = await download(node); // Reauthorize on the server for every save, never reuse a cached preview.
   try {
-    if (generation !== epoch) throw new Error("MEDIA_REQUEST_CANCELLED");
+    if (generation !== epoch || signal.cancelled) throw new Error("MEDIA_REQUEST_CANCELLED");
     await call(wx.saveImageToPhotosAlbum, { filePath: path });
   } catch (error) {
     if (/auth|permission|denied/i.test(String(error && error.errMsg))) throw new Error("ALBUM_PERMISSION_REQUIRED");
     throw error instanceof Error ? error : new Error("ALBUM_SAVE_FAILED");
   } finally { await remove(path); }
 }
-module.exports = { download, save, clearAll, remove };
+async function openAlbumSettings() {
+  session.requireSession();
+  if (typeof wx.openSetting !== "function") throw new Error("ALBUM_SETTINGS_UNAVAILABLE");
+  const response = await call(wx.openSetting, {});
+  if (!response || !response.authSetting || typeof response.authSetting !== "object") throw new Error("ALBUM_SETTINGS_INVALID");
+  return response.authSetting["scope.writePhotosAlbum"] === true;
+}
+module.exports = { download, save, clearAll, remove, openAlbumSettings };

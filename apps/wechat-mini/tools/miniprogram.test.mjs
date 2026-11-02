@@ -158,6 +158,7 @@ test("mini upload preflight streams a whole-file SHA-256 digest", async () => {
 test("resumable upload overrides a product-operation session for create, chunks, complete, and cancel", async () => {
   const requests = [];
   let uploadSequence = 0;
+  const cancelledUpload = { cancelled: false };
   const wxRuntime = {
     getExtConfigSync: () => ({ apiBaseUrl: "https://api.product.cn", apiAllowedOrigins: ["https://api.product.cn"] }),
     getAccountInfoSync: () => ({ miniProgram: { envVersion: "release", appId: "wx0123456789abcdef" } }),
@@ -170,6 +171,7 @@ test("resumable upload overrides a product-operation session for create, chunks,
       requests.push(input);
       if (input.url.endsWith("/v1/uploads")) {
         uploadSequence += 1;
+        if (uploadSequence === 2) cancelledUpload.cancelled = true;
         input.success({ statusCode: 200, data: { uploadId: `upload-${uploadSequence}`, nextOffset: 0 } });
       } else if (input.url.endsWith("/chunks")) {
         input.success({ statusCode: 200, data: { nextOffset: 4 } });
@@ -197,7 +199,7 @@ test("resumable upload overrides a product-operation session for create, chunks,
   });
   const file = { path: "/temporary/media.jpg", size: 4, digest: "d".repeat(64), digestAlgorithm: "sha256" };
   await upload.resumableUpload(file, () => {});
-  await assert.rejects(upload.resumableUpload(file, () => {}, { cancelled: true }), /UPLOAD_CANCELLED/);
+  await assert.rejects(upload.resumableUpload(file, () => {}, cancelledUpload), /UPLOAD_CANCELLED/);
   assert.deepEqual(requests.map(({ url }) => url.replace("https://api.product.cn", "")), [
     "/v1/uploads",
     "/v1/uploads/upload-1/chunks",

@@ -8,9 +8,9 @@
       <label class="row"><checkbox color="#26384a" value="accepted" checked="{{accepted}}" /><text>我确认照片中的人物已明确授权，用于本次带 AI 标识的年龄主题创作。</text></label>
     </checkbox-group>
     <view class="portrait-mat" wx:if="{{preview}}"><image class="preview" src="{{preview}}" mode="aspectFit" /><view class="photo-caption">这张原照会用于每个年龄的创作</view></view>
-    <button class="upload-picker {{preview ? 'has-photo' : ''}}" disabled="{{!accepted || busy}}" bindtap="choose"><view class="upload-plus" wx:if="{{!preview}}">＋</view><view>{{preview ? '重新选择照片' : '选择一张照片'}}</view><view class="caption" wx:if="{{!preview}}">从相机或相册选择</view></button>
+    <button class="upload-picker {{preview ? 'has-photo' : ''}}" disabled="{{!accepted || busy || choosing}}" bindtap="choose"><view class="upload-plus" wx:if="{{!preview}}">＋</view><view>{{choosing ? '正在检查照片' : preview ? '重新选择照片' : '选择一张照片'}}</view><view class="caption" wx:if="{{!preview}}">从相机或相册选择</view></button>
     <view class="caption upload-details" wx:if="{{details}}">{{details}}</view>
-    <button class="button" wx:if="{{preview}}" disabled="{{busy}}" bindtap="upload">{{busy ? '上传 ' + progress + '%' : '安全上传并继续'}}</button>
+    <button class="button" wx:if="{{preview}}" disabled="{{!accepted || busy || choosing}}" bindtap="upload">{{busy ? '上传 ' + progress + '%' : '安全上传并继续'}}</button>
     <button class="button danger" wx:if="{{busy}}" bindtap="cancel">取消上传</button>
     <view class="status error" wx:if="{{error}}">{{error}}</view>
   </view>
