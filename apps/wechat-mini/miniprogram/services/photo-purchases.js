@@ -1,34 +1,56 @@
 const api = require("./api");
 const session = require("./session");
 const commerce = require("./commerce");
-const PRICES = Object.freeze({ "lifespan-21": 990, "selected-age": 590, "wardrobe-series": 990 });
+const PRICES = Object.freeze({ "lifespan-11-standard":1990,"lifespan-21-standard":2990,"lifespan-11-hd":2990,"lifespan-21": 4990, "selected-age": 590, "wardrobe-series": 990 });
+const ALBUMS = Object.freeze({"lifespan-11-standard":Object.freeze({count:11,quality:"standard",size:1536}),"lifespan-21-standard":Object.freeze({count:21,quality:"standard",size:1536}),"lifespan-11-hd":Object.freeze({count:11,quality:"hd",size:2048}),"lifespan-21":Object.freeze({count:21,quality:"hd",size:2048})});
+function album(count,quality) {
+  if ((count !== 11 && count !== 21) || (quality !== "standard" && quality !== "hd")) throw new Error("PHOTO_PURCHASE_INVALID");
+  const sku=count===21&&quality==="hd"?"lifespan-21":`lifespan-${count}-${quality}`;
+  return {sku,amountMinor:PRICES[sku],...ALBUMS[sku]};
+}
+const PRICE_VERSIONS = Object.freeze({
+  "photo-retail-cny.v1": Object.freeze({ "lifespan-21": 990, "selected-age": 590, "wardrobe-series": 990 }),
+  "photo-retail-cny.v2": Object.freeze({ "lifespan-21": 4990, "selected-age": 590, "wardrobe-series": 990 }),
+  "photo-retail-cny.v3": PRICES,
+});
+function validPrice(value) {
+  const prices = value && Object.prototype.hasOwnProperty.call(PRICE_VERSIONS, value.priceVersion) && PRICE_VERSIONS[value.priceVersion];
+  if (!prices || !Object.prototype.hasOwnProperty.call(prices, value.sku) || value.amountMinor !== prices[value.sku] || value.currency !== "CNY") return false;
+  if (value.priceVersion !== "photo-retail-cny.v3" && ["imageQuality","imageWidth","imageHeight","retentionDays"].some(key=>value[key] !== undefined)) return false;
+  const tier=ALBUMS[value.sku];
+  return value.priceVersion !== "photo-retail-cny.v3" || !tier || (value.expectedCount===tier.count && value.imageQuality===tier.quality && value.imageWidth===tier.size && value.imageHeight===tier.size && value.retentionDays===30);
+}
 const active = new Set();
 const validId = value => typeof value === "string" && /^photo-[a-f0-9]{64}$/.test(value);
 const money = value => `¥${(value / 100).toFixed(2)}`;
 
 function validate(value, expected) {
-  if (!value || value.schemaVersion !== "ltm.photo-purchase.v1" || !validId(value.purchaseId) || !Object.prototype.hasOwnProperty.call(PRICES, value.sku) || value.amountMinor !== PRICES[value.sku] || value.currency !== "CNY" || value.priceVersion !== "photo-retail-cny.v1" ||
-      !/^[a-f0-9]{64}$/.test(value.scopeSha256) || !Number.isInteger(value.expectedCount) || value.expectedCount < 1 || (value.sku === "wardrobe-series" ? value.expectedCount > 4 || !["east","retro","together","daily","wedding","milestone","winter","newyear"].includes(value.seriesId) : value.expectedCount !== (value.sku === "lifespan-21" ? 21 : 1)) ||
+  if (!value || value.schemaVersion !== "ltm.photo-purchase.v1" || !validId(value.purchaseId) || !validPrice(value) ||
+      !/^[a-f0-9]{64}$/.test(value.scopeSha256) || !Number.isInteger(value.expectedCount) || value.expectedCount < 1 || (value.sku === "wardrobe-series" ? value.expectedCount > 4 || !["east","retro","together","daily","wedding","milestone","winter","newyear"].includes(value.seriesId) : value.expectedCount !== (ALBUMS[value.sku] ? ALBUMS[value.sku].count : 1)) ||
       !["pending","paid","closed","refunded","failed"].includes(value.paymentState) || !["awaiting_payment","processing","partial","ready","blocked","closed","refunded","failed"].includes(value.state) || !Array.isArray(value.items) || value.items.length !== value.expectedCount || new Set(value.items.map(i => i.itemId)).size !== value.items.length ||
       value.items.some(i => typeof i.itemId !== "string" || !Number.isInteger(i.targetAge) || i.targetAge < 0 || i.targetAge > 100 || !["awaiting_payment","unsubmitted","pending","retrying","ready","failed","review","reconciliation_required"].includes(i.status)) ||
       value.readyCount !== value.items.filter(i => i.status === "ready").length || (value.state === "ready" && value.readyCount !== value.expectedCount)) throw new Error("PHOTO_PURCHASE_INVALID");
-  if (value.sku === "lifespan-21" && value.items.some((i,n) => i.targetAge !== n*5)) throw new Error("PHOTO_PURCHASE_SCOPE_CHANGED");
+  if (ALBUMS[value.sku] && value.items.some((i,n) => i.targetAge !== n*(ALBUMS[value.sku].count===11?10:5))) throw new Error("PHOTO_PURCHASE_SCOPE_CHANGED");
   if (value.sku === "wardrobe-series" && value.items.some(i => !i.itemId.startsWith(value.seriesId + "-") || i.targetAge !== value.items[0].targetAge)) throw new Error("PHOTO_PURCHASE_SCOPE_CHANGED");
   if (value.checkout && (value.checkout.checkoutId !== value.purchaseId || value.checkout.amountMinor !== value.amountMinor || value.checkout.currency !== value.currency || value.checkout.scopeSha256 !== value.scopeSha256)) throw new Error("PHOTO_CHECKOUT_CHANGED");
-  if (expected && ["purchaseId","sku","amountMinor","currency","priceVersion","expectedCount","scopeSha256","seriesId"].some(key => value[key] !== expected[key])) throw new Error("PHOTO_PURCHASE_SCOPE_CHANGED");
+  if (expected && ["purchaseId","sku","amountMinor","currency","priceVersion","expectedCount","scopeSha256","seriesId","imageQuality","imageWidth","imageHeight","retentionDays"].some(key => value[key] !== expected[key])) throw new Error("PHOTO_PURCHASE_SCOPE_CHANGED");
   return value;
 }
 async function call(path, data, key) {
   const response = await api.requestForPurpose(path, "age_transformation", data === undefined ? { method: "GET" } : { data, headers: { "Idempotency-Key": key || api.idempotencyKey("photo-order") } });
   return response && response.data;
 }
-async function create(input, key) { return validate(await call("/v1/photo-purchases", input, key)); }
+async function create(input, key) {
+  const value=validate(await call("/v1/photo-purchases", input, key));
+  if (value.sku !== input.sku || (input.generation?.imageQuality !== undefined && value.imageQuality !== input.generation.imageQuality)) throw new Error("PHOTO_PURCHASE_SCOPE_CHANGED");
+  return value;
+}
 async function get(id) { if (!validId(id)) throw new Error("PHOTO_PURCHASE_INVALID"); const value = validate(await call(`/v1/photo-purchases/${id}`)); if (value.purchaseId !== id) throw new Error("PHOTO_PURCHASE_SCOPE_CHANGED"); return value; }
 async function operation(value, action, data = {}) { return validate(await call(`/v1/photo-purchases/${value.purchaseId}/${action}`, data), value); }
 async function listPage(cursor) {
   if (cursor !== undefined && cursor !== null && !validId(cursor)) throw new Error("PHOTO_ORDERS_INVALID");
   const result = await call("/v1/photo-purchases" + (cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""));
-  if (!result || !Array.isArray(result.items) || result.items.some(i => !validId(i.purchaseId) || !Object.prototype.hasOwnProperty.call(PRICES,i.sku) || i.amountMinor !== PRICES[i.sku] || i.currency !== "CNY")) throw new Error("PHOTO_ORDERS_INVALID");
+  if (!result || !Array.isArray(result.items) || result.items.some(i => !validId(i.purchaseId) || !validPrice(i))) throw new Error("PHOTO_ORDERS_INVALID");
   if (result.nextCursor !== null && (!validId(result.nextCursor) || result.nextCursor === cursor || !result.items.length || result.items[result.items.length-1].purchaseId !== result.nextCursor)) throw new Error("PHOTO_ORDERS_INVALID");
   return { items: result.items.map(i => ({ ...i, amountText: money(i.amountMinor) })), nextCursor: result.nextCursor };
 }
@@ -81,4 +103,4 @@ function errorText(error) {
   if (code === "PHOTO_PAYMENT_NOT_PAID") return "此订单未完成付款或已退款，请在订单中查看状态。";
   return "暂时未能完成，已创建的订单会保留；请从「我的订单」继续。";
 }
-module.exports = { PRICES, money, validate, create, get, list, listPage, execute, retry, errorText };
+module.exports = { PRICES, album, money, validate, create, get, list, listPage, execute, retry, errorText };

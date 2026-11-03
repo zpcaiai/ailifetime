@@ -16,13 +16,17 @@ export function buildAgeGenerationPlan(input: {
   timelineProfile?: string;
   templateId?: string;
   participantAges?: readonly number[];
+  imageQuality?: string;
 }): JsonObject {
   const profile = input.timelineProfile;
-  const couple = profile === "lifespan-21-couple-v1" || profile === "single-age-couple-v1";
+  const short = profile === "lifespan-11-v1" || profile === "lifespan-11-couple-v1";
+  const lifespanAges = short ? Array.from({length:11},(_,i)=>i*10) : LIFESPAN_AGES;
+  const couple = profile === "lifespan-11-couple-v1" || profile === "lifespan-21-couple-v1" || profile === "single-age-couple-v1";
   const singleAge = profile === "single-age-v1" || profile === "single-age-couple-v1";
-  if (profile !== undefined && !["lifespan-21-v1", "lifespan-21-couple-v1", "single-age-v1", "single-age-couple-v1"].includes(profile)) {
+  if (profile !== undefined && !["lifespan-11-v1","lifespan-11-couple-v1","lifespan-21-v1", "lifespan-21-couple-v1", "single-age-v1", "single-age-couple-v1"].includes(profile)) {
     throw new DomainError("VALIDATION_FAILED", "unknown timeline profile");
   }
+  if (input.imageQuality !== undefined && input.imageQuality !== "standard" && input.imageQuality !== "hd") throw new DomainError("VALIDATION_FAILED","unknown image quality");
   if (input.targetAges.length < 1 || input.targetAges.length > 101 || new Set(input.targetAges).size !== input.targetAges.length ||
       input.targetAges.some(age => !Number.isInteger(age) || age < 0 || age > 100)) throw new DomainError("VALIDATION_FAILED", "timeline profile target ages must be unique integer ages from zero through 100");
   if (input.currentAge !== undefined && (!Number.isInteger(input.currentAge) || input.currentAge < 0 || input.currentAge > 100)) {
@@ -34,15 +38,15 @@ export function buildAgeGenerationPlan(input: {
   if (couple && (input.participantIds.length !== 2 || new Set(input.participantIds).size !== 2 ||
       !Array.isArray(input.participantAges) || input.participantAges.length !== 2 ||
       input.participantAges.some(age => !Number.isInteger(age) || age < 0 || age > 100) || input.participantAges[0] !== input.currentAge ||
-      (!singleAge && (input.targetAges.length !== 21 || input.targetAges.some((age, i) => age !== LIFESPAN_AGES[i]))))) {
-    throw new DomainError("VALIDATION_FAILED", "couple profile requires two distinct participants and their ordered source ages; lifespan ages must be the exact 21 nodes");
+      (!singleAge && (input.targetAges.length !== lifespanAges.length || input.targetAges.some((age, i) => age !== lifespanAges[i]))))) {
+    throw new DomainError("VALIDATION_FAILED", "couple profile requires two distinct participants and their ordered source ages; lifespan ages must match the exact profile");
   }
   if (!couple && input.participantAges !== undefined) throw new DomainError("VALIDATION_FAILED", "participantAges requires an explicit couple profile");
-  if (input.timelineProfile === "lifespan-21-v1" &&
+  if ((input.timelineProfile === "lifespan-21-v1" || input.timelineProfile === "lifespan-11-v1") &&
       (input.participantIds.length !== 1 || input.currentAge === undefined ||
-       input.targetAges.length !== LIFESPAN_AGES.length ||
-       input.targetAges.some((age, index) => age !== LIFESPAN_AGES[index]))) {
-    throw new DomainError("VALIDATION_FAILED", "lifespan-21-v1 requires one participant, currentAge and ordered ages 0..100 every five years");
+       input.targetAges.length !== lifespanAges.length ||
+       input.targetAges.some((age, index) => age !== lifespanAges[index]))) {
+    throw new DomainError("VALIDATION_FAILED", "lifespan profile requires one participant, currentAge and exact ordered ages0..100");
   }
   return {
     schemaVersion: AGE_PLAN_VERSION,
@@ -54,6 +58,7 @@ export function buildAgeGenerationPlan(input: {
     currentAge: input.currentAge ?? null,
     sourceAgeState: input.currentAge === undefined ? "not_provided" : "user_declared_not_age_verification",
     expectedImageCount: input.targetAges.length,
+    ...(input.imageQuality === undefined ? {} : {imageQuality:input.imageQuality,imageWidth:input.imageQuality === "standard" ? 1536 : 2048,imageHeight:input.imageQuality === "standard" ? 1536 : 2048,retentionDays:30}),
     promptPolicyVersion: input.promptPolicyVersion,
     templateId: input.templateId ?? "timeline-classic-v1",
     identityPolicy: {
@@ -83,6 +88,7 @@ export function buildAgeGenerationPlan(input: {
         AGE_PLAN_VERSION, input.sourceAssetId, input.participantIds, input.seed, input.promptPolicyVersion,
         input.templateId ?? "timeline-classic-v1", targetAge,
         ...(couple ? [profile, input.participantAges] : []),
+        ...(input.imageQuality === undefined ? [] : [input.imageQuality]),
       ])).digest("hex"),
       ageInstruction: ageInstruction(targetAge),
       creativeBackcast: input.currentAge === undefined ? null : targetAge < input.currentAge,

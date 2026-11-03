@@ -1,4 +1,5 @@
 <view class="page">
+  <view class="field-hint">照片生成成功后云端保存 30 天，请及时保存到手机。</view>
   <view class="page-header"><view class="page-title">{{complete ? '处理结果' : '正在生成照片'}}</view><view class="muted">可以离开页面，稍后从相册查看。</view></view>
   <view class="card job-card">
     <view class="job-state tag">{{state === 'requested' ? '等待处理' : state === 'dispatched' ? '已开始准备' : state === 'acknowledged' ? '创作处理中' : state === 'succeeded' ? '处理已结束' : state === 'failed' ? '需要恢复' : state === 'cancelled' ? '已取消' : '正在核对'}}</view>

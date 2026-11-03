@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { canonicalJson, DomainError, type ActorContext, type JsonObject, type JsonValue, type LifeTimeMachineRuntimePort, type RecordEnvelope } from "@ltm/core";
 import { buildAgeGenerationPlan, type CapabilityRegistry } from "@ltm/capabilities";
-import { agePhotoProduct, wardrobeSeriesProduct } from "./photo-catalog.js";
+import { agePhotoProduct, photoProduct, wardrobeSeriesProduct } from "./photo-catalog.js";
 import { WardrobeService, wardrobeCommandId } from "./wardrobe.js";
 import { TimelineDeliveryService } from "./timeline-delivery.js";
 import type { TimelineArtifactReader } from "./timeline-artifacts.js";
@@ -38,10 +38,10 @@ export class PhotoPurchaseService {
       request = json({ sourceRootCommandId: input.sourceRootCommandId, targetAge: input.targetAge, sourceSha256: source.sourceNode.asset!.sha256, participantIds: source.participants.map(p => p.participantId) });
     } else {
       closed(input, ["sku", "generation"]);
-      const g = closed(input.generation, ["sourceAssetId", "participantIds", "targetAges", "currentAge", "timelineProfile", "seed", "promptPolicyVersion", "illustrativeLabel"], ["templateId", "participantAges"]);
+      const g = closed(input.generation, ["sourceAssetId", "participantIds", "targetAges", "currentAge", "timelineProfile", "seed", "promptPolicyVersion", "illustrativeLabel"], ["templateId", "participantAges", "imageQuality"]);
       if (!identifier(g.sourceAssetId) || !identifier(g.seed) || !identifier(g.promptPolicyVersion) || (g.templateId !== undefined && !identifier(g.templateId)) || g.illustrativeLabel !== true ||
           !Array.isArray(g.participantIds) || g.participantIds.length < 1 || g.participantIds.length > 2 || g.participantIds.some(p => !identifier(p)) || new Set(g.participantIds).size !== g.participantIds.length || typeof g.timelineProfile !== "string" || !Number.isInteger(g.currentAge)) throw new DomainError("VALIDATION_FAILED", "invalid age purchase request");
-      const product = agePhotoProduct(g.timelineProfile, g.targetAges);
+      const product = agePhotoProduct(g.timelineProfile, g.targetAges, g.imageQuality);
       if (product.sku !== input.sku) throw new DomainError("VALIDATION_FAILED", "photo product does not match requested age scope");
       buildAgeGenerationPlan(g as Parameters<typeof buildAgeGenerationPlan>[0]);
       const intake = await this.runtime.getRecord(actor, "media.intake-results", g.sourceAssetId);
@@ -50,8 +50,29 @@ export class PhotoPurchaseService {
       scope = json(product); request = json(g);
     }
     const id = `photo-${digest([actor.tenantId, actor.actorId, key])}`;
-    await this.runtime.createRecord(actor, { collection: PHOTO_PURCHASE_COLLECTION, id, ownerActorId: actor.actorId, processingPurpose: actor.purpose,
-      data: { kind: "photo_purchase.v1", scope, request, scopeSha256: digest([scope, request]), commands: {}, checkout: null, paymentProof: null, paymentState: "pending" }, idempotencyKey: `photo-create:${key}` });
+    const priorQuote = async () => {
+      let record: RecordEnvelope;
+      try { record = await this.load(actor,id); }
+      catch (error) { if (error instanceof DomainError && error.code === "RESOURCE_NOT_FOUND") return undefined; throw error; }
+      const stored = record.data.scope as JsonObject, price = photoProduct(stored.sku,stored.priceVersion);
+      const historical = stored.priceVersion === "photo-retail-cny.v1" || stored.priceVersion === "photo-retail-cny.v2";
+      const comparable = historical ? { ...stored,title:scope.title!,...(scope.imageQuality ? {imageQuality:scope.imageQuality,imageWidth:scope.imageWidth!,imageHeight:scope.imageHeight!,retentionDays:scope.retentionDays!} : {}) } : stored;
+      if (stored.amountMinor !== price.amountMinor || record.data.scopeSha256 !== digest([stored,record.data.request]) ||
+          canonicalJson(record.data.request!) !== canonicalJson(request) || canonicalJson({ ...comparable,amountMinor:scope.amountMinor!,priceVersion:scope.priceVersion! }) !== canonicalJson(scope)) {
+        throw new DomainError("IDEMPOTENCY_CONFLICT","photo purchase idempotency key has a different scope");
+      }
+      await this.bindCommands(actor,record);return this.get(actor,id);
+    };
+    // A create response can be lost before a price rollout. Recover the original
+    // owned quote for that same request instead of recomputing its agreed price.
+    const prior = await priorQuote();if (prior) return prior;
+    try {
+      await this.runtime.createRecord(actor, { collection: PHOTO_PURCHASE_COLLECTION, id, ownerActorId: actor.actorId, processingPurpose: actor.purpose,
+        data: { kind: "photo_purchase.v1", scope, request, scopeSha256: digest([scope, request]), commands: {}, checkout: null, paymentProof: null, paymentState: "pending" }, idempotencyKey: `photo-create:${key}` });
+    } catch (error) {
+      if (error instanceof DomainError && error.code === "IDEMPOTENCY_CONFLICT") { const recovered = await priorQuote();if (recovered) return recovered; }
+      throw error;
+    }
     await this.bindCommands(actor, await this.load(actor, id));
     return this.get(actor, id);
   }
@@ -151,7 +172,7 @@ export class PhotoPurchaseService {
         commandId = (await wardrobe.create(actor, request.sourceRootCommandId as string, request.targetAge as number,
           { selections: context.participants.map(p => ({ participantId: p.participantId, styleId: item })) }, `${id}:${item}`)).commandId;
       } else {
-        const value = await this.registry.execute(this.runtime, "B14", { actor, idempotencyKey: `${id}:age`, input: { ...request, jobId: `${id}:age` } });
+        const value = await this.registry.execute(this.runtime, "B14", { actor, idempotencyKey: `${id}:age`, input: { ...request, ...(typeof scope.imageQuality === "string" ? {imageQuality:scope.imageQuality} : {}), jobId: `${id}:age` } });
         if (!value || typeof value !== "object" || Array.isArray(value) || typeof value.externalCommandId !== "string") throw new DomainError("DEPENDENCY_UNAVAILABLE", "invalid generation command receipt");
         commandId = value.externalCommandId;
       }
@@ -177,6 +198,7 @@ export class PhotoPurchaseService {
     });
     const readyCount = items.filter(i => i.status === "ready").length;
     return { schemaVersion: "ltm.photo-purchase.v1", purchaseId: id, sku: scope.sku, title: scope.title, priceVersion: scope.priceVersion,
+      ...(scope.imageQuality ? {imageQuality:scope.imageQuality,imageWidth:scope.imageWidth,imageHeight:scope.imageHeight,retentionDays:scope.retentionDays} : {}),
       amountMinor: scope.amountMinor, currency: "CNY", expectedCount: scope.imageCount, seriesId: scope.seriesId ?? null, seriesTitle: scope.seriesTitle ?? null,
       sourceRootCommandId: request.sourceRootCommandId ?? null,
       scopeSha256: record.data.scopeSha256, checkout: record.data.checkout, paymentState: record.data.paymentState, commandId: commands.age ?? null,

@@ -17,6 +17,16 @@ test('order load and refresh only read; explicit resume shows exact total and op
 test('whole series order opens all-style wardrobe and refunded order cannot resume',async()=>{
  const f=fixture();f.p.showOrder({...f.quote,sku:'wardrobe-series',purchaseId:'series-order',expectedCount:4,amountMinor:990,paymentState:'refunded'});assert.equal(f.p.data.selected.amountText,'¥9.90');await f.p.resume();assert.equal(f.payments,0);f.p.open();assert.equal(f.navigation[0],'/pages/wardrobe/index?purchaseId=series-order');
 });
+test('order details retain four-tier count, quality andoriginal total without recomputing or charging on read',()=>{
+ const f=fixture();
+ for(const count of [11,21])for(const quality of ['standard','hd']){
+  const amount=quality==='standard'?(count===11?1990:2990):(count===11?2990:4990),size=quality==='standard'?1536:2048;
+  f.p.showOrder({...f.quote,sku:count===21&&quality==='hd'?'lifespan-21':`lifespan-${count}-${quality}`,amountMinor:amount,expectedCount:count,imageQuality:quality,imageWidth:size,imageHeight:size,retentionDays:30});
+  assert.equal(f.p.data.selected.amountText,'¥'+(amount/100).toFixed(2));assert.equal(f.p.data.selected.expectedCount,count);assert.equal(f.p.data.selected.imageQuality,quality);assert.equal(f.p.data.selected.imageWidth,size);assert.equal(f.p.data.selected.retentionDays,30);assert.equal(f.payments,0);
+ }
+ const view=readFileSync(new URL('../miniprogram/pages/commerce/index.wxml',import.meta.url),'utf8');for(const field of ['selected.imageQuality','selected.imageWidth','selected.imageHeight','保存 30 天'])assert.ok(view.includes(field));
+ assert.ok(readFileSync(new URL('../miniprogram/pages/job/index.wxml',import.meta.url),'utf8').includes('保存 30 天'));
+});
 test('hidden or changed account ignores late order lookup and clears private metadata',async()=>{
  for(const change of ['hide','account']){
   let release;const f=fixture({get:()=>new Promise(resolve=>release=resolve)});const pending=f.p.select({currentTarget:{dataset:{id:'photo-order'}}});

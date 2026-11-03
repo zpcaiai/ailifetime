@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants, closeSync, fsyncSync, lstatSync, linkSync, mkdirSync, openSync, readSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import { DomainError, parseTimelineImageAsset, type TimelineImageAsset } from "@ltm/core";
+import { DomainError, parseTimelineImageAsset, type ActorContext, type TimelineImageAsset } from "@ltm/core";
 
-export interface TimelineArtifactReader { read(asset: TimelineImageAsset): Promise<Uint8Array>; }
+export interface TimelineArtifactReader { read(asset: TimelineImageAsset, actor?: Pick<ActorContext,"tenantId"|"actorId">): Promise<Uint8Array>; }
 export function configuredTimelineArtifacts(environment: Readonly<Record<string,string|undefined>>, appEnvironment: string): FileTimelineArtifactStore | undefined {
   const directory = environment.LTM_TIMELINE_MEDIA_DIRECTORY;
   if (directory === undefined) return undefined;

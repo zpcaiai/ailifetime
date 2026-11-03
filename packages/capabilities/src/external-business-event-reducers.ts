@@ -574,6 +574,10 @@ function timelineResultPatch(event: VerifiedBusinessEvent, context: ExternalBusi
   const editBinding = wardrobe ? parseWardrobeBinding(plan.wardrobeBinding) : undefined;
   if (wardrobe && JSON.stringify(editBinding) !== JSON.stringify(wardrobeBinding(current.data.wardrobeEdit))) throw invalid("wardrobe plan and original edit binding changed");
   for (const node of manifest.nodes.filter(node => node.status === "ready")) {
+    if (plan.imageQuality !== undefined) {
+      const size = plan.imageQuality === "standard" ? 1536 : plan.imageQuality === "hd" ? 2048 : undefined;
+      if (!size || plan.imageWidth !== size || plan.imageHeight !== size || node.asset!.width !== size || node.asset!.height !== size) throw invalid("timeline output dimensions do not match the purchased image quality");
+    }
     if (editBinding && (node.asset!.id === editBinding.sourceImageId || node.asset!.sha256 === editBinding.sourceImageSha256 || node.targetAge !== editBinding.targetAge)) throw invalid("wardrobe result must be a new image at the source age");
     const quality = context.relatedRecords[`quality-${node.targetAge}`];
     const safety = context.relatedRecords[`safety-${node.targetAge}`];

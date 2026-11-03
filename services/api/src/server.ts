@@ -311,7 +311,8 @@ async function handleRequest(
         const records = await options.runtime.listRecords(actor, { collection: PHOTO_PURCHASE_COLLECTION, limit: 25, ...(cursor ? {cursor} : {}) });
         const items = records.filter(record => record.ownerActorId === actor.actorId).map(record => {
           const scope = record.data.scope as Record<string, unknown>;
-          return { purchaseId: record.id, title: scope.title, sku: scope.sku, amountMinor: scope.amountMinor, currency: scope.currency, seriesTitle: scope.seriesTitle ?? null, expectedCount: scope.imageCount, paymentState: record.data.paymentState, createdAt: record.createdAt };
+          return { purchaseId: record.id, title: scope.title, sku: scope.sku, priceVersion: scope.priceVersion, amountMinor: scope.amountMinor, currency: scope.currency, seriesTitle: scope.seriesTitle ?? null, expectedCount: scope.imageCount, paymentState: record.data.paymentState, createdAt: record.createdAt,
+            ...(scope.imageQuality ? {imageQuality:scope.imageQuality,imageWidth:scope.imageWidth,imageHeight:scope.imageHeight,retentionDays:scope.retentionDays} : {}) };
         });
         sendJson(response, 200, { data: { items, nextCursor: records.length === 25 ? records.at(-1)!.id : null }, requestId }); return;
       }
@@ -592,18 +593,29 @@ async function handleRequest(
         if (String(age) !== timelineMatch[3]) throw new DomainError("VALIDATION_FAILED", "timeline age path must be canonical");
         if (node?.status !== "ready" || !node.asset) throw new DomainError("RESOURCE_NOT_FOUND", "timeline image is not publishable");
         if (!options.timelineArtifacts) throw new DomainError("DEPENDENCY_UNAVAILABLE", "timeline image reader is not configured");
-        const bytes = await options.timelineArtifacts.read(node.asset);
+        const bytes = await options.timelineArtifacts.read(node.asset, actor);
         if (bytes.byteLength !== node.asset.byteLength || createHash("sha256").update(bytes).digest("hex") !== node.asset.sha256) throw new DomainError("DEPENDENCY_UNAVAILABLE", "timeline image storage binding failed");
         const fresh = (await delivery.get(actor, commandId)).nodes.find(item => item.targetAge === age);
         if (fresh?.status !== "ready" || fresh.asset?.sha256 !== node.asset.sha256) throw new DomainError("VERSION_CONFLICT", "timeline image changed during download");
         response.statusCode = 200;
         response.setHeader("cache-control", "private, no-store");
         response.setHeader("content-type", node.asset.mimeType);
-        response.setHeader("content-length", bytes.byteLength);
         response.setHeader("content-disposition", `attachment; filename="ai-age-${age}.${node.asset.mimeType === "image/png" ? "png" : "jpg"}"`);
         response.setHeader("x-ltm-image-sha256", node.asset.sha256);
         response.setHeader("x-ltm-ai-generated", "true");
-        response.end(bytes); return;
+        // Streaming avoids Vercel's buffered 4.5 MB response limit. Verify all
+        // bytes, authorization and expiry before emitting the first chunk.
+        response.flushHeaders();
+        for (let offset = 0; offset < bytes.byteLength; offset += 64*1024) {
+          if (response.destroyed) return;
+          if (!response.write(bytes.subarray(offset,offset+64*1024))) {
+            await new Promise<void>(resolve => {
+              const done = () => { response.off("drain",done); response.off("close",done); resolve(); };
+              response.once("drain",done); response.once("close",done);
+            });
+          }
+        }
+        response.end(); return;
       }
       sendJson(response, 200, { data: { ...view, mediaAvailable: options.timelineArtifacts !== undefined,
         nodes: view.nodes.map(node => ({ ...node, downloadPath: node.status === "ready" && options.timelineArtifacts ? `/v1/timelines/${commandId}/nodes/${node.targetAge}/image` : null })) }, requestId }); return;

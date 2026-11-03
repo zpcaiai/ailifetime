@@ -79,7 +79,14 @@ function send(path, options, accessToken, authenticatedPurpose) {
         }
         resolve(response.data);
       },
-      fail(error) { reject(new Error(error && error.errMsg ? error.errMsg.split(":", 1)[0] : "NETWORK_UNAVAILABLE")); },
+      fail(error) {
+        const message = typeof error?.errMsg === "string" ? error.errMsg.toLowerCase() : "";
+        const code = message.includes("not in domain list") ? "NETWORK_DOMAIN_NOT_ENROLLED"
+          : ["ssl", "tls", "certificate", "证书"].some(part => message.includes(part)) ? "NETWORK_TLS_FAILED"
+          : message.includes("timeout") || message.includes("timed out") ? "NETWORK_TIMEOUT"
+          : "NETWORK_UNAVAILABLE";
+        reject(new Error(code));
+      },
     });
   });
 }

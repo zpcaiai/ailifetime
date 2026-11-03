@@ -72,10 +72,11 @@ export class TimelineDeliveryService {
     if (existing) return { commandId: existing.id, attempt, reused: true };
     if (!node.canRetry || attempt !== node.attempts + 1) throw new DomainError("VERSION_CONFLICT", "retry is active, uncertain, disallowed or exhausted; refresh its original status");
     const id = timelineRetryId(root.id, age, attempt), originalPlan = root.data.generationPlan as JsonObject;
-    const seed = createHash("sha256").update(JSON.stringify([root.data.seed, age, attempt])).digest("hex");
+    const seed = createHash("sha256").update(JSON.stringify([root.data.seed, age, attempt,...(originalPlan.imageQuality === undefined ? [] : [originalPlan.imageQuality])])).digest("hex");
     const data: JsonObject = { batchId: "B14", skill: "building-age-media-pipeline", operation: "createTimeline", operationMode: "external-command",
       jobId: id, sourceAssetId: root.data.sourceAssetId!, participantIds: Array.isArray(originalPlan.participantIds) ? [...originalPlan.participantIds] : [...root.participantIds], targetAges: [age],
       seed, promptPolicyVersion: root.data.promptPolicyVersion!, illustrativeLabel: true,
+      ...(originalPlan.imageQuality === undefined ? {} : {imageQuality:originalPlan.imageQuality}),
       ...(root.data.wardrobeEdit === undefined ? {} : { wardrobeEdit: root.data.wardrobeEdit }),
       generationPlan: { ...originalPlan, profile: "single-node-recovery-v1", expectedImageCount: 1,
         nodes: (originalPlan.nodes as JsonObject[]).filter(node => node.targetAge === age).map(node => ({ ...node, seed })) },
