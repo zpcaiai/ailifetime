@@ -7,7 +7,7 @@
   "base_commit": "1e9efd8d367c2878988f09f2685b159ba8e9942a",
   "result_commit": null,
   "started_at": "2026-11-03T08:48:14.840767+00:00",
-  "completed_at": "2026-11-03T09:36:30.959678+00:00",
+  "completed_at": "2026-11-03T10:13:36.685845+00:00",
   "agent": {
     "host": "codex",
     "model": null,
@@ -191,6 +191,24 @@
       "status": "passed",
       "artifact": "evidence/B15/photo-scorer-local-evidence.json",
       "duration_ms": null
+    },
+    {
+      "name": "canonical-sql-regression (local integration only)",
+      "scope": "integration",
+      "command": "node --test services/api/test/timeline-photo-quality.test.mjs services/api/test/photo-score.http.test.mjs packages/capabilities/dist/photo-score-evidence.test.js",
+      "exit_code": 0,
+      "status": "passed",
+      "artifact": "evidence/B15/photo-scorer-local-evidence.json",
+      "duration_ms": null
+    },
+    {
+      "name": "canonical-full-postgres (local integration only)",
+      "scope": "integration",
+      "command": "python3 /Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/photo-scorer-20261103/canonical-regression/local-pg.py test",
+      "exit_code": 0,
+      "status": "passed",
+      "artifact": "evidence/B15/photo-scorer-local-evidence.json",
+      "duration_ms": null
     }
   ],
   "evidence": [
@@ -214,8 +232,8 @@
     {
       "type": "test-result",
       "path": "evidence/B15/photo-scorer-local-evidence.json",
-      "sha256": "47074497885b0d1cc7817b7e687a4ea0d69518d2fc469af36609dafc10cfaaa6",
-      "created_at": "2026-11-03T09:36:30.959678+00:00",
+      "sha256": "66a518307895878e22143491863fa93f9ca80036f6b397921d86383436d44248",
+      "created_at": "2026-11-03T10:13:36.685845+00:00",
       "producer": "Actual local process receipts and synthetic external-model boundary fixtures; no real model acceptance",
       "supports": [
         "B15-R01",
