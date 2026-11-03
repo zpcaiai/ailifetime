@@ -17,6 +17,8 @@ import type { ProductionDomainRuntime } from "./domain-runtime.js";
 import type { BrowserOidcPublicConfiguration } from "./browser-oidc.js";
 import type { ClientIntegrationPorts, MediaDeletionProjection } from "./client-integrations.js";
 import { TimelineDeliveryService } from "./timeline-delivery.js";
+import type { TimelinePhotoQualityService } from "./timeline-photo-quality.js";
+import type { TimelineSeedreamService } from "./timeline-seedream.js";
 import { WardrobeService } from "./wardrobe.js";
 import { PHOTO_PRODUCTS, PHOTO_PRICE_VERSION } from "./photo-catalog.js";
 import { PhotoPurchaseService, PHOTO_PURCHASE_COLLECTION } from "./photo-purchases.js";
@@ -59,6 +61,9 @@ export interface ApiServerOptions {
   readonly metricsTokenSha256?: string;
   readonly clientIntegrations?: ClientIntegrationPorts;
   readonly timelineArtifacts?: TimelineArtifactReader;
+  readonly photoQuality?: TimelinePhotoQualityService;
+  readonly seedream?: TimelineSeedreamService;
+  readonly seedreamReadiness?: () => Promise<boolean>;
   /** Production bounded-context composition; omitted only for local/test fixtures. */
   readonly domainRuntime?: ProductionDomainRuntime;
   readonly browserOidcConfiguration?: BrowserOidcPublicConfiguration;
@@ -201,8 +206,9 @@ async function handleRequest(
       const readiness = await options.runtime.readiness();
       const integrations = await clientIntegrationReadiness(options.clientIntegrations);
       const domain = options.domainRuntime === undefined ? { ready: true, database: "embedded", schemaVersion: null } : await options.domainRuntime.readiness();
-      const ready = readiness.ready && integrations.every((item) => item.ready) && domain.ready;
-      sendJson(response, ready ? 200 : 503, { ...readiness, ready, integrations, domain, requestId });
+      const generationReady = options.seedreamReadiness === undefined ? true : await options.seedreamReadiness();
+      const ready = readiness.ready && integrations.every((item) => item.ready) && domain.ready && generationReady;
+      sendJson(response, ready ? 200 : 503, { ...readiness, ready, integrations, domain, generationReady, requestId });
       return;
     }
     if (method === "GET" && path === "/metrics") {
@@ -309,7 +315,8 @@ async function handleRequest(
         const records = await options.runtime.listRecords(actor, { collection: PHOTO_PURCHASE_COLLECTION, limit: 25, ...(cursor ? {cursor} : {}) });
         const items = records.filter(record => record.ownerActorId === actor.actorId).map(record => {
           const scope = record.data.scope as Record<string, unknown>;
-          return { purchaseId: record.id, title: scope.title, sku: scope.sku, amountMinor: scope.amountMinor, currency: scope.currency, seriesTitle: scope.seriesTitle ?? null, expectedCount: scope.imageCount, paymentState: record.data.paymentState, createdAt: record.createdAt };
+          return { purchaseId: record.id, title: scope.title, sku: scope.sku, priceVersion: scope.priceVersion, amountMinor: scope.amountMinor, currency: scope.currency, seriesTitle: scope.seriesTitle ?? null, expectedCount: scope.imageCount, paymentState: record.data.paymentState, createdAt: record.createdAt,
+            ...(scope.imageQuality ? {imageQuality:scope.imageQuality,imageWidth:scope.imageWidth,imageHeight:scope.imageHeight,retentionDays:scope.retentionDays} : {}) };
         });
         sendJson(response, 200, { data: { items, nextCursor: records.length === 25 ? records.at(-1)!.id : null }, requestId }); return;
       }
@@ -560,6 +567,28 @@ async function handleRequest(
       const data = method === "GET" ? await wardrobe.context(actor, rootId, age) : await wardrobe.create(operationContext(actor, "wardrobe.create", requireIdempotencyKey(request)), rootId, age, object(await readJsonBody(request, bodyLimit), "wardrobe request"), requireIdempotencyKey(request));
       sendJson(response, 200, {data, requestId}); return;
     }
+    const generationMatch = /^\/v1\/timelines\/([A-Za-z0-9](?:[A-Za-z0-9._:-]|%3[Aa]){0,127})\/generate$/.exec(path);
+    if (method === "POST" && generationMatch?.[1] !== undefined) {
+      const actor = await authenticate(options, request, requestId);
+      if (!actor.roles.includes("service_account") || !hasPermission(actor,"media.generation.generate")) throw new DomainError("AUTH_FORBIDDEN","generation requires an authorized service account");
+      if (!options.seedream) throw new DomainError("DEPENDENCY_UNAVAILABLE","Seedream Pro is not configured");
+      const input = object(await readJsonBody(request,bodyLimit),"generation request");
+      assertExactKeys(input,["targetAge"],"generation request");
+      if (typeof input.targetAge !== "number") throw new DomainError("VALIDATION_FAILED","generation requires targetAge");
+      const data = await options.seedream.generate(operationContext(actor,"seedream.generate",requireIdempotencyKey(request)),decodeURIComponent(generationMatch[1]),input.targetAge);
+      sendJson(response,200,{data,requestId});return;
+    }
+    const photoQualityMatch = /^\/v1\/timelines\/([A-Za-z0-9](?:[A-Za-z0-9._:-]|%3[Aa]){0,127})\/quality$/.exec(path);
+    if (method === "POST" && photoQualityMatch?.[1] !== undefined) {
+      const actor = await authenticate(options, request, requestId);
+      if (!actor.roles.includes("service_account") || !hasPermission(actor,"media.quality.evaluate")) throw new DomainError("AUTH_FORBIDDEN","photo quality requires an authorized service account");
+      if (!options.photoQuality) throw new DomainError("DEPENDENCY_UNAVAILABLE","photo scoring is not configured");
+      const input=object(await readJsonBody(request,bodyLimit),"photo quality request");
+      assertExactKeys(input,["targetAge","asset"],"photo quality request");
+      if (typeof input.targetAge!=="number") throw new DomainError("VALIDATION_FAILED","photo scoring requires targetAge");
+      const data=await options.photoQuality.evaluate(operationContext(actor,"photo-quality.evaluate",requireIdempotencyKey(request)),decodeURIComponent(photoQualityMatch[1]),input.targetAge,input.asset);
+      sendJson(response,200,{data,requestId});return;
+    }
     const timelineMatch = /^\/v1\/timelines\/([A-Za-z0-9](?:[A-Za-z0-9._:-]|%3[Aa]){0,127})(?:\/(retry|nodes\/(\d{1,3})\/image))?$/.exec(path);
     if (timelineMatch?.[1] !== undefined && ((method === "GET" && timelineMatch[2] !== "retry") || (method === "POST" && timelineMatch[2] === "retry"))) {
       const actor = await authenticate(options, request, requestId);
@@ -579,18 +608,29 @@ async function handleRequest(
         if (String(age) !== timelineMatch[3]) throw new DomainError("VALIDATION_FAILED", "timeline age path must be canonical");
         if (node?.status !== "ready" || !node.asset) throw new DomainError("RESOURCE_NOT_FOUND", "timeline image is not publishable");
         if (!options.timelineArtifacts) throw new DomainError("DEPENDENCY_UNAVAILABLE", "timeline image reader is not configured");
-        const bytes = await options.timelineArtifacts.read(node.asset);
+        const bytes = await options.timelineArtifacts.read(node.asset, actor);
         if (bytes.byteLength !== node.asset.byteLength || createHash("sha256").update(bytes).digest("hex") !== node.asset.sha256) throw new DomainError("DEPENDENCY_UNAVAILABLE", "timeline image storage binding failed");
         const fresh = (await delivery.get(actor, commandId)).nodes.find(item => item.targetAge === age);
         if (fresh?.status !== "ready" || fresh.asset?.sha256 !== node.asset.sha256) throw new DomainError("VERSION_CONFLICT", "timeline image changed during download");
         response.statusCode = 200;
         response.setHeader("cache-control", "private, no-store");
         response.setHeader("content-type", node.asset.mimeType);
-        response.setHeader("content-length", bytes.byteLength);
         response.setHeader("content-disposition", `attachment; filename="ai-age-${age}.${node.asset.mimeType === "image/png" ? "png" : "jpg"}"`);
         response.setHeader("x-ltm-image-sha256", node.asset.sha256);
         response.setHeader("x-ltm-ai-generated", "true");
-        response.end(bytes); return;
+        // Streaming avoids Vercel's buffered 4.5 MB response limit. Verify all
+        // bytes, authorization and expiry before emitting the first chunk.
+        response.flushHeaders();
+        for (let offset = 0; offset < bytes.byteLength; offset += 64*1024) {
+          if (response.destroyed) return;
+          if (!response.write(bytes.subarray(offset,offset+64*1024))) {
+            await new Promise<void>(resolve => {
+              const done = () => { response.off("drain",done); response.off("close",done); resolve(); };
+              response.once("drain",done); response.once("close",done);
+            });
+          }
+        }
+        response.end(); return;
       }
       sendJson(response, 200, { data: { ...view, mediaAvailable: options.timelineArtifacts !== undefined,
         nodes: view.nodes.map(node => ({ ...node, downloadPath: node.status === "ready" && options.timelineArtifacts ? `/v1/timelines/${commandId}/nodes/${node.targetAge}/image` : null })) }, requestId }); return;
@@ -635,6 +675,9 @@ async function handleRequest(
       const batchId = normalizeCapabilityBatchId(capabilityMatch?.[1] ?? body.batchId);
       if (batchId === "B14") requireOperatorGeneration(authenticated);
       const input = body.input ?? (capabilityMatch?.[1] === undefined ? undefined : body);
+      if (batchId === "B15" && options.photoQuality !== undefined && object(input ?? {},"quality input").artifactBinding !== undefined) {
+        throw new DomainError("AUTH_FORBIDDEN","bound photo quality must use the configured pixel scorer endpoint");
+      }
       const context = operationContext(authenticated, `capability:${batchId}`, key);
       const secured = await secureMediaCapabilityInput(
         options.runtime,

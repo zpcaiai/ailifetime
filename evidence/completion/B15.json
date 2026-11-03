@@ -4,10 +4,10 @@
   "batch_id": "B15",
   "status": "blocked",
   "repo_root": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
-  "base_commit": "96c152c706da5b67225753a6a3e73ff85dba6fef",
+  "base_commit": "1e9efd8d367c2878988f09f2685b159ba8e9942a",
   "result_commit": null,
-  "started_at": "2026-11-03T07:46:00Z",
-  "completed_at": "2026-11-03T08:07:11.984691+00:00",
+  "started_at": "2026-11-03T08:48:14.840767+00:00",
+  "completed_at": "2026-11-03T10:27:18.853811+00:00",
   "agent": {
     "host": "codex",
     "model": null,
@@ -17,82 +17,215 @@
   "dependencies": [],
   "changed_files": [
     {
-      "path": "packages/capabilities/src/domains/building-age-media-pipeline.ts",
-      "change": "modified",
-      "reason": "Existing-path local maintenance; full B15 not certified"
-    },
-    {
-      "path": "services/api/src/timeline-delivery.ts",
-      "change": "modified",
-      "reason": "Existing-path local maintenance; full B15 not certified"
-    },
-    {
-      "path": "packages/capabilities/src/portrait-quality-contract.test.ts",
+      "path": "docs/PHOTO_SCORER_LOCAL.md",
       "change": "added",
-      "reason": "Existing-path local maintenance; full B15 not certified"
-    },
-    {
-      "path": "services/api/test/timeline-quality-recovery.test.mjs",
-      "change": "added",
-      "reason": "Existing-path local maintenance; full B15 not certified"
-    },
-    {
-      "path": "services/api/test/timeline-quality-recovery.http.test.mjs",
-      "change": "added",
-      "reason": "Existing-path local maintenance; full B15 not certified"
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
     },
     {
       "path": "docs/PORTRAIT_QUALITY_RECOVERY.md",
-      "change": "added",
-      "reason": "Existing-path local maintenance; full B15 not certified"
+      "change": "modified",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
     },
     {
-      "path": "evidence/B15/local-maintenance-evidence.json",
+      "path": "evidence/B15/photo-scorer-local-evidence.json",
       "change": "added",
-      "reason": "Existing-path local maintenance; full B15 not certified"
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
     },
     {
-      "path": "evidence/B15/local-maintenance-traceability.json",
+      "path": "evidence/B15/photo-scorer-traceability.json",
       "change": "added",
-      "reason": "Existing-path local maintenance; full B15 not certified"
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "evidence/completion/B15.json",
+      "change": "modified",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "packages/capabilities/src/domains/building-age-media-pipeline.ts",
+      "change": "modified",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "packages/capabilities/src/photo-score-evidence.test.ts",
+      "change": "added",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "services/api/openapi.yaml",
+      "change": "modified",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "services/api/src/client-integrations.ts",
+      "change": "modified",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "services/api/src/main.ts",
+      "change": "modified",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "services/api/src/photo-score-client.ts",
+      "change": "added",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "services/api/src/photo-score-config.ts",
+      "change": "added",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "services/api/src/photo-score-contract.ts",
+      "change": "added",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "services/api/src/server.ts",
+      "change": "modified",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "services/api/src/timeline-photo-quality.ts",
+      "change": "added",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "services/api/test/photo-score-client.test.mjs",
+      "change": "added",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "services/api/test/photo-score-config.test.mjs",
+      "change": "added",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "services/api/test/photo-score-contract.test.mjs",
+      "change": "added",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "services/api/test/photo-score-fixtures.mjs",
+      "change": "added",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "services/api/test/photo-score-fixtures.test.mjs",
+      "change": "added",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "services/api/test/photo-score-stream.test.mjs",
+      "change": "added",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "services/api/test/photo-score-wardrobe-contract.test.mjs",
+      "change": "added",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "services/api/test/photo-score.http.test.mjs",
+      "change": "added",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "services/api/test/timeline-fixtures.mjs",
+      "change": "modified",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "services/api/test/timeline-photo-quality.test.mjs",
+      "change": "added",
+      "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
     }
   ],
   "entrypoints": [
-    "B15.evaluateQuality",
-    "TimelineDeliveryService.get",
-    "TimelineDeliveryService.retry",
-    "GET /v1/timelines/:id/nodes/:age/image"
+    "POST /v1/timelines/{commandId}/quality",
+    "configuredPhotoScoring",
+    "HttpPhotoScorer.evaluate",
+    "TimelinePhotoQualityService.evaluate",
+    "B15.evaluateQuality"
   ],
   "contracts": [
-    "docs/PORTRAIT_QUALITY_RECOVERY.md"
+    "services/api/openapi.yaml",
+    "services/api/src/photo-score-contract.ts",
+    "docs/PHOTO_SCORER_LOCAL.md"
   ],
   "migrations": [],
   "tests": [
     {
-      "name": "s2-green (local maintenance only)",
-      "scope": "recovery",
-      "command": "node --test services/api/test/timeline-quality-recovery.test.mjs services/api/test/timeline-delivery.test.mjs services/api/test/timeline-play-modes.test.mjs",
+      "name": "calibration-tests (local integration only)",
+      "scope": "contract",
+      "command": "node --test packages/capabilities/dist/photo-score-evidence.test.js services/api/test/timeline-photo-quality.test.mjs services/api/test/photo-score.http.test.mjs services/api/test/photo-score-wardrobe-contract.test.mjs",
       "exit_code": 0,
       "status": "passed",
-      "artifact": "evidence/B15/local-maintenance-evidence.json",
+      "artifact": "evidence/B15/photo-scorer-local-evidence.json",
       "duration_ms": null
     },
     {
-      "name": "s3-http-verified (local maintenance only)",
+      "name": "runtime-http (local integration only)",
       "scope": "e2e",
-      "command": "node --test services/api/test/timeline-quality-recovery.http.test.mjs services/api/test/photo-purchases.test.mjs",
+      "command": "node --test services/api/test/photo-score.http.test.mjs",
       "exit_code": 0,
       "status": "passed",
-      "artifact": "evidence/B15/local-maintenance-evidence.json",
+      "artifact": "evidence/B15/photo-scorer-local-evidence.json",
       "duration_ms": null
     },
     {
-      "name": "full-postgres-regression (local maintenance only)",
-      "scope": "integration",
-      "command": "python3 /Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/portrait-quality-recovery-20261103/regression/local-pg.py test",
+      "name": "stream-green (local integration only)",
+      "scope": "negative",
+      "command": "node --test services/api/test/photo-score-stream.test.mjs services/api/test/client-integrations.test.mjs services/api/test/photo-score-client.test.mjs services/api/test/photo-score.http.test.mjs",
       "exit_code": 0,
       "status": "passed",
-      "artifact": "evidence/B15/local-maintenance-evidence.json",
+      "artifact": "evidence/B15/photo-scorer-local-evidence.json",
+      "duration_ms": null
+    },
+    {
+      "name": "full-postgres-regression (local integration only)",
+      "scope": "integration",
+      "command": "python3 /Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/photo-scorer-20261103/regression/local-pg.py test",
+      "exit_code": 0,
+      "status": "passed",
+      "artifact": "evidence/B15/photo-scorer-local-evidence.json",
+      "duration_ms": null
+    },
+    {
+      "name": "canonical-sql-regression (local integration only)",
+      "scope": "integration",
+      "command": "node --test services/api/test/timeline-photo-quality.test.mjs services/api/test/photo-score.http.test.mjs packages/capabilities/dist/photo-score-evidence.test.js",
+      "exit_code": 0,
+      "status": "passed",
+      "artifact": "evidence/B15/photo-scorer-local-evidence.json",
+      "duration_ms": null
+    },
+    {
+      "name": "canonical-full-postgres (local integration only)",
+      "scope": "integration",
+      "command": "python3 /Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/photo-scorer-20261103/canonical-regression/local-pg.py test",
+      "exit_code": 0,
+      "status": "passed",
+      "artifact": "evidence/B15/photo-scorer-local-evidence.json",
+      "duration_ms": null
+    },
+    {
+      "name": "consent-read-green (local integration only)",
+      "scope": "negative",
+      "command": "node --test services/api/test/timeline-photo-quality.test.mjs services/api/test/photo-score.http.test.mjs services/api/test/photo-score-wardrobe-contract.test.mjs",
+      "exit_code": 0,
+      "status": "passed",
+      "artifact": "evidence/B15/photo-scorer-local-evidence.json",
+      "duration_ms": null
+    },
+    {
+      "name": "consent-full-postgres (local integration only)",
+      "scope": "integration",
+      "command": "python3 /Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/photo-scorer-20261103/consent-regression/local-pg.py test",
+      "exit_code": 0,
+      "status": "passed",
+      "artifact": "evidence/B15/photo-scorer-local-evidence.json",
       "duration_ms": null
     }
   ],
@@ -113,115 +246,143 @@
       "contains_sensitive_data": false,
       "redaction": null,
       "notes": "R02/R03/R05 evidence records the scope/gaps; it does not establish completed calibration, real golden data or production regression control."
+    },
+    {
+      "type": "test-result",
+      "path": "evidence/B15/photo-scorer-local-evidence.json",
+      "sha256": "bfc6908d866f40e3f4d5769895961e373ffa23081041569207addfcba7579d23",
+      "created_at": "2026-11-03T10:27:18.853811+00:00",
+      "producer": "Actual local process receipts and synthetic external-model boundary fixtures; no real model acceptance",
+      "supports": [
+        "B15-R01",
+        "B15-R02",
+        "B15-R03",
+        "B15-R04",
+        "B15-R05"
+      ],
+      "contains_sensitive_data": false,
+      "redaction": null,
+      "notes": "Supports local execution and records incomplete R02/R03/R05 external/model requirements; not full Batch acceptance."
     }
   ],
   "traceability": [
     {
       "requirement_id": "B15-R01",
       "source_files": [
-        "packages/capabilities/src/domains/building-age-media-pipeline.ts",
-        "packages/capabilities/src/participant-quality.ts"
+        "services/api/src/photo-score-contract.ts",
+        "services/api/src/photo-score-client.ts",
+        "services/api/src/timeline-photo-quality.ts"
       ],
       "symbols": [
-        "qualityGate",
-        "participantQuality"
+        "assessPhotoResponse",
+        "HttpPhotoScorer.evaluate",
+        "TimelinePhotoQualityService.evaluate"
       ],
       "tests": [
-        "packages/capabilities/src/portrait-quality-contract.test.ts"
+        "services/api/test/photo-score.http.test.mjs",
+        "services/api/test/timeline-photo-quality.test.mjs"
       ],
       "evidence": [
-        "evidence/B15/local-maintenance-evidence.json"
+        "evidence/B15/photo-scorer-local-evidence.json"
       ],
-      "notes": "Bound nine/eleven dimensions and per-person contracts locally exercised. Actual pixel evaluator is NOT_RUN."
+      "notes": "Actual original/output JPEG/PNG bytes reach the external-model boundary and then B15; per-person identity/age and photorealism reports gated. No real scoring model or quality effect accepted."
     },
     {
       "requirement_id": "B15-R02",
       "source_files": [
-        "services/experience-platform/src/media-pipeline.ts"
+        "services/api/src/photo-score-config.ts",
+        "services/api/src/timeline-photo-quality.ts",
+        "packages/capabilities/src/domains/building-age-media-pipeline.ts"
       ],
       "symbols": [
-        "QualityGateService.calibrate"
+        "configuredPhotoScoring",
+        "TimelinePhotoQualityService.load",
+        "photoScoreEvidence"
       ],
       "tests": [
-        "services/experience-platform/src/media-quality.test.ts"
+        "services/api/test/photo-score-config.test.mjs",
+        "services/api/test/photo-score-wardrobe-contract.test.mjs"
       ],
       "evidence": [
-        "evidence/B15/local-maintenance-evidence.json"
+        "evidence/B15/photo-scorer-local-evidence.json"
       ],
-      "notes": "Reference context calibration exists but is not wired into production B15. Real calibrated thresholds NOT_CERTIFIED."
+      "notes": "Explicit unique person/age-span/route/template/channel calibration and durable hashed snapshots; real calibration, vendor-specific generation lineage and classifier bias acceptance remain unrun."
     },
     {
       "requirement_id": "B15-R03",
       "source_files": [
-        "services/api/test/timeline-quality-recovery.http.test.mjs"
+        "services/api/test/photo-score-fixtures.mjs"
       ],
       "symbols": [
-        "timelineFixture",
-        "syntheticPng"
+        "withPhotoFixture"
       ],
       "tests": [
-        "services/api/test/timeline-quality-recovery.http.test.mjs"
+        "services/api/test/photo-score-fixtures.test.mjs"
       ],
       "evidence": [
-        "evidence/B15/local-maintenance-evidence.json"
+        "evidence/B15/photo-scorer-local-evidence.json"
       ],
-      "notes": "Synthetic boundary coverage is executed; authorized real-photo golden set remains NOT_RUN."
+      "notes": "Synthetic non-person JPEG/PNG plus controlled model HTTP boundary only; separately authorized real-photo golden set still NOT_RUN."
     },
     {
       "requirement_id": "B15-R04",
       "source_files": [
-        "services/api/src/timeline-delivery.ts",
-        "services/api/src/photo-purchases.ts"
+        "services/api/src/timeline-photo-quality.ts",
+        "services/api/src/client-integrations.ts"
       ],
       "symbols": [
-        "TimelineDeliveryService.retry",
-        "PhotoPurchaseService.authorizeRetry"
+        "TimelinePhotoQualityService.evaluate",
+        "BrokerClient"
       ],
       "tests": [
-        "services/api/test/timeline-quality-recovery.test.mjs"
+        "services/api/test/timeline-photo-quality.test.mjs",
+        "services/api/test/photo-score.http.test.mjs",
+        "services/api/test/photo-score-stream.test.mjs"
       ],
       "evidence": [
-        "evidence/B15/local-maintenance-evidence.json"
+        "evidence/B15/photo-scorer-local-evidence.json"
       ],
-      "notes": "Bounded3 retry, cancellation/uncertainty and payment gates exercised. Alternate provider, local repair and staffed review not accepted."
+      "notes": "Low scores/review cannot publish; actual21 partial recovery preserves originals/siblings. No automatic inference retry; stable key and persisted report reuse. Real upstream dedup/cost, alternate providers, repair and staffed review not accepted."
     },
     {
       "requirement_id": "B15-R05",
       "source_files": [
         "packages/capabilities/src/domains/building-age-media-pipeline.ts",
-        "services/experience-platform/src/media-pipeline.ts"
+        "services/api/src/timeline-photo-quality.ts"
       ],
       "symbols": [
+        "photoScoreEvidence",
         "qualityGate",
-        "QualityGateService.evaluate"
+        "TimelinePhotoQualityService.evaluate"
       ],
       "tests": [
-        "services/api/test/timeline-quality-recovery.http.test.mjs"
+        "packages/capabilities/src/photo-score-evidence.test.ts",
+        "services/api/test/photo-score.http.test.mjs"
       ],
       "evidence": [
-        "evidence/B15/local-maintenance-evidence.json"
+        "evidence/B15/photo-scorer-local-evidence.json"
       ],
-      "notes": "Persisted dimensions/model version/decision tested. Production evaluator provenance, calibration revision and automatic regression stop are unfinished."
+      "notes": "Model/policy/request/response hashes, dimensions and per-person age confidence persisted without pixels/features. Production model/template regression-stop remains unwired/unaccepted."
     }
   ],
   "risks": [
     {
       "severity": "high",
-      "description": "No production pixel quality evaluator/calibration/authorized real-photo golden set has been accepted; no real model or phone acceptance.",
+      "description": "Actual scoring/generation model accuracy, real-photo golden calibration, production review/regression stop and phone permission acceptance are unaccepted; authenticated external service responses are not independent weight attestations.",
       "disposition": "blocked",
       "owner": "Model integration, quality acceptance and mini-program deployment maintainers",
       "expires_at": null
     }
   ],
   "follow_ups": [
-    "Provide valid B00/B14 dependency completion reports without fabricating baseline evidence.",
-    "Integrate and calibrate real evaluator on authorized media; user has not authorized paid inference.",
-    "Run real21-image and phone permission acceptance with authorized service/device."
+    "Provide actual authorized scorer model service and pinned weights, real generated-photo lineage and consented golden data under explicit free or authorized budget.",
+    "Calibrate and assess per-person identity/age/photorealism across21 ages, couple and wardrobe conditions and wire production regression stopping/manual review.",
+    "Provide approved tenant-scoped HTTPS media service and physical WeChat device for permission/save acceptance."
   ],
   "blockers": [
-    "Formal B15 remains BLOCKED_INCOMPLETE; this record covers only executed local maintenance checks.",
-    "Validated dependency completion reports are absent (including B14); dependencies is intentionally empty.",
-    "Real model, authorized golden set, realism and phone permission acceptance are NOT_RUN/NOT_CERTIFIED."
+    "Full B15 remains BLOCKED_INCOMPLETE; only local scorer integration and maintenance are verified.",
+    "Validated B00/B14 dependency reports are absent; no fabricated dependency success.",
+    "Actual scorer/generator model, authorized golden set, calibration accuracy/realism, production regression stopping and real device permissions remain unaccepted."
   ],
   "assertions": {
     "no_placeholders": true,

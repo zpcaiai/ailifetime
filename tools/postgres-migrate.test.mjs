@@ -153,6 +153,35 @@ test("a migration failure rolls back without writing its ledger entry", async ()
   assert.equal(database.queries.at(-1).text.includes("pg_advisory_unlock"), true);
 });
 
+test("PostgreSQL18 accepts exactly the six enforced and validated NOT NULL catalog constraints", async () => {
+  const database = new FakeDatabase({ serverVersion: 180_006, constraints: postgres18Constraints() });
+  const report = await execute(database);
+  assert.equal(report.status, "PASS");
+  assert.equal(report.database.serverVersionNumber, 180_006);
+  assert.equal(database.ledger.length, 7);
+  assert.deepEqual((await execute(database)).migrations.newlyApplied, []);
+});
+
+test("PostgreSQL18 still rejects missing, additional, renamed, redefined, unvalidated and unenforced constraints", async () => {
+  const exact = postgres18Constraints();
+  const mutated = [
+    exact.filter((row) => row.conname !== "schema_migrations_path_not_null"),
+    [...exact, { conname: "unexpected", contype: "n", definition: "NOT NULL path", validated: true, enforced: true }],
+    exact.map((row) => row.conname === "schema_migrations_path_not_null" ? { ...row, conname: "renamed" } : row),
+    exact.map((row) => row.conname === "schema_migrations_path_not_null" ? { ...row, definition: "NOT NULL sha256" } : row),
+    exact.map((row) => row.contype === "c" ? { ...row, validated: false } : row),
+    exact.map((row) => row.contype === "n" ? { ...row, enforced: false } : row),
+    exact.filter((row) => row.conname !== "schema_migrations_migration_id_check"),
+  ];
+  for (const constraints of mutated) {
+    const database = new FakeDatabase({ serverVersion: 180_006, constraints: constraints.sort((a,b) => a.conname.localeCompare(b.conname)) });
+    await assert.rejects(execute(database), (error) => error.code === "MIGRATION_LEDGER_DRIFT");
+    assert.equal(database.ledger.length, 0);
+    assert.equal(database.queries.at(-1).text.includes("pg_advisory_unlock"), true);
+  }
+  await assert.rejects(execute(new FakeDatabase({ constraints: exact })), (error) => error.code === "MIGRATION_LEDGER_DRIFT");
+});
+
 function execute(database) {
   return runPostgresMigrations({
     connectionString: TEST_URL,
@@ -174,6 +203,8 @@ class FakeDatabase {
     this.schemaHasObjects = options.schemaHasObjects ?? false;
     this.failMigration = options.failMigration;
     this.triggerDrift = options.triggerDrift ?? false;
+    this.serverVersion = options.serverVersion ?? 170_005;
+    this.constraints = options.constraints ?? ledgerConstraints();
     this.role = {
       role_name: "ltm_migrator",
       session_role: "ltm_migrator",
@@ -206,7 +237,7 @@ class FakeDatabase {
       return { rows: [{ relkind: "r", relpersistence: "p", owner_name: "ltm_migrator", current_role: "ltm_migrator" }] };
     }
     if (text.includes("information_schema.columns")) return { rows: ledgerColumns() };
-    if (text.includes("pg_get_constraintdef")) return { rows: ledgerConstraints() };
+    if (text.includes("pg_get_constraintdef")) return { rows: this.constraints };
     if (text.includes("pg_get_triggerdef")) return { rows: this.triggerDrift ? ledgerTriggers().slice(0, 1) : ledgerTriggers() };
     if (text.includes("function.proname = 'reject_schema_migration_change'")) {
       return { rows: [{
@@ -234,7 +265,7 @@ class FakeDatabase {
       throw new Error("synthetic migration failure");
     }
     if (text.includes("SELECT value FROM ltm.schema_metadata")) return { rows: [{ value: "7" }] };
-    if (text.includes("server_version_num")) return { rows: [{ server_version_num: 170_005, database_name: "ltm_test" }] };
+    if (text.includes("server_version_num")) return { rows: [{ server_version_num: this.serverVersion, database_name: "ltm_test" }] };
     return { rows: [] };
   }
 
@@ -259,7 +290,14 @@ function ledgerConstraints() {
     ["schema_migrations_path_key", "u", "UNIQUE (path)"],
     ["schema_migrations_pkey", "p", "PRIMARY KEY (migration_id)"],
     ["schema_migrations_sha256_check", "c", "CHECK ((sha256 ~ '^[a-f0-9]{64}$'::text))"],
-  ].map(([conname, contype, definition]) => ({ conname, contype, definition }));
+  ].map(([conname, contype, definition]) => ({ conname, contype, definition, validated: true, enforced: true }));
+}
+
+function postgres18Constraints() {
+  return [...ledgerConstraints(), ...ledgerColumns().map(({column_name}) => ({
+    conname: `schema_migrations_${column_name}_not_null`, contype: "n",
+    definition: `NOT NULL ${column_name}`, validated: true, enforced: true,
+  }))].sort((a,b) => a.conname.localeCompare(b.conname));
 }
 
 function ledgerTriggers() {

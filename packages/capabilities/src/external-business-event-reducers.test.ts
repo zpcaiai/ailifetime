@@ -111,6 +111,13 @@ test("B14 publishes only exact-plan images with separate stored source/output-bo
   const good = reduceVerifiedBusinessEvent(ev, context);
   assert.equal(good.reduction.patch.deliveryState, "ready");
   assert.equal(good.target.relatedRecords?.length, 2);
+  for(const imageQuality of ['standard','hd']){
+    const size=imageQuality==='standard'?1536:2048;
+    const qualified={...current,data:{...current.data,generationPlan:{schemaVersion:'age-portrait-plan.v1',imageQuality,imageWidth:size,imageHeight:size}}};
+    assert.throws(()=>reduceVerifiedBusinessEvent(ev,{...context,current:qualified}),/dimensions/);
+    const matching=event({...ev,canonicalClaims:{providerOperationId:'op',resultManifest:{...resultManifest,nodes:resultManifest.nodes.map(n=>({...n,asset:{...n.asset,width:size,height:size}}))}}});
+    assert.equal(reduceVerifiedBusinessEvent(matching,{...context,current:qualified}).reduction.patch.deliveryState,'ready');
+  }
   assert.throws(() => reduceVerifiedBusinessEvent(ev, { current, relatedRecords: {} }), /evidence is missing/);
   assert.throws(() => reduceVerifiedBusinessEvent(ev, { ...context, relatedRecords: { ...context.relatedRecords, "quality-5": { ...quality, data: { ...quality.data, decision: "reject" } } } }), /quality and safety/);
   assert.throws(() => reduceVerifiedBusinessEvent({ ...ev, canonicalClaims: { ...ev.canonicalClaims, resultManifest: { ...resultManifest, sourceAssetId: "wrong" } } }, context), /original plan/);

@@ -27,23 +27,45 @@ async function serverFor(f,store) {
   return{payment,request,close:()=>new Promise(resolve=>server.close(resolve))};
 }
 const single={sku:'selected-age',generation:{sourceAssetId:'source',participantIds:['user'],targetAges:[37],currentAge:30,timelineProfile:'single-age-v1',seed:'http-photo-seed',promptPolicyVersion:'age-policy-v1',illustrativeLabel:true}};
+for(const count of [11,21])for(const quality of ['standard','hd'])for(const couple of [false,true])test(`four-tier HTTP${count} ${quality} ${couple?'couple':'single'} binds exact paid plan and rejects downgrade`,async()=>{
+ const f=await timelineFixture(':memory:',{couple,verifiedConsent:true}),s=await serverFor(f);
+ const sku=count===21&&quality==='hd'?'lifespan-21':`lifespan-${count}-${quality}`,ages=Array.from({length:count},(_,i)=>i*(count===11?10:5));
+ const generation={...single.generation,targetAges:ages,currentAge:35,participantIds:f.participantIds,timelineProfile:`lifespan-${count}${couple?'-couple':''}-v1`,imageQuality:quality,...(couple?{participantAges:[35,32]}:{})};
+ try{
+  const created=await s.request('/v1/photo-purchases',{sku,generation});assert.equal(created.status,201,JSON.stringify(created.body));const p=created.body.data,prefix='/v1/photo-purchases/'+p.purchaseId;
+  assert.equal(p.amountMinor,quality==='standard'?(count===11?1990:2990):(count===11?2990:4990));assert.equal(p.expectedCount,count);assert.equal(p.imageQuality,quality);assert.equal(p.imageWidth,quality==='standard'?1536:2048);assert.equal(p.imageHeight,p.imageWidth);assert.equal(p.retentionDays,30);assert.deepEqual(p.items.map(i=>i.targetAge),ages);
+  const listed=(await s.request('/v1/photo-purchases')).body.data.items.find(i=>i.purchaseId===p.purchaseId);assert.equal(listed.imageQuality,quality);assert.equal(listed.imageWidth,p.imageWidth);assert.equal(listed.retentionDays,30);
+  assert.equal((await s.request('/v1/photo-purchases',{sku,generation:{...generation,imageQuality:quality==='hd'?'standard':'hd'}})).status,422);
+  assert.equal((await s.request('/v1/photo-purchases',{sku,generation:{...generation,targetAges:ages.slice(1)}})).status,422);
+  assert.equal((await s.request('/v1/photo-purchases',{sku,generation,amountMinor:1})).status,422);
+  assert.equal((await s.request('/v1/photo-purchases',{sku,generation:{...generation,imageWidth:1024}})).status,422);
+  assert.equal((await s.request('/v1/photo-purchases',{sku,generation,retentionDays:365})).status,422);
+  await s.request(prefix+'/checkout',{});assert.equal((await s.request(prefix+'/fulfill',{})).status,409);
+  s.payment.state='paid';const result=await s.request(prefix+'/fulfill',{});assert.equal(result.status,200,JSON.stringify(result.body));
+  const record=f.runtime.getRecord(f.actor,'generation.timeline-commands',result.body.data.commandId);assert.equal(record.data.imageQuality,quality);assert.equal(record.data.generationPlan.imageWidth,p.imageWidth);assert.equal(record.data.generationPlan.retentionDays,30);assert.deepEqual(record.data.targetAges,ages);
+  f.runtime.applyExternalBusinessEvent(f.service,f.callback(record.id,'failed'));
+  const retried=await s.request(`/v1/timelines/${record.id}/retry`,{targetAge:0,attempt:1});assert.equal(retried.status,200,JSON.stringify(retried.body));
+  const child=f.runtime.getRecord(f.actor,'generation.timeline-commands',retried.body.data.commandId);assert.equal(child.data.imageQuality,quality);assert.equal(child.data.generationPlan.imageWidth,p.imageWidth);assert.equal(child.data.generationPlan.retentionDays,30);assert.deepEqual(child.data.targetAges,[0]);
+ }finally{await s.close();f.runtime.close();}
+});
 
 for(const couple of [false,true])for(const lifespan of [false,true])test(`paid consumer purchase ${couple?'couple':'single'} ${lifespan?'21 ages':'selected age'}`,async()=>{
   const ages=lifespan?Array.from({length:21},(_,i)=>i*5):[37],f=await timelineFixture(':memory:',{couple,targetAges:ages,verifiedConsent:true}),s=await serverFor(f);
   try{
     const input={sku:lifespan?'lifespan-21':'selected-age',generation:{...single.generation,participantIds:f.participantIds,targetAges:ages,currentAge:35,timelineProfile:`${lifespan?'lifespan-21':'single-age'}${couple?'-couple':''}-v1`,...(couple?{participantAges:[35,32]}:{})}};
     const response=await s.request('/v1/photo-purchases',input);assert.equal(response.status,201,JSON.stringify(response.body));const p=response.body.data,prefix='/v1/photo-purchases/'+p.purchaseId;
-    assert.equal(p.amountMinor,lifespan?990:590);assert.equal(p.expectedCount,ages.length);assert.deepEqual(p.items.map(item=>item.targetAge),ages);
+    assert.equal(p.amountMinor,lifespan?4990:590);assert.equal(p.priceVersion,'photo-retail-cny.v3');assert.equal(p.expectedCount,ages.length);assert.deepEqual(p.items.map(item=>item.targetAge),ages);
     await s.request(prefix+'/checkout',{});assert.equal((await s.request(prefix+'/fulfill',{})).status,409);
     s.payment.state='paid';const fulfilled=await s.request(prefix+'/fulfill',{});assert.equal(fulfilled.status,200,JSON.stringify(fulfilled.body));
     const command=f.runtime.getRecord(f.actor,'generation.timeline-commands',fulfilled.body.data.commandId);assert.deepEqual(command.data.participantIds,f.participantIds);assert.deepEqual(command.data.targetAges,ages);assert.equal(command.data.timelineProfile,input.generation.timelineProfile);
+    if(lifespan){assert.equal(command.data.imageQuality,'hd');assert.equal(command.data.generationPlan.imageWidth,2048);assert.equal(command.data.generationPlan.imageHeight,2048);}
     assert.equal((await s.request(prefix+'/fulfill',{})).body.data.commandId,fulfilled.body.data.commandId);
   }finally{await s.close();f.runtime.close();}
 });
 
 test('HTTP retail pricing cannot be changed, forged, or bypassed by a free B14 call',async()=>{
   const f=await timelineFixture(),s=await serverFor(f);try{
-    const catalog=await s.request('/v1/photo-products');assert.deepEqual(catalog.body.data.products.map(p=>p.amountMinor),[990,590,990]);
+    const catalog=await s.request('/v1/photo-products');assert.equal(catalog.body.data.priceVersion,'photo-retail-cny.v3');assert.deepEqual(catalog.body.data.products.map(p=>p.amountMinor),[1990,2990,2990,4990,590,990]);
     assert.equal((await s.request('/v1/photo-purchases',{...single,amountMinor:1})).status,422);
     const created=await s.request('/v1/photo-purchases',single);assert.equal(created.status,201);const p=created.body.data,prefix='/v1/photo-purchases/'+p.purchaseId;assert.equal(p.amountMinor,590);
     assert.equal((await s.request(prefix,undefined,'photo-attacker-token')).status,403);

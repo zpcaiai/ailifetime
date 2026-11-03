@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { createCapabilityRegistry, externalBusinessEventReducerRegistry } from "@ltm/capabilities";
 import {
+  DomainError,
   isDomainError,
   LifeTimeMachineRuntime,
   PostgresLifeTimeMachineRuntime,
@@ -10,6 +11,9 @@ import { loadApiConfiguration } from "./config.js";
 import { createApiServer, type ApiLogEntry } from "./server.js";
 import { ProductionDomainRuntime } from "./domain-runtime.js";
 import { configuredTimelineArtifacts } from "./timeline-artifacts.js";
+import { configuredPhotoScoring } from "./photo-score-config.js";
+import { TimelinePhotoQualityService } from "./timeline-photo-quality.js";
+import { configuredSeedream } from "./seedream-config.js";
 
 const PRODUCT_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 
@@ -20,6 +24,10 @@ function log(entry: ApiLogEntry): void {
 
 let runtimeForCleanup: LifeTimeMachineRuntimePort | undefined;
 let domainRuntimeForCleanup: ProductionDomainRuntime | undefined;
+let seedreamForCleanup: ReturnType<typeof configuredSeedream>;
+async function closeSeedream(): Promise<void> {
+  const configured = seedreamForCleanup; seedreamForCleanup = undefined; await configured?.close();
+}
 
 async function run(): Promise<void> {
   const configuration = loadApiConfiguration(process.env, PRODUCT_ROOT);
@@ -38,17 +46,24 @@ async function run(): Promise<void> {
     })
     : undefined;
   domainRuntimeForCleanup = domainRuntime;
-  const timelineArtifacts = configuredTimelineArtifacts(process.env, configuration.appEnvironment);
+  const seedream = configuredSeedream(process.env, configuration.appEnvironment, runtime);
+  seedreamForCleanup = seedream;
+  const timelineArtifacts = seedream?.media ?? configuredTimelineArtifacts(process.env, configuration.appEnvironment);
+  const registry=createCapabilityRegistry(),scoring=configuredPhotoScoring(process.env,configuration.appEnvironment);
+  if(scoring!==undefined && timelineArtifacts===undefined)throw new DomainError("CONFIGURATION_INVALID","photo scoring requires an approved source/output media reader");
+  const photoQuality=scoring===undefined?undefined:new TimelinePhotoQualityService(runtime,registry,timelineArtifacts!,scoring.scorer,scoring.policies,scoring.channel);
   const server = createApiServer({
     runtime,
     authenticator: configuration.authenticator,
-    capabilityRegistry: createCapabilityRegistry(),
+    capabilityRegistry: registry,
     externalBusinessEventReducerRegistry,
     bodyLimitBytes: configuration.bodyLimitBytes,
     allowSandboxStepUpHeader: configuration.allowSandboxStepUpHeader,
     appEnvironment: configuration.appEnvironment,
     clientIntegrations: configuration.clientIntegrations,
     ...(timelineArtifacts === undefined ? {} : { timelineArtifacts }),
+    ...(photoQuality === undefined ? {} : { photoQuality }),
+    ...(seedream === undefined ? {} : { seedream: seedream.generation, seedreamReadiness: seedream.readiness }),
     ...(domainRuntime === undefined ? {} : { domainRuntime }),
     ...(configuration.browserOidcConfiguration === undefined
       ? {}
@@ -66,6 +81,7 @@ async function run(): Promise<void> {
       closing = true;
       void Promise.resolve(runtime.close());
       void domainRuntime?.close();
+      void closeSeedream();
       process.exitCode = 1;
     }
   });
@@ -85,6 +101,7 @@ async function run(): Promise<void> {
     server.close((error) => {
       void Promise.resolve(runtime.close());
       void domainRuntime?.close();
+      void closeSeedream();
       if (error !== undefined) {
         log({ level: "error", event: "server.stop_failed", requestId: signal, error: error.name });
         process.exitCode = 1;
@@ -94,6 +111,7 @@ async function run(): Promise<void> {
       server.closeAllConnections();
       void Promise.resolve(runtime.close());
       void domainRuntime?.close();
+      void closeSeedream();
       process.exitCode = 1;
     }, 10_000).unref();
   };
@@ -102,6 +120,7 @@ async function run(): Promise<void> {
 }
 
 void run().catch(async (error: unknown) => {
+  await closeSeedream().catch(() => undefined);
   if (runtimeForCleanup !== undefined) {
     await Promise.resolve(runtimeForCleanup.close()).catch(() => undefined);
   }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { once } from "node:events";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm,readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApiServer, StaticTokenAuthenticator } from "../../../services/api/dist/index.js";
@@ -28,10 +28,14 @@ test("native price views use actual authenticated HTTP/SQLite scopes and create 
     assert.equal(views.context.participants[0].authorized, true); assert.equal(views.series.expectedCount, 4);
     assert.deepEqual(views.lifespan.items.map(item => item.targetAge), Array.from({ length: 21 }, (_, i) => i * 5));
     assert.equal(views.age.items[0].targetAge, 37);
+    assert.equal(views.lifespan.amountMinor,4990);assert.equal(views.lifespan.priceVersion,'photo-retail-cny.v3');
+    assert.equal(views.albums.length,4);assert.deepEqual(views.albums.map(p=>[p.expectedCount,p.imageQuality,p.amountMinor]),[[11,'standard',1990],[21,'standard',2990],[11,'hd',2990],[21,'hd',4990]]);
+    const home=await readFile(new URL('../miniprogram/pages/home/index.wxml',import.meta.url),'utf8');for(const quote of views.albums)assert.ok(home.includes('¥'+(quote.amountMinor/100).toFixed(2)));
+    assert.ok(home.includes('保存 30 天'));
     for (const quote of [views.lifespan, views.age, views.series]) { assert.equal(quote.paymentState, "pending"); assert.equal(quote.checkout, null); assert.ok(quote.items.every(item => item.commandId === null)); }
     const after = fixture.runtime.listRecords(fixture.actor, { collection: "generation.timeline-commands", limit: 200 });
     assert.deepEqual(after, before);
-    assert.equal(fixture.runtime.listRecords(fixture.actor, { collection: "commerce.photo-purchases", limit: 200 }).length, 3);
+    assert.equal(fixture.runtime.listRecords(fixture.actor, { collection: "commerce.photo-purchases", limit: 200 }).length, 6);
   } finally {
     if (server?.listening) await new Promise(resolve => server.close(resolve));
     fixture.runtime.close(); await rm(directory, { recursive: true, force: true });

@@ -95,6 +95,9 @@ importers:
 
   services/api:
     dependencies:
+      '@aws-sdk/client-s3':
+        specifier: 3.1114.0
+        version: 3.1114.0
       '@ltm/capabilities':
         specifier: workspace:*
         version: link:../../packages/capabilities

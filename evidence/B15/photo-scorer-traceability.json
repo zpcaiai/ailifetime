@@ -1,0 +1,100 @@
+[
+  {
+    "requirement_id": "B15-R01",
+    "source_files": [
+      "services/api/src/photo-score-contract.ts",
+      "services/api/src/photo-score-client.ts",
+      "services/api/src/timeline-photo-quality.ts"
+    ],
+    "symbols": [
+      "assessPhotoResponse",
+      "HttpPhotoScorer.evaluate",
+      "TimelinePhotoQualityService.evaluate"
+    ],
+    "tests": [
+      "services/api/test/photo-score.http.test.mjs",
+      "services/api/test/timeline-photo-quality.test.mjs"
+    ],
+    "evidence": [
+      "evidence/B15/photo-scorer-local-evidence.json"
+    ],
+    "notes": "Actual original/output JPEG/PNG bytes reach the external-model boundary and then B15; per-person identity/age and photorealism reports gated. No real scoring model or quality effect accepted."
+  },
+  {
+    "requirement_id": "B15-R02",
+    "source_files": [
+      "services/api/src/photo-score-config.ts",
+      "services/api/src/timeline-photo-quality.ts",
+      "packages/capabilities/src/domains/building-age-media-pipeline.ts"
+    ],
+    "symbols": [
+      "configuredPhotoScoring",
+      "TimelinePhotoQualityService.load",
+      "photoScoreEvidence"
+    ],
+    "tests": [
+      "services/api/test/photo-score-config.test.mjs",
+      "services/api/test/photo-score-wardrobe-contract.test.mjs"
+    ],
+    "evidence": [
+      "evidence/B15/photo-scorer-local-evidence.json"
+    ],
+    "notes": "Explicit unique person/age-span/route/template/channel calibration and durable hashed snapshots; real calibration, vendor-specific generation lineage and classifier bias acceptance remain unrun."
+  },
+  {
+    "requirement_id": "B15-R03",
+    "source_files": [
+      "services/api/test/photo-score-fixtures.mjs"
+    ],
+    "symbols": [
+      "withPhotoFixture"
+    ],
+    "tests": [
+      "services/api/test/photo-score-fixtures.test.mjs"
+    ],
+    "evidence": [
+      "evidence/B15/photo-scorer-local-evidence.json"
+    ],
+    "notes": "Synthetic non-person JPEG/PNG plus controlled model HTTP boundary only; separately authorized real-photo golden set still NOT_RUN."
+  },
+  {
+    "requirement_id": "B15-R04",
+    "source_files": [
+      "services/api/src/timeline-photo-quality.ts",
+      "services/api/src/client-integrations.ts"
+    ],
+    "symbols": [
+      "TimelinePhotoQualityService.evaluate",
+      "BrokerClient"
+    ],
+    "tests": [
+      "services/api/test/timeline-photo-quality.test.mjs",
+      "services/api/test/photo-score.http.test.mjs",
+      "services/api/test/photo-score-stream.test.mjs"
+    ],
+    "evidence": [
+      "evidence/B15/photo-scorer-local-evidence.json"
+    ],
+    "notes": "Low scores/review cannot publish; actual21 partial recovery preserves originals/siblings. No automatic inference retry; stable key and persisted report reuse. Real upstream dedup/cost, alternate providers, repair and staffed review not accepted."
+  },
+  {
+    "requirement_id": "B15-R05",
+    "source_files": [
+      "packages/capabilities/src/domains/building-age-media-pipeline.ts",
+      "services/api/src/timeline-photo-quality.ts"
+    ],
+    "symbols": [
+      "photoScoreEvidence",
+      "qualityGate",
+      "TimelinePhotoQualityService.evaluate"
+    ],
+    "tests": [
+      "packages/capabilities/src/photo-score-evidence.test.ts",
+      "services/api/test/photo-score.http.test.mjs"
+    ],
+    "evidence": [
+      "evidence/B15/photo-scorer-local-evidence.json"
+    ],
+    "notes": "Model/policy/request/response hashes, dimensions and per-person age confidence persisted without pixels/features. Production model/template regression-stop remains unwired/unaccepted."
+  }
+]

@@ -1,4 +1,5 @@
-import { DomainError } from "@ltm/core";
+import { canonicalJson, DomainError } from "@ltm/core";
+import { createHash } from "node:crypto";
 import type { CapabilityRegistry, JsonObject, JsonValue } from "../registry.js";
 import { requiredBoolean, requiredNumber, requiredString, stringList } from "../validation.js";
 import { buildAgeGenerationPlan } from "../age-generation-plan.js";
@@ -41,6 +42,7 @@ function createTimeline(input: JsonObject): JsonObject {
   const currentAge = input.currentAge === undefined ? undefined : requiredNumber(input, "currentAge", 0);
   const timelineProfile = input.timelineProfile === undefined ? undefined : requiredString(input, "timelineProfile");
   const templateId = input.templateId === undefined ? undefined : requiredString(input, "templateId");
+  const imageQuality = input.imageQuality === undefined ? undefined : requiredString(input,"imageQuality");
   const participantAges = input.participantAges;
   if (participantAges !== undefined && (!Array.isArray(participantAges) || participantAges.some(age => typeof age !== "number"))) throw new DomainError("VALIDATION_FAILED", "participantAges must be a numeric array");
   const generationPlan = buildAgeGenerationPlan({
@@ -48,12 +50,14 @@ function createTimeline(input: JsonObject): JsonObject {
     ...(currentAge === undefined ? {} : { currentAge }),
     ...(timelineProfile === undefined ? {} : { timelineProfile }),
     ...(templateId === undefined ? {} : { templateId }),
+    ...(imageQuality === undefined ? {} : { imageQuality }),
     ...(participantAges === undefined ? {} : { participantAges: participantAges as number[] }),
   });
   return { jobId, sourceAssetId, participantIds, targetAges, seed, promptPolicyVersion, illustrativeLabel,
     ...(currentAge === undefined ? {} : { currentAge }),
     ...(timelineProfile === undefined ? {} : { timelineProfile }),
     ...(templateId === undefined ? {} : { templateId }),
+    ...(imageQuality === undefined ? {} : { imageQuality }),
     ...(participantAges === undefined ? {} : { participantAges }),
     generationPlan, purpose: "age_transformation" };
 }
@@ -83,6 +87,7 @@ function qualityGate(input: JsonObject): JsonObject {
   const normalizedThresholds: Record<string, JsonValue> = {};
   const failed: string[] = [];
   const binding = artifactBinding(input);
+  const scorerEvidence = photoScoreEvidence(input, binding, participantIds);
   const wardrobe = binding?.wardrobeBinding !== undefined;
   const dimensions: readonly string[] = binding === undefined ? QUALITY_DIMENSIONS : [...QUALITY_DIMENSIONS, "background", "handsTeethEyes", "photorealism", ...(wardrobe ? ["garmentMatch", "regionPreservation"] : [])];
   for (const dimension of dimensions) {
@@ -115,6 +120,7 @@ function qualityGate(input: JsonObject): JsonObject {
     modelVersion,
     ...(people.assessments === undefined ? {} : { participantAssessments: people.assessments }),
     ...(binding === undefined ? {} : { artifactBinding: binding }),
+    ...(scorerEvidence === undefined ? {} : { photoScoreEvidence: scorerEvidence }),
     scores: normalizedScores,
     thresholds: normalizedThresholds,
     failedDimensions: failed,
@@ -122,6 +128,48 @@ function qualityGate(input: JsonObject): JsonObject {
     ...(overrideReason ? { overrideReason } : {}),
     purpose: "quality_assurance",
   };
+}
+
+function photoScoreEvidence(input: JsonObject, binding: JsonObject | undefined, participants: string[]): JsonObject | undefined {
+  if (input.photoScoreEvidence === undefined) return undefined;
+  if (binding === undefined) throw new DomainError("VALIDATION_FAILED", "photo scoring evidence requires an artifact binding");
+  const evidence = requireNonEmptyObject(input, "photoScoreEvidence");
+  const keys = ["schemaVersion", "requestSha256", "responseSha256", "sourceSha256", "modelSha256", "calibrationId", "calibrationSha256", "calibration", "ages"];
+  if (Object.keys(evidence).length !== keys.length || Object.keys(evidence).some(key => !keys.includes(key)) || evidence.schemaVersion !== "ltm.photo-score.evidence.v1") {
+    throw new DomainError("VALIDATION_FAILED", "photo scoring evidence schema is invalid");
+  }
+  for (const key of ["requestSha256", "responseSha256", "sourceSha256", "modelSha256", "calibrationSha256"]) {
+    if (!/^[a-f0-9]{64}$/.test(requiredString(evidence, key))) throw new DomainError("VALIDATION_FAILED", "photo scoring evidence digest is invalid");
+  }
+  const calibrationId = requiredString(evidence, "calibrationId");
+  const calibration = requireNonEmptyObject(evidence, "calibration"), thresholds = requireNonEmptyObject(input, "thresholds");
+  const policyKeys = ["id", "modelVersion", "modelSha256", "context", "minimumTargetAge", "maximumTargetAge", "minimumAgeSpan", "maximumAgeSpan", "ageToleranceYears", "minimumAgeConfidence", "thresholds"];
+  const context = requireNonEmptyObject(calibration, "context"), minimums = requireNonEmptyObject(calibration, "thresholds");
+  if (Object.keys(calibration).length !== policyKeys.length || Object.keys(calibration).some(key => !policyKeys.includes(key)) ||
+      Object.keys(context).length !== 5 || ["provider", "templateId", "channel", "subjectMode", "operation"].some(key => typeof context[key] !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(context[key] as string)) ||
+      context.subjectMode !== (participants.length === 2 ? "couple" : "single") || context.operation !== (binding.wardrobeBinding === undefined ? "age" : "wardrobe") ||
+      calibration.id !== calibrationId || calibration.modelVersion !== input.modelVersion || calibration.modelSha256 !== evidence.modelSha256 ||
+      Object.keys(minimums).length !== Object.keys(thresholds).length || Object.keys(thresholds).some(key => minimums[key] !== thresholds[key]) ||
+      createHash("sha256").update(canonicalJson(calibration)).digest("hex") !== evidence.calibrationSha256) {
+    throw new DomainError("VALIDATION_FAILED", "photo scoring calibration snapshot or binding is invalid");
+  }
+  for (const [min, max] of [[calibration.minimumTargetAge, calibration.maximumTargetAge], [calibration.minimumAgeSpan, calibration.maximumAgeSpan]]) {
+    if (typeof min !== "number" || typeof max !== "number" || !Number.isInteger(min) || !Number.isInteger(max) || min < 0 || max > 100 || min > max) throw new DomainError("VALIDATION_FAILED", "photo scoring calibration ages are invalid");
+  }
+  if (typeof calibration.ageToleranceYears !== "number" || !Number.isFinite(calibration.ageToleranceYears) || calibration.ageToleranceYears <= 0 || calibration.ageToleranceYears > 100 ||
+      typeof calibration.minimumAgeConfidence !== "number" || !Number.isFinite(calibration.minimumAgeConfidence) || calibration.minimumAgeConfidence <= 0 || calibration.minimumAgeConfidence > 1 ||
+      (binding.targetAge as number) < (calibration.minimumTargetAge as number) || (binding.targetAge as number) > (calibration.maximumTargetAge as number)) throw new DomainError("VALIDATION_FAILED", "photo scoring calibration confidence or tolerance is invalid");
+  if (!Array.isArray(evidence.ages) || evidence.ages.length !== participants.length) throw new DomainError("VALIDATION_FAILED", "photo scoring ages require exact participant coverage");
+  const ages = evidence.ages.map((value, index) => {
+    const age = requireNonEmptyObject({ value }, "value");
+    if (Object.keys(age).length !== 3 || Object.keys(age).some(key => !["participantId", "estimatedAgeYears", "confidence"].includes(key)) || typeof age.participantId !== "string" || age.participantId !== participants[index] ||
+        typeof age.estimatedAgeYears !== "number" || !Number.isFinite(age.estimatedAgeYears) || age.estimatedAgeYears < 0 || age.estimatedAgeYears > 120 ||
+        typeof age.confidence !== "number" || !Number.isFinite(age.confidence) || age.confidence < 0 || age.confidence > 1) {
+      throw new DomainError("VALIDATION_FAILED", "photo scoring age or participant binding is invalid");
+    }
+    return { participantId: age.participantId, estimatedAgeYears: age.estimatedAgeYears, confidence: age.confidence };
+  });
+  return { schemaVersion: evidence.schemaVersion, requestSha256: evidence.requestSha256!, responseSha256: evidence.responseSha256!, sourceSha256: evidence.sourceSha256!, modelSha256: evidence.modelSha256!, calibrationId, calibrationSha256: evidence.calibrationSha256!, calibration: JSON.parse(JSON.stringify(calibration)) as JsonObject, ages };
 }
 
 function renderVideo(input: JsonObject): JsonObject {
