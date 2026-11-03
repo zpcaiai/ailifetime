@@ -1,5 +1,48 @@
 # Vercel + Neon API deployment
 
+## Reproducible deployment and secure launch inventory
+
+The separate `ltm-album-save-test-01a1a064` project is an expiring synthetic
+album transport fixture. Its repository-root build/entry is independent of this
+production API. Do not point either project at the other's output, renew its test
+credentials during a build, or deploy the shared dirty checkout.
+
+From a verified clean checkout, with Node 26 and pnpm 10.12.4:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm --workspace-concurrency=1 --filter @ltm/api... build
+# New absolute directories only. Default packaging omits production cron.
+node tools/vercel-photo-package.mjs /absolute/new-preview-artifact
+# Production explicitly retains the existing authenticated 15-minute cleanup.
+node tools/vercel-photo-package.mjs --production /absolute/new-production-artifact
+```
+
+Deploy only the artifact with the logged-in Vercel CLI and explicit
+`--project ailifetime-private-api --scope zpchoney-6160s-projects`. Use preview
+first; use `--prod` only after verifying production configuration and the
+approved scheduler/plan. CLI packaging never reads deployment secrets or calls
+Ark. Do not remove the cleanup schedule to bypass a hosting-plan restriction;
+if the current plan cannot run it, retain that launch blocker until an approved
+external scheduler or plan is configured. No upgrade is authorized by packaging.
+
+The live team inventory on 2026-11-04 reports **Hobby**. Its cron frequency limit
+is once per day, so the required 15-minute cleanup is a concrete production
+deployment blocker, even after credentials are added. Keep the schedule intact
+and obtain an approved scheduler/hosting arrangement before production launch.
+See [Vercel cron limits](https://vercel.com/docs/cron-jobs/usage-and-pricing).
+
+Use `node tools/seedream-launch-check.mjs` in an already secured server
+environment, or pass `--names-json` with a variable-name-only inventory. It does
+not print values and does not establish runtime readiness. Avoid `vercel env ls
+--json`, which can expose non-sensitive values; use the dashboard's names view
+and never export decrypted credentials into logs or a shared checkout.
+
+See [Seedream safe setup and real generation acceptance](../../docs/SEEDREAM_PRO.md)
+for the exact Vercel environment/file mappings and one-image validation process.
+Missing dependencies keep readiness closed. Liveness/catalog responses and a
+successful build do not prove an actual generated photo or production launch.
+
 Status (2026-11-03): foundational backend deployed to `https://ailifetime-private-api.vercel.app` in the verified zpchoney account/team. Native Vercel CLI succeeded where the connected app returned403. Dedicated Neon Free resource `ailifetime-private-db` has seven core and two photo migrations applied and replay-verified. **BLOCKED_INCOMPLETE**: live/catalog return200, readiness and login return503 `BACKEND_NOT_CONFIGURED`; the user confirms production identity/payment/upload/model/storage services are not yet configured. No real model generation, phone login, cloud photo deletion or production business acceptance has passed. No custom API domain exists yet.
 
 ## Runtime and storage

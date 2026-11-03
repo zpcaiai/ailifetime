@@ -36,6 +36,55 @@ Ordinary server and Vercel use the same composition. Vercel supports encrypted
 `LTM_UPLOAD_BROKER_TOKEN` by materializing the existing owner-only temporary token
 file. No production endpoint override or automatic provider fallback is offered.
 
+Vercel also accepts `LTM_PHOTO_SCORER_TOKEN`,
+`LTM_PHOTO_SCORER_POLICIES_JSON` and `LTM_CONSENT_POLICY_CATALOG_JSON` instead of
+their corresponding token/policy/catalog file paths. They become isolated 0600
+temporary files in a 0700 directory, removed on failed initialization or when
+the handler's explicit close lifecycle runs.
+Configure exactly one source per item. Existing signature, trust, expiry and
+calibration validation remains mandatory; supplying JSON does not approve it.
+Use the original signed catalog issued by the consent-policy authority and the
+calibrated scorer policy document, with the corresponding trust keys, jurisdiction,
+locale, scorer URL and channel. Never generate production approval documents from
+test fixtures. Values must also fit Vercel's environment size limits.
+
+### Safe production setup and real generation acceptance
+
+In Vercel select **ailifetime-private-api**, then **Settings → Environment
+Variables → Production**. Add `ARK_API_KEY` as a Sensitive variable; paste the
+key only in that trusted field, never in chat, a command argument or Git. Current
+Vercel dashboards call this type **Secret**; legacy Sensitive variables continue
+to work as Secrets. In the
+Ark console enable access to `doubao-seedream-5-0-pro-260628` for that key/project
+and confirm existing balance and a one-image spending limit. Do not buy credits
+or switch providers as part of a configuration check.
+
+Add the approved upload broker URL/token and private S3 settings above, then the
+existing OIDC, signed-consent, evidence-trust and scorer configuration. Store
+credentials as Secret variables. `CRON_SECRET` needs at least 32 random
+characters. Keep `LTM_SEEDREAM_ENABLED=false` until dependencies, migrations and
+retention cleanup are ready; then explicitly set it to `true` and redeploy.
+Environment edits take effect on a new deployment. Preview needs its own approved
+configuration; do not copy production secrets to every branch.
+
+`node tools/seedream-launch-check.mjs` checks the current process environment
+without printing values or calling Ark. `--names-json /absolute/names.json`
+instead accepts a JSON array of variable names from a deployment inventory. It
+reports missing names and always leaves runtime verification `NOT_RUN`; names
+alone cannot prove credentials, signatures, storage privacy or model access.
+
+After `/health/ready` succeeds, real acceptance requires an authorized original
+photo with current participant consent, an active stored B14 command, and a
+service-account token carrying `media.generation.generate`. Call the generation
+route below for **one** planned age using one persistent idempotency key. Record
+the actual response, model, candidate asset hash and request/journal binding;
+read back the private stored PNG through the approved owner-authorized media
+path and compare its bytes/hash. Keep the image and receipts private. A timeout
+or uncertain result requires reconciliation, never an automatic new paid POST.
+One generated candidate proves transport only; cross-age realism and B15/B17
+publication acceptance remain separate. Missing any dependency is
+`BLOCKED_INCOMPLETE`, never a synthetic substitute for a real image.
+
 ## Provider-controller workflow
 
 The existing B14/outbox provider controller, using an authenticated service

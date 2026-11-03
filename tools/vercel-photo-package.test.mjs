@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath,pathToFileURL } from 'node:url';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { spawnSync } from 'node:child_process';
 import { packageVercelApi } from './vercel-photo-package.mjs';
 
 test('isolated bundled API imports and serves real HTTP without shipping private files or enabling preview cron',async()=>{
@@ -24,4 +25,20 @@ test('isolated bundled API imports and serves real HTTP without shipping private
   assert.equal((await fetch(base+'/health/ready')).status,503);assert.equal((await fetch(base+'/internal/media-cleanup')).status,401);
   await assert.rejects(packageVercelApi(output),/EEXIST/);
  }finally{if(server)await new Promise(r=>server.close(r));await rm(dir,{recursive:true,force:true});}
+});
+
+test('explicit production CLI retains authenticated cleanup schedule in an isolated deployable artifact',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'vercel-production-package-'));
+ try{
+  const output=join(dir,'production');
+  const result=spawnSync(process.execPath,['tools/vercel-photo-package.mjs','--production',output],{encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr);const receipt=JSON.parse(result.stdout);assert.equal(receipt.preview,false);
+  const config=JSON.parse(await readFile(join(output,'vercel.json'),'utf8'));
+  assert.deepEqual(config.crons,[{path:'/internal/media-cleanup',schedule:'*/15 * * * *'}]);
+  assert.deepEqual(config.functions,{'api/index.mjs':{maxDuration:300}});
+  assert.deepEqual(config.rewrites,[{source:'/(.*)',destination:'/api/index'}]);
+  assert.deepEqual((await readdir(output)).sort(),['api','package.json','vercel.json']);
+  const repeated=spawnSync(process.execPath,['tools/vercel-photo-package.mjs','--production',output],{encoding:'utf8'});assert.notEqual(repeated.status,0);assert.match(repeated.stderr,/EEXIST/);
+  const bad=spawnSync(process.execPath,['tools/vercel-photo-package.mjs','--production',join(dir,'bad'),'--preview'],{encoding:'utf8'});assert.notEqual(bad.status,0);assert.match(bad.stderr,/usage:/);
+ }finally{await rm(dir,{recursive:true,force:true});}
 });
