@@ -28,8 +28,32 @@ test('client advertises the exact authoritative totals and rejects mutated quote
  for(const change of [{amountMinor:1},{expectedCount:21},{scopeSha256:'invalid'},{currency:'USD'},{readyCount:1},{items:[]}])assert.throws(()=>f.p.validate(purchase(change)));
  assert.throws(()=>f.p.validate(purchase({scopeSha256:'c'.repeat(64)}),purchase()),/SCOPE_CHANGED/);
 });
+test('new 49.90 lifespan quotes and immutable old 9.90 quotes use exact version-price pairs',async()=>{
+ const f=client(),life=purchase({sku:'lifespan-21',expectedCount:21,items:Array.from({length:21},(_,i)=>({itemId:'age-'+i*5,targetAge:i*5,status:'awaiting_payment'}))});
+ assert.equal(f.p.validate({...life,priceVersion:'photo-retail-cny.v1',amountMinor:990}).amountMinor,990);
+ assert.equal(f.p.validate({...life,priceVersion:'photo-retail-cny.v2',amountMinor:4990}).amountMinor,4990);
+ assert.equal(f.p.money(f.p.PRICES['lifespan-21']),'¥49.90');
+ for(const change of [{priceVersion:'photo-retail-cny.v2',amountMinor:990},{priceVersion:'photo-retail-cny.v1',amountMinor:4990},{priceVersion:'photo-retail-cny.v3',amountMinor:4990},{priceVersion:'toString',amountMinor:4990}]){
+   assert.throws(()=>f.p.validate({...life,...change}),/INVALID/);
+   const g=client({orderPage:{items:[{...life,...change}],nextCursor:null}});await assert.rejects(g.p.listPage(),/INVALID/);
+ }
+ const g=client({orderPage:{items:[{...life,amountMinor:990},{...life,priceVersion:'photo-retail-cny.v2',amountMinor:4990}],nextCursor:null}});
+ assert.deepEqual(Array.from((await g.p.list()).map(i=>i.amountText)),['¥9.90','¥49.90']);
+});
 test('an already-paid merchant order resumes without another native payment',async()=>{
  const f=client();const result=await f.p.execute(purchase(),f.options);assert.equal(result.commandId,'generation-1');assert.equal(f.native,0);assert.equal(f.calls.filter(c=>c.path.endsWith('/fulfill')).length,1);
+});
+test('all four v3 mini quotes bind price/count/resolution and reject changed tier or30day retention',async()=>{
+ const f=client();
+ for(const count of [11,21])for(const quality of ['standard','hd']){
+  const tier=f.p.album(count,quality),quote=purchase({sku:tier.sku,priceVersion:'photo-retail-cny.v3',amountMinor:tier.amountMinor,expectedCount:count,imageQuality:quality,imageWidth:tier.size,imageHeight:tier.size,retentionDays:30,items:Array.from({length:count},(_,i)=>({itemId:'age-'+i*(count===11?10:5),targetAge:i*(count===11?10:5),status:'awaiting_payment'}))});
+  assert.equal(f.p.validate(quote).expectedCount,count);
+  for(const change of [{imageQuality:quality==='hd'?'standard':'hd'},{imageWidth:1024},{imageHeight:1024},{retentionDays:31},{expectedCount:count===11?21:11},{priceVersion:'photo-retail-cny.v2'},{amountMinor:1}])assert.throws(()=>f.p.validate({...quote,...change}));
+  assert.throws(()=>f.p.validate({...quote,items:[...quote.items].reverse()}),/SCOPE_CHANGED/);
+  const g=client({orderPage:{items:[quote],nextCursor:null}});assert.equal((await g.p.list())[0].amountText,f.p.money(tier.amountMinor));
+ }
+ for(const args of [[10,'hd'],[11,'fast'],['11','standard']])assert.throws(()=>f.p.album(...args));
+ await assert.rejects(f.p.create({sku:'lifespan-11-standard',generation:{imageQuality:'standard'}}),/SCOPE_CHANGED/);assert.equal(f.native,0);
 });
 test('native payment success cannot generate until the server confirms paid',async()=>{
  const f=client({confirmStates:['pending','pending','pending']});await assert.rejects(f.p.execute(purchase(),f.options),/CONFIRMATION_PENDING/);assert.equal(f.native,1);assert.equal(f.calls.filter(c=>c.path.endsWith('/fulfill')).length,0);

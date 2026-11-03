@@ -339,8 +339,11 @@ async function verifyLedgerContract(client) {
   if (actual.length !== expected.length || actual.some((value, index) => value !== expected[index])) {
     throw migrationError("MIGRATION_LEDGER_DRIFT", "Migration ledger schema differs from the required append-only contract");
   }
+  const serverVersion = await client.query("SELECT current_setting('server_version_num')::integer AS server_version_num");
   const constraints = await client.query(`
-    SELECT conname, contype, pg_get_constraintdef(oid) AS definition
+    SELECT conname, contype, pg_get_constraintdef(oid) AS definition,
+           convalidated AS validated,
+           COALESCE((to_jsonb(pg_constraint)->>'conenforced')::boolean,true) AS enforced
       FROM pg_constraint
      WHERE conrelid = 'ltm.schema_migrations'::regclass
      ORDER BY conname
@@ -352,8 +355,17 @@ async function verifyLedgerContract(client) {
     "schema_migrations_pkey:p:PRIMARY KEY (migration_id)",
     "schema_migrations_sha256_check:c:CHECK ((sha256 ~ '^[a-f0-9]{64}$'::text))",
   ];
+  // PostgreSQL18 records table NOT NULL constraints in pg_constraint. Accept
+  // only the exact six required columns; do not ignore arbitrary new entries.
+  if (Number(serverVersion.rows?.[0]?.server_version_num) >= 180_000) {
+    for (const column of ["migration_id", "path", "sha256", "manifest_sha256", "applied_at", "applied_by"]) {
+      expectedConstraints.push(`schema_migrations_${column}_not_null:n:NOT NULL ${column}`);
+    }
+    expectedConstraints.sort();
+  }
   const actualConstraints = constraints.rows.map((row) => `${row.conname}:${row.contype}:${row.definition}`);
   if (
+    constraints.rows.some((row) => row.validated !== true || row.enforced !== true) ||
     actualConstraints.length !== expectedConstraints.length ||
     actualConstraints.some((value, index) => value !== expectedConstraints[index])
   ) {

@@ -104,7 +104,7 @@ export class HttpWechatPlatformBroker implements WechatPlatformPort {
 
   async preparePhotoCheckout(context: ActorContext, input: PhotoCheckoutRequest): Promise<PhotoCheckoutResult> {
     assertPurpose(context, "commerce");
-    const product = photoProduct(input.sku);
+    const product = photoProduct(input.sku, input.priceVersion);
     if (!/^photo-[a-f0-9]{64}$/.test(input.purchaseId) || input.amountMinor !== product.amountMinor || input.currency !== "CNY" || input.priceVersion !== product.priceVersion ||
         !/^[a-f0-9]{64}$/.test(input.scopeSha256) || !Number.isInteger(input.imageCount) || input.imageCount < 1 || (product.imageCount === null ? input.imageCount > 4 : input.imageCount !== product.imageCount)) {
       throw new DomainError("VALIDATION_FAILED", "photo checkout must use the server-owned price and exact delivery count");

@@ -689,6 +689,7 @@ function loadJobPage(request) {
 }
 
 function loadEditorPage(request) {
+  const purchaseCatalog=loadMiniCommonJs('../miniprogram/services/photo-purchases.js',{require:()=>({})});
   let page;
   let nextId = 0;
   const redirects = [];
@@ -709,7 +710,7 @@ function loadEditorPage(request) {
     require: (specifier) => {
       if (specifier === "../../services/api") return api;
       if (specifier === "../../services/photo-purchases") return {
-        PRICES: {"lifespan-21":990,"selected-age":590},money:minor=>`¥${(minor/100).toFixed(2)}`,errorText:error=>error.message,
+        ...purchaseCatalog,errorText:error=>error.message,
         create:async(input,key)=>(await request("/v1/photo-purchases",{data:input,headers:{"Idempotency-Key":key}},"age_transformation")).data,
         get:async id=>(await request(`/v1/photo-purchases/${id}`,{method:"GET"},"age_transformation")).data,
         execute:async quote=>(await request(`/v1/photo-purchases/${quote.purchaseId}/fulfill`,{data:{}},"age_transformation")).data,
@@ -857,6 +858,26 @@ function loadMiniCommonJs(relative, globals) {
   return module.exports;
 }
 
+test("editor sends every11/21 standard/HD tier for both subjects with exact ages and prices",async()=>{
+ for(const count of [11,21])for(const quality of ['standard','hd'])for(const couple of [false,true]){
+  const calls=[],editor=loadEditorPage(async(path,options)=>{calls.push({path,options});return{data:path.endsWith('/B07')?{state:'persisted'}:path==='/v1/photo-purchases'?{purchaseId:'tier-quote'}:path.endsWith('/fulfill')?{commandId:'tier-command'}:{}};});
+  editor.page.onLoad({assetId:'source-1'});editor.page.setData({currentAge:'35',consentAccepted:true,subjectMode:couple?'couple':'single',partnerParticipantId:'partner-1',partnerCurrentAge:'32'});
+  editor.page.albumCountChanged({currentTarget:{dataset:{value:String(count)}}});editor.page.imageQualityChanged({currentTarget:{dataset:{value:quality}}});
+  const amount=quality==='standard'?(count===11?'¥19.90':'¥29.90'):(count===11?'¥29.90':'¥49.90');assert.equal(editor.page.data.priceLifespan,amount);
+  const ages=Array.from({length:count},(_,i)=>i*(count===11?10:5));assert.deepEqual(Array.from(editor.page.data.ages.split(',').map(Number)),ages);
+  await editor.page.generate();assert.equal(editor.page.data.error,'');const data=calls.find(c=>c.path==='/v1/photo-purchases').options.data;
+  assert.equal(data.sku,count===21&&quality==='hd'?'lifespan-21':`lifespan-${count}-${quality}`);assert.equal(data.generation.imageQuality,quality);assert.equal(data.generation.timelineProfile,`lifespan-${count}${couple?'-couple':''}-v1`);assert.deepEqual(Array.from(data.generation.targetAges),ages);assert.equal(editor.redirects.length,1);
+ }
+ const view=readFileSync(new URL('../miniprogram/pages/editor/index.wxml',import.meta.url),'utf8');for(const text of ['albumCountChanged','imageQualityChanged','1536 × 1536','2048 × 2048','保存 30 天'])assert.ok(view.includes(text),text);
+});
+test("tier changes during intake or uncertain create cannot alter an in-flight order or create a second purchase",async()=>{
+ let release;const hold=new Promise(r=>release=r),calls=[];
+ const editor=loadEditorPage(async(path,options)=>{calls.push({path,options});if(path.endsWith('/B07')){await hold;return{data:{state:'persisted'}};}if(path==='/v1/photo-purchases')throw new Error('NETWORK_UNAVAILABLE');return{data:{}};});
+ editor.page.onLoad({assetId:'source-1'});editor.page.setData({currentAge:'35',consentAccepted:true});const pending=editor.page.generate();
+ editor.page.albumCountChanged({currentTarget:{dataset:{value:'11'}}});editor.page.imageQualityChanged({currentTarget:{dataset:{value:'standard'}}});assert.equal(editor.page.data.albumCount,21);assert.equal(editor.page.data.imageQuality,'hd');
+ release();await pending;const first=calls.find(c=>c.path==='/v1/photo-purchases');assert.equal(first.options.data.generation.imageQuality,'hd');
+ editor.page.albumCountChanged({currentTarget:{dataset:{value:'11'}}});editor.page.imageQualityChanged({currentTarget:{dataset:{value:'standard'}}});const before=calls.length;await editor.page.generate();assert.equal(editor.page.data.error,'GENERATION_RECONCILIATION_REQUIRED');assert.equal(calls.length,before);
+});
 test("editor supports both subjects and both play modes without granting partner consent", async () => {
   for (const subjectMode of ["single", "couple"]) for (const playMode of ["lifespan", "age"]) for (const targetAge of ["0", "37", "100"]) {
     const calls=[]; const editor=loadEditorPage(async(path,options)=>{calls.push({path,options});if(path.endsWith('B07'))return{data:{state:'persisted'}};if(path.startsWith('/v1/photo-purchases'))return{data:{purchaseId:'photo-mode',commandId:'mode-command'}};return{data:{}};});
@@ -865,7 +886,7 @@ test("editor supports both subjects and both play modes without granting partner
     const grants=calls.filter(c=>c.options.data.command==='consent.grant');assert.equal(grants.length,1);assert.equal(grants[0].options.data.input.participantId,'consumer-1');
     const quoted=calls.find(c=>c.path==='/v1/photo-purchases').options.data;
     assert.equal(quoted.sku,playMode==='age'?'selected-age':'lifespan-21');
-    assert.equal(editor.page.data.priceLifespan,'¥9.90');assert.equal(editor.page.data.priceAge,'¥5.90');
+    assert.equal(editor.page.data.priceLifespan,'¥49.90');assert.equal(editor.page.data.priceAge,'¥5.90');
     const request=quoted.generation;
     assert.deepEqual(Array.from(request.participantIds),subjectMode==='couple'?['consumer-1','partner']:['consumer-1']);
     assert.equal(request.targetAges.length,playMode==='age'?1:21);if(playMode==='age')assert.equal(request.targetAges[0],Number(targetAge));

@@ -42,7 +42,7 @@ export class WardrobeService {
       targetAge: age, sourceImage: context.sourceNode.asset! as unknown as JsonObject, selections: input.selections as JsonValue });
     if (!context.participants.every(p => p.authorized)) throw new DomainError("CONSENT_REQUIRED", "each participant must independently authorize wardrobe editing");
     if (!this.artifacts) throw new DomainError("DEPENDENCY_UNAVAILABLE", "wardrobe source image reader is not configured");
-    const bytes = await this.artifacts.read(context.sourceNode.asset!);
+    const bytes = await this.artifacts.read(context.sourceNode.asset!, actor);
     if (bytes.byteLength !== context.sourceNode.asset!.byteLength || createHash("sha256").update(bytes).digest("hex") !== context.sourceNode.asset!.sha256) throw new DomainError("DEPENDENCY_UNAVAILABLE", "wardrobe source bytes changed");
     const jobId = wardrobeCommandId(actor, rootId, age, key);
     const result = await this.registry.execute(this.runtime, "B14", { actor, idempotencyKey: `wardrobe:${key}`, input: {

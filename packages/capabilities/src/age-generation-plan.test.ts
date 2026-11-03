@@ -10,6 +10,19 @@ const base = {
   sourceAssetId: "source-1", participantIds: ["person-1"], targetAges: [...LIFESPAN_AGES],
   seed: "seed-1", promptPolicyVersion: "prompt-v1", currentAge: 35, timelineProfile: "lifespan-21-v1",
 };
+test("B14 preserves11/21 quality-bound dimensions and distinct seeds for both subject modes",()=>{
+ for(const count of [11,21])for(const couple of [false,true]){
+  const input={...base,jobId:`tier-${count}`,illustrativeLabel:true,targetAges:Array.from({length:count},(_,i)=>i*(count===11?10:5)),timelineProfile:`lifespan-${count}${couple?'-couple':''}-v1`,...(couple?{participantIds:['left','right'],participantAges:[35,32]}:{})};
+  const b14=createCapabilityRegistry().get('B14')!;
+  const standard=b14.parseInput(invocation({...input,imageQuality:'standard'})),hd=b14.parseInput(invocation({...input,imageQuality:'hd'}));
+  const s=standard.generationPlan as JsonObject,h=hd.generationPlan as JsonObject;
+  assert.equal(standard.imageQuality,'standard');assert.equal(s.expectedImageCount,count);assert.equal(s.imageWidth,1536);assert.equal(s.imageHeight,1536);assert.equal(s.retentionDays,30);assert.equal(h.imageWidth,2048);
+  assert.notEqual((s.nodes as JsonObject[])[0]!.seed,(h.nodes as JsonObject[])[0]!.seed);
+  assert.deepEqual((s.nodes as JsonObject[]).map(n=>n.targetAge),input.targetAges);
+  for(const ages of [input.targetAges.slice(1),[...input.targetAges].reverse()])assert.throws(()=>b14.parseInput(invocation({...input,targetAges:ages,imageQuality:'standard'})));
+  for(const imageQuality of ['fast','4k','',[],{}])assert.throws(()=>b14.parseInput(invocation({...input,imageQuality})));
+ }
+});
 
 test("single-age and couple profiles preserve exact targets and two independent original references", () => {
   for (const age of [0, 37, 100]) {

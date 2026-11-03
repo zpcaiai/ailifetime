@@ -4,7 +4,7 @@ import { mkdtemp,rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { LifeTimeMachineRuntime } from '@ltm/core';
+import { LifeTimeMachineRuntime,canonicalJson } from '@ltm/core';
 import { PhotoPurchaseService,PHOTO_PURCHASE_COLLECTION,PHOTO_COMMAND_BINDING_COLLECTION } from '../dist/photo-purchases.js';
 import { FileTimelineArtifactStore } from '../dist/timeline-artifacts.js';
 import { timelineFixture,syntheticPng } from './timeline-fixtures.mjs';
@@ -24,13 +24,30 @@ function ageInput(couple=false,life=false) {
   return {sku:life?'lifespan-21':'selected-age',generation:{sourceAssetId:'source',participantIds:couple?['user','partner']:['user'],targetAges:life?Array.from({length:21},(_,i)=>i*5):[37],currentAge:30,
     timelineProfile:life?(couple?'lifespan-21-couple-v1':'lifespan-21-v1'):(couple?'single-age-couple-v1':'single-age-v1'),...(couple?{participantAges:[30,29]}:{}),seed:'purchase-seed',promptPolicyVersion:'age-policy-v1',illustrativeLabel:true}};
 }
-test('authoritative 590/990 age purchases bind exact scope and refuse overposted money',async()=>{
+test('persisted historical v1 lifespan quote remains990 on read and merchant checkout after v2 rollout',async()=>{
+  const f=await timelineFixture();try{
+    const pay=paymentBoundary(),service=new PhotoPurchaseService(f.runtime,f.registry,undefined,pay),created=await service.create(f.actor,ageInput(false,true),'old-order-fixture');
+    const row=f.runtime.getRecord(f.actor,PHOTO_PURCHASE_COLLECTION,created.purchaseId);
+    // Model an order already persisted by the old version, using the real SQL store.
+    const scope={...row.data.scope,title:'一生相册',priceVersion:'photo-retail-cny.v1',amountMinor:990};
+    for(const key of ['imageQuality','imageWidth','imageHeight','retentionDays'])delete scope[key];
+    const data={...row.data,scope,scopeSha256:createHash('sha256').update(canonicalJson([scope,row.data.request])).digest('hex')};
+    f.runtime.updateRecord(f.actor,{collection:PHOTO_PURCHASE_COLLECTION,id:row.id,expectedVersion:row.version,data,idempotencyKey:'seed-historical-v1'});
+    assert.equal((await service.get(f.actor,row.id)).amountMinor,990);
+    assert.equal((await service.create(f.actor,ageInput(false,true),'old-order-fixture')).amountMinor,990);
+    await assert.rejects(service.create(f.actor,ageInput(),'old-order-fixture'),{code:'IDEMPOTENCY_CONFLICT'});
+    const checkout=await service.checkout(f.actor,row.id);assert.equal(checkout.priceVersion,'photo-retail-cny.v1');assert.equal(checkout.checkout.amountMinor,990);assert.equal(checkout.expectedCount,21);
+    const current=await service.create(f.actor,ageInput(false,true),'new-order-v2');assert.equal(current.amountMinor,4990);assert.equal(current.priceVersion,'photo-retail-cny.v3');
+    assert.equal((await service.get(f.actor,row.id)).amountMinor,990);
+  }finally{f.runtime.close();}
+});
+test('authoritative 590/4990 age purchases bind exact scope and refuse overposted money',async()=>{
   const f=await timelineFixture();try{
     const service=new PhotoPurchaseService(f.runtime,f.registry);
     assert.equal((await service.create(f.actor,ageInput(), 'single-purchase')).amountMinor,590);
     const reordered=ageInput();reordered.generation=Object.fromEntries(Object.entries(reordered.generation).reverse());
     assert.equal((await service.create(f.actor,reordered,'single-purchase')).amountMinor,590);
-    const full=await service.create(f.actor,ageInput(false,true),'full-purchase');assert.equal(full.amountMinor,990);assert.equal(full.expectedCount,21);assert.equal(full.items.length,21);
+    const full=await service.create(f.actor,ageInput(false,true),'full-purchase');assert.equal(full.amountMinor,4990);assert.equal(full.priceVersion,'photo-retail-cny.v3');assert.equal(full.expectedCount,21);assert.equal(full.items.length,21);
     await assert.rejects(service.create(f.actor,{...ageInput(),amountMinor:1},'tampered-money'));
     await assert.rejects(service.create(f.actor,{...ageInput(false,true),sku:'selected-age'},'wrong-sku'));
     await assert.rejects(service.create(f.actor,ageInput(false,true),'single-purchase'),/Idempotency|idempotency/);
@@ -38,6 +55,19 @@ test('authoritative 590/990 age purchases bind exact scope and refuse overposted
     await service.authorizeRetry(f.actor,'root');
     await assert.rejects(service.get({...f.actor,actorId:'other'},full.purchaseId));
   }finally{f.runtime.close();}
+});
+test('equal2990 tiers cannot replace one another andpersist standard quality and21 exact ages across SQLite reopen',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'tier-sqlite-')),f=await timelineFixture(join(dir,'runtime.sqlite'));let runtime=f.runtime;
+ try{
+  const a=ageInput(false,true);a.sku='lifespan-21-standard';a.generation.imageQuality='standard';
+  const b=ageInput(false,true);b.sku='lifespan-11-hd';b.generation.imageQuality='hd';b.generation.timelineProfile='lifespan-11-v1';b.generation.targetAges=Array.from({length:11},(_,i)=>i*10);
+  let service=new PhotoPurchaseService(runtime,f.registry);const first=await service.create(f.actor,a,'same-price-key');assert.equal(first.amountMinor,2990);assert.equal(first.imageWidth,1536);
+  await assert.rejects(service.create(f.actor,b,'same-price-key'),{code:'IDEMPOTENCY_CONFLICT'});
+  const stored=runtime.getRecord(f.actor,PHOTO_PURCHASE_COLLECTION,first.purchaseId),rowHash=createHash('sha256').update(JSON.stringify(stored)).digest('hex');runtime.close();runtime=new LifeTimeMachineRuntime(f.runtimeOptions);
+  assert.equal(createHash('sha256').update(JSON.stringify(runtime.getRecord(f.actor,PHOTO_PURCHASE_COLLECTION,first.purchaseId))).digest('hex'),rowHash);
+  service=new PhotoPurchaseService(runtime,f.registry);const replay=await service.create(f.actor,a,'same-price-key');assert.equal(replay.purchaseId,first.purchaseId);assert.equal(replay.imageQuality,'standard');assert.equal(replay.imageWidth,1536);assert.equal(replay.expectedCount,21);assert.equal(replay.retentionDays,30);assert.equal(replay.scopeSha256,first.scopeSha256);
+  assert.deepEqual(replay.items.map(i=>i.targetAge),Array.from({length:21},(_,i)=>i*5));console.log(JSON.stringify({proof:'V3_TIER_SQLITE_REOPEN_ROW',rowHash}));
+ }finally{runtime.close();await rm(dir,{recursive:true,force:true});}
 });
 test('native acknowledgement or pending/wrong payment cannot create generation; exact paid amount creates once',async()=>{
   const f=await timelineFixture();try{

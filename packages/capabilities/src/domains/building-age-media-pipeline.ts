@@ -42,6 +42,7 @@ function createTimeline(input: JsonObject): JsonObject {
   const currentAge = input.currentAge === undefined ? undefined : requiredNumber(input, "currentAge", 0);
   const timelineProfile = input.timelineProfile === undefined ? undefined : requiredString(input, "timelineProfile");
   const templateId = input.templateId === undefined ? undefined : requiredString(input, "templateId");
+  const imageQuality = input.imageQuality === undefined ? undefined : requiredString(input,"imageQuality");
   const participantAges = input.participantAges;
   if (participantAges !== undefined && (!Array.isArray(participantAges) || participantAges.some(age => typeof age !== "number"))) throw new DomainError("VALIDATION_FAILED", "participantAges must be a numeric array");
   const generationPlan = buildAgeGenerationPlan({
@@ -49,12 +50,14 @@ function createTimeline(input: JsonObject): JsonObject {
     ...(currentAge === undefined ? {} : { currentAge }),
     ...(timelineProfile === undefined ? {} : { timelineProfile }),
     ...(templateId === undefined ? {} : { templateId }),
+    ...(imageQuality === undefined ? {} : { imageQuality }),
     ...(participantAges === undefined ? {} : { participantAges: participantAges as number[] }),
   });
   return { jobId, sourceAssetId, participantIds, targetAges, seed, promptPolicyVersion, illustrativeLabel,
     ...(currentAge === undefined ? {} : { currentAge }),
     ...(timelineProfile === undefined ? {} : { timelineProfile }),
     ...(templateId === undefined ? {} : { templateId }),
+    ...(imageQuality === undefined ? {} : { imageQuality }),
     ...(participantAges === undefined ? {} : { participantAges }),
     generationPlan, purpose: "age_transformation" };
 }
