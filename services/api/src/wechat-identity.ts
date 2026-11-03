@@ -41,6 +41,13 @@ export class WechatIdentityAuthority {
  private readonly signing:Promise<Awaited<ReturnType<typeof importJWK>>>;
  private readonly publicJwk:JWK;
  private readonly kid:Promise<string>;
+ private appSecret():string{
+  const value=this.env.LTM_WECHAT_APP_SECRET;
+  if(typeof value!=='string'||!value.trim())reject('WECHAT_APP_SECRET_MISSING',503);
+  const secret=value.trim();
+  if(secret.length<16||secret.length>512||/\s/.test(secret))reject('WECHAT_APP_SECRET_FORMAT_INVALID',503);
+  return secret;
+ }
  constructor(private readonly env:NodeJS.ProcessEnv,testEndpoint?:string){
   this.config=settings(env);this.endpoint=new URL('https://api.weixin.qq.com/sns/jscode2session');
   if(testEndpoint){const u=new URL(testEndpoint);if(env.APP_ENV!=='test'||u.origin!==testEndpoint||u.hostname!=='127.0.0.1'||u.protocol!=='http:')reject('IDENTITY_NOT_CONFIGURED',503);this.endpoint=new URL('/sns/jscode2session',u);}
@@ -93,7 +100,7 @@ export class WechatIdentityAuthority {
   const input=exact(body,['code','consentVersion','clientRequestId']);
   if(!identifier(key)||!identifier(input.clientRequestId)||typeof input.code!=='string'||input.code.length<1||input.code.length>512||/\s/.test(input.code))reject('VALIDATION_FAILED');
   if(input.consentVersion!==this.config.consent)reject('CONSENT_REQUIRED',403);
-  const secret=required(this.env,'LTM_WECHAT_APP_SECRET');if(secret.length<16||secret.length>512||/\s/.test(secret))reject('IDENTITY_NOT_CONFIGURED',503);
+  const secret=this.appSecret();
   const fingerprint=digest(JSON.stringify([input.code,input.consentVersion,input.clientRequestId]));
   const prior=await this.transaction(async c=>{
    await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[this.config.appId]);
@@ -146,7 +153,7 @@ export class WechatIdentityAuthority {
   });
  }
  async jwks(){return {keys:[{...this.publicJwk,kid:await this.kid}]};}
- async ready(){const secret=required(this.env,'LTM_WECHAT_APP_SECRET');if(secret.length<16||secret.length>512||/\s/.test(secret))reject('IDENTITY_NOT_CONFIGURED',503);await this.signing;await this.transaction(async c=>{
+ async ready(){this.appSecret();await this.signing;await this.transaction(async c=>{
   await c.query('SELECT session_id FROM wechat_identity.sessions LIMIT 1');await c.query('SELECT actor_id FROM wechat_identity.users LIMIT 1');await c.query('SELECT request_key FROM wechat_identity.requests LIMIT 1');
   const tables=(await c.query("SELECT relrowsecurity,relforcerowsecurity FROM pg_class WHERE relnamespace='wechat_identity'::regnamespace AND relkind='r'")).rows;
   if(tables.length!==3||tables.some(t=>!t.relrowsecurity||!t.relforcerowsecurity))reject('IDENTITY_UNAVAILABLE',503);

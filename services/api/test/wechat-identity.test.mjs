@@ -36,7 +36,7 @@ async function fixture(){
  let calls=0,mode='valid',hold;
  const provider=createServer(async(req,res)=>{
   calls++;const u=new URL(req.url,'http://127.0.0.1');assert.equal(u.pathname,'/sns/jscode2session');
-  assert.equal(u.searchParams.get('appid'),appId);assert.equal(u.searchParams.get('secret'),env.LTM_WECHAT_APP_SECRET);assert.equal(u.searchParams.get('grant_type'),'authorization_code');
+  assert.equal(u.searchParams.get('appid'),appId);assert.equal(u.searchParams.get('secret'),'synthetic-wechat-app-secret');assert.equal(u.searchParams.get('grant_type'),'authorization_code');
   const claimed=await admin.query('SELECT state FROM wechat_identity.requests WHERE app_id=$1 AND code_hash=$2',[appId,hash(u.searchParams.get('js_code'))]);
   assert.equal(claimed.rows[0].state,'executing','real SQL intent must commit before external exchange');
   if(mode==='hold')await new Promise(r=>hold=r);
@@ -63,6 +63,7 @@ async function fixture(){
 // synthetic; these tests never establish actual WeChat or real-phone acceptance.
 test('actual HTTP/SQL issuer recovers immutable session, verifies API JWT, rotates refresh and revokes family',async()=>{
  const f=await fixture();try{
+  f.env.LTM_WECHAT_APP_SECRET=' \nsynthetic-wechat-app-secret\n ';
   const body=f.login(),first=await f.request('/v1/wechat/sessions',body,'create-key');assert.equal(first.status,200);
   assert.equal(first.headers.get('cache-control'),'private, no-store');assert.deepEqual(first.body.session.roles,['consumer']);
   const {accessToken:token,actorId,tenantId}=first.body.session;assert.notEqual(actorId,tenantId);
@@ -117,7 +118,9 @@ test('untrusted HTTP inputs cannot choose principals or cause external exchange;
   assert.equal((await fetch(f.base+'/.well-known/jwks.json?leak=1')).status,400);
   delete f.env.LTM_WECHAT_APP_SECRET;
   assert.equal((await fetch(f.base+'/health/ready',{headers:{authorization:'Bearer '+f.workload}})).status,503);
-  assert.equal((await f.request('/v1/wechat/sessions',f.login())).body.error.code,'IDENTITY_NOT_CONFIGURED');assert.equal(f.calls,0);
+  assert.equal((await f.request('/v1/wechat/sessions',f.login())).body.error.code,'WECHAT_APP_SECRET_MISSING');assert.equal(f.calls,0);
+  f.env.LTM_WECHAT_APP_SECRET='synthetic invalid secret';
+  assert.equal((await f.request('/v1/wechat/sessions',f.login())).body.error.code,'WECHAT_APP_SECRET_FORMAT_INVALID');assert.equal(f.calls,0);
   assert.throws(()=>new WechatIdentityAuthority({...f.env,APP_ENV:'production'},'http://127.0.0.1:1234'),/IDENTITY_NOT_CONFIGURED/);
  }finally{await f.close();}
 });
