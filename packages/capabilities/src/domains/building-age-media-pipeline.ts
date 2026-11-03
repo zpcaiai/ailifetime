@@ -1,4 +1,4 @@
-import { DomainError } from "@ltm/core";
+import { canonicalJson, DomainError } from "@ltm/core";
 import { createHash } from "node:crypto";
 import type { CapabilityRegistry, JsonObject, JsonValue } from "../registry.js";
 import { requiredBoolean, requiredNumber, requiredString, stringList } from "../validation.js";
@@ -147,7 +147,7 @@ function photoScoreEvidence(input: JsonObject, binding: JsonObject | undefined, 
       context.subjectMode !== (participants.length === 2 ? "couple" : "single") || context.operation !== (binding.wardrobeBinding === undefined ? "age" : "wardrobe") ||
       calibration.id !== calibrationId || calibration.modelVersion !== input.modelVersion || calibration.modelSha256 !== evidence.modelSha256 ||
       Object.keys(minimums).length !== Object.keys(thresholds).length || Object.keys(thresholds).some(key => minimums[key] !== thresholds[key]) ||
-      createHash("sha256").update(JSON.stringify(calibration)).digest("hex") !== evidence.calibrationSha256) {
+      createHash("sha256").update(canonicalJson(calibration)).digest("hex") !== evidence.calibrationSha256) {
     throw new DomainError("VALIDATION_FAILED", "photo scoring calibration snapshot or binding is invalid");
   }
   for (const [min, max] of [[calibration.minimumTargetAge, calibration.maximumTargetAge], [calibration.minimumAgeSpan, calibration.maximumAgeSpan]]) {
