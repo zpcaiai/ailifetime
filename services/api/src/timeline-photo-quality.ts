@@ -15,7 +15,7 @@ function active(record:RecordEnvelope):void {
   if(record.data._externalDecisionState==="frozen" || record.data._externalReconciliationState==="reconciliation_required" || ["cancelled","compensated"].includes(String(record.data.commandState))) throw new DomainError("VERSION_CONFLICT","photo scoring command is frozen, cancelled or compensated");
 }
 export function photoQualityId(tenant:string,command:string,age:number,outputSha:string,referenceSha:string,policy:PhotoPolicy):string {
-  return "photo-quality-"+digest(canonicalJson([tenant,command,age,outputSha,referenceSha,policy]));
+  return "photo-quality-v2-"+digest(canonicalJson([tenant,command,age,outputSha,referenceSha,policy]));
 }
 /** Reads approved media, calls a real perception boundary, and persists through the existing B15 validator. */
 export class TimelinePhotoQualityService {
@@ -30,6 +30,8 @@ export class TimelinePhotoQualityService {
     await this.runtime.authorize(actor,"media.quality.evaluate",{tenantId:actor.tenantId});
     if(!Number.isInteger(targetAge) || targetAge<0 || targetAge>100) return invalid("photo target age is invalid");
     const command=await this.runtime.getRecord(actor,COMMANDS,commandId);active(command);
+    const ownerActorId=command.ownerActorId;
+    if(typeof ownerActorId!=="string" || ownerActorId.trim()==="")return invalid("photo command owner is missing");
     if(command.data.batchId!=="B14" || command.data.operation!=="createTimeline" || !Array.isArray(command.data.targetAges) || !command.data.targetAges.includes(targetAge)) return invalid("photo score target is not in the stored B14 plan");
     const plan=json(command.data.generationPlan),people=plan.participantIds;
     if(!Array.isArray(people) || people.length<1 || people.length>2 || people.some(id=>typeof id!=="string") || new Set(people).size!==people.length || !isDeepStrictEqual([...people].sort(),[...command.participantIds].sort())) return invalid("photo participant plan is invalid");
@@ -67,22 +69,21 @@ export class TimelinePhotoQualityService {
     const context:PhotoContext={provider:"generation-engine",templateId:wardrobe?"wardrobe:"+digest(JSON.stringify(wardrobe.selections.map(s=>s.styleId))):String(plan.templateId),channel:this.channel,subjectMode:participantIds.length===2?"couple":"single",operation:wardrobe?"wardrobe":"age"};
     const matches=this.policies.filter(p=>isDeepStrictEqual(p.context,context) && targetAge>=p.minimumTargetAge && targetAge<=p.maximumTargetAge && ageSpan>=p.minimumAgeSpan && ageSpan<=p.maximumAgeSpan);
     if(matches.length!==1)throw new DomainError("DEPENDENCY_UNAVAILABLE","photo scoring context has no unique calibration");
-    return {command,plan,intake,participantIds,reference,context,policy:matches[0]!,wardrobe};
+    return {command,ownerActorId,plan,intake,participantIds,reference,context,policy:matches[0]!,wardrobe};
   }
   async evaluate(actor:ActorContext,commandId:string,targetAge:number,assetValue:unknown) {
     const asset=parseTimelineImageAsset(assetValue),loaded=await this.load(actor,commandId,targetAge);
     const {plan,intake,participantIds,reference,context,policy}=loaded;
     const workId=photoQualityId(actor.tenantId,commandId,targetAge,asset.sha256,reference.sha256,policy);
     await this.runtime.assertConsent(actor,{participantIds,purpose:"quality_assurance",scope:{resource:`${REPORTS}:${workId}`,action:"process"}});
-    if(typeof loaded.command.ownerActorId!=="string")return invalid("photo scoring requires a bound media owner");
-    const owner={tenantId:actor.tenantId,actorId:loaded.command.ownerActorId};
-    const referenceBytes=await this.media.read(reference,owner),outputBytes=await this.media.read(asset,owner);
-    const wardrobe=loaded.wardrobe===undefined?undefined:{...loaded.wardrobe,bytes:await this.media.read(loaded.wardrobe.asset,owner)};
+    const mediaOwner={tenantId:actor.tenantId,actorId:loaded.ownerActorId};
+    const referenceBytes=await this.media.read(reference,mediaOwner),outputBytes=await this.media.read(asset,mediaOwner);
+    const wardrobe=loaded.wardrobe===undefined?undefined:{...loaded.wardrobe,bytes:await this.media.read(loaded.wardrobe.asset,mediaOwner)};
     const request=makePhotoScoreRequest({tenantId:actor.tenantId,commandId,sourceAssetId:reference.id,targetAge,context,
       people:participantIds.map((participantId,index)=>({participantId,position:participantIds.length===1?"single":index===0?"left":"right"})),referenceAsset:reference,referenceBytes,outputAsset:asset,outputBytes,...(wardrobe?{wardrobe}:{})},policy);
     const current=async()=>{
       const fresh=await this.load(actor,commandId,targetAge);
-      if(fresh.intake.version!==intake.version || !isDeepStrictEqual(fresh.plan,plan))throw new DomainError("VERSION_CONFLICT","photo authorization/plan changed during evaluation");
+      if(fresh.ownerActorId!==loaded.ownerActorId || fresh.intake.version!==intake.version || !isDeepStrictEqual(fresh.plan,plan))throw new DomainError("VERSION_CONFLICT","photo authorization/plan changed during evaluation");
       await this.runtime.assertConsent(actor,{participantIds,purpose:"quality_assurance",scope:{resource:`${REPORTS}:${workId}`,action:"process"}});
       return fresh;
     };

@@ -91,7 +91,8 @@ export function assessPhotoResponse(value: unknown, request: PhotoScoreRequest, 
     participantAssessments.push({participantId:expected.participantId,scores:individual,thresholds:Object.fromEntries(Object.keys(individual).map(key=>[key,policy.thresholds[key]!]))});
     ages.push({participantId:expected.participantId,estimatedAgeYears:age,confidence});
   }
-  for(const dimension of ["identity","ageRange","facialDrift",...(wardrobe?["garmentMatch"]:[])]) scores[dimension]=Math.min(...participantAssessments.map(person=>person.scores[dimension]!));
+  for(const dimension of ["identity","ageRange","facialDrift"]) scores[dimension]=Math.min(...participantAssessments.map(person=>person.scores[dimension]!));
+  if(wardrobe) scores.garmentMatch=Math.min(scores.garmentMatch!,...participantAssessments.map(person=>person.scores.garmentMatch!));
   const failedDimensions=Object.keys(scores).filter(key=>scores[key]!<policy.thresholds[key]!);
   return {scores,thresholds:structuredClone(policy.thresholds),participantAssessments,ages,decision:uncertain?"review":failedDimensions.length?"retry":"pass",failedDimensions,modelVersion:policy.modelVersion};
 }
