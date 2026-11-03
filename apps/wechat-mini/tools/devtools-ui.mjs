@@ -6,7 +6,8 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { buttonByText, cleanupOwnedSession, navigate, tapAndWait, waitForState, withDeadline } from "./devtools-driver.mjs";
+import { buttonByText, cleanupOwnedSession, disposeRouteObserver, navigate, NativeContextNotReadyError, tapAndWait, tapAndWaitForRoute, verifyNativeContext, waitForState, withDeadline } from "./devtools-driver.mjs";
+import { NativeHostNotReadyError, requireNativeHostSession } from "./devtools-host.mjs";
 
 // Explicit synthetic views exercise the real DevTools renderer and native taps.
 // They cannot establish model quality, production authentication or phone permissions.
@@ -68,11 +69,13 @@ export async function verifyNativeUI({ syntheticUI, sdkPath, output, endpoint = 
     });
   }
   try {
+    result.hostSession = requireNativeHostSession();
     mini = await withDeadline("connect", () => automator.connect({ wsEndpoint: endpoint }));
     result.system = await withDeadline("system", () => mini.systemInfo());
     assert.equal(result.system.platform, "devtools", "THIS_RUNNER_IS_DEVTOOLS_UI_ONLY");
     const projectConfig = JSON.parse(await readFile(new URL("../project.config.json", import.meta.url), "utf8"));
     assert.equal(await evaluate("AppID", function () { return wx.getAccountInfoSync().miniProgram.appId; }), projectConfig.appid);
+    result.nativeContext = await verifyNativeContext(mini);
     assert.equal(await evaluate("session admission", function () { return !!require("services/session.js").get(); }), false, "ACTIVE_USER_SESSION_MUST_BE_PRESERVED");
     const { timelineFixture, syntheticPng } = await import("../../../services/api/test/timeline-fixtures.mjs");
     const { createApiServer, StaticTokenAuthenticator } = await import("../../../services/api/dist/index.js");
@@ -176,21 +179,27 @@ export async function verifyNativeUI({ syntheticUI, sdkPath, output, endpoint = 
     });
     await step("native wardrobe return button opens the actual album", async () => {
       const back = await waitForState("wardrobe album button", () => buttonByText(page, "返回相册"));
-      await tapAndWait("wardrobe returned to album", back, async () => {
-        const current = await mini.currentPage();
-        if (current.path !== "pages/library/index" || !await current.$(".page")) return false;
-        page = current; return true;
-      });
+      page = await tapAndWaitForRoute(mini, "wardrobe returned to album", back, "/pages/library/index");
     });
     result.status = "PASS_DEVTOOLS_UI_ONLY";
-  } catch (error) { result.status = "FAILED"; result.error = { message: error.message, stack: error.stack }; throw error; }
+  } catch (error) {
+    result.status = error instanceof NativeHostNotReadyError || error instanceof NativeContextNotReadyError ? "NOT_RUN" : "FAILED";
+    if (error instanceof NativeHostNotReadyError) result.hostSession = error.report;
+    if (error instanceof NativeContextNotReadyError) result.nativeContext = error.report;
+    result.error = { message: error.message, stack: error.stack }; throw error;
+  }
   finally {
     try {
       if (mini && bound) {
         await cleanupOwnedSession(mini, token);
       }
     } catch (error) { result.cleanupError = error.message; result.status = "FAILED"; console.error("Native cleanup failed:", error.stack); }
-    finally { if (mini) await withDeadline("disconnect owned client", () => mini.disconnect());
+    finally { if (mini) {
+        try { result.routes = await disposeRouteObserver(mini); }
+        catch (error) { result.cleanupError = error.message; result.status = "FAILED"; console.error("Native observer cleanup failed:", error.stack); }
+        try { await withDeadline("disconnect owned client", () => mini.disconnect()); }
+        catch (error) { result.cleanupError = error.message; result.status = "FAILED"; console.error("Native disconnect failed:", error.stack); }
+      }
       if (server?.listening) await new Promise(resolve => server.close(resolve)); fixture?.runtime.close();
       await writeFile(join(directory, "results.json"), JSON.stringify(result, null, 2) + "\n");
       console.log(JSON.stringify({ directory, status: result.status, passed: result.steps.filter(s => s.status === "PASS").length })); }
