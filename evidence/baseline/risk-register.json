@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "ltm.repository-risk-register.v1",
+  "threats": [
+    {
+      "id": "tenant-boundary",
+      "control": "application authorization plus PostgreSQL FORCE RLS",
+      "status": "tracked"
+    },
+    {
+      "id": "external-side-effect-replay",
+      "control": "transactional intent, outbox, signed callback and idempotency",
+      "status": "tracked"
+    },
+    {
+      "id": "sensitive-media-lifecycle",
+      "control": "quarantine, purpose consent, retention and deletion receipts",
+      "status": "tracked"
+    },
+    {
+      "id": "release-evidence-forgery",
+      "control": "digest-bound independent Ed25519 evidence and fail-closed B127",
+      "status": "tracked"
+    }
+  ],
+  "technicalDebt": [
+    {
+      "id": "unrun:build",
+      "disposition": "verification_required"
+    },
+    {
+      "id": "unrun:test",
+      "disposition": "verification_required"
+    },
+    {
+      "id": "unrun:test:e2e",
+      "disposition": "verification_required"
+    }
+  ],
+  "secretScan": {
+    "status": "failed",
+    "findings": [
+      "services/integration-gateway/src/config.test.ts"
+    ]
+  },
+  "licenseReview": {
+    "status": "requires pnpm audit and signed SBOM evidence",
+    "policy": "security/license-policy.json"
+  },
+  "irreversibleOperations": [
+    "production database destructive migration",
+    "provider payment capture or refund",
+    "public release or app-store submission",
+    "production data deletion",
+    "Git history rewrite"
+  ]
+}
