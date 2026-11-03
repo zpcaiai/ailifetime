@@ -84,23 +84,26 @@ function qualityGate(input: JsonObject): JsonObject {
   const failed: string[] = [];
   const binding = artifactBinding(input);
   const wardrobe = binding?.wardrobeBinding !== undefined;
-  const dimensions = binding === undefined ? QUALITY_DIMENSIONS : [...QUALITY_DIMENSIONS, "background", "handsTeethEyes", "photorealism", ...(wardrobe ? ["garmentMatch", "regionPreservation"] : [])];
+  const dimensions: readonly string[] = binding === undefined ? QUALITY_DIMENSIONS : [...QUALITY_DIMENSIONS, "background", "handsTeethEyes", "photorealism", ...(wardrobe ? ["garmentMatch", "regionPreservation"] : [])];
   for (const dimension of dimensions) {
     const score = scores[dimension];
     const threshold = thresholds[dimension];
     if (typeof score !== "number" || !Number.isFinite(score) || score < 0 || score > 1 ||
-        typeof threshold !== "number" || !Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
-      throw new DomainError("VALIDATION_FAILED", `quality ${dimension} score and threshold must be between zero and one`);
+        typeof threshold !== "number" || !Number.isFinite(threshold) || threshold <= 0 || threshold > 1) {
+      throw new DomainError("VALIDATION_FAILED", `quality ${dimension} score and threshold must be between zero and one; threshold must be positive`);
     }
     normalizedScores[dimension] = score;
     normalizedThresholds[dimension] = threshold;
     if (score < threshold) failed.push(dimension);
   }
+  if (binding !== undefined && [scores, thresholds].some(values => Object.keys(values).length !== dimensions.length || Object.keys(values).some(key => !dimensions.includes(key)))) {
+    throw new DomainError("VALIDATION_FAILED", "bound quality scores and thresholds must contain exactly the required dimensions");
+  }
   const decision = assertKnownState(requiredString(input, "decision"), ["pass", "retry", "review", "reject"] as const, "decision");
   const people = participantQuality(input.participantAssessments, participantIds, wardrobe || (binding !== undefined && participantIds.length > 1), wardrobe);
   failed.push(...people.failedDimensions);
   const overrideReason = input.overrideReason === undefined ? undefined : requiredString(input, "overrideReason");
-  if (decision === "pass" && failed.some((dimension) => dimension.startsWith("participant:") || ["identity", "ageRange", "facialDrift", "artifacts", "handsTeethEyes", "photorealism", "garmentMatch", "regionPreservation"].includes(dimension))) {
+  if (decision === "pass" && failed.some((dimension) => binding !== undefined || dimension.startsWith("participant:") || ["identity", "ageRange", "facialDrift", "artifacts", "handsTeethEyes", "photorealism", "garmentMatch", "regionPreservation"].includes(dimension))) {
     throw new DomainError("VALIDATION_FAILED", "critical identity, age or artifact failures cannot be overridden");
   }
   if ((decision === "pass") !== (failed.length === 0) && !overrideReason) {

@@ -1,0 +1,89 @@
+[
+  {
+    "requirement_id": "B15-R01",
+    "source_files": [
+      "packages/capabilities/src/domains/building-age-media-pipeline.ts",
+      "packages/capabilities/src/participant-quality.ts"
+    ],
+    "symbols": [
+      "qualityGate",
+      "participantQuality"
+    ],
+    "tests": [
+      "packages/capabilities/src/portrait-quality-contract.test.ts"
+    ],
+    "evidence": [
+      "evidence/B15/local-maintenance-evidence.json"
+    ],
+    "notes": "Bound nine/eleven dimensions and per-person contracts locally exercised. Actual pixel evaluator is NOT_RUN."
+  },
+  {
+    "requirement_id": "B15-R02",
+    "source_files": [
+      "services/experience-platform/src/media-pipeline.ts"
+    ],
+    "symbols": [
+      "QualityGateService.calibrate"
+    ],
+    "tests": [
+      "services/experience-platform/src/media-quality.test.ts"
+    ],
+    "evidence": [
+      "evidence/B15/local-maintenance-evidence.json"
+    ],
+    "notes": "Reference context calibration exists but is not wired into production B15. Real calibrated thresholds NOT_CERTIFIED."
+  },
+  {
+    "requirement_id": "B15-R03",
+    "source_files": [
+      "services/api/test/timeline-quality-recovery.http.test.mjs"
+    ],
+    "symbols": [
+      "timelineFixture",
+      "syntheticPng"
+    ],
+    "tests": [
+      "services/api/test/timeline-quality-recovery.http.test.mjs"
+    ],
+    "evidence": [
+      "evidence/B15/local-maintenance-evidence.json"
+    ],
+    "notes": "Synthetic boundary coverage is executed; authorized real-photo golden set remains NOT_RUN."
+  },
+  {
+    "requirement_id": "B15-R04",
+    "source_files": [
+      "services/api/src/timeline-delivery.ts",
+      "services/api/src/photo-purchases.ts"
+    ],
+    "symbols": [
+      "TimelineDeliveryService.retry",
+      "PhotoPurchaseService.authorizeRetry"
+    ],
+    "tests": [
+      "services/api/test/timeline-quality-recovery.test.mjs"
+    ],
+    "evidence": [
+      "evidence/B15/local-maintenance-evidence.json"
+    ],
+    "notes": "Bounded3 retry, cancellation/uncertainty and payment gates exercised. Alternate provider, local repair and staffed review not accepted."
+  },
+  {
+    "requirement_id": "B15-R05",
+    "source_files": [
+      "packages/capabilities/src/domains/building-age-media-pipeline.ts",
+      "services/experience-platform/src/media-pipeline.ts"
+    ],
+    "symbols": [
+      "qualityGate",
+      "QualityGateService.evaluate"
+    ],
+    "tests": [
+      "services/api/test/timeline-quality-recovery.http.test.mjs"
+    ],
+    "evidence": [
+      "evidence/B15/local-maintenance-evidence.json"
+    ],
+    "notes": "Persisted dimensions/model version/decision tested. Production evaluator provenance, calibration revision and automatic regression stop are unfinished."
+  }
+]
