@@ -1,0 +1,234 @@
+{
+  "schema_version": "1.0",
+  "package_version": "2.0.0",
+  "batch_id": "B15",
+  "status": "blocked",
+  "repo_root": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+  "base_commit": "96c152c706da5b67225753a6a3e73ff85dba6fef",
+  "result_commit": null,
+  "started_at": "2026-11-03T07:46:00Z",
+  "completed_at": "2026-11-03T08:07:11.984691+00:00",
+  "agent": {
+    "host": "codex",
+    "model": null,
+    "session_id": "01a19b90-24e5-7591-8205-438965d262a6",
+    "worktree": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout"
+  },
+  "dependencies": [],
+  "changed_files": [
+    {
+      "path": "packages/capabilities/src/domains/building-age-media-pipeline.ts",
+      "change": "modified",
+      "reason": "Existing-path local maintenance; full B15 not certified"
+    },
+    {
+      "path": "services/api/src/timeline-delivery.ts",
+      "change": "modified",
+      "reason": "Existing-path local maintenance; full B15 not certified"
+    },
+    {
+      "path": "packages/capabilities/src/portrait-quality-contract.test.ts",
+      "change": "added",
+      "reason": "Existing-path local maintenance; full B15 not certified"
+    },
+    {
+      "path": "services/api/test/timeline-quality-recovery.test.mjs",
+      "change": "added",
+      "reason": "Existing-path local maintenance; full B15 not certified"
+    },
+    {
+      "path": "services/api/test/timeline-quality-recovery.http.test.mjs",
+      "change": "added",
+      "reason": "Existing-path local maintenance; full B15 not certified"
+    },
+    {
+      "path": "docs/PORTRAIT_QUALITY_RECOVERY.md",
+      "change": "added",
+      "reason": "Existing-path local maintenance; full B15 not certified"
+    },
+    {
+      "path": "evidence/B15/local-maintenance-evidence.json",
+      "change": "added",
+      "reason": "Existing-path local maintenance; full B15 not certified"
+    },
+    {
+      "path": "evidence/B15/local-maintenance-traceability.json",
+      "change": "added",
+      "reason": "Existing-path local maintenance; full B15 not certified"
+    }
+  ],
+  "entrypoints": [
+    "B15.evaluateQuality",
+    "TimelineDeliveryService.get",
+    "TimelineDeliveryService.retry",
+    "GET /v1/timelines/:id/nodes/:age/image"
+  ],
+  "contracts": [
+    "docs/PORTRAIT_QUALITY_RECOVERY.md"
+  ],
+  "migrations": [],
+  "tests": [
+    {
+      "name": "s2-green (local maintenance only)",
+      "scope": "recovery",
+      "command": "node --test services/api/test/timeline-quality-recovery.test.mjs services/api/test/timeline-delivery.test.mjs services/api/test/timeline-play-modes.test.mjs",
+      "exit_code": 0,
+      "status": "passed",
+      "artifact": "evidence/B15/local-maintenance-evidence.json",
+      "duration_ms": null
+    },
+    {
+      "name": "s3-http-verified (local maintenance only)",
+      "scope": "e2e",
+      "command": "node --test services/api/test/timeline-quality-recovery.http.test.mjs services/api/test/photo-purchases.test.mjs",
+      "exit_code": 0,
+      "status": "passed",
+      "artifact": "evidence/B15/local-maintenance-evidence.json",
+      "duration_ms": null
+    },
+    {
+      "name": "full-postgres-regression (local maintenance only)",
+      "scope": "integration",
+      "command": "python3 /Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/portrait-quality-recovery-20261103/regression/local-pg.py test",
+      "exit_code": 0,
+      "status": "passed",
+      "artifact": "evidence/B15/local-maintenance-evidence.json",
+      "duration_ms": null
+    }
+  ],
+  "evidence": [
+    {
+      "type": "test-result",
+      "path": "evidence/B15/local-maintenance-evidence.json",
+      "sha256": "01042b7ae0039cf3a188a3f87e0dacb55c9b0a362e159c8aeb010ebfa7a0de32",
+      "created_at": "2026-11-03T08:07:11.984691+00:00",
+      "producer": "Actual local commands with PID, raw-output hashes and synthetic boundary inputs; not real-image acceptance",
+      "supports": [
+        "B15-R01",
+        "B15-R02",
+        "B15-R03",
+        "B15-R04",
+        "B15-R05"
+      ],
+      "contains_sensitive_data": false,
+      "redaction": null,
+      "notes": "R02/R03/R05 evidence records the scope/gaps; it does not establish completed calibration, real golden data or production regression control."
+    }
+  ],
+  "traceability": [
+    {
+      "requirement_id": "B15-R01",
+      "source_files": [
+        "packages/capabilities/src/domains/building-age-media-pipeline.ts",
+        "packages/capabilities/src/participant-quality.ts"
+      ],
+      "symbols": [
+        "qualityGate",
+        "participantQuality"
+      ],
+      "tests": [
+        "packages/capabilities/src/portrait-quality-contract.test.ts"
+      ],
+      "evidence": [
+        "evidence/B15/local-maintenance-evidence.json"
+      ],
+      "notes": "Bound nine/eleven dimensions and per-person contracts locally exercised. Actual pixel evaluator is NOT_RUN."
+    },
+    {
+      "requirement_id": "B15-R02",
+      "source_files": [
+        "services/experience-platform/src/media-pipeline.ts"
+      ],
+      "symbols": [
+        "QualityGateService.calibrate"
+      ],
+      "tests": [
+        "services/experience-platform/src/media-quality.test.ts"
+      ],
+      "evidence": [
+        "evidence/B15/local-maintenance-evidence.json"
+      ],
+      "notes": "Reference context calibration exists but is not wired into production B15. Real calibrated thresholds NOT_CERTIFIED."
+    },
+    {
+      "requirement_id": "B15-R03",
+      "source_files": [
+        "services/api/test/timeline-quality-recovery.http.test.mjs"
+      ],
+      "symbols": [
+        "timelineFixture",
+        "syntheticPng"
+      ],
+      "tests": [
+        "services/api/test/timeline-quality-recovery.http.test.mjs"
+      ],
+      "evidence": [
+        "evidence/B15/local-maintenance-evidence.json"
+      ],
+      "notes": "Synthetic boundary coverage is executed; authorized real-photo golden set remains NOT_RUN."
+    },
+    {
+      "requirement_id": "B15-R04",
+      "source_files": [
+        "services/api/src/timeline-delivery.ts",
+        "services/api/src/photo-purchases.ts"
+      ],
+      "symbols": [
+        "TimelineDeliveryService.retry",
+        "PhotoPurchaseService.authorizeRetry"
+      ],
+      "tests": [
+        "services/api/test/timeline-quality-recovery.test.mjs"
+      ],
+      "evidence": [
+        "evidence/B15/local-maintenance-evidence.json"
+      ],
+      "notes": "Bounded3 retry, cancellation/uncertainty and payment gates exercised. Alternate provider, local repair and staffed review not accepted."
+    },
+    {
+      "requirement_id": "B15-R05",
+      "source_files": [
+        "packages/capabilities/src/domains/building-age-media-pipeline.ts",
+        "services/experience-platform/src/media-pipeline.ts"
+      ],
+      "symbols": [
+        "qualityGate",
+        "QualityGateService.evaluate"
+      ],
+      "tests": [
+        "services/api/test/timeline-quality-recovery.http.test.mjs"
+      ],
+      "evidence": [
+        "evidence/B15/local-maintenance-evidence.json"
+      ],
+      "notes": "Persisted dimensions/model version/decision tested. Production evaluator provenance, calibration revision and automatic regression stop are unfinished."
+    }
+  ],
+  "risks": [
+    {
+      "severity": "high",
+      "description": "No production pixel quality evaluator/calibration/authorized real-photo golden set has been accepted; no real model or phone acceptance.",
+      "disposition": "blocked",
+      "owner": "Model integration, quality acceptance and mini-program deployment maintainers",
+      "expires_at": null
+    }
+  ],
+  "follow_ups": [
+    "Provide valid B00/B14 dependency completion reports without fabricating baseline evidence.",
+    "Integrate and calibrate real evaluator on authorized media; user has not authorized paid inference.",
+    "Run real21-image and phone permission acceptance with authorized service/device."
+  ],
+  "blockers": [
+    "Formal B15 remains BLOCKED_INCOMPLETE; this record covers only executed local maintenance checks.",
+    "Validated dependency completion reports are absent (including B14); dependencies is intentionally empty.",
+    "Real model, authorized golden set, realism and phone permission acceptance are NOT_RUN/NOT_CERTIFIED."
+  ],
+  "assertions": {
+    "no_placeholders": true,
+    "no_skipped_required_tests": true,
+    "no_fake_evidence": true,
+    "no_real_customer_media": true,
+    "no_secrets": true,
+    "clean_room_reproducible": false
+  }
+}

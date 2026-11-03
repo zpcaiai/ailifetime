@@ -4,6 +4,7 @@ import { bindTimelineResultManifest, DomainError, type ActorContext, type JsonOb
 
 const COLLECTION = "generation.timeline-commands";
 const TERMINAL = new Set(["succeeded", "failed", "cancelled", "compensated"]);
+const RETRYABLE_ERRORS = new Set(["PROVIDER_TRANSIENT", "QUALITY_REJECTED"]);
 const identifier = (value: string) => { if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value)) throw new DomainError("VALIDATION_FAILED", "timeline command ID is invalid"); return value; };
 export function timelineRetryId(root: string, age: number, attempt: number): string {
   return `retry-${createHash("sha256").update(JSON.stringify([root, age, attempt])).digest("hex")}`;
@@ -49,16 +50,16 @@ export class TimelineDeliveryService {
       const uncertain = latest.data.commandState === "succeeded" && result === undefined;
       const status: TimelineDeliveryNode["status"] = frozen || uncertain ? "reconciliation_required" :
         !terminal ? attempts > 0 ? "retrying" : "pending" : result?.status ?? (latest.data.commandState === "compensated" ? "review" : "failed");
-      const errorCode = frozen || uncertain ? "RESULT_RECONCILIATION_REQUIRED" : result?.errorCode ?? (status === "failed" ? "PROVIDER_TRANSIENT" : null);
+      const errorCode = frozen || uncertain ? "RESULT_RECONCILIATION_REQUIRED" : latest.data.commandState === "cancelled" ? "CANCELLED" : result?.errorCode ?? (status === "failed" ? "PROVIDER_TRANSIENT" : null);
       nodes.push({ nodeId: `age-${age}`, targetAge: age, status, attempts,
-        canRetry: status === "failed" && attempts < 3 && errorCode !== "POLICY_BLOCKED",
+        canRetry: status === "failed" && attempts < 3 && errorCode !== null && RETRYABLE_ERRORS.has(errorCode),
         errorCode, commandId: latest.id, ...(status === "ready" && result?.asset ? { asset: result.asset } : {}) });
     }
     const ready = nodes.filter(node => node.status === "ready").length;
     const edit = root.data.wardrobeEdit as JsonObject | undefined;
     return { commandId: root.id, sourceAssetId: root.data.sourceAssetId, commandState: root.data.commandState,
       creationKind: edit === undefined ? "age" : "wardrobe", wardrobeSource: edit === undefined ? null : { sourceRootCommandId: edit.sourceRootCommandId, targetAge: edit.targetAge, selections: edit.selections },
-      reconciliationState: root.data._externalReconciliationState ?? "clear", state: ready === nodes.length ? "ready" : ready > 0 ? "partial" : nodes.some(node => node.status === "pending" || node.status === "retrying") ? "pending" : "blocked",
+      reconciliationState: nodes.some(node => node.status === "reconciliation_required") ? "reconciliation_required" : root.data._externalReconciliationState ?? "clear", state: ready === nodes.length ? "ready" : ready > 0 ? "partial" : nodes.some(node => node.status === "pending" || node.status === "retrying") ? "pending" : "blocked",
       expectedCount: nodes.length, readyCount: ready, missingAges: nodes.filter(node => node.status !== "ready").map(node => node.targetAge),
       aiLabel: "AI 年龄创作 · 非真实容貌预测", nodes };
   }
