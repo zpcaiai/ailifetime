@@ -18,6 +18,7 @@ import type { BrowserOidcPublicConfiguration } from "./browser-oidc.js";
 import type { ClientIntegrationPorts, MediaDeletionProjection } from "./client-integrations.js";
 import { TimelineDeliveryService } from "./timeline-delivery.js";
 import type { TimelinePhotoQualityService } from "./timeline-photo-quality.js";
+import type { TimelineSeedreamService } from "./timeline-seedream.js";
 import { WardrobeService } from "./wardrobe.js";
 import { PHOTO_PRODUCTS, PHOTO_PRICE_VERSION } from "./photo-catalog.js";
 import { PhotoPurchaseService, PHOTO_PURCHASE_COLLECTION } from "./photo-purchases.js";
@@ -61,6 +62,8 @@ export interface ApiServerOptions {
   readonly clientIntegrations?: ClientIntegrationPorts;
   readonly timelineArtifacts?: TimelineArtifactReader;
   readonly photoQuality?: TimelinePhotoQualityService;
+  readonly seedream?: TimelineSeedreamService;
+  readonly seedreamReadiness?: () => Promise<boolean>;
   /** Production bounded-context composition; omitted only for local/test fixtures. */
   readonly domainRuntime?: ProductionDomainRuntime;
   readonly browserOidcConfiguration?: BrowserOidcPublicConfiguration;
@@ -203,8 +206,9 @@ async function handleRequest(
       const readiness = await options.runtime.readiness();
       const integrations = await clientIntegrationReadiness(options.clientIntegrations);
       const domain = options.domainRuntime === undefined ? { ready: true, database: "embedded", schemaVersion: null } : await options.domainRuntime.readiness();
-      const ready = readiness.ready && integrations.every((item) => item.ready) && domain.ready;
-      sendJson(response, ready ? 200 : 503, { ...readiness, ready, integrations, domain, requestId });
+      const generationReady = options.seedreamReadiness === undefined ? true : await options.seedreamReadiness();
+      const ready = readiness.ready && integrations.every((item) => item.ready) && domain.ready && generationReady;
+      sendJson(response, ready ? 200 : 503, { ...readiness, ready, integrations, domain, generationReady, requestId });
       return;
     }
     if (method === "GET" && path === "/metrics") {
@@ -562,6 +566,17 @@ async function handleRequest(
       const wardrobe = new WardrobeService(options.runtime, options.capabilityRegistry, options.timelineArtifacts);
       const data = method === "GET" ? await wardrobe.context(actor, rootId, age) : await wardrobe.create(operationContext(actor, "wardrobe.create", requireIdempotencyKey(request)), rootId, age, object(await readJsonBody(request, bodyLimit), "wardrobe request"), requireIdempotencyKey(request));
       sendJson(response, 200, {data, requestId}); return;
+    }
+    const generationMatch = /^\/v1\/timelines\/([A-Za-z0-9](?:[A-Za-z0-9._:-]|%3[Aa]){0,127})\/generate$/.exec(path);
+    if (method === "POST" && generationMatch?.[1] !== undefined) {
+      const actor = await authenticate(options, request, requestId);
+      if (!actor.roles.includes("service_account") || !hasPermission(actor,"media.generation.generate")) throw new DomainError("AUTH_FORBIDDEN","generation requires an authorized service account");
+      if (!options.seedream) throw new DomainError("DEPENDENCY_UNAVAILABLE","Seedream Pro is not configured");
+      const input = object(await readJsonBody(request,bodyLimit),"generation request");
+      assertExactKeys(input,["targetAge"],"generation request");
+      if (typeof input.targetAge !== "number") throw new DomainError("VALIDATION_FAILED","generation requires targetAge");
+      const data = await options.seedream.generate(operationContext(actor,"seedream.generate",requireIdempotencyKey(request)),decodeURIComponent(generationMatch[1]),input.targetAge);
+      sendJson(response,200,{data,requestId});return;
     }
     const photoQualityMatch = /^\/v1\/timelines\/([A-Za-z0-9](?:[A-Za-z0-9._:-]|%3[Aa]){0,127})\/quality$/.exec(path);
     if (method === "POST" && photoQualityMatch?.[1] !== undefined) {

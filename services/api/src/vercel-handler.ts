@@ -14,6 +14,7 @@ import { PrivateS3Images } from "./private-s3.js";
 import { PHOTO_PRICE_VERSION,PHOTO_PRODUCTS } from "./photo-catalog.js";
 import { configuredPhotoScoring } from "./photo-score-config.js";
 import { TimelinePhotoQualityService } from "./timeline-photo-quality.js";
+import { configuredSeedream } from "./seedream-config.js";
 
 function json(response: ServerResponse,status: number,body: unknown): void {
   response.statusCode=status;response.setHeader("content-type","application/json; charset=utf-8");response.setHeader("cache-control","private, no-store");response.end(JSON.stringify(body));
@@ -52,21 +53,26 @@ export function createVercelHandler(environment: NodeJS.ProcessEnv,productRoot: 
     storage={media:new PostgresGeneratedMedia(pool,objects),pool,objects};return storage;
   }
   async function initialize() {
-    const configuration=loadApiConfiguration(await secretFiles(env),productRoot);
+    const effectiveEnv=await secretFiles(env);
+    const configuration=loadApiConfiguration(effectiveEnv,productRoot);
     if (!configuration.postgresRuntimeOptions) throw new Error("CONFIGURATION_INVALID");
     const runtime=await PostgresLifeTimeMachineRuntime.connect(configuration.postgresRuntimeOptions);
     let domain: ProductionDomainRuntime|undefined;
+    let seedream: ReturnType<typeof configuredSeedream>;
     try {
       domain=new ProductionDomainRuntime(configuration.postgresRuntimeOptions.connectionString,{poolMax:2,applicationName:"ltm-vercel-domain"});
+      seedream=configuredSeedream(effectiveEnv,"production",runtime);
+      const artifacts=seedream?.media ?? media().media;
       const registry=createCapabilityRegistry(),scoring=configuredPhotoScoring(env,"production");
-      const photoQuality=scoring===undefined?undefined:new TimelinePhotoQualityService(runtime,registry,media().media,scoring.scorer,scoring.policies,scoring.channel);
+      const photoQuality=scoring===undefined?undefined:new TimelinePhotoQualityService(runtime,registry,artifacts,scoring.scorer,scoring.policies,scoring.channel);
       const server=createApiServer({runtime,authenticator:configuration.authenticator,capabilityRegistry:registry,externalBusinessEventReducerRegistry,
-        appEnvironment:"production",clientIntegrations:configuration.clientIntegrations,timelineArtifacts:media().media,domainRuntime:domain,staticDirectory:null,
+        appEnvironment:"production",clientIntegrations:configuration.clientIntegrations,timelineArtifacts:artifacts,domainRuntime:domain,staticDirectory:null,
         ...(photoQuality===undefined?{}:{photoQuality}),
+        ...(seedream===undefined?{}:{seedream:seedream.generation,seedreamReadiness:seedream.readiness}),
         ...(configuration.metricsTokenSha256?{metricsTokenSha256:configuration.metricsTokenSha256}:{})});
       const activeDomain=domain;
-      return {server,close:async()=>{await runtime.close();await activeDomain.close();}};
-    }catch(error){await runtime.close();await domain?.close();throw error;}
+      return {server,close:async()=>{await seedream?.close();await runtime.close();await activeDomain.close();}};
+    }catch(error){await seedream?.close();await runtime.close();await domain?.close();throw error;}
   }
   async function handler(request: IncomingMessage,response: ServerResponse):Promise<void> {
     const url=new URL(request.url??"/","https://function.invalid");
