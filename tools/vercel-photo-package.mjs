@@ -24,6 +24,7 @@ export async function packageVercelApi(output,{preview=true}={}) {
  return {output,preview,files};
 }
 if(process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)){
- const args=process.argv.slice(2);if(args.length!==1)throw new Error('usage: node tools/vercel-photo-package.mjs ABSOLUTE_OUTPUT_DIRECTORY');
- console.log(JSON.stringify(await packageVercelApi(args[0]),null,2));
+ const args=process.argv.slice(2),production=args[0]==='--production';
+ if((production&&args.length!==2)||(!production&&args.length!==1))throw new Error('usage: node tools/vercel-photo-package.mjs [--production] ABSOLUTE_OUTPUT_DIRECTORY');
+ console.log(JSON.stringify(await packageVercelApi(args[production?1:0],{preview:!production}),null,2));
 }

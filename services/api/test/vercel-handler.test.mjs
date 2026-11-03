@@ -2,7 +2,36 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { createVercelHandler } from '../dist/vercel-handler.js';
+import { readFile,stat,access } from 'node:fs/promises';
+import { dirname } from 'node:path';
+import { createVercelHandler,materializeVercelConfiguration } from '../dist/vercel-handler.js';
+
+test('Vercel materializes exact bounded documents and credentials into owner-only files and removes them on close',async()=>{
+ const env={LTM_UPLOAD_BROKER_TOKEN:'synthetic-broker',LTM_PHOTO_SCORER_TOKEN:'synthetic-scorer',
+  LTM_PHOTO_SCORER_POLICIES_JSON:'[{"id":"synthetic-policy"}]',LTM_CONSENT_POLICY_CATALOG_JSON:'{"syntheticUnsignedTest":true}',ARK_API_KEY:'synthetic-ark'};
+ const app=await materializeVercelConfiguration(env);let directory;
+ try{
+  for(const [name,target] of [['LTM_UPLOAD_BROKER_TOKEN','LTM_UPLOAD_BROKER_TOKEN_FILE'],['LTM_PHOTO_SCORER_TOKEN','LTM_PHOTO_SCORER_TOKEN_FILE'],['LTM_PHOTO_SCORER_POLICIES_JSON','LTM_PHOTO_SCORER_POLICY_FILE'],['LTM_CONSENT_POLICY_CATALOG_JSON','LTM_CONSENT_POLICY_CATALOG_FILE']]){
+   const path=app.environment[target];assert.equal(await readFile(path,'utf8'),env[name]);assert.equal((await stat(path)).mode&0o777,0o600);
+   directory??=dirname(path);assert.equal(dirname(path),directory);assert.equal(app.environment[name],undefined);assert.equal(env[name].startsWith('synthetic')||env[name].startsWith('[')||env[name].startsWith('{'),true);
+  }
+  assert.equal((await stat(directory)).mode&0o777,0o700);assert.equal(app.environment.ARK_API_KEY,env.ARK_API_KEY);
+  assert.equal(env.LTM_UPLOAD_BROKER_TOKEN_FILE,undefined);
+ }finally{await app.close();await app.close();}
+ await assert.rejects(access(directory),{code:'ENOENT'});
+});
+
+test('Vercel refuses ambiguous, empty, malformed and oversized configuration without reflecting values',async()=>{
+ for(const env of [
+  {LTM_UPLOAD_BROKER_TOKEN:'synthetic',LTM_UPLOAD_BROKER_TOKEN_FILE:'/private/existing'},
+  {LTM_PHOTO_SCORER_TOKEN:''},{LTM_PHOTO_SCORER_TOKEN:'x'.repeat(8193)},
+  {LTM_PHOTO_SCORER_POLICIES_JSON:'not-json'},
+  {LTM_CONSENT_POLICY_CATALOG_JSON:'{"invalid":'},
+  {LTM_CONSENT_POLICY_CATALOG_JSON:'"'+'界'.repeat(700000)+'"'},
+ ])await assert.rejects(materializeVercelConfiguration(env),{message:'CONFIGURATION_INVALID'});
+ const existing=await materializeVercelConfiguration({LTM_UPLOAD_BROKER_TOKEN_FILE:'/private/operator-managed'});
+ assert.equal(existing.environment.LTM_UPLOAD_BROKER_TOKEN_FILE,'/private/operator-managed');await existing.close();
+});
 
 test('Vercel HTTP entry exposes actual liveness/catalog while missing production auth stays503 and cron is protected',async()=>{
  const secret='synthetic-cron-secret-'.repeat(3),app=createVercelHandler({CRON_SECRET:secret},process.cwd());
