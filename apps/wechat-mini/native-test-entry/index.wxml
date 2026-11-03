@@ -1,0 +1,18 @@
+<view class="page">
+  <view class="page-header"><view class="page-title">手机相册保存联调</view><view class="muted">明确标注的测试图片 · 不调用付费模型</view></view>
+  <view class="card">
+    <view class="section-title">仅用于保存链路验证</view>
+    <view class="muted">图片是 512 × 512 的测试图案。保存结果不代表真实人像、模型质量或生产验收。</view>
+    <view wx:if="{{enabled &amp;&amp; !connected}}">
+      <input class="test-credential" password="true" maxlength="64" bindinput="tokenChanged" placeholder="输入部署负责人提供的短期测试凭据" aria-label="短期测试凭据" />
+      <button class="button" bindtap="connect" loading="{{busy}}" disabled="{{busy}}">校验测试身份</button>
+    </view>
+    <view wx:if="{{enabled &amp;&amp; connected}}">
+      <view class="muted">身份已由服务端校验，有效至 {{expiresAt}}</view>
+      <button class="button" bindtap="openSingle">单张保存测试</button>
+      <button class="button secondary" bindtap="openBatch">21 张批量保存测试</button>
+      <view class="muted">进入结果页后点击“一键保存到手机相册”，再到手机实际相册核对图片及数量。首次授权、拒绝和设置返回后的重试需要分别验证。</view>
+    </view>
+    <view class="status error" wx:if="{{error}}">{{error}}</view>
+  </view>
+</view>
