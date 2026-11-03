@@ -10,6 +10,28 @@ import {withPhotoFixture,response} from './photo-score-fixtures.mjs';
 
 const service=f=>new TimelinePhotoQualityService(f.runtime,f.registry,f.store,new HttpPhotoScorer(f.scorerOptions),[f.policy],'wechat');
 async function consent(f,asset,command='root',age=37){const id=photoQualityId('tenant',command,age,asset.sha256,f.sourceAsset.sha256,f.policy);await f.grantQuality(id);return id;}
+for(const condition of ['source-consent','report-consent','cancelled','cached-consent'])test(`authority changes during actual media reads prevent inference or cached success: ${condition}`,()=>withPhotoFixture(async f=>{
+ const asset=await f.asset('authority-candidate',9),id=await consent(f,asset);
+ if(condition==='cached-consent')await service(f).evaluate(f.service,'root',37,asset);
+ let changed=false;
+ const media={read:async a=>{
+  const bytes=await f.store.read(a);
+  if(!changed){
+   changed=true;
+   if(condition==='cancelled')f.runtime.applyExternalBusinessEvent(f.service,f.callback('root','cancelled'));
+   else {
+    const resource=condition==='report-consent'?`media.quality-decisions:${id}`:'media.asset:source';
+    const grant=f.runtime.listConsents(f.service).find(g=>g.participantId==='user'&&g.purpose==='quality_assurance'&&g.scope.resource===resource);assert.ok(grant);
+    f.runtime.withdrawConsent({...f.actor,purpose:'quality_assurance'},{consentId:grant.id,expectedVersion:grant.version,reason:'withdraw while reading actual media',idempotencyKey:'withdraw-read-'+condition});
+   }
+  }
+  return bytes;
+ }};
+ const scorer=new TimelinePhotoQualityService(f.runtime,f.registry,media,new HttpPhotoScorer(f.scorerOptions),[f.policy],'wechat');
+ await assert.rejects(scorer.evaluate(f.service,'root',37,asset),/consent|cancelled/i);
+ assert.equal(f.seen.length,condition==='cached-consent'?1:0,'No inference after authority changed while reading');
+ if(condition!=='cached-consent')assert.throws(()=>f.runtime.getRecord(f.service,'media.quality-decisions',id),/not found/i);
+}));
 test('SQL-reopened calibration hashes reproduce and reordered equivalent policies reuse the same report without inference',()=>withPhotoFixture(async f=>{
  const asset=await f.asset('canonical-candidate',7),id=await consent(f,asset);
  await service(f).evaluate(f.service,'root',37,asset);
