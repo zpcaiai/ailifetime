@@ -71,26 +71,34 @@ export class TimelinePhotoQualityService {
   }
   async evaluate(actor:ActorContext,commandId:string,targetAge:number,assetValue:unknown) {
     const asset=parseTimelineImageAsset(assetValue),loaded=await this.load(actor,commandId,targetAge);
-    const {command,plan,intake,participantIds,reference,context,policy}=loaded;
+    const {plan,intake,participantIds,reference,context,policy}=loaded;
     const workId=photoQualityId(actor.tenantId,commandId,targetAge,asset.sha256,reference.sha256,policy);
     await this.runtime.assertConsent(actor,{participantIds,purpose:"quality_assurance",scope:{resource:`${REPORTS}:${workId}`,action:"process"}});
     const referenceBytes=await this.media.read(reference),outputBytes=await this.media.read(asset);
     const wardrobe=loaded.wardrobe===undefined?undefined:{...loaded.wardrobe,bytes:await this.media.read(loaded.wardrobe.asset)};
     const request=makePhotoScoreRequest({tenantId:actor.tenantId,commandId,sourceAssetId:reference.id,targetAge,context,
       people:participantIds.map((participantId,index)=>({participantId,position:participantIds.length===1?"single":index===0?"left":"right"})),referenceAsset:reference,referenceBytes,outputAsset:asset,outputBytes,...(wardrobe?{wardrobe}:{})},policy);
+    const current=async()=>{
+      const fresh=await this.load(actor,commandId,targetAge);
+      if(fresh.intake.version!==intake.version || !isDeepStrictEqual(fresh.plan,plan))throw new DomainError("VERSION_CONFLICT","photo authorization/plan changed during evaluation");
+      await this.runtime.assertConsent(actor,{participantIds,purpose:"quality_assurance",scope:{resource:`${REPORTS}:${workId}`,action:"process"}});
+      return fresh;
+    };
     try {
       const cached=await this.runtime.getRecord(actor,REPORTS,workId),binding=json(cached.data.artifactBinding),evidence=json(cached.data.photoScoreEvidence);
       if(cached.data.batchId!=="B15" || cached.data.executionState!=="persisted" || cached.data.modelVersion!==policy.modelVersion || !isDeepStrictEqual(cached.participantIds,[...participantIds].sort()) || !isDeepStrictEqual(cached.data.thresholds,policy.thresholds) ||
           binding.sourceAssetId!==reference.id || binding.assetId!==asset.id || binding.outputSha256!==asset.sha256 || binding.targetAge!==targetAge || evidence.requestSha256!==request.requestSha256 || evidence.sourceSha256!==reference.sha256 || evidence.modelSha256!==policy.modelSha256 || evidence.calibrationId!==policy.id ||
           evidence.calibrationSha256!==digest(canonicalJson(policy)) || !isDeepStrictEqual(evidence.calibration,policy)) throw new DomainError("EVENT_FINGERPRINT_CONFLICT","cached photo quality binding changed");
+      await current();
       return {qualityResultId:workId,decision:cached.data.decision,failedDimensions:cached.data.failedDimensions,modelVersion:policy.modelVersion,calibrationId:policy.id,reused:true};
     }catch(error){if(!(error instanceof DomainError && error.code==="RESOURCE_NOT_FOUND"))throw error;}
-    if(!["requested","dispatched","acknowledged"].includes(String(command.data.commandState)))throw new DomainError("VERSION_CONFLICT","photo scoring cannot create new quality after terminal delivery");
+    const before=await current();
+    if(!["requested","dispatched","acknowledged"].includes(String(before.command.data.commandState)))throw new DomainError("VERSION_CONFLICT","photo scoring cannot create new quality after terminal delivery");
     const fingerprint=digest(JSON.stringify(request)),raw=await this.scorer.evaluate(request);
     if(digest(JSON.stringify(request))!==fingerprint)throw new DomainError("DEPENDENCY_UNAVAILABLE","photo scorer mutated the bound request");
     const result=assessPhotoResponse(raw,request,policy);
-    const fresh=await this.load(actor,commandId,targetAge);
-    if(fresh.intake.version!==intake.version || !isDeepStrictEqual(fresh.plan,plan) || !["requested","dispatched","acknowledged"].includes(String(fresh.command.data.commandState)))throw new DomainError("VERSION_CONFLICT","photo authorization/plan changed during evaluation");
+    const fresh=await current();
+    if(!["requested","dispatched","acknowledged"].includes(String(fresh.command.data.commandState)))throw new DomainError("VERSION_CONFLICT","photo authorization/plan changed during evaluation");
     await this.registry.execute(this.runtime,"B15",{actor,idempotencyKey:`photo-score:${workId}`,input:{workId,participantIds,modelVersion:result.modelVersion,
       artifactBinding:{sourceAssetId:reference.id,assetId:asset.id,outputSha256:asset.sha256,targetAge,...(plan.wardrobeBinding===undefined?{}:{wardrobeBinding:plan.wardrobeBinding})},
       scores:result.scores,thresholds:result.thresholds,participantAssessments:result.participantAssessments,decision:result.decision,
