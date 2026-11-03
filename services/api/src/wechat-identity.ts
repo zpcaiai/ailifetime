@@ -6,7 +6,8 @@ import { importJWK,SignJWT,jwtVerify,calculateJwkThumbprint,type JWK } from 'jos
 const PURPOSES=['age_transformation','sharing','privacy_rights','commerce','notifications','customer_support'];
 const digest=(v:string)=>createHash('sha256').update(v).digest('hex');
 const identifier=(v:unknown,max=200):v is string=>typeof v==='string'&&v.length<=max&&/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(v);
-class IdentityError extends Error { constructor(readonly code:string,readonly status:number){super(code);} }
+type SecretFormatReason='too_short'|'too_long'|'internal_whitespace';
+class IdentityError extends Error { constructor(readonly code:string,readonly status:number,readonly reason?:SecretFormatReason){super(code);} }
 function reject(code:string,status=400):never{throw new IdentityError(code,status);}
 function exact(v:unknown,keys:string[]):Record<string,unknown>{
  if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).length!==keys.length||Object.keys(v).some(k=>!keys.includes(k)))reject('VALIDATION_FAILED');
@@ -45,7 +46,8 @@ export class WechatIdentityAuthority {
   const value=this.env.LTM_WECHAT_APP_SECRET;
   if(typeof value!=='string'||!value.trim())reject('WECHAT_APP_SECRET_MISSING',503);
   const secret=value.trim();
-  if(secret.length<16||secret.length>512||/\s/.test(secret))reject('WECHAT_APP_SECRET_FORMAT_INVALID',503);
+  const reason:SecretFormatReason|undefined=secret.length<16?'too_short':secret.length>512?'too_long':/\s/.test(secret)?'internal_whitespace':undefined;
+  if(reason)throw new IdentityError('WECHAT_APP_SECRET_FORMAT_INVALID',503,reason);
   return secret;
  }
  constructor(private readonly env:NodeJS.ProcessEnv,testEndpoint?:string){
@@ -178,7 +180,7 @@ export class WechatIdentityAuthority {
    const token=req.headers['x-ltm-subject-token'];if(typeof token!=='string')reject('AUTH_REQUIRED',401);
    const op=url.pathname.endsWith('/refresh')?'refresh':'revoke';const result=await this.sessionOperation(op,body,key,token);
    if(op==='revoke'){res.statusCode=204;res.setHeader('cache-control','private, no-store');res.end();}else send(200,result);
-  }catch(error){if(error instanceof IdentityError)send(error.status,{error:{code:error.code}});else send(503,{error:{code:'IDENTITY_UNAVAILABLE'}});}
+  }catch(error){if(error instanceof IdentityError)send(error.status,{error:{code:error.code,...(error.reason&&this.allowed(req.headers.authorization)?{reason:error.reason}:{})}});else send(503,{error:{code:'IDENTITY_UNAVAILABLE'}});}
  }
  async close(){await this.pool.end();}
 }

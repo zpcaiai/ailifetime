@@ -121,6 +121,15 @@ test('untrusted HTTP inputs cannot choose principals or cause external exchange;
   assert.equal((await f.request('/v1/wechat/sessions',f.login())).body.error.code,'WECHAT_APP_SECRET_MISSING');assert.equal(f.calls,0);
   f.env.LTM_WECHAT_APP_SECRET='synthetic invalid secret';
   assert.equal((await f.request('/v1/wechat/sessions',f.login())).body.error.code,'WECHAT_APP_SECRET_FORMAT_INVALID');assert.equal(f.calls,0);
+  for(const [value,reason] of [['short','too_short'],['x'.repeat(513),'too_long'],['synthetic invalid secret','internal_whitespace']]){
+   f.env.LTM_WECHAT_APP_SECRET=value;
+   const response=await fetch(f.base+'/health/ready',{headers:{authorization:'Bearer '+f.workload}});
+   assert.equal(response.status,503);
+   assert.deepEqual(await response.json(),{error:{code:'WECHAT_APP_SECRET_FORMAT_INVALID',reason}});
+   const denied=await fetch(f.base+'/health/ready');assert.equal(denied.status,401);
+   assert.deepEqual(await denied.json(),{error:{code:'AUTH_REQUIRED'}});
+   assert.equal(f.calls,0);
+  }
   assert.throws(()=>new WechatIdentityAuthority({...f.env,APP_ENV:'production'},'http://127.0.0.1:1234'),/IDENTITY_NOT_CONFIGURED/);
  }finally{await f.close();}
 });
