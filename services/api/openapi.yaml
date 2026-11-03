@@ -65,6 +65,56 @@ paths:
                 $ref: "#/components/schemas/TimelineDeliveryResponse"
         default:
           $ref: "#/components/responses/Error"
+  /v1/timelines/{commandId}/generate:
+    post:
+      operationId: generateSeedreamTimelineCandidate
+      description: Service-account-only Seedream Pro candidate generation. Requires media.generation.generate, an active stored B14 plan, accepted B07 source and current per-person transform consent. One node per awaited request. Model, source, prompt and resolution are server-derived. Durable replay never resubmits an uncertain paid operation. This operation does not certify quality/safety or publish a B14 delivery.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TimelineCommandId"
+        - $ref: "#/components/parameters/TimelinePurpose"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [targetAge]
+              properties:
+                targetAge: { type: integer, minimum: 0, maximum: 100 }
+      responses:
+        "200":
+          description: Private candidate metadata, pending independent quality/safety and signed delivery. No public image URL.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, requestId]
+                properties:
+                  requestId: { type: string }
+                  data:
+                    type: object
+                    required: [asset, generatedAt, commandId, targetAge, model, sourceAssetId, sourceSha256, planSha256, promptPolicyVersion, planSeed, seedMode, status, publishable, aiLabel]
+                    properties:
+                      asset: { $ref: "#/components/schemas/TimelineImageAsset" }
+                      generatedAt: { type: string, format: date-time }
+                      commandId: { type: string }
+                      targetAge: { type: integer, minimum: 0, maximum: 100 }
+                      model: { const: doubao-seedream-5-0-pro-260628 }
+                      sourceAssetId: { type: string }
+                      sourceSha256: { type: string, pattern: '^[a-f0-9]{64}$' }
+                      planSha256: { type: string, pattern: '^[a-f0-9]{64}$' }
+                      promptPolicyVersion: { type: string }
+                      planSeed: { type: string }
+                      seedMode: { const: plan-provenance-only }
+                      status: { const: candidate }
+                      publishable: { const: false }
+                      aiLabel: { type: string }
+        default:
+          $ref: "#/components/responses/Error"
   /v1/timelines/{commandId}/quality:
     post:
       operationId: evaluateTimelinePhotoQuality

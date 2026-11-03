@@ -446,6 +446,41 @@ export class BrokerClient {
     } catch { return { ready: false, dependency }; }
   }
 
+  /** The broker token never leaves its configured origin. No upstream URL is followed. */
+  async authorizedImage(token: string, context: ActorContext, expected: { id: string; byteLength: number; sha256: string }): Promise<Uint8Array> {
+    if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token) || token.length > 8192 ||
+        !Number.isSafeInteger(expected.byteLength) || expected.byteLength < 1 || expected.byteLength > 25*1024*1024) {
+      throw validation("invalid source download binding");
+    }
+    const response = await this.#fetch(`${this.#baseUrl}/v1/media/downloads/${token}`, {
+      redirect: "error", signal: AbortSignal.timeout(this.#timeoutMs),
+      headers: { authorization: `Bearer ${this.#workloadToken()}`, ...principalHeaders(context) },
+    }).catch(() => unavailable("source broker is unreachable"));
+    const expires = Date.parse(response.headers.get("x-ltm-authorization-expires-at") ?? "");
+    if (!response.ok || response.headers.get("content-type") !== "image/jpeg" ||
+        response.headers.get("x-ltm-media-reference") !== expected.id || !Number.isFinite(expires) || expires <= Date.now()) {
+      await response.body?.cancel(); unavailable("source broker binding is invalid");
+    }
+    const reader = response.body?.getReader();
+    if (!reader) unavailable("source broker returned no image");
+    const chunks: Uint8Array[] = []; let size = 0;
+    try {
+      for (;;) {
+        const next = await reader.read(); if (next.done) break;
+        size += next.value.byteLength;
+        if (size > expected.byteLength) { await reader.cancel(); unavailable("source image is too large"); }
+        chunks.push(next.value);
+      }
+    } catch { unavailable("source image stream failed"); }
+    finally { reader.releaseLock(); }
+    const bytes = Buffer.concat(chunks, size);
+    if (size !== expected.byteLength || createHash("sha256").update(bytes).digest("hex") !== expected.sha256 ||
+        bytes[0] !== 255 || bytes[1] !== 216 || bytes.at(-2) !== 255 || bytes.at(-1) !== 217 || expires <= Date.now()) {
+      bytes.fill(0); unavailable("source image bytes or authorization changed");
+    }
+    return bytes;
+  }
+
   async #request(method: "GET" | "POST" | "PUT", path: string, body: string | Uint8Array | undefined,
     headers: Readonly<Record<string, string>>, expectsJson: boolean): Promise<unknown> {
     if (!/^\/[A-Za-z0-9/_-]+$/.test(path) || path.includes("..")) throw configuration("broker path is invalid");
