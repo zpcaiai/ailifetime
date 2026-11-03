@@ -1,0 +1,213 @@
+{
+  "schemaVersion": "ltm.repository-inventory.v1",
+  "repository": {
+    "kind": "monorepo",
+    "git": {
+      "present": true,
+      "head": "f0da9c1275afb46cb9d74ddb67b8ab369a34c034",
+      "branch": "codex/b15-formal-20261104",
+      "dirty": true
+    },
+    "packageManager": "pnpm@10.12.4",
+    "nodeEngine": ">=26"
+  },
+  "workspacePackages": [
+    "apps/developer-portal",
+    "apps/mobile",
+    "apps/web",
+    "apps/wechat-mini",
+    "services/api",
+    "services/client-integration-broker",
+    "services/commerce-platform",
+    "services/commercial-operations",
+    "services/data-intelligence",
+    "services/developer-platform",
+    "services/enterprise-control-plane",
+    "services/experience-platform",
+    "services/growth-operations-platform",
+    "services/integration-gateway",
+    "services/migrator",
+    "services/notification-platform",
+    "services/orchestration-platform",
+    "services/partner-channel-platform",
+    "services/support-platform",
+    "services/workers",
+    "packages/capabilities",
+    "packages/core",
+    "packages/experience-governance",
+    "packages/providers",
+    "packages/public-web-platform",
+    "packages/sdk-java",
+    "packages/sdk-python",
+    "packages/sdk-ts"
+  ],
+  "languages": [
+    {
+      "name": "Java",
+      "fileCount": 21
+    },
+    {
+      "name": "JavaScript",
+      "fileCount": 244
+    },
+    {
+      "name": "JSON",
+      "fileCount": 161
+    },
+    {
+      "name": "Markdown",
+      "fileCount": 386
+    },
+    {
+      "name": "Python",
+      "fileCount": 25
+    },
+    {
+      "name": "SQL",
+      "fileCount": 14
+    },
+    {
+      "name": "TypeScript",
+      "fileCount": 285
+    },
+    {
+      "name": "WXML",
+      "fileCount": 12
+    },
+    {
+      "name": "WXSS",
+      "fileCount": 12
+    },
+    {
+      "name": "YAML",
+      "fileCount": 94
+    }
+  ],
+  "buildManifests": [
+    ".ai-life-time-machine/skill-package/starter/repository/package.json",
+    ".ai-life-time-machine/skill-package/starter/repository/pnpm-workspace.yaml",
+    "apps/developer-portal/package.json",
+    "apps/developer-portal/tsconfig.json",
+    "apps/mobile/native/package.json",
+    "apps/mobile/native/tsconfig.json",
+    "apps/mobile/package.json",
+    "apps/mobile/tsconfig.json",
+    "apps/web/package.json",
+    "apps/web/tsconfig.json",
+    "apps/wechat-mini/package.json",
+    "apps/wechat-mini/release/package.json",
+    "apps/wechat-mini/tsconfig.json",
+    "package.json",
+    "packages/capabilities/package.json",
+    "packages/capabilities/tsconfig.json",
+    "packages/core/package.json",
+    "packages/core/tsconfig.json",
+    "packages/experience-governance/package.json",
+    "packages/experience-governance/tsconfig.json",
+    "packages/providers/package.json",
+    "packages/providers/tsconfig.json",
+    "packages/public-web-platform/package.json",
+    "packages/sdk-ts/package.json",
+    "packages/sdk-ts/tsconfig.json",
+    "pnpm-workspace.yaml",
+    "services/api/Dockerfile",
+    "services/api/package.json",
+    "services/api/tsconfig.json",
+    "services/client-integration-broker/Dockerfile",
+    "services/client-integration-broker/package.json",
+    "services/client-integration-broker/tsconfig.json",
+    "services/commerce-platform/package.json",
+    "services/commerce-platform/tsconfig.json",
+    "services/commercial-operations/package.json",
+    "services/commercial-operations/tsconfig.json",
+    "services/data-intelligence/package.json",
+    "services/data-intelligence/tsconfig.json",
+    "services/developer-platform/package.json",
+    "services/developer-platform/tsconfig.json",
+    "services/enterprise-control-plane/package.json",
+    "services/enterprise-control-plane/tsconfig.json",
+    "services/experience-platform/package.json",
+    "services/experience-platform/tsconfig.json",
+    "services/growth-operations-platform/package.json",
+    "services/growth-operations-platform/tsconfig.json",
+    "services/integration-gateway/Dockerfile",
+    "services/integration-gateway/package.json",
+    "services/integration-gateway/tsconfig.json",
+    "services/migrator/Dockerfile",
+    "services/migrator/package.json",
+    "services/notification-platform/package.json",
+    "services/orchestration-platform/package.json",
+    "services/orchestration-platform/tsconfig.json",
+    "services/partner-channel-platform/package.json",
+    "services/partner-channel-platform/tsconfig.json",
+    "services/support-platform/package.json",
+    "services/workers/Dockerfile",
+    "services/workers/package.json",
+    "services/workers/tsconfig.json"
+  ],
+  "entrypoints": [
+    "services/api/Dockerfile",
+    "services/api/src/main.ts",
+    "services/client-integration-broker/Dockerfile",
+    "services/client-integration-broker/src/main.ts",
+    "services/integration-gateway/Dockerfile",
+    "services/integration-gateway/src/main.ts",
+    "services/migrator/Dockerfile",
+    "services/migrator/src/main.mjs",
+    "services/workers/Dockerfile",
+    "services/workers/src/main.ts"
+  ],
+  "databases": {
+    "migrations": [
+      "infra/postgres/migrations/001_core.sql",
+      "infra/postgres/migrations/002_external_evidence.sql",
+      "infra/postgres/migrations/003_runtime_compatibility.sql",
+      "infra/postgres/migrations/004_external_business_events.sql",
+      "infra/postgres/migrations/005_participant_authority_and_processing_purpose.sql",
+      "infra/postgres/migrations/006_data_intelligence_durability.sql",
+      "infra/postgres/migrations/007_commerce_partner_growth.sql",
+      "infra/postgres/migrations/manifest.json"
+    ],
+    "postgres": true,
+    "redis": true,
+    "objectStorage": true
+  },
+  "deployment": [
+    ".github/workflows/ci.yml",
+    ".github/workflows/production-release-candidate.yml",
+    "compose.yaml",
+    "infra/kubernetes/production/README.md",
+    "infra/kubernetes/production/api.yaml",
+    "infra/kubernetes/production/availability.yaml",
+    "infra/kubernetes/production/client-integration-broker.yaml",
+    "infra/kubernetes/production/configmap.yaml",
+    "infra/kubernetes/production/ingress.yaml",
+    "infra/kubernetes/production/integration-gateway.yaml",
+    "infra/kubernetes/production/kustomization.yaml",
+    "infra/kubernetes/production/migration-job.yaml",
+    "infra/kubernetes/production/namespace-serviceaccounts.yaml",
+    "infra/kubernetes/production/networking.yaml",
+    "infra/kubernetes/production/policies/integration-gateway-readiness-iam-policy.json",
+    "infra/kubernetes/production/workers.yaml"
+  ],
+  "directories": [
+    ".agents",
+    ".ai-life-time-machine",
+    ".git",
+    ".github",
+    "apps",
+    "data",
+    "deploy",
+    "docs",
+    "evidence",
+    "infra",
+    "node_modules",
+    "packages",
+    "security",
+    "services",
+    "skills",
+    "tools"
+  ],
+  "skillCount": 22,
+  "sourceFileCount": 1298
+}
