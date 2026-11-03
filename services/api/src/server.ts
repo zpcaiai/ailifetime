@@ -18,6 +18,8 @@ import type { BrowserOidcPublicConfiguration } from "./browser-oidc.js";
 import type { ClientIntegrationPorts, MediaDeletionProjection } from "./client-integrations.js";
 import { TimelineDeliveryService } from "./timeline-delivery.js";
 import { WardrobeService } from "./wardrobe.js";
+import { PHOTO_PRODUCTS, PHOTO_PRICE_VERSION } from "./photo-catalog.js";
+import { PhotoPurchaseService, PHOTO_PURCHASE_COLLECTION } from "./photo-purchases.js";
 import { FileTimelineArtifactStore, type TimelineArtifactReader } from "./timeline-artifacts.js";
 import {
   COMMANDS,
@@ -295,6 +297,47 @@ async function handleRequest(
     }
 
     const catalog = capabilityCatalog(options.capabilityRegistry);
+    if (method === "GET" && path === "/v1/photo-products") {
+      sendJson(response, 200, { data: { priceVersion: PHOTO_PRICE_VERSION, products: PHOTO_PRODUCTS }, requestId }); return;
+    }
+    if (path === "/v1/photo-purchases" && (method === "GET" || method === "POST")) {
+      const actor = await authenticate(options, request, requestId);
+      if (actor.purpose !== "age_transformation") throw new DomainError("PURPOSE_REQUIRED", "photo purchase requires age_transformation purpose");
+      const cursor = url.searchParams.get("cursor");
+      if ((method === "POST" && url.search !== "") || [...url.searchParams.keys()].some(key => key !== "cursor") || url.searchParams.getAll("cursor").length > 1 || (cursor !== null && !/^photo-[a-f0-9]{64}$/.test(cursor))) throw new DomainError("VALIDATION_FAILED", "invalid photo purchase list cursor");
+      if (method === "GET") {
+        const records = await options.runtime.listRecords(actor, { collection: PHOTO_PURCHASE_COLLECTION, limit: 25, ...(cursor ? {cursor} : {}) });
+        const items = records.filter(record => record.ownerActorId === actor.actorId).map(record => {
+          const scope = record.data.scope as Record<string, unknown>;
+          return { purchaseId: record.id, title: scope.title, sku: scope.sku, amountMinor: scope.amountMinor, currency: scope.currency, seriesTitle: scope.seriesTitle ?? null, expectedCount: scope.imageCount, paymentState: record.data.paymentState, createdAt: record.createdAt };
+        });
+        sendJson(response, 200, { data: { items, nextCursor: records.length === 25 ? records.at(-1)!.id : null }, requestId }); return;
+      }
+      const input = object(await readJsonBody(request, bodyLimit), "photo purchase");
+      const data = await photoPurchases(options).create(actor, input, requireIdempotencyKey(request));
+      sendJson(response, 201, { data, requestId }); return;
+    }
+    const photoPurchaseMatch = /^\/v1\/photo-purchases\/(photo-[a-f0-9]{64})(?:\/(checkout|confirm|fulfill))?$/.exec(path);
+    if (photoPurchaseMatch && (method === "GET" || method === "POST")) {
+      const actor = await authenticate(options, request, requestId), purchase = photoPurchases(options), id = photoPurchaseMatch[1]!;
+      if (actor.purpose !== "age_transformation") throw new DomainError("PURPOSE_REQUIRED", "photo purchase requires age_transformation purpose");
+      if (url.search !== "") throw new DomainError("VALIDATION_FAILED", "photo purchase does not accept query parameters");
+      if (method === "GET" && !photoPurchaseMatch[2]) { sendJson(response, 200, { data: await purchase.get(actor, id), requestId }); return; }
+      if (method === "POST" && photoPurchaseMatch[2]) {
+        assertEmptyObject(await readJsonBody(request, bodyLimit), "photo purchase operation"); requireIdempotencyKey(request);
+        const action = photoPurchaseMatch[2];
+        const data = action === "checkout" ? await purchase.checkout(actor, id) : action === "confirm" ? await purchase.confirm(actor, id) : await purchase.fulfill(actor, id);
+        sendJson(response, 200, { data, requestId }); return;
+      }
+    }
+    const photoRetryMatch = /^\/v1\/photo-purchases\/(photo-[a-f0-9]{64})\/items\/([A-Za-z0-9._:-]{1,128})\/retry$/.exec(path);
+    if (method === "POST" && photoRetryMatch) {
+      const actor = await authenticate(options, request, requestId);
+      if (actor.purpose !== "age_transformation") throw new DomainError("PURPOSE_REQUIRED", "photo purchase requires age_transformation purpose");
+      const input = object(await readJsonBody(request, bodyLimit), "purchased item retry"); assertExactKeys(input, ["attempt"], "purchased item retry"); requireIdempotencyKey(request);
+      const data = await photoPurchases(options).retry(actor, photoRetryMatch[1]!, photoRetryMatch[2]!, requestInteger(input.attempt, "attempt", 1, 3));
+      sendJson(response, 200, { data, requestId }); return;
+    }
     if (method === "GET" && (path === "/v1/capabilities" || path === "/v1/catalog/capabilities")) {
       sendJson(response, 200, { capabilities: catalog, count: catalog.length, requestId });
       return;
@@ -385,6 +428,7 @@ async function handleRequest(
         checkoutId: requestIdentifier(body.checkoutId, "checkoutId"),
         idempotencyKey: requireIdempotencyKey(request),
       });
+      if (String(body.checkoutId).startsWith("photo-")) await photoPurchases(options).assertIntent({ ...context, purpose: "age_transformation" }, body.checkoutId as string, data);
       sendJson(response, 201, { data, meta: { requestId } });
       return;
     }
@@ -511,6 +555,7 @@ async function handleRequest(
     if (wardrobeMatch && (method === "GET" || method === "POST")) {
       const actor = await authenticate(options, request, requestId), rootId = decodeURIComponent(wardrobeMatch[1]!), age = Number(wardrobeMatch[2]);
       if (String(age) !== wardrobeMatch[2]) throw new DomainError("VALIDATION_FAILED", "wardrobe age path must be canonical");
+      if (method === "POST") requireOperatorGeneration(actor);
       const wardrobe = new WardrobeService(options.runtime, options.capabilityRegistry, options.timelineArtifacts);
       const data = method === "GET" ? await wardrobe.context(actor, rootId, age) : await wardrobe.create(operationContext(actor, "wardrobe.create", requireIdempotencyKey(request)), rootId, age, object(await readJsonBody(request, bodyLimit), "wardrobe request"), requireIdempotencyKey(request));
       sendJson(response, 200, {data, requestId}); return;
@@ -524,6 +569,7 @@ async function handleRequest(
         if (Object.keys(input).length !== 2 || Object.keys(input).some(key => !["targetAge", "attempt"].includes(key)) ||
             typeof input.targetAge !== "number" || typeof input.attempt !== "number") throw new DomainError("VALIDATION_FAILED", "retry requires only targetAge and attempt");
         const key = requireIdempotencyKey(request);
+        await photoPurchases(options).authorizeRetry(actor, commandId);
         const result = await delivery.retry(operationContext(actor, "timeline.retry", key), commandId, input.targetAge, input.attempt);
         sendJson(response, 200, { data: result, requestId }); return;
       }
@@ -587,6 +633,7 @@ async function handleRequest(
       const key = requireIdempotencyKey(request);
       const body = object(await readJsonBody(request, bodyLimit), "request body");
       const batchId = normalizeCapabilityBatchId(capabilityMatch?.[1] ?? body.batchId);
+      if (batchId === "B14") requireOperatorGeneration(authenticated);
       const input = body.input ?? (capabilityMatch?.[1] === undefined ? undefined : body);
       const context = operationContext(authenticated, `capability:${batchId}`, key);
       const secured = await secureMediaCapabilityInput(
@@ -1132,4 +1179,18 @@ function serveStatic(
 function isContentHashedAsset(path: string): boolean {
   const filename = path.split(sep).at(-1) ?? "";
   return /-[a-f0-9]{8,64}\.[A-Za-z0-9]+$/i.test(filename) || /\.[a-f0-9]{8,64}\.[A-Za-z0-9]+$/i.test(filename);
+}
+
+function photoPurchases(options: ApiServerOptions): PhotoPurchaseService {
+  const platform = options.clientIntegrations?.wechatPlatform;
+  const payments = platform?.preparePhotoCheckout ? {
+    preparePhotoCheckout: platform.preparePhotoCheckout.bind(platform), getPayment: platform.getPayment.bind(platform),
+  } : undefined;
+  return new PhotoPurchaseService(options.runtime, options.capabilityRegistry, options.timelineArtifacts, payments);
+}
+
+function requireOperatorGeneration(actor: ActorContext): void {
+  if (!actor.roles.some(role => ["platform_admin", "service_account", "studio_operator"].includes(role))) {
+    throw new DomainError("AUTH_FORBIDDEN", "consumer generation requires a server-verified paid photo purchase");
+  }
 }

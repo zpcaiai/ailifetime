@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { buttonByText, cleanupOwnedSession, disposeRouteObserver, navigate, NativeContextNotReadyError, tapAndWait, tapAndWaitForRoute, verifyNativeContext, waitForState, withDeadline } from "./devtools-driver.mjs";
 import { NativeHostNotReadyError, requireNativeHostSession } from "./devtools-host.mjs";
+import { preparePriceViews, verifyPriceScenes } from "./devtools-price-scenes.mjs";
 
 // Explicit synthetic views exercise the real DevTools renderer and native taps.
 // They cannot establish model quality, production authentication or phone permissions.
@@ -47,8 +48,16 @@ export async function verifyNativeUI({ syntheticUI, sdkPath, output, endpoint = 
     result.screenshots.push({ name, path, sha256: createHash("sha256").update(bytes).digest("hex") });
   }
   async function scrollToBottom(page) {
+    const bounds = () => evaluate("measure native page bottom", function () {
+      return new Promise(resolve => wx.createSelectorQuery().in(getCurrentPages().slice(-1)[0]).select(".page").boundingClientRect().exec(values => resolve(values[0])));
+    });
+    const before = await bounds(); assert.ok(before && before.height > 0, "NATIVE_PAGE_BOUNDS_MISSING");
     await evaluate("scroll native page", function () { wx.pageScrollTo({ scrollTop: 99999, duration: 0 }); return true; });
-    await waitForState("native page scrolled", async () => Number(await page.scrollTop()) > 0);
+    const after = await waitForState("native page bottom visible", async () => {
+      const rect = await bounds(), scrollTop = Number(await page.scrollTop());
+      return rect && rect.bottom <= result.system.windowHeight + 1 && (before.height <= result.system.windowHeight + 1 || scrollTop > 0) ? { rect, scrollTop } : false;
+    });
+    (result.bottomGeometry ||= []).push({ page: page.path, before, after });
   }
   async function scrollClassIntoView(selector) {
     const rect = await evaluate("locate native control", function (selector) {
@@ -84,6 +93,7 @@ export async function verifyNativeUI({ syntheticUI, sdkPath, output, endpoint = 
     const store = new FileTimelineArtifactStore(join(directory, "images")), nodes = [];
     for (let i = 0; i < 21; i++) nodes.push(await fixture.readyNode(await store.put("age-" + i, syntheticPng(i, 64, 64), "image/png"), i * 5));
     fixture.runtime.applyExternalBusinessEvent(fixture.service, fixture.callback("root", "succeeded", { schemaVersion: "ltm.timeline-results.v1", sourceAssetId: "source", planVersion: "age-portrait-plan.v1", aiLabel: true, nodes }));
+    fixture.runtime.grantConsent(fixture.actor, { participantId: "user", grantorCapacity: "self", purpose: "age_transformation", scope: { resource: "media.asset:source", actions: ["wardrobe"] }, policyVersion: "wardrobe-edit-consent-v1", evidenceHash: "c".repeat(64), idempotencyKey: "native-price-wardrobe-consent" });
     token = randomUUID() + randomUUID();
     server = createApiServer({ runtime: fixture.runtime, capabilityRegistry: fixture.registry, timelineArtifacts: store, appEnvironment: "test", staticDirectory: null,
       authenticator: new StaticTokenAuthenticator([{ token, actorId: "user", tenantId: "tenant", roles: ["consumer"], allowedPurposes: ["age_transformation", "sharing"] }]) });
@@ -93,9 +103,11 @@ export async function verifyNativeUI({ syntheticUI, sdkPath, output, endpoint = 
     const projection = await (await fetch(base + "/v1/session", { headers })).json();
     const view = (await (await fetch(base + "/v1/timelines/root", { headers })).json()).data;
     assert.equal(view.readyCount, 21);
+    const priceViews = await preparePriceViews({ base, headers });
     await evaluate("bind explicit synthetic session", function (candidate, response) { require("services/session.js").bindServerProjection(candidate, response); return true; },
       { actorId: "user", tenantId: "tenant", roles: ["consumer"], purpose: "age_transformation", accessToken: token, expiresAt: new Date(Date.now() + 3600000).toISOString() }, projection);
     bound = true;
+    await verifyPriceScenes({ mini, views: priceViews, step, frame, project, windowHeight: result.system.windowHeight });
     let page;
     await step("capture real consent taps and picker enable/disable", async () => {
       page = await navigate(mini, "switchTab", "/pages/capture/index");

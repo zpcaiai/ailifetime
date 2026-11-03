@@ -387,14 +387,14 @@ test("editor overrides a product-operation session with age transformation and r
   const successful = loadEditorPage(async (path, options, purpose) => {
     successfulCalls.push({ path, options, purpose });
     if (path === "/v1/capabilities/B07") return { data: { state: "persisted" } };
-    if (path === "/v1/capabilities/B14") return { data: { externalCommandId: "generation-command-1" } };
+    if (path.startsWith("/v1/photo-purchases")) return { data: { purchaseId: "photo-order-1", commandId: "generation-command-1" } };
     return { data: {} };
   });
   successful.page.setData({
     assetId: "media-1",
     participantId: "consumer-1",
     consentAccepted: true,
-    ages: "18,35,80",
+    ages: Array.from({length:21},(_,i)=>i*5).join(","),
     currentAge: "35",
   });
   await successful.page.generate();
@@ -408,12 +408,12 @@ test("editor overrides a product-operation session with age transformation and r
   assert.deepEqual(capabilityCalls.map(({ path }) => path), [
     "/v1/capabilities/B07",
     "/v1/capabilities/B08",
-    "/v1/capabilities/B14",
   ]);
   assert.deepEqual(Object.keys(capabilityCalls[0].options.data).sort(), ["assetId", "participantIds"]);
   assert.equal(capabilityCalls[1].options.data.sourceAssetId, "media-1");
-  assert.equal(capabilityCalls[2].options.data.sourceAssetId, "media-1");
-  assert.equal(capabilityCalls[2].options.data.templateId, capabilityCalls[1].options.data.templateId);
+  const purchasedGeneration = successfulCalls.find(c=>c.path==="/v1/photo-purchases").options.data.generation;
+  assert.equal(purchasedGeneration.sourceAssetId, "media-1");
+  assert.equal(purchasedGeneration.templateId, capabilityCalls[1].options.data.templateId);
   assert.equal(successful.redirects.length, 1);
 
   const blockedCalls = [];
@@ -426,7 +426,7 @@ test("editor overrides a product-operation session with age transformation and r
     assetId: "media-2",
     participantId: "consumer-1",
     consentAccepted: true,
-    ages: "18,80",
+    ages: Array.from({length:21},(_,i)=>i*5).join(","),
     currentAge: "35",
   });
   await blocked.page.generate();
@@ -570,7 +570,7 @@ test("editor defaults to 21 ages, binds original age and blocks duplicate in-fli
     calls.push({ path, options });
     if (path === "/v1/commands") await wait;
     if (path === "/v1/capabilities/B07") return { data: { state: "persisted" } };
-    if (path === "/v1/capabilities/B14") return { data: { externalCommandId: "generation-21" } };
+    if (path.startsWith("/v1/photo-purchases")) return { data: { purchaseId: "photo-order-21", commandId: "generation-21" } };
     return { data: {} };
   });
   assert.equal(editor.page.data.ages, Array.from({ length: 21 }, (_, index) => index * 5).join(","));
@@ -580,11 +580,12 @@ test("editor defaults to 21 ages, binds original age and blocks duplicate in-fli
   assert.equal(calls.length, 1);
   release();
   await first;
-  const request = calls.find((call) => call.path === "/v1/capabilities/B14");
+  const request = calls.find((call) => call.path === "/v1/photo-purchases");
   assert.ok(request);
-  assert.equal(request.options.data.timelineProfile, "lifespan-21-v1");
-  assert.equal(request.options.data.currentAge, 35);
-  assert.deepEqual(Array.from(request.options.data.targetAges), Array.from({ length: 21 }, (_, index) => index * 5));
+  assert.equal(request.options.data.sku, "lifespan-21");
+  assert.equal(request.options.data.generation.timelineProfile, "lifespan-21-v1");
+  assert.equal(request.options.data.generation.currentAge, 35);
+  assert.deepEqual(Array.from(request.options.data.generation.targetAges), Array.from({ length: 21 }, (_, index) => index * 5));
   assert.equal(editor.redirects.length, 1);
 });
 
@@ -641,16 +642,17 @@ test("job provider success is not photo acceptance and terminal jobs expose the 
   assert.equal(frozen.page.data.canOpenLibrary, false);
 });
 
-test("editor replays an uncertain B14 intent with the same body and keys, and blocks changed parameters", async () => {
+test("editor replays an uncertain purchase intent with the same body and keys, and blocks changed parameters", async () => {
   const calls = [];
   let generationAttempts = 0;
   const editor = loadEditorPage(async (path, options) => {
     calls.push({ path, options });
     if (path === "/v1/capabilities/B07") return { data: { state: "persisted" } };
-    if (path === "/v1/capabilities/B14") {
+    if (path === "/v1/photo-purchases") {
       if (++generationAttempts === 1) throw new Error("NETWORK_UNAVAILABLE");
-      return { data: { externalCommandId: "original-command" } };
+      return { data: { purchaseId: "photo-original", commandId: "original-command" } };
     }
+    if (path.endsWith("/fulfill")) return { data: { commandId: "original-command" } };
     return { data: {} };
   });
   editor.page.setData({ assetId: "media-1", participantId: "consumer-1", consentAccepted: true, currentAge: "35" });
@@ -662,7 +664,7 @@ test("editor replays an uncertain B14 intent with the same body and keys, and bl
   assert.equal(generationAttempts, 1);
   editor.page.setData({ currentAge: "35" });
   await editor.page.generate();
-  const generations = calls.filter((call) => call.path === "/v1/capabilities/B14");
+  const generations = calls.filter((call) => call.path === "/v1/photo-purchases");
   assert.equal(generations.length, 2);
   assert.deepEqual(generations[1].options, generations[0].options);
   const consents = calls.filter((call) => call.path === "/v1/commands");
@@ -706,6 +708,12 @@ function loadEditorPage(request) {
     Page: (definition) => { page = definition; },
     require: (specifier) => {
       if (specifier === "../../services/api") return api;
+      if (specifier === "../../services/photo-purchases") return {
+        PRICES: {"lifespan-21":990,"selected-age":590},money:minor=>`¥${(minor/100).toFixed(2)}`,errorText:error=>error.message,
+        create:async(input,key)=>(await request("/v1/photo-purchases",{data:input,headers:{"Idempotency-Key":key}},"age_transformation")).data,
+        get:async id=>(await request(`/v1/photo-purchases/${id}`,{method:"GET"},"age_transformation")).data,
+        execute:async quote=>(await request(`/v1/photo-purchases/${quote.purchaseId}/fulfill`,{data:{}},"age_transformation")).data,
+      };
       if (specifier === "../../services/session") return { get: () => activeSession, requireSession: () => activeSession };
       if (specifier === "../../services/policy") return { requireCapabilities() {} };
       if (specifier === "../../policies/age-transformation") return { version: "privacy-v1", text: "age transformation consent" };
@@ -851,11 +859,14 @@ function loadMiniCommonJs(relative, globals) {
 
 test("editor supports both subjects and both play modes without granting partner consent", async () => {
   for (const subjectMode of ["single", "couple"]) for (const playMode of ["lifespan", "age"]) for (const targetAge of ["0", "37", "100"]) {
-    const calls=[]; const editor=loadEditorPage(async(path,options)=>{calls.push({path,options});if(path.endsWith('B07'))return{data:{state:'persisted'}};if(path.endsWith('B14'))return{data:{externalCommandId:'mode-command'}};return{data:{}};});
+    const calls=[]; const editor=loadEditorPage(async(path,options)=>{calls.push({path,options});if(path.endsWith('B07'))return{data:{state:'persisted'}};if(path.startsWith('/v1/photo-purchases'))return{data:{purchaseId:'photo-mode',commandId:'mode-command'}};return{data:{}};});
     editor.page.setData({assetId:'source',participantId:'consumer-1',currentAge:'35',consentAccepted:true,subjectMode,playMode,targetAge,partnerParticipantId:'partner',partnerCurrentAge:'32'});
     await editor.page.generate();
     const grants=calls.filter(c=>c.options.data.command==='consent.grant');assert.equal(grants.length,1);assert.equal(grants[0].options.data.input.participantId,'consumer-1');
-    const request=calls.find(c=>c.path.endsWith('B14')).options.data;
+    const quoted=calls.find(c=>c.path==='/v1/photo-purchases').options.data;
+    assert.equal(quoted.sku,playMode==='age'?'selected-age':'lifespan-21');
+    assert.equal(editor.page.data.priceLifespan,'¥9.90');assert.equal(editor.page.data.priceAge,'¥5.90');
+    const request=quoted.generation;
     assert.deepEqual(Array.from(request.participantIds),subjectMode==='couple'?['consumer-1','partner']:['consumer-1']);
     assert.equal(request.targetAges.length,playMode==='age'?1:21);if(playMode==='age')assert.equal(request.targetAges[0],Number(targetAge));
     assert.equal(request.timelineProfile,`${playMode==='age'?'single-age':'lifespan-21'}${subjectMode==='couple'?'-couple':''}-v1`);

@@ -2,11 +2,15 @@ const api = require("../../services/api");
 const session = require("../../services/session");
 const policy = require("../../services/policy");
 const consentPolicy = require("../../policies/age-transformation");
+const purchases = require("../../services/photo-purchases");
 const LIFESPAN_AGES = Array.from({ length: 21 }, (_, index) => index * 5);
 
 Page({
-  data: { subjectMode: "single", playMode: "lifespan", targetAge: "30", partnerParticipantId: "", partnerCurrentAge: "", assetId: "", participantId: "", currentAge: "", ages: LIFESPAN_AGES.join(","), templateId: "timeline-classic-v1", consentAccepted: false, busy: false, error: "" },
+  data: { subjectMode: "single", playMode: "lifespan", targetAge: "30", partnerParticipantId: "", partnerCurrentAge: "", assetId: "", participantId: "", currentAge: "", ages: LIFESPAN_AGES.join(","), templateId: "timeline-classic-v1", consentAccepted: false, busy: false, error: "", priceLifespan: purchases.money(purchases.PRICES["lifespan-21"]), priceAge: purchases.money(purchases.PRICES["selected-age"]) },
+  active: true,
   submission: null,
+  onShow() { this.active = true; },
+  onHide() { this.active = false; },
   onLoad(options) {
     if (!session.get()) { wx.navigateTo({ url: "/pages/auth/index" }); return; }
     if (typeof options.assetId !== "string" || !/^[A-Za-z0-9._:-]{1,128}$/.test(options.assetId)) { this.setData({ error: "ASSET_ID_INVALID" }); return; }
@@ -49,6 +53,7 @@ Page({
         (singleAge && targetAges.length !== 1) || ageTokens.some((value) => value === "") || targetAges.length < 1 || targetAges.some((age) => !Number.isInteger(age) || age < 0 || age > 100) || new Set(targetAges).size !== targetAges.length) {
       this.setData({ error: "PARTICIPANT_OR_AGES_INVALID" }); return;
     }
+    if (!singleAge && (targetAges.length !== 21 || targetAges.some((age,i) => age !== LIFESPAN_AGES[i]))) { this.setData({error: "PARTICIPANT_OR_AGES_INVALID"}); return; }
     const fingerprint = JSON.stringify({ assetId, participantIds, templateId, targetAges, currentAge, participantAges, subjectMode: this.data.subjectMode, playMode: this.data.playMode });
     if (this.submission && this.submission.fingerprint !== fingerprint && this.submission.effectUncertain) {
       this.setData({ error: "GENERATION_RECONCILIATION_REQUIRED" }); return;
@@ -92,20 +97,22 @@ Page({
         headers: { "Idempotency-Key": draftId },
       });
       submission.effectUncertain = true;
-      const result = await api.requestForPurpose("/v1/capabilities/B14", "age_transformation", {
-        data: { jobId, sourceAssetId: assetId, templateId, participantIds, targetAges, currentAge,
+      const generation = { sourceAssetId: assetId, templateId, participantIds, targetAges, currentAge,
           ...(participantAges ? { participantAges } : {}),
-          ...(singleAge ? { timelineProfile: couple ? "single-age-couple-v1" : "single-age-v1" } : targetAges.length === LIFESPAN_AGES.length && targetAges.every((age, index) => age === LIFESPAN_AGES[index]) ? { timelineProfile: couple ? "lifespan-21-couple-v1" : "lifespan-21-v1" } : {}),
-          seed: submission.seed, promptPolicyVersion: "age-policy-v1", illustrativeLabel: true },
-        headers: { "Idempotency-Key": jobId },
-      });
-      const commandId = result && result.data && result.data.externalCommandId;
+          timelineProfile: singleAge ? couple ? "single-age-couple-v1" : "single-age-v1" : couple ? "lifespan-21-couple-v1" : "lifespan-21-v1",
+          seed: submission.seed, promptPolicyVersion: "age-policy-v1", illustrativeLabel: true };
+      const quote = submission.purchaseId ? await purchases.get(submission.purchaseId) : await purchases.create({ sku: singleAge ? "selected-age" : "lifespan-21", generation }, jobId);
+      submission.purchaseId = quote.purchaseId;
+      const result = await purchases.execute(quote, { isCurrent: () => this.active });
+      const commandId = result && result.commandId;
       if (typeof commandId !== "string") throw new Error("GENERATION_COMMAND_INVALID");
       submission.commandId = commandId;
       submission.effectUncertain = false;
+      if (!this.active) return;
       wx.redirectTo({ url: `/pages/job/index?commandId=${encodeURIComponent(commandId)}` });
     } catch (error) {
-      this.setData({ error: error instanceof Error ? error.message : "GENERATION_SUBMIT_FAILED" });
+      if (error.message === "PAYMENT_USER_CANCELLED") submission.effectUncertain = false;
+      if (this.active) this.setData({ error: /^(PHOTO_|PAYMENT_|EXTERNAL_ADAPTER_UNAVAILABLE|DEPENDENCY_UNAVAILABLE)/.test(error.message || "") ? purchases.errorText(error) : error instanceof Error ? error.message : "GENERATION_SUBMIT_FAILED" });
     } finally { this.setData({ busy: false }); }
   },
 });

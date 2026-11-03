@@ -4,6 +4,10 @@ import { parseWardrobeEdit, WARDROBE_STYLES, type CapabilityRegistry } from "@lt
 import { TimelineDeliveryService } from "./timeline-delivery.js";
 import type { TimelineArtifactReader } from "./timeline-artifacts.js";
 
+export function wardrobeCommandId(actor: ActorContext, rootId: string, age: number, key: string): string {
+  return `wardrobe-${createHash("sha256").update(JSON.stringify([actor.tenantId,actor.actorId,rootId,age,key])).digest("hex")}`;
+}
+
 export class WardrobeService {
   constructor(private readonly runtime: LifeTimeMachineRuntimePort, private readonly registry: CapabilityRegistry, private readonly artifacts?: TimelineArtifactReader) {}
   async context(actor: ActorContext, rootId: string, age: number) {
@@ -40,7 +44,7 @@ export class WardrobeService {
     if (!this.artifacts) throw new DomainError("DEPENDENCY_UNAVAILABLE", "wardrobe source image reader is not configured");
     const bytes = await this.artifacts.read(context.sourceNode.asset!);
     if (bytes.byteLength !== context.sourceNode.asset!.byteLength || createHash("sha256").update(bytes).digest("hex") !== context.sourceNode.asset!.sha256) throw new DomainError("DEPENDENCY_UNAVAILABLE", "wardrobe source bytes changed");
-    const jobId = `wardrobe-${createHash("sha256").update(JSON.stringify([actor.tenantId,actor.actorId,rootId,age,key])).digest("hex")}`;
+    const jobId = wardrobeCommandId(actor, rootId, age, key);
     const result = await this.registry.execute(this.runtime, "B14", { actor, idempotencyKey: `wardrobe:${key}`, input: {
       jobId, sourceAssetId: context.sourceAssetId, participantIds: context.participants.map(p => p.participantId), targetAges: [age], wardrobeEdit,
       timelineProfile: "wardrobe-edit-v1", seed: jobId, promptPolicyVersion: "wardrobe-only.v1", illustrativeLabel: true,
