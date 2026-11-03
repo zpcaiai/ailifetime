@@ -65,6 +65,53 @@ paths:
                 $ref: "#/components/schemas/TimelineDeliveryResponse"
         default:
           $ref: "#/components/responses/Error"
+  /v1/timelines/{commandId}/quality:
+    post:
+      operationId: evaluateTimelinePhotoQuality
+      description: Service-account-only byte-bound photo scoring. Requires media.quality.evaluate and current per-person quality consent. Reads the original B07 reference and output bytes; caller scores, thresholds, model selection and media URLs are forbidden. No generation or publication occurs here. Missing scorer/calibration fails closed; actual model accuracy is independently unaccepted.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TimelineCommandId"
+        - $ref: "#/components/parameters/TimelinePurpose"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [targetAge, asset]
+              properties:
+                targetAge: { type: integer, minimum: 0, maximum: 100 }
+                asset: { $ref: "#/components/schemas/TimelineImageAsset" }
+      responses:
+        "200":
+          description: Persisted B15 decision; pass still requires B17 and a signed generation callback before publication.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, requestId]
+                properties:
+                  requestId: { type: string }
+                  data:
+                    type: object
+                    additionalProperties: false
+                    required: [qualityResultId, decision, failedDimensions, modelVersion, calibrationId, reused]
+                    properties:
+                      qualityResultId: { type: string }
+                      decision: { type: string, enum: [pass, retry, review] }
+                      failedDimensions: { type: array, items: { type: string } }
+                      modelVersion: { type: string }
+                      calibrationId: { type: string }
+                      reused: { type: boolean }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /v1/timelines/{commandId}/nodes/{targetAge}/wardrobe:
     parameters:
       - $ref: "#/components/parameters/TimelineCommandId"
