@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtempSync,readFileSync,rmSync } from 'node:fs';
+import { mkdtempSync,readFileSync,rmSync,writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { prepareNativeAlbumPreview } from './native-album-preview.mjs';
+import { prepareNativeAlbumPreview,verifyNativeAlbumPreviewConfiguration } from './native-album-preview.mjs';
 import { validateMiniProgram } from '../apps/wechat-mini/tools/validate-miniprogram.mjs';
 
 test('isolated preview adds only a development entry, keeps source and security gates intact',()=>{
@@ -21,6 +21,16 @@ test('isolated preview adds only a development entry, keeps source and security 
     assert.equal(app.pages.length,JSON.parse(original).pages.length+1);
     const project=JSON.parse(readFileSync(join(output,'project.config.json')));
     assert.equal(project.setting.urlCheck,true);assert.equal(project.__usePrivacyCheck__,true);
+    assert.doesNotThrow(()=>verifyNativeAlbumPreviewConfiguration(output));
+    const configPath=join(output,'miniprogram/services/native-album-ext.js'),configBytes=readFileSync(configPath);
+    try {
+      writeFileSync(configPath,Buffer.concat([configBytes,Buffer.from('\nthrow Error("unapproved executable payload");\n')]));
+      assert.throws(()=>verifyNativeAlbumPreviewConfiguration(output),/PREVIEW_CONFIG_MODULE_PROVENANCE_MISMATCH/);
+    } finally {writeFileSync(configPath,configBytes);}
+    const extra=join(output,'miniprogram/services/unapproved-origin.js');
+    writeFileSync(extra,'module.exports="https://unapproved.example.org";\n');
+    assert.throws(()=>verifyNativeAlbumPreviewConfiguration(output),/PREVIEW_BUSINESS_ORIGIN_LITERAL_FORBIDDEN/);
+    rmSync(extra);
     const ext=JSON.parse(readFileSync(join(output,'miniprogram/ext.json')));
     assert.equal(ext.ext.nativeAlbumTestEnabled,true);
     assert.equal('accessToken' in ext.ext,false);

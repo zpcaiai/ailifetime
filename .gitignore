@@ -25,4 +25,9 @@ coverage/
 playwright-report/
 evidence/**/runtime/private/
 .ai-life-time-machine/state/*.lock
+
+# Native album test private state and generated output
+.vercel/
 native-album-public/
+serverless-live-identity-*.json
+test-window-*-env-*.json

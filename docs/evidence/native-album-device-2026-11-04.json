@@ -1,0 +1,238 @@
+{
+  "schema": "ltm.native-album-device-record.v1",
+  "record_date": "2026-11-04",
+  "timezone": "Asia/Shanghai",
+  "preview": "v9",
+  "evidence_type": "USER_REPORTED_CHAT",
+  "cases_passed": 4,
+  "cases_total": 4,
+  "device": {
+    "model": "iPhone 15 Pro Max",
+    "ios": "27.2",
+    "wechat": "8.0.79",
+    "versions_evidence": "USER_REPORTED_NOT_INDEPENDENTLY_INSPECTED"
+  },
+  "source": {
+    "base_commit": "2fef2e05c295f0ad39f1a213cb06e7f01f1c2b32",
+    "media_path": "apps/wechat-mini/miniprogram/services/timeline-media.js",
+    "media_sha256": "ff9a822b98dcba91731d66ef62b9696d97bc1d1cb41ff9e0e518ff66a53d03e6",
+    "preview_manifest_sha256": "e39cb7b45044e1ac216d3af59092da25b632ef06daa64a65c25ea6891ae7a421"
+  },
+  "cases": [
+    {
+      "id": "single",
+      "name": "单张保存",
+      "status": "PASS_USER_REPORTED",
+      "event_ids": [
+        "single_and_first_allow"
+      ],
+      "expected_photos_delta": 1,
+      "actual_photos_delta": 1
+    },
+    {
+      "id": "first_grant",
+      "name": "首次相册授权",
+      "status": "PASS_USER_REPORTED",
+      "event_ids": [
+        "single_and_first_allow"
+      ],
+      "native_prompt_observed": true,
+      "selection": "允许"
+    },
+    {
+      "id": "batch21",
+      "name": "批量保存21张",
+      "status": "PASS_USER_REPORTED",
+      "event_ids": [
+        "settings_grant_and_explicit_retry"
+      ],
+      "page_saved": 21,
+      "page_total": 21,
+      "actual_photos_delta": 21,
+      "distinct_test_images": true
+    },
+    {
+      "id": "deny_retry",
+      "name": "拒绝状态→设置恢复→显式重试",
+      "status": "PASS_USER_REPORTED",
+      "event_ids": [
+        "revoked_permission_denial",
+        "settings_grant_and_explicit_retry"
+      ],
+      "mechanism": "通过正常设置关闭已授权的添加到相册权限，触发实际拒绝；不是初次弹窗点拒绝",
+      "denied_photos_delta": 0,
+      "settings_return_photos_delta_before_save": 0,
+      "retry_photos_delta": 21
+    }
+  ],
+  "manual_events": [
+    {
+      "id": "single_and_first_allow",
+      "evidence_type": "USER_REPORTED_CHAT",
+      "quote": "出现相册授权弹窗，已选择允许；页面显示保存成功，手机“照片”中新增了1张测试图。继续验证批量保存和拒绝后重试。",
+      "native_prompt_observed": true,
+      "action": "允许",
+      "page_result": "保存成功",
+      "photos_delta": 1
+    },
+    {
+      "id": "revoked_permission_denial",
+      "evidence_type": "USER_REPORTED_CHAT",
+      "quote": "页面提示需要相册权限，出现了“前往设置，允许保存到相册”按钮，手机“照片”新增0张。继续指导我恢复授权并重试批量保存。",
+      "permission_disabled_label": "添加到相册",
+      "permission_required_feedback": true,
+      "settings_button_visible": true,
+      "photos_delta": 0
+    },
+    {
+      "id": "settings_grant_and_explicit_retry",
+      "evidence_type": "USER_REPORTED_CHAT",
+      "quote": "已通过页面按钮打开设置并恢复“添加到相册”授权，返回后未点保存时新增0张；手动重试后页面显示21/21，手机“照片”新增21张不同测试图。请整理并保存这次真机验证结果。",
+      "settings_opened_via_page_button": true,
+      "permission_reenabled_label": "添加到相册",
+      "photos_delta_before_save": 0,
+      "explicit_retry": true,
+      "page_saved": 21,
+      "page_total": 21,
+      "photos_delta_after_retry": 21,
+      "distinct_test_images": true
+    }
+  ],
+  "automated_regression": {
+    "mini": {
+      "passed": 122,
+      "failed": 0,
+      "skipped": 0
+    },
+    "save_related_subset": {
+      "passed": 29,
+      "failed": 0,
+      "skipped": 0,
+      "subset_of_mini": true
+    },
+    "preview": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "zero_fake": {
+      "violations": 0,
+      "limitation": "Python-oriented; does not independently certify JS/native behavior"
+    }
+  },
+  "automated_evidence": [
+    {
+      "id": "native-random-mini-holistic",
+      "executed": true,
+      "pid": 78840,
+      "exit_code": 0,
+      "raw_log": "native-random-mini-holistic.log",
+      "raw_log_sha256": "7536dcba993d4d9c13f3017b9b046bad6a81b756eb1184e9dd03c7acebb6c421"
+    },
+    {
+      "id": "native-random-media-green",
+      "executed": true,
+      "pid": 78778,
+      "exit_code": 0,
+      "raw_log": "native-random-media-green.log",
+      "raw_log_sha256": "5096947a77d2ed4d59e7ccfa8e196ed618781978398352631444870c4f793601"
+    },
+    {
+      "id": "native-random-preview-holistic",
+      "executed": true,
+      "pid": 78839,
+      "exit_code": 0,
+      "raw_log": "native-random-preview-holistic.log",
+      "raw_log_sha256": "550924cf9481661628f733cd59861a461868ad43d18d1b5326e4a51a638717d6"
+    },
+    {
+      "id": "v3-fixed-window-create",
+      "executed": true,
+      "pid": 75198,
+      "exit_code": 0,
+      "raw_log": "v3-fixed-window-create.log",
+      "raw_log_sha256": "f9139293c04d96e73afa317e34b1894b5c31deac59f8423cedbef4b7cd6e3b0a"
+    },
+    {
+      "id": "v3-same-source-deployment",
+      "executed": true,
+      "pid": 75512,
+      "exit_code": 0,
+      "raw_log": "v3-same-source-deployment.log",
+      "raw_log_sha256": "7617cb629d90bd2849ef51690e7cc0c9e540c2cbb52fa80755a14a70fcf2854a"
+    },
+    {
+      "id": "v3-public-api-1plus21",
+      "executed": true,
+      "pid": 76517,
+      "exit_code": 0,
+      "raw_log": "v3-public-api-1plus21.log",
+      "raw_log_sha256": "817b823207c722f3dd4fae51f1e9640a2ddfad85a16e974c82cab156eacac77d"
+    },
+    {
+      "id": "native-random-final-zero-fake",
+      "executed": true,
+      "pid": 79351,
+      "exit_code": 0,
+      "raw_log": "native-random-final-zero-fake.log",
+      "raw_log_sha256": "37d18b33d0ae388e68335d7bea34ddcc42419e0f59559b59a552cf242c99bc81"
+    },
+    {
+      "id": "native-random-final-secret-scan",
+      "executed": true,
+      "pid": 79266,
+      "exit_code": 0,
+      "raw_log": "native-random-final-secret-scan.log",
+      "raw_log_sha256": "e158c0344d7bf2dcc861f5c09cb118117d1044ba45134d2577ac083d5ab8535a"
+    },
+    {
+      "id": "v9-preview-privacy-native-code",
+      "executed": true,
+      "pid": 79212,
+      "exit_code": 0,
+      "raw_log": "v9-preview-privacy-native-code.log",
+      "raw_log_sha256": "976053fc767e54e1aca2c4a6ac5cebea28f658660080d64d4da88579016647dd"
+    },
+    {
+      "id": "v7-v9-native-random-official-preview",
+      "executed": true,
+      "pid": 79207,
+      "exit_code": 0,
+      "raw_log": "v7-v9-native-random-official-preview.log",
+      "raw_log_sha256": "7e353c9bc68da05914ae8c88e73e63478bfa04e73a67da5bfdd90b3f672af8b3"
+    },
+    {
+      "id": "v9-qr-and-v3-deadline-check",
+      "executed": true,
+      "pid": 79674,
+      "exit_code": 0,
+      "raw_log": "v9-qr-and-v3-deadline-check.log",
+      "raw_log_sha256": "d274373cae9d92734b5072ac2db55506b216574edbe8bf8dbd78e339542dbe02"
+    },
+    {
+      "id": "phone-final-expired-identity-check",
+      "executed": true,
+      "pid": 3690,
+      "exit_code": 0,
+      "raw_log": "phone-final-expired-identity-check.log",
+      "raw_log_sha256": "bc936b9a56b1af546b1643f1da6dbf183769e2cedc2567d0fbf70cbaae706475"
+    }
+  ],
+  "local_archive_hashes": {
+    "report_sha256": "290928d42fc91fba6fe082f2b680ebbfc0761e8398b307badbc9a81425aca4e8",
+    "structured_sha256": "0f2e9d577cb4bde672936bc96d94ca4b5ce389ac2407c94228b77e96e6881730"
+  },
+  "timing": {
+    "actual_execution_timestamps": "UNKNOWN_NOT_RECORDED",
+    "fixed_test_identity_expiry_utc": "2026-11-03T16:15:23.450Z",
+    "archive_time_identity_status": "EXPIRED_HTTP401_VERIFIED_NO_RENEWAL",
+    "boundary": "Do not infer actual save time from delayed report receipt."
+  },
+  "boundaries": {
+    "manual": "Phone operator checked actual Photos; no agent native OS command/PID, captured native Photos bytes or independent certification claimed.",
+    "denial_mechanism": "First native prompt Deny-button branch not separately run; denial tested through normal permission revocation.",
+    "production": "NOT_CERTIFIED; synthetic512x512testimages, no paid model, no portrait-quality or production-domain/privacy acceptance.",
+    "history": "Earlier V2 success was retracted. Original failures, local report, full receipts and logs retained in local archive.",
+    "git_record": "This record describes the tested pre-delivery V9 build; no claim that its uncommitted snapshot was already merged at test time."
+  }
+}
