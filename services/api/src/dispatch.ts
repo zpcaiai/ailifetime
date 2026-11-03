@@ -30,6 +30,7 @@ import type {
   SignedExternalEvidence,
   VerifiedBusinessEvent,
 } from "@ltm/core";
+import { PHOTO_PURCHASE_COLLECTION, PHOTO_COMMAND_BINDING_COLLECTION } from "./photo-purchases.js";
 
 type InputObject = Record<string, unknown>;
 
@@ -37,6 +38,8 @@ const EXTERNAL_COMMAND_COLLECTIONS = new Set<string>(
   EXTERNAL_COMMAND_CALLBACK_ROUTES.map((route) => route.collection),
 );
 const SERVER_MANAGED_MUTATION_COLLECTIONS = new Set<string>([
+  PHOTO_PURCHASE_COLLECTION,
+  PHOTO_COMMAND_BINDING_COLLECTION,
   ...EXTERNAL_COMMAND_COLLECTIONS,
   ...EXTERNAL_EVENT_REDUCER_TARGET_COLLECTIONS,
   "media.quality-decisions",

@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import type { ActorContext } from "@ltm/core";
 import { DomainError } from "@ltm/core";
 import { BrokerClient, type BrokerClientOptions } from "./client-integrations.js";
+import { photoProduct } from "./photo-catalog.js";
+import type { PhotoCheckoutRequest, PhotoCheckoutResult } from "./photo-purchases.js";
 
 export interface WechatNativePaymentParameters {
   readonly timeStamp: string;
@@ -58,6 +60,7 @@ export interface WechatCustomerServiceGrant {
 }
 
 export interface WechatPlatformPort {
+  preparePhotoCheckout?(context: ActorContext, input: PhotoCheckoutRequest): Promise<PhotoCheckoutResult>;
   createPayment(context: ActorContext, input: {
     readonly checkoutId: string;
     readonly idempotencyKey: string;
@@ -98,6 +101,21 @@ export interface WechatPlatformBrokerOptions extends BrokerClientOptions {
 export class HttpWechatPlatformBroker implements WechatPlatformPort {
   readonly #broker: BrokerClient;
   readonly #clock: () => Date;
+
+  async preparePhotoCheckout(context: ActorContext, input: PhotoCheckoutRequest): Promise<PhotoCheckoutResult> {
+    assertPurpose(context, "commerce");
+    const product = photoProduct(input.sku);
+    if (!/^photo-[a-f0-9]{64}$/.test(input.purchaseId) || input.amountMinor !== product.amountMinor || input.currency !== "CNY" || input.priceVersion !== product.priceVersion ||
+        !/^[a-f0-9]{64}$/.test(input.scopeSha256) || !Number.isInteger(input.imageCount) || input.imageCount < 1 || (product.imageCount === null ? input.imageCount > 4 : input.imageCount !== product.imageCount)) {
+      throw new DomainError("VALIDATION_FAILED", "photo checkout must use the server-owned price and exact delivery count");
+    }
+    const value = await this.#broker.json("POST", "/v1/wechat/photo-checkouts", { principal: principal(context), purchaseId: input.purchaseId,
+      product: { sku: input.sku, priceVersion: input.priceVersion, amountMinor: input.amountMinor, currency: input.currency, imageCount: input.imageCount, scopeSha256: input.scopeSha256 } }, input.idempotencyKey, context.requestId);
+    const result = upstreamRecord(value, "photo checkout");
+    upstreamExactKeys(result, ["schemaVersion", "checkoutId", "orderId", "amountMinor", "currency", "scopeSha256"], "photo checkout");
+    if (result.schemaVersion !== "ltm.photo-checkout.v1" || result.checkoutId !== input.purchaseId || result.amountMinor !== input.amountMinor || result.currency !== "CNY" || result.scopeSha256 !== input.scopeSha256) unavailable("merchant changed the photo checkout price or scope");
+    return { schemaVersion: "ltm.photo-checkout.v1", checkoutId: input.purchaseId, orderId: upstreamIdentifier(result.orderId, "orderId"), amountMinor: input.amountMinor, currency: "CNY", scopeSha256: input.scopeSha256 };
+  }
   readonly #customerServiceAllowedOrigins: ReadonlySet<string>;
 
   constructor(options: WechatPlatformBrokerOptions) {

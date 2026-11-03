@@ -10,11 +10,12 @@ import { FileTimelineArtifactStore } from '../dist/timeline-artifacts.js';
 import { syntheticPng } from './timeline-fixtures.mjs';
 import { wardrobeFixture } from './wardrobe-fixtures.mjs';
 
-for(const couple of [false,true])test(`actual wardrobe HTTP ${couple?'couple':'single'} creates independent copy, recovers, saves exact bytes and rejects revoked access`,async()=>{
+// Supported operator workflow; retail payment gating is tested separately.
+for(const couple of [false,true])test(`actual operator wardrobe HTTP ${couple?'couple':'single'} creates independent copy, recovers, saves exact bytes and rejects revoked access`,async()=>{
   const directory=mkdtempSync(join(tmpdir(),'ltm-wardrobe-')),store=new FileTimelineArtifactStore(join(directory,'images'));
   const f=await wardrobeFixture({couple,databasePath:join(directory,'runtime.sqlite'),store,verifiedConsent:true});let runtime=f.runtime,server;
   const headers={authorization:'Bearer wardrobe-consumer-token-000001','x-purpose':'age_transformation','content-type':'application/json'},path='/v1/timelines/root/nodes/37/wardrobe';
-  async function start(){server=createApiServer({runtime,capabilityRegistry:f.registry,authenticator:new StaticTokenAuthenticator(f.participantIds.map(participantId=>({token:participantId==='user'?'wardrobe-consumer-token-000001':'wardrobe-partner-token-000002',actorId:participantId,tenantId:'tenant',roles:['consumer'],allowedPurposes:['age_transformation']}))),timelineArtifacts:store,appEnvironment:'test',staticDirectory:null});server.listen(0,'127.0.0.1');await once(server,'listening');return'http://127.0.0.1:'+server.address().port;}
+  async function start(){server=createApiServer({runtime,capabilityRegistry:f.registry,authenticator:new StaticTokenAuthenticator(f.participantIds.map(participantId=>({token:participantId==='user'?'wardrobe-consumer-token-000001':'wardrobe-partner-token-000002',actorId:participantId,tenantId:'tenant',roles:participantId==='user'?['consumer','studio_operator']:['consumer'],allowedPurposes:['age_transformation']}))),timelineArtifacts:store,appEnvironment:'test',staticDirectory:null});server.listen(0,'127.0.0.1');await once(server,'listening');return'http://127.0.0.1:'+server.address().port;}
   const request=(base,body,key='wardrobe-intent')=>fetch(base+path,{method:'POST',headers:{...headers,'idempotency-key':key},body:JSON.stringify(body)});
   try{
     let base=await start();assert.equal((await fetch(base+path)).status,401);

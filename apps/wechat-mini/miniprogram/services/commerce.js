@@ -3,7 +3,7 @@ const api = require("./api");
 const activeCheckouts = new Set();
 const intentsByOrder = new Map();
 
-async function requestPayment(input) {
+async function requestPayment(input, beforeNativePayment) {
   const expected = validateCheckoutInput(input);
   if (activeCheckouts.has(expected.checkoutId)) throw new Error("PAYMENT_ALREADY_IN_PROGRESS");
   activeCheckouts.add(expected.checkoutId);
@@ -13,6 +13,7 @@ async function requestPayment(input) {
       headers: { "Idempotency-Key": api.idempotencyKey("wechat-pay") },
     });
     const intent = validatePaymentIntent(response && response.data, expected);
+    if (beforeNativePayment) await beforeNativePayment(intent);
     intentsByOrder.set(intent.orderId, intent);
     await nativePayment(intent.parameters);
     return Object.freeze({

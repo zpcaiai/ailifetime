@@ -5,33 +5,44 @@ import {runInNewContext}from'node:vm';
 import {WARDROBE_STYLES}from'../../../packages/capabilities/dist/wardrobe-plan.js';
 function context(couple=false,age=37){return{sourceAssetId:'source',sourceRootCommandId:'root',sourceCommandId:'root',targetAge:age,policyVersion:'wardrobe-edit-consent-v1',catalogVersion:'lifetime-wardrobe.v1',sourceNode:{status:'ready',targetAge:age,asset:{sha256:'a'.repeat(64)},downloadPath:`/v1/timelines/root/nodes/${age}/image`},participants:(couple?['user','partner']:['user']).map((participantId,i)=>({participantId,position:couple?(i?'right':'left'):'single',authorized:false})),styles:WARDROBE_STYLES.map(s=>({...s,seriesId:s.seriesId??'legacy',seriesLabel:s.seriesLabel??'原有基础款',minAge:s.minAge??0,maxAge:100,minPeople:s.minPeople??1,available:age>=(s.minAge??0)&&(couple?2:1)>=(s.minPeople??1),unavailableReason:'适用范围',legacy:!s.seriesId}))};}
 function result(age=37,status='ready',couple=false){return{commandId:'outfit',creationKind:'wardrobe',wardrobeSource:{sourceRootCommandId:'root',targetAge:age,selections:(couple?['user','partner']:['user']).map(participantId=>({participantId,styleId:'daily-white-v1'}))},expectedCount:1,nodes:[{targetAge:age,status,canRetry:status==='failed',attempts:0,asset:{sha256:'b'.repeat(64)},downloadPath:`/v1/timelines/outfit/nodes/${age}/image`}]};}
+function seriesResult(age=37,seriesId='daily',statuses=[]) {
+ const styles=WARDROBE_STYLES.filter(style=>style.seriesId===seriesId && age>=(style.minAge??0) && (style.minPeople??1)<=1);
+ const items=styles.map((style,i)=>({itemId:style.id,title:style.label,targetAge:age,commandId:'series-job-'+i,status:statuses[i]||'ready',attempts:0,canRetry:statuses[i]==='failed',asset:{sha256:String(i+2).padStart(64,'0')},downloadPath:`/v1/timelines/series-job-${i}/nodes/${age}/image`}));
+ return{purchaseId:'photo-suite',sku:'wardrobe-series',sourceRootCommandId:'root',seriesId,seriesTitle:styles[0]?.seriesLabel,expectedCount:styles.length,amountMinor:990,currency:'CNY',readyCount:items.filter(item=>item.status==='ready').length,paymentState:'paid',items};
+}
 function page(request,mediaOverrides={}){
  let p,n=0;const timers=new Map(),removed=[],saves=[],calls=[];
  const media={download:async node=>'private-'+node.asset.sha256,remove:async path=>removed.push(path),save:async node=>saves.push(node),...mediaOverrides};
  runInNewContext(readFileSync(new URL('../miniprogram/pages/wardrobe/index.js',import.meta.url),'utf8'),{Page:x=>p=x,require:name=>{
   if(name.endsWith('/api'))return{idempotencyKey:prefix=>prefix+'-'+(++n),requestForPurpose:async(path,purpose,options)=>{calls.push({path,purpose,options});return request(path,options,purpose);}};
   if(name.endsWith('/session'))return{get:()=>({actorId:'user'}),requireSession:()=>({actorId:'user'})};
+  if(name.endsWith('/photo-purchases')) {
+    const call=async(path,options)=>{calls.push({path,purpose:'age_transformation',options});return(await request(path,options,'age_transformation')).data;};
+    return{PRICES:{'wardrobe-series':990},money:minor=>`¥${(minor/100).toFixed(2)}`,errorText:error=>error.message,
+      create:(input,key)=>call('/v1/photo-purchases',{data:input,headers:{'Idempotency-Key':key}}),get:id=>call('/v1/photo-purchases/'+id,{method:'GET'}),
+      execute:quote=>call('/v1/photo-purchases/'+quote.purchaseId+'/fulfill',{data:{}}),retry:(id,item,attempt)=>call(`/v1/photo-purchases/${id}/items/${item}/retry`,{data:{attempt}})};
+  }
   if(name.endsWith('/timeline-media'))return media;if(name.endsWith('/wardrobe'))return{version:'wardrobe-edit-consent-v1'};throw Error(name);
  },wx:{navigateTo(){},switchTab(){}},setTimeout:fn=>{const id=++n;timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id),console});
  p.setData=x=>Object.assign(p.data,x);return{p,calls,removed,saves,timers};
 }
 test('wardrobe page handles single/couple and0/37/100, grants only self and uses neutral invite image',async()=>{
  for(const couple of[false,true])for(const age of[0,37,100]){
-  const f=page(async(path,options)=>options.method==='GET'?{data:path.endsWith('/wardrobe')?context(couple,age):result(age,'ready',couple)}:{data:path==='/v1/commands'?{}:{commandId:'outfit'}});
+  const f=page(async(path,options)=>options.method==='GET'?{data:path.endsWith('/wardrobe')?context(couple,age):seriesResult(age,'east')}:{data:path==='/v1/commands'?{}:{purchaseId:'photo-suite'}});
   await f.p.onLoad({rootId:'root',age:String(age)});assert.equal(f.p.data.people.length,couple?2:1);
-  f.p.chooseStyle({currentTarget:{dataset:{participant:'user',style:'formal'}}});if(couple)f.p.chooseStyle({currentTarget:{dataset:{participant:'partner',style:'traditional'}}});
+  await f.p.selectBundle({currentTarget:{dataset:{series:'east'}}});
   f.p.consentChanged({detail:{value:['accepted']}});await f.p.submit();
   const grants=f.calls.filter(c=>c.options.data?.command==='consent.grant');assert.equal(grants.length,1);assert.equal(grants[0].options.data.input.participantId,'user');assert.deepEqual(Array.from(grants[0].options.data.input.scope.actions),['wardrobe']);
-  const submit=f.calls.find(c=>c.path.endsWith('/wardrobe')&&c.options.method!=='GET');assert.equal(submit.options.data.selections[0].styleId,'formal');assert.equal(f.p.data.result.status,'ready');assert.ok(f.p.data.sourcePath);assert.ok(f.p.data.resultPath);
+  const submit=f.calls.find(c=>c.path==='/v1/photo-purchases');assert.equal(submit.options.data.sku,'wardrobe-series');assert.equal(submit.options.data.seriesId,'east');assert.equal(f.p.data.seriesPurchase.expectedCount,4);assert.equal(f.p.data.priceSeries,'¥9.90');assert.equal(f.p.data.seriesItems.length,4);assert.ok(f.p.data.sourcePath);assert.ok(f.p.data.seriesItems.every(item=>item.localPath));
   if(couple){const invite=f.p.onShareAppMessage({target:{dataset:{participant:'partner'}}});assert.match(invite.path,/action=wardrobe/);assert.equal(invite.imageUrl,'/assets/wardrobe-invite.png');assert.doesNotMatch(JSON.stringify(invite),/private-|token|download/);}
   f.p.onHide();assert.equal(f.p.data.context,null);assert.equal(f.p.data.resultPath,'');assert.equal(f.timers.size,0);
  }
 });
 test('uncertain wardrobe request reuses exact body/key, changed choices cannot submit again',async()=>{
- let attempts=0;const f=page(async(path,options)=>{if(options.method==='GET')return{data:path.endsWith('/wardrobe')?context():result()};if(path==='/v1/commands')return{data:{}};if(++attempts===1)throw Error('NETWORK_UNAVAILABLE');return{data:{commandId:'outfit'}};});
+ let attempts=0;const f=page(async(path,options)=>{if(options.method==='GET')return{data:path.endsWith('/wardrobe')?context():seriesResult()};if(path==='/v1/commands')return{data:{}};if(path==='/v1/photo-purchases'&&++attempts===1)throw Error('NETWORK_UNAVAILABLE');return{data:{purchaseId:'photo-suite'}};});
  await f.p.onLoad({rootId:'root',age:'37'});f.p.data.accepted=true;await f.p.submit();assert.equal(f.p.intent.uncertain,true);
- f.p.chooseStyle({currentTarget:{dataset:{participant:'user',style:'formal'}}});await f.p.submit();assert.match(f.p.data.error,/原选择/);assert.equal(attempts,1);
- f.p.chooseStyle({currentTarget:{dataset:{participant:'user',style:'daily-white-v1'}}});await f.p.submit();const posts=f.calls.filter(c=>c.path.endsWith('/wardrobe')&&c.options.method!=='GET');assert.equal(posts.length,2);assert.equal(posts[0].options.headers['Idempotency-Key'],posts[1].options.headers['Idempotency-Key']);assert.deepEqual(posts[0].options.data,posts[1].options.data);assert.equal(f.p.data.commandId,'outfit');
+ f.p.setData({selectedSeriesId:'east'});f.p.updateBundle();await f.p.submit();assert.match(f.p.data.error,/原选择/);assert.equal(attempts,1);
+ f.p.setData({selectedSeriesId:'daily'});f.p.updateBundle();await f.p.submit();const posts=f.calls.filter(c=>c.path==='/v1/photo-purchases');assert.equal(posts.length,2);assert.equal(posts[0].options.headers['Idempotency-Key'],posts[1].options.headers['Idempotency-Key']);assert.deepEqual(posts[0].options.data,posts[1].options.data);assert.equal(f.p.data.purchaseId,'photo-suite');
 });
 test('hidden wardrobe page ignores late context and never starts a job after consent returns late',async()=>{
  let resolveContext;const f=page(()=>new Promise(r=>resolveContext=r));const opening=f.p.onLoad({rootId:'root',age:'37'});f.p.onHide();resolveContext({data:context()});await opening;assert.equal(f.p.data.context,null);
@@ -54,9 +65,9 @@ test('native privacy refusal clears both wardrobe and original private preview m
  const f=page(async path=>({data:path.endsWith('/wardrobe')?context():result()}),{save:async()=>{throw Error('PRIVACY_AUTHORIZATION_DENIED');}});
  await f.p.onLoad({rootId:'root',age:'37',commandId:'outfit'});const paths=[f.p.data.sourcePath,f.p.data.resultPath];assert.ok(paths.every(Boolean));await f.p.save();assert.equal(f.p.data.context,null);assert.equal(f.p.data.result,null);assert.equal(f.p.data.sourcePath,'');assert.equal(f.p.data.resultPath,'');assert.ok(paths.every(path=>f.removed.includes(path)));
 });
-test('a successful wardrobe receipt arriving after hide is restored without resubmitting on foreground',async()=>{
- let release;const f=page(async(path,options)=>{if(options.method==='GET')return{data:path.endsWith('/wardrobe')?context():result()};if(path==='/v1/commands')return{data:{}};return new Promise(r=>release=r);});
- await f.p.onLoad({rootId:'root',age:'37'});f.p.data.accepted=true;const submitting=f.p.submit();for(let i=0;i<4&&!release;i++)await Promise.resolve();assert.ok(release);f.p.onHide();release({data:{commandId:'outfit'}});await submitting;assert.equal(f.p.data.commandId,'');f.p.onShow();for(let i=0;i<12&&!f.p.data.result;i++)await Promise.resolve();assert.equal(f.p.data.commandId,'outfit');assert.equal(f.calls.filter(c=>c.path.endsWith('/wardrobe')&&c.options.method!=='GET').length,1);
+test('a successful wardrobe purchase receipt arriving after hide is restored without resubmitting on foreground',async()=>{
+ let release;const f=page(async(path,options)=>{if(options.method==='GET')return{data:path.endsWith('/wardrobe')?context():seriesResult()};if(path==='/v1/commands')return{data:{}};return new Promise(r=>release=r);});
+ await f.p.onLoad({rootId:'root',age:'37'});f.p.data.accepted=true;const submitting=f.p.submit();for(let i=0;i<4&&!release;i++)await Promise.resolve();assert.ok(release);f.p.onHide();release({data:{purchaseId:'photo-suite'}});await submitting;assert.equal(f.p.data.purchaseId,'');f.p.onShow();for(let i=0;i<60&&!f.p.data.seriesPurchase;i++)await Promise.resolve();assert.equal(f.p.data.purchaseId,'photo-suite');assert.equal(f.p.data.seriesItems.length,4);assert.equal(f.calls.filter(c=>c.path==='/v1/photo-purchases').length,1);
 });
 test('eight series expose all 31 looks; unavailable age/count choices cannot replace a selection',async()=>{
  for(const couple of[false,true])for(const age of[0,17,18,49,50,100]){
@@ -78,4 +89,34 @@ test('wardrobe offers explicit album settings after denial, never auto saves and
  let settings=0,release;const f=page(async path=>({data:path.endsWith('/wardrobe')?context():result()}),{save:async()=>{throw Error('ALBUM_PERMISSION_REQUIRED');},openAlbumSettings:async()=>{settings++;return true;}});
  await f.p.onLoad({rootId:'root',age:'37',commandId:'outfit'});await f.p.save();assert.equal(f.p.data.albumPermissionDenied,true);await f.p.albumSettings();assert.equal(settings,1);assert.equal(f.p.data.albumPermissionDenied,false);assert.match(f.p.data.message,/再次点击/);assert.equal(f.saves.length,0);
  const g=page(async path=>({data:path.endsWith('/wardrobe')?context():result()}),{openAlbumSettings:()=>new Promise(r=>release=r)});await g.p.onLoad({rootId:'root',age:'37',commandId:'outfit'});const pending=g.p.albumSettings();g.p.onHide();release(true);await pending;assert.equal(g.p.data.context,null);assert.equal(g.p.data.resultPath,'');assert.equal(g.p.data.message,'');
+});
+
+test('late purchase lookup cannot reopen a hidden wardrobe page or download portraits',async()=>{
+ let release,first=true,downloads=0;
+ const f=page(async(path)=>{if(path.endsWith('/wardrobe'))return{data:context()};if(first){first=false;return new Promise(resolve=>release=resolve);}return{data:seriesResult()};},{download:async()=>{downloads++;return'private-photo';}});
+ const opening=f.p.onLoad({purchaseId:'photo-suite'});f.p.onHide();release({data:seriesResult()});await opening;
+ assert.equal(f.p.active,false);assert.equal(f.p.data.context,null);assert.equal(downloads,0);
+});
+test('whole-series save resumes remaining originals after denial and item recovery keeps one purchase',async()=>{
+ const statuses=['ready','ready','failed','pending'];let allowed=false,saving=0;
+ const f=page(async(path,options)=>{
+  if(path.endsWith('/wardrobe'))return{data:context()};
+  if(path.endsWith('/retry')){assert.equal(options.data.attempt,1);statuses[2]='ready';return{data:{}};}
+  return{data:seriesResult(37,'daily',statuses)};
+ },{save:async()=>{saving++;if(!allowed&&saving===2)throw Error('ALBUM_PERMISSION_REQUIRED');},openAlbumSettings:async()=>true});
+ await f.p.onLoad({purchaseId:'photo-suite'});assert.equal(f.p.data.seriesItems.length,4);assert.equal(f.p.data.seriesPurchase.readyCount,2);
+ await f.p.saveSeries();assert.equal(f.p.data.albumPermissionDenied,true);assert.equal(f.p.data.seriesSaved,1);
+ await f.p.albumSettings();allowed=true;await f.p.saveSeries();assert.equal(saving,3);assert.equal(f.p.data.seriesSaved,2);
+ await f.p.retrySeries({currentTarget:{dataset:{item:'daily-linen-v1'}}});assert.equal(f.p.data.seriesPurchase.readyCount,3);assert.equal(f.p.data.purchaseId,'photo-suite');assert.equal(f.calls.filter(c=>c.path==='/v1/photo-purchases').length,0);
+ const paths=[f.p.data.sourcePath,...f.p.data.seriesItems.map(i=>i.localPath).filter(Boolean)];f.p.onHide();assert.equal(f.p.data.seriesItems.length,0);assert.equal(f.p.data.seriesPurchase,null);assert.ok(paths.every(path=>f.removed.includes(path)));assert.equal(f.timers.size,0);
+});
+test('a mismatched purchased series cannot leave original or generated private previews visible',async()=>{
+ const bad={...seriesResult(),sourceRootCommandId:'other-root'};
+ const f=page(async path=>({data:path.endsWith('/wardrobe')?context():bad}));await f.p.onLoad({rootId:'root',age:'37'});assert.ok(f.p.data.sourcePath);f.p.setData({purchaseId:'photo-suite'});await f.p.refresh();
+ assert.equal(f.p.data.context,null);assert.equal(f.p.data.sourcePath,'');assert.equal(f.p.data.seriesItems.length,0);
+});
+test('late series thumbnail after hide is removed and cannot restore the private view',async()=>{
+ let release;const f=page(async path=>({data:path.endsWith('/wardrobe')?context():seriesResult()}),{download:async node=>node.itemId?new Promise(resolve=>release=resolve):'private-source'});
+ const opening=f.p.onLoad({purchaseId:'photo-suite'});for(let i=0;i<30&&!release;i++)await Promise.resolve();assert.ok(release);
+ f.p.onHide();release('late-series-thumbnail');await opening;assert.equal(f.p.data.seriesItems.length,0);assert.equal(f.p.data.context,null);assert.ok(f.removed.includes('late-series-thumbnail'));
 });

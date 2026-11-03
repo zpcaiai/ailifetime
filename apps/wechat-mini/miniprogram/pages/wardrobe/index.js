@@ -2,6 +2,7 @@ const api = require("../../services/api");
 const session = require("../../services/session");
 const media = require("../../services/timeline-media");
 const consentPolicy = require("../../policies/wardrobe");
+const purchases = require("../../services/photo-purchases");
 const validId = value => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
 const codeOf = error => error && typeof error.message === "string" ? error.message : "";
 const authorizationFailure = error => /CONSENT|AUTH|PRIVACY|TIMELINE_DOWNLOAD_HTTP_(401|403|409)/.test(codeOf(error));
@@ -11,9 +12,25 @@ const dressPerson = (person, styles, seriesId) => {
 };
 
 Page({
-  data: { rootId: "", targetAge: 0, context: null, people: [], styles: [], series: [], sourcePath: "", resultPath: "", commandId: "", result: null, accepted: false, busy: false, albumPermissionDenied: false, error: "", message: "" },
+  data: { rootId: "", targetAge: 0, context: null, people: [], styles: [], series: [], sourcePath: "", resultPath: "", commandId: "", result: null, accepted: false, busy: false, albumPermissionDenied: false, error: "", message: "", selectedSeriesId: "daily", bundleStyles: [], bundleCount: 0, purchaseId: "", seriesPurchase: null, seriesItems: [], priceSeries: purchases.money(purchases.PRICES["wardrobe-series"]), seriesSaved: 0 },
   active: false, epoch: 0, timer: null, intent: null,
   async onLoad(options) {
+    const openingEpoch = ++this.epoch;
+    this.seriesSavedKeys = new Set();
+    if (options.purchaseId) {
+      const initial = session.get();
+      if (!initial) { wx.navigateTo({url: "/pages/auth/index"}); return; }
+      const owner = { actorId: initial.actorId, tenantId: initial.tenantId };
+      try {
+        const purchase = await purchases.get(options.purchaseId);
+        if (openingEpoch !== this.epoch) return;
+        const current = session.get();
+        if (!current || current.actorId !== owner.actorId || current.tenantId !== owner.tenantId) throw new Error("PHOTO_ACCOUNT_CHANGED");
+        if (purchase.sku !== "wardrobe-series") throw new Error("PHOTO_PURCHASE_INVALID");
+        options = { ...options, rootId: purchase.sourceRootCommandId, age: String(purchase.items[0].targetAge) };
+        this.setData({purchaseId: purchase.purchaseId, selectedSeriesId: purchase.seriesId});
+      } catch (error) { if (openingEpoch === this.epoch) await this.showError(error); return; }
+    }
     if (!validId(options.rootId) || typeof options.age !== "string" || !/^(?:0|[1-9][0-9]?|100)$/.test(options.age) || (options.commandId !== undefined && !validId(options.commandId))) { this.setData({ error: "请选择已完成的年龄照片再换装。" }); return; }
     this.setData({ rootId: options.rootId, targetAge: Number(options.age), commandId: options.commandId || "" });
     if (!session.get()) { wx.navigateTo({ url: "/pages/auth/index" }); return; }
@@ -22,6 +39,7 @@ Page({
   onShow() {
     if (this.data.rootId && !this.active && session.get()) {
       if (this.intent?.commandId && !this.data.commandId) this.setData({commandId: this.intent.commandId});
+      if (this.intent?.purchaseId && !this.data.purchaseId) this.setData({purchaseId: this.intent.purchaseId});
       this.active = true; this.refresh();
     }
   },
@@ -29,9 +47,9 @@ Page({
   onUnload() { this.onHide(); },
   stop() { if (this.timer) clearTimeout(this.timer); this.timer = null; },
   async clearViews() {
-    const paths = [this.data.sourcePath, this.data.resultPath];
+    const paths = [this.data.sourcePath, this.data.resultPath, ...this.data.seriesItems.map(item => item.localPath)];
     this.loadedCommandId = "";
-    this.setData({ context: null, people: [], styles: [], series: [], sourcePath: "", resultPath: "", result: null, accepted: false, busy: false, albumPermissionDenied: false });
+    this.setData({ context: null, people: [], styles: [], series: [], sourcePath: "", resultPath: "", result: null, seriesPurchase: null, seriesItems: [], bundleStyles: [], bundleCount: 0, accepted: false, busy: false, albumPermissionDenied: false });
     await Promise.all(paths.filter(Boolean).map(path => media.remove(path)));
   },
   async refresh() {
@@ -58,14 +76,53 @@ Page({
       if (!sameSource && this.data.sourcePath) await media.remove(this.data.sourcePath);
       if (epoch !== this.epoch) return;
       this.setData({ context, people, styles: context.styles, series, sourcePath: sameSource ? this.data.sourcePath : "" });
+      this.updateBundle();
       if (!this.data.sourcePath && context.sourceNode.downloadPath) {
         const path = await media.download(context.sourceNode);
         if (epoch !== this.epoch || !this.active) { await media.remove(path); return; }
         this.setData({ sourcePath: path });
       }
-      if (this.data.commandId) await this.loadResult(epoch);
+      if (this.data.purchaseId) await this.loadSeries(epoch);
+      else if (this.data.commandId) await this.loadResult(epoch);
     } catch (error) { if (epoch === this.epoch && this.active) await this.showError(error); }
     finally { if (epoch === this.epoch && this.active) this.setData({ busy: false }); }
+  },
+  updateBundle() {
+    const selected = this.data.selectedSeriesId;
+    const bundleStyles = this.data.styles.filter(style => style.seriesId === selected && style.available);
+    const series = this.data.series.map(group => ({ ...group, count: this.data.styles.filter(style => style.seriesId === group.id && style.available).length }));
+    this.setData({ bundleStyles, bundleCount: bundleStyles.length, series });
+  },
+  async selectBundle(event) {
+    const id = event.currentTarget.dataset.series;
+    if (this.data.busy || !this.data.series.some(group => group.id === id && group.count > 0)) return;
+    if (this.intent?.uncertain && id !== this.data.selectedSeriesId) { this.setData({error: "上次订单尚待核对，请先恢复原选择并继续，避免重复付款。"}); return; }
+    if (id !== this.data.selectedSeriesId) {
+      const paths = this.data.seriesItems.map(item => item.localPath).filter(Boolean);
+      this.intent = null;this.setData({selectedSeriesId: id,purchaseId: "",seriesPurchase: null,seriesItems: [],seriesSaved: 0});this.updateBundle();
+      await Promise.all(paths.map(path => media.remove(path)));
+    }
+  },
+  async loadSeries(epoch) {
+    const purchase = await purchases.get(this.data.purchaseId);
+    if (epoch !== this.epoch || !this.active) return;
+    const allowed = this.data.styles.filter(style => style.seriesId === purchase.seriesId && style.available);
+    if (purchase.sku !== "wardrobe-series" || purchase.sourceRootCommandId !== this.data.rootId || purchase.expectedCount !== allowed.length ||
+        purchase.items.some(item => item.targetAge !== this.data.targetAge || !allowed.some(style => style.id === item.itemId)) || new Set(purchase.items.map(item => item.itemId)).size !== allowed.length) throw new Error("PHOTO_PURCHASE_INVALID");
+    const previous = this.data.seriesItems, items = [], created = [];
+    try {
+      for (const item of purchase.items) {
+        const old = previous.find(candidate => candidate.itemId === item.itemId && candidate.asset?.sha256 === item.asset?.sha256);
+        let localPath = old?.localPath || "";
+        if (item.status === "ready" && !localPath && item.downloadPath) { localPath = await media.download(item); created.push(localPath); }
+        if (epoch !== this.epoch || !this.active) { await Promise.all(created.map(path => media.remove(path))); return; }
+        items.push({...item, localPath});
+      }
+    } catch (error) { await Promise.all(created.map(path => media.remove(path))); throw error; }
+    await Promise.all(previous.filter(item => item.localPath && !items.some(next => next.localPath === item.localPath)).map(item => media.remove(item.localPath)));
+    if (epoch !== this.epoch || !this.active) { await Promise.all(created.map(path => media.remove(path))); return; }
+    this.setData({seriesPurchase: purchase,seriesItems: items,selectedSeriesId: purchase.seriesId,seriesSaved: items.filter(item => this.seriesSavedKeys?.has(`${purchase.purchaseId}:${item.itemId}:${item.asset?.sha256}`)).length});this.updateBundle();
+    if (items.some(item => ["pending","retrying"].includes(item.status))) this.timer = setTimeout(() => this.refresh(), 3000);
   },
   async loadResult(epoch) {
     const commandId = this.data.commandId;
@@ -106,13 +163,11 @@ Page({
   async submit() {
     if (this.data.busy) return;
     if (!this.data.accepted || !this.data.context || !this.data.sourcePath) { this.setData({ error: "请先查看原片并确认换装用途。" }); return; }
-    const selections = this.data.people.map(p => ({ participantId: p.participantId, styleId: p.styleId }));
-    if (selections.some(s => !this.data.styles.some(style => style.id === s.styleId && style.available))) { this.setData({error: "请为每位人物选择适合当前年龄的衣着。"}); return; }
-    const fingerprint = JSON.stringify([this.data.rootId,this.data.targetAge,this.data.context.sourceNode.asset.sha256,selections]);
+    if (!this.data.bundleCount) { this.setData({error: "这个系列没有适合当前年龄与人数的款式，请换一个系列。"}); return; }
+    const fingerprint = JSON.stringify([this.data.rootId,this.data.targetAge,this.data.context.sourceNode.asset.sha256,this.data.selectedSeriesId]);
     if (this.intent?.uncertain && this.intent.fingerprint !== fingerprint) { this.setData({ error: "上次换装结果尚待核对，请恢复原选择重试，避免重复提交。" }); return; }
-    if (!this.intent || this.intent.fingerprint !== fingerprint) this.intent = { fingerprint, key: api.idempotencyKey("wardrobe"), consentKey: api.idempotencyKey("wardrobe-consent"), uncertain: false, commandId: "", selections };
+    if (!this.intent || this.intent.fingerprint !== fingerprint) this.intent = { fingerprint, key: api.idempotencyKey("wardrobe-series"), consentKey: api.idempotencyKey("wardrobe-consent"), uncertain: false, purchaseId: this.data.purchaseId };
     const intent = this.intent;
-    if (intent.commandId) { this.setData({ commandId: intent.commandId }); await this.refresh(); return; }
     const epoch = ++this.epoch; this.stop(); this.setData({ busy: true, error: "", message: "" });
     const wasUncertain = intent.uncertain;
     try {
@@ -124,17 +179,46 @@ Page({
       } }, headers: { "Idempotency-Key": intent.consentKey } });
       if (epoch !== this.epoch || !this.active) return;
       intent.uncertain = true;
-      const response = await api.requestForPurpose(`/v1/timelines/${encodeURIComponent(this.data.rootId)}/nodes/${this.data.targetAge}/wardrobe`, "age_transformation", { data: { selections: intent.selections }, headers: { "Idempotency-Key": intent.key } });
-      const commandId = response && response.data && response.data.commandId;
-      if (!validId(commandId)) throw new Error("WARDROBE_COMMAND_INVALID");
-      intent.commandId = commandId; intent.uncertain = false;
+      const purchase = intent.purchaseId ? await purchases.get(intent.purchaseId) : await purchases.create({sku: "wardrobe-series",sourceRootCommandId: this.data.rootId,targetAge: this.data.targetAge,seriesId: this.data.selectedSeriesId},intent.key);
+      intent.purchaseId = purchase.purchaseId;
       if (epoch !== this.epoch || !this.active) return;
-      this.setData({ commandId, busy: false, message: "换装请求已提交，原年龄照片会保留。" });
+      this.setData({purchaseId: purchase.purchaseId,commandId: ""});
+      await purchases.execute(purchase,{isCurrent: () => this.active && epoch === this.epoch});
+      intent.uncertain = false;
+      if (epoch !== this.epoch || !this.active) return;
+      this.setData({ busy: false, message: "整套换装订单已确认，各款照片会分别显示；原片会保留。" });
       await this.refresh();
     } catch (error) {
+      if (codeOf(error) === "PAYMENT_USER_CANCELLED") intent.uncertain = false;
       if (!wasUncertain && /^(CONSENT_REQUIRED|VALIDATION_FAILED|AUTH_FORBIDDEN|WARDROBE_SELF_REQUIRED)$/.test(codeOf(error))) intent.uncertain = false;
       if (epoch === this.epoch && this.active) await this.showError(error);
     } finally { if (epoch === this.epoch && this.active) this.setData({ busy: false }); }
+  },
+  async saveSeries(event) {
+    if (this.data.busy || !this.active) return;
+    const requested = event?.currentTarget?.dataset?.item;
+    const items = this.data.seriesItems.filter(item => item.status === "ready" && (!requested || item.itemId === requested));
+    const epoch = this.epoch, purchaseId = this.data.purchaseId;
+    this.setData({busy: true,error: "",message: ""});
+    try {
+      for (const item of items) {
+        if (!this.active || epoch !== this.epoch) return;
+        const key = `${purchaseId}:${item.itemId}:${item.asset.sha256}`;
+        if (this.seriesSavedKeys.has(key)) continue;
+        await media.save(item);this.seriesSavedKeys.add(key);
+        if (this.active && epoch === this.epoch) this.setData({seriesSaved: this.data.seriesItems.filter(row => this.seriesSavedKeys.has(`${purchaseId}:${row.itemId}:${row.asset?.sha256}`)).length,message: "已保存的款式会保留，未完成的款式可以继续保存。"});
+      }
+    } catch (error) { if (this.active && epoch === this.epoch) { if (codeOf(error) === "ALBUM_PERMISSION_REQUIRED") this.setData({albumPermissionDenied: true}); await this.showError(error); } }
+    finally { if (this.active && epoch === this.epoch) this.setData({busy: false}); }
+  },
+  async retrySeries(event) {
+    if (this.data.busy || !this.active) return;
+    const item = this.data.seriesItems.find(row => row.itemId === event.currentTarget.dataset.item);
+    if (!item?.canRetry) return;
+    const epoch = this.epoch;this.setData({busy: true,error: ""});
+    try { await purchases.retry(this.data.purchaseId,item.itemId,item.attempts+1); if (this.active && epoch === this.epoch) {this.setData({busy:false});await this.refresh();} }
+    catch (error) {if (this.active && epoch === this.epoch) await this.showError(error);}
+    finally {if (this.active && epoch === this.epoch) this.setData({busy:false});}
   },
   async save() {
     if (this.data.busy || this.data.result?.status !== "ready") return;
@@ -178,14 +262,15 @@ Page({
     finally { if (epoch === this.epoch && this.active) this.setData({ busy: false }); }
   },
   async showError(error) {
-    if ((authorizationFailure(error) && codeOf(error) !== "CONSENT_REQUIRED") || /CONTEXT_INVALID|RESULT_INVALID|COMMAND_INVALID/.test(codeOf(error))) await this.clearViews();
+    if ((authorizationFailure(error) && codeOf(error) !== "CONSENT_REQUIRED") || /CONTEXT_INVALID|RESULT_INVALID|COMMAND_INVALID|PHOTO_.*(?:INVALID|CHANGED)/.test(codeOf(error))) await this.clearViews();
     const code = codeOf(error);
     const message = code === "ALBUM_PERMISSION_REQUIRED" ? "请在微信设置中允许保存到相册，再重试。" :
       code === "CONSENT_REQUIRED" ? "请等待每位人物独立确认换装用途，再重试。" :
       code === "WARDROBE_SELF_REQUIRED" ? "请由照片参与者本人确认；监护授权需先由服务端核验。" :
       authorizationFailure(error) ? "换装授权已失效，请重新确认；原年龄照片授权可单独管理。" :
       /CONTEXT|RESULT|COMMAND/.test(code) ? "照片或任务信息未通过校验，请从相册重新打开。" :
-      /DIGEST|SIZE|DIMENSIONS/.test(code) ? "图片校验未通过，请刷新后重新下载。" : "暂时未能完成，请刷新或按原选择重试。";
+      /DIGEST|SIZE|DIMENSIONS/.test(code) ? "图片校验未通过，请刷新后重新下载。" :
+      /PHOTO_|PAYMENT_|EXTERNAL_ADAPTER_UNAVAILABLE|DEPENDENCY_UNAVAILABLE/.test(code) ? purchases.errorText(error) : "暂时未能完成，请刷新或按原选择重试。";
     this.setData({ error: message });
   },
   onShareAppMessage(event = {}) {

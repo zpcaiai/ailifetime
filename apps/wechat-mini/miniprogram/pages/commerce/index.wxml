@@ -1,12 +1,19 @@
 <view class="page">
-  <view class="page-header"><view class="page-title">订单与支付</view><view class="muted">把值得珍藏的时光，安排妥当。</view></view>
+  <view class="page-header"><view class="page-title">我的订单</view><view class="muted">每一段时光，都为你留着。</view></view>
   <view class="card">
-    <view class="section-head"><view class="section-title">确认你的订单</view><text class="tag">微信支付</text></view>
-    <view class="muted">订单金额、币种与状态会在支付前安全核验，支付结果以核验后的订单状态为准。</view>
-    <label class="field-label">结算编号</label><input class="field" aria-label="结算引用" placeholder="填写本次订单的结算编号" value="{{checkoutId}}" bindinput="checkoutChanged" />
-    <button class="button" disabled="{{busy}}" bindtap="pay">{{busy ? '正在核对订单' : '核对订单并发起支付'}}</button>
-    <view class="divider" wx:if="{{amountText}}"></view><view class="page-title" wx:if="{{amountText}}">{{amountText}}</view>
-    <view class="status" wx:if="{{stateText}}">{{stateText}}</view><view class="status error" wx:if="{{error}}">{{error}}</view>
+    <view class="section-head"><view class="section-title">时光清单</view><button class="button secondary" size="mini" disabled="{{loading || busy}}" bindtap="refresh">刷新</button></view>
+    <view class="muted" wx:if="{{loading}}">正在找回你的订单…</view>
+    <view class="muted" wx:elif="{{!orders.length}}">还没有订单。选好照片和玩法后，就会出现在这里。</view>
+    <button class="button secondary" wx:for="{{orders}}" wx:key="purchaseId" data-id="{{item.purchaseId}}" bindtap="select" disabled="{{busy}}">{{item.seriesTitle || item.title}} · {{item.expectedCount}} 张 · {{item.amountText}} · {{item.stateText}}</button>
+    <button class="button secondary" wx:if="{{nextCursor}}" disabled="{{loading || busy}}" bindtap="more">{{loading ? '正在找回' : '更多订单'}}</button>
   </view>
-  <view class="privacy-foot">支付完成后仍需核验订单结果。请勿重复支付，遇到问题可从“我的”联系支持。</view>
+  <view class="card" wx:if="{{selected}}">
+    <view class="section-head"><view class="section-title">{{selected.seriesTitle || selected.title}}</view><text class="tag">{{selected.stateText}}</text></view>
+    <view class="page-title">{{selected.amountText}}<text class="muted"> / 整单</text></view>
+    <view class="muted">共 {{selected.expectedCount}} 张照片{{selected.sku === 'wardrobe-series' ? '，包含本系列全部适用款式' : ''}} · 已备好 {{selected.readyCount}} 张</view>
+    <button class="button" wx:if="{{selected.canResume}}" disabled="{{busy || loading}}" bindtap="resume">{{busy ? '正在核对订单' : selected.paymentState === 'paid' ? '继续处理，不重复付款' : '确认订单并继续'}}</button>
+    <button class="button secondary" wx:if="{{selected.canOpen}}" disabled="{{busy}}" bindtap="open">查看照片与进度</button>
+  </view>
+  <view class="status" wx:if="{{message}}">{{message}}</view><view class="status error" wx:if="{{error}}">{{error}}</view>
+  <view class="privacy-foot">付款中断或暂未出片，都可以回到这里继续。支付结果以核验后的订单状态为准。</view>
 </view>

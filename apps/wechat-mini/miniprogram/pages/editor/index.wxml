@@ -10,6 +10,8 @@
     <view wx:else><label class="field-label">你想看几岁？</label><view class="age-focus"><input class="age-input" type="number" value="{{targetAge}}" aria-label="想生成的年龄" placeholder="0–100" bindinput="targetAgeChanged" /><text>岁</text></view><view class="field-hint">可填写 0 到 100 之间任意整数年龄。</view></view>
   </view>
   <checkbox-group class="consent-panel" bindchange="consentChanged"><label class="row"><checkbox color="#26384a" value="accepted" checked="{{consentAccepted}}" /><text>我本人同意使用这张照片创作年龄影像，可随时撤回。{{subjectMode === 'couple' ? '对方须另行确认，此处不能代为授权。' : ''}}</text></label></checkbox-group>
-  <button class="button" disabled="{{busy || !consentAccepted}}" bindtap="generate">{{busy ? '正在提交' : playMode === 'lifespan' ? '生成 21 张年龄照片' : '生成 ' + targetAge + ' 岁的照片'}}</button>
+  <view class="card"><view class="section-head"><view class="section-title">{{playMode === 'lifespan' ? '一生相册 · 21 张' : targetAge + ' 岁 · 1 张'}}</view><text class="tag">{{playMode === 'lifespan' ? priceLifespan : priceAge}} / 套</text></view><view class="muted">整套总价，单人照和情侣合照同价。付款确认后开始生成。</view></view>
+  <button class="button" disabled="{{busy || !consentAccepted}}" bindtap="generate">{{busy ? '正在核对订单' : (playMode === 'lifespan' ? priceLifespan + ' · 生成 21 张照片' : priceAge + ' · 生成 ' + targetAge + ' 岁照片')}}</button>
+  <view class="field-hint">未完成的订单可从「我的订单」继续，已付款的订单不会重复收费。</view>
   <view class="status error" wx:if="{{error}}">{{error}}</view><view class="privacy-foot">照片带 AI 生成标识。年龄变化是艺术想象，不代表真实容貌预测。</view>
 </view>

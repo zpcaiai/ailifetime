@@ -25,6 +25,7 @@ import { registerDesigningLifeTimeMachineExperienceCapabilities } from "./domain
 import { registerHardeningEnterprisePlatformCapabilities } from "./domains/hardening-enterprise-platform.js";
 import { registerLaunchingCompleteCommercialProductCapabilities } from "./domains/launching-complete-commercial-product.js";
 export { WARDROBE_STYLES, parseWardrobeEdit, requireWardrobeSource } from "./wardrobe-plan.js";
+export { buildAgeGenerationPlan } from "./age-generation-plan.js";
 import { registerOrchestratingLifeTimeMachineCapabilities } from "./domains/orchestrating-life-time-machine.js";
 import { registerSecuringOperatingLifeTimeMachineCapabilities } from "./domains/securing-operating-life-time-machine.js";
 
