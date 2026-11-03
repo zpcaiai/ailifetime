@@ -39,7 +39,11 @@ export async function timelineFixture(databasePath = ':memory:', options = {}) {
   }
   const consent = consents[0];
   const registry = createCapabilityRegistry(), fixtures = createCapabilityValidInputFixtures();
-  await registry.execute(runtime, 'B07', { actor, idempotencyKey: 'intake', input: { ...fixtures.B07, assetId: 'source', participantIds, faceCount: participantIds.length } });
+  const source = options.sourceAsset;
+  const sourceIntake = source === undefined ? {} : { sourceSha256: source.sha256, canonicalSha256: source.sha256,
+    lineageSha256: createHash('sha256').update(`ltm-media-lineage-v1\n${source.sha256}\n${source.sha256}\n`).digest('hex'),
+    mimeType: source.mimeType, byteLength: source.byteLength, qualityDimensions: {width:source.width,height:source.height} };
+  await registry.execute(runtime, 'B07', { actor, idempotencyKey: 'intake', input: { ...fixtures.B07, ...sourceIntake, assetId: 'source', participantIds, faceCount: participantIds.length } });
   await registry.execute(runtime, 'B14', { actor, idempotencyKey: 'root', input: { jobId: 'root', sourceAssetId: 'source', participantIds, targetAges: options.targetAges ?? Array.from({length:21},(_,i)=>i*5), currentAge: 35, timelineProfile: `${options.targetAges?.length === 1 ? 'single-age' : 'lifespan-21'}${options.couple ? '-couple' : ''}-v1`, ...(options.couple ? {participantAges:[35,32]} : {}), seed: 'synthetic-seed', promptPolicyVersion: 'age-policy-v1', illustrativeLabel: true } });
   let sequence = 0;
   function callback(commandId, state, resultManifest) {

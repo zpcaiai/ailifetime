@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { createCapabilityRegistry, externalBusinessEventReducerRegistry } from "@ltm/capabilities";
 import {
+  DomainError,
   isDomainError,
   LifeTimeMachineRuntime,
   PostgresLifeTimeMachineRuntime,
@@ -10,6 +11,8 @@ import { loadApiConfiguration } from "./config.js";
 import { createApiServer, type ApiLogEntry } from "./server.js";
 import { ProductionDomainRuntime } from "./domain-runtime.js";
 import { configuredTimelineArtifacts } from "./timeline-artifacts.js";
+import { configuredPhotoScoring } from "./photo-score-config.js";
+import { TimelinePhotoQualityService } from "./timeline-photo-quality.js";
 
 const PRODUCT_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 
@@ -39,16 +42,20 @@ async function run(): Promise<void> {
     : undefined;
   domainRuntimeForCleanup = domainRuntime;
   const timelineArtifacts = configuredTimelineArtifacts(process.env, configuration.appEnvironment);
+  const registry=createCapabilityRegistry(),scoring=configuredPhotoScoring(process.env,configuration.appEnvironment);
+  if(scoring!==undefined && timelineArtifacts===undefined)throw new DomainError("CONFIGURATION_INVALID","photo scoring requires an approved source/output media reader");
+  const photoQuality=scoring===undefined?undefined:new TimelinePhotoQualityService(runtime,registry,timelineArtifacts!,scoring.scorer,scoring.policies,scoring.channel);
   const server = createApiServer({
     runtime,
     authenticator: configuration.authenticator,
-    capabilityRegistry: createCapabilityRegistry(),
+    capabilityRegistry: registry,
     externalBusinessEventReducerRegistry,
     bodyLimitBytes: configuration.bodyLimitBytes,
     allowSandboxStepUpHeader: configuration.allowSandboxStepUpHeader,
     appEnvironment: configuration.appEnvironment,
     clientIntegrations: configuration.clientIntegrations,
     ...(timelineArtifacts === undefined ? {} : { timelineArtifacts }),
+    ...(photoQuality === undefined ? {} : { photoQuality }),
     ...(domainRuntime === undefined ? {} : { domainRuntime }),
     ...(configuration.browserOidcConfiguration === undefined
       ? {}

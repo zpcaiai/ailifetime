@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {writeFileSync,chmodSync,symlinkSync} from 'node:fs';
+import {join} from 'node:path';
+import {configuredPhotoScoring} from '../dist/photo-score-config.js';
+import {TimelinePhotoQualityService,photoQualityId} from '../dist/timeline-photo-quality.js';
+import {withPhotoFixture} from './photo-score-fixtures.mjs';
+test('explicit local scorer config executes actual bytes through model HTTP and SQL; absent config is disabled',()=>withPhotoFixture(async f=>{
+ assert.equal(configuredPhotoScoring({},'test'),undefined);
+ const policyFile=join(f.directory,'policy.json');writeFileSync(policyFile,JSON.stringify([f.policy]),{mode:0o600});
+ const env={LTM_PHOTO_SCORER_URL:f.scorerOptions.baseUrl,LTM_PHOTO_SCORER_TOKEN_FILE:f.scorerOptions.workloadTokenFile,LTM_PHOTO_SCORER_POLICY_FILE:policyFile,LTM_PHOTO_SCORER_CHANNEL:'wechat',LTM_PHOTO_SCORER_ALLOW_HTTP_LOOPBACK:'true'};
+ const config=configuredPhotoScoring(env,'test'),asset=await f.asset('candidate',3);
+ await f.grantQuality(photoQualityId('tenant','root',37,asset.sha256,f.sourceAsset.sha256,f.policy));
+ assert.equal((await new TimelinePhotoQualityService(f.runtime,f.registry,f.store,config.scorer,config.policies,config.channel).evaluate(f.service,'root',37,asset)).decision,'pass');
+ for(const patch of [{LTM_PHOTO_SCORER_URL:undefined},{LTM_PHOTO_SCORER_POLICY_FILE:'relative.json'},{LTM_PHOTO_SCORER_CHANNEL:'other'},{LTM_PHOTO_SCORER_TIMEOUT_MS:'0'},{LTM_PHOTO_SCORER_ALLOW_HTTP_LOOPBACK:'yes'}])assert.throws(()=>configuredPhotoScoring({...env,...patch},'test'));
+ assert.throws(()=>configuredPhotoScoring(env,'production'),/explicit URL/);
+ assert.throws(()=>configuredPhotoScoring({LTM_PHOTO_SCORER_TIMEOUT_MS:'500'},'test'));
+ const alias=join(f.directory,'policy-link');symlinkSync(policyFile,alias);assert.throws(()=>configuredPhotoScoring({...env,LTM_PHOTO_SCORER_POLICY_FILE:alias},'test'));
+ chmodSync(env.LTM_PHOTO_SCORER_TOKEN_FILE,0o644);assert.throws(()=>configuredPhotoScoring(env,'test'));
+ assert.equal(f.seen.length,1);
+}));

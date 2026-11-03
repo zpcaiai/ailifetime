@@ -463,8 +463,26 @@ export class BrokerClient {
     if (!response.ok) unavailable("client integration broker rejected the request");
     if (!expectsJson && response.status === 204) return undefined;
     const contentLength = response.headers.get("content-length");
-    if (contentLength !== null && Number(contentLength) > MAX_BROKER_RESPONSE_BYTES) unavailable("client integration broker response is too large");
-    const raw = await response.text();
+    if (contentLength !== null && Number(contentLength) > MAX_BROKER_RESPONSE_BYTES) {
+      await response.body?.cancel();
+      unavailable("client integration broker response is too large");
+    }
+    const reader=response.body?.getReader(),chunks:Uint8Array[]=[];
+    let size=0;
+    if(reader!==undefined) {
+      try {
+        for(;;) {
+          const next=await reader.read();if(next.done)break;
+          size+=next.value.byteLength;
+          if(size>MAX_BROKER_RESPONSE_BYTES) {
+            await reader.cancel();unavailable("client integration broker response is too large");
+          }
+          chunks.push(next.value);
+        }
+      }catch(error){if(error instanceof DomainError)throw error;unavailable("client integration broker response stream failed");}
+      finally{reader.releaseLock();}
+    }
+    const raw=Buffer.concat(chunks,size).toString("utf8");
     if (raw.length === 0 && !expectsJson) return undefined;
     if (Buffer.byteLength(raw, "utf8") > MAX_BROKER_RESPONSE_BYTES) unavailable("client integration broker response is too large");
     try { return JSON.parse(raw) as unknown; } catch { unavailable("client integration broker returned invalid JSON"); }

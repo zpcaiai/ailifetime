@@ -17,6 +17,7 @@ import type { ProductionDomainRuntime } from "./domain-runtime.js";
 import type { BrowserOidcPublicConfiguration } from "./browser-oidc.js";
 import type { ClientIntegrationPorts, MediaDeletionProjection } from "./client-integrations.js";
 import { TimelineDeliveryService } from "./timeline-delivery.js";
+import type { TimelinePhotoQualityService } from "./timeline-photo-quality.js";
 import { WardrobeService } from "./wardrobe.js";
 import { PHOTO_PRODUCTS, PHOTO_PRICE_VERSION } from "./photo-catalog.js";
 import { PhotoPurchaseService, PHOTO_PURCHASE_COLLECTION } from "./photo-purchases.js";
@@ -59,6 +60,7 @@ export interface ApiServerOptions {
   readonly metricsTokenSha256?: string;
   readonly clientIntegrations?: ClientIntegrationPorts;
   readonly timelineArtifacts?: TimelineArtifactReader;
+  readonly photoQuality?: TimelinePhotoQualityService;
   /** Production bounded-context composition; omitted only for local/test fixtures. */
   readonly domainRuntime?: ProductionDomainRuntime;
   readonly browserOidcConfiguration?: BrowserOidcPublicConfiguration;
@@ -560,6 +562,17 @@ async function handleRequest(
       const data = method === "GET" ? await wardrobe.context(actor, rootId, age) : await wardrobe.create(operationContext(actor, "wardrobe.create", requireIdempotencyKey(request)), rootId, age, object(await readJsonBody(request, bodyLimit), "wardrobe request"), requireIdempotencyKey(request));
       sendJson(response, 200, {data, requestId}); return;
     }
+    const photoQualityMatch = /^\/v1\/timelines\/([A-Za-z0-9](?:[A-Za-z0-9._:-]|%3[Aa]){0,127})\/quality$/.exec(path);
+    if (method === "POST" && photoQualityMatch?.[1] !== undefined) {
+      const actor = await authenticate(options, request, requestId);
+      if (!actor.roles.includes("service_account") || !hasPermission(actor,"media.quality.evaluate")) throw new DomainError("AUTH_FORBIDDEN","photo quality requires an authorized service account");
+      if (!options.photoQuality) throw new DomainError("DEPENDENCY_UNAVAILABLE","photo scoring is not configured");
+      const input=object(await readJsonBody(request,bodyLimit),"photo quality request");
+      assertExactKeys(input,["targetAge","asset"],"photo quality request");
+      if (typeof input.targetAge!=="number") throw new DomainError("VALIDATION_FAILED","photo scoring requires targetAge");
+      const data=await options.photoQuality.evaluate(operationContext(actor,"photo-quality.evaluate",requireIdempotencyKey(request)),decodeURIComponent(photoQualityMatch[1]),input.targetAge,input.asset);
+      sendJson(response,200,{data,requestId});return;
+    }
     const timelineMatch = /^\/v1\/timelines\/([A-Za-z0-9](?:[A-Za-z0-9._:-]|%3[Aa]){0,127})(?:\/(retry|nodes\/(\d{1,3})\/image))?$/.exec(path);
     if (timelineMatch?.[1] !== undefined && ((method === "GET" && timelineMatch[2] !== "retry") || (method === "POST" && timelineMatch[2] === "retry"))) {
       const actor = await authenticate(options, request, requestId);
@@ -635,6 +648,9 @@ async function handleRequest(
       const batchId = normalizeCapabilityBatchId(capabilityMatch?.[1] ?? body.batchId);
       if (batchId === "B14") requireOperatorGeneration(authenticated);
       const input = body.input ?? (capabilityMatch?.[1] === undefined ? undefined : body);
+      if (batchId === "B15" && options.photoQuality !== undefined && object(input ?? {},"quality input").artifactBinding !== undefined) {
+        throw new DomainError("AUTH_FORBIDDEN","bound photo quality must use the configured pixel scorer endpoint");
+      }
       const context = operationContext(authenticated, `capability:${batchId}`, key);
       const secured = await secureMediaCapabilityInput(
         options.runtime,
