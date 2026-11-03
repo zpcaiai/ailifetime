@@ -1,0 +1,548 @@
+{
+  "schemaVersion": "ltm.b15.local-resume.v1",
+  "status": "LOCAL_MAINTENANCE_VERIFIED_NOT_FORMAL_B15",
+  "formal": "BLOCKED_INCOMPLETE",
+  "prior_whole_project_check": "Actual1249Node+12Python+12Java passed before cacheIDrevision; current affected9packages and deployment runtime tested separately below",
+  "prior_dp_timeout": "Unmodified300s runner limit hit on repeatedwholecheck, retained notPASS; amended scope runs actualaffectedcrossmodule tests and originalCI stillrequired",
+  "receipts": {
+    "garment-red": {
+      "command": [
+        "env",
+        "APP_ENV=test",
+        "node",
+        "--test",
+        "services/api/test/photo-score-wardrobe-contract.test.mjs"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 86192,
+      "exit_code": 1,
+      "started_at": "2026-11-03T21:50:24.076378+00:00",
+      "ended_at": "2026-11-03T21:50:25.076633+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/garment-red.log",
+      "sha256": "85254b6f3057d2c0a5c60400692f525689d7b47ccc00e9d8f813c8d3780b44e9"
+    },
+    "cache-red": {
+      "command": [
+        "env",
+        "APP_ENV=test",
+        "node",
+        "--test",
+        "services/api/test/photo-quality-cache-version.test.mjs"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 8135,
+      "exit_code": 1,
+      "started_at": "2026-11-03T22:01:44.707788+00:00",
+      "ended_at": "2026-11-03T22:01:47.847615+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/cache-red.log",
+      "sha256": "7c7f1ceb41906650843ac830c2811e14ce14833f1a83fbf571db66f182822d67"
+    },
+    "cache-green": {
+      "command": [
+        "env",
+        "APP_ENV=test",
+        "node",
+        "--test",
+        "services/api/test/photo-quality-cache-version.test.mjs",
+        "services/api/test/timeline-photo-quality.test.mjs",
+        "services/api/test/photo-score-wardrobe-contract.test.mjs"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 8403,
+      "exit_code": 0,
+      "started_at": "2026-11-03T22:02:39.138459+00:00",
+      "ended_at": "2026-11-03T22:02:45.856889+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/cache-green.log",
+      "sha256": "957c80be28c8106a1ee136f016661def9bc004756700eb6c738d858a5163ef45"
+    },
+    "full-check": {
+      "command": [
+        "python3",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/native-env.py",
+        "pnpm",
+        "run",
+        "check"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 87164,
+      "exit_code": 0,
+      "started_at": "2026-11-03T21:52:05.928926+00:00",
+      "ended_at": "2026-11-03T21:55:26.598303+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/full-check.log",
+      "sha256": "4605c704ff62822bac76a4a7dbd07f07cd9a434d661580741210882a020d4c95"
+    },
+    "dp-global": {
+      "command": [
+        "python3",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/global-env.py",
+        "python3",
+        "/Users/stephen/DevProjects/AIProjects/elmos/.ai-progress/bin/dp_slice_strategy_engine.py",
+        "--db-path",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/dp-state.sqlite3",
+        "--repo-root",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+        "verify-regression",
+        "--plan-id",
+        "ailifetime-vercel-b15-resume-20261104",
+        "--agent",
+        "codex"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 99104,
+      "exit_code": 1,
+      "started_at": "2026-11-03T21:55:52.824170+00:00",
+      "ended_at": "2026-11-03T22:00:53.703239+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/dp-global.log",
+      "sha256": "d671d2825f7185e1e6bf6a269bf8077e1a41b2763e2ad898cb44a2393eddde71"
+    },
+    "amended-serverless": {
+      "command": [
+        "python3",
+        "/Users/stephen/DevProjects/AIProjects/elmos/.ai-progress/bin/dp_slice_strategy_engine.py",
+        "--db-path",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/dp-state.sqlite3",
+        "--repo-root",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+        "verify-slice",
+        "--plan-id",
+        "ailifetime-vercel-b15-cache-amended-20261104",
+        "--agent",
+        "codex",
+        "--slice-id",
+        "serverless"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 8530,
+      "exit_code": 0,
+      "started_at": "2026-11-03T22:03:00.429008+00:00",
+      "ended_at": "2026-11-03T22:04:09.667740+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/amended-serverless.log",
+      "sha256": "6d1f76bba6f3f7e7e8e0c723a6b590a42ba40c40836dd71bde5a072864c85d28"
+    },
+    "amended-build": {
+      "command": [
+        "python3",
+        "/Users/stephen/DevProjects/AIProjects/elmos/.ai-progress/bin/dp_slice_strategy_engine.py",
+        "--db-path",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/dp-state.sqlite3",
+        "--repo-root",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+        "verify-slice",
+        "--plan-id",
+        "ailifetime-vercel-b15-cache-amended-20261104",
+        "--agent",
+        "codex",
+        "--slice-id",
+        "build"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 8944,
+      "exit_code": 0,
+      "started_at": "2026-11-03T22:04:09.815992+00:00",
+      "ended_at": "2026-11-03T22:04:43.492220+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/amended-build.log",
+      "sha256": "2cff748bb38f2e3d531654a7a821637072c2f79f384301ebfa80fb78177bd5a8"
+    },
+    "amended-garment": {
+      "command": [
+        "python3",
+        "/Users/stephen/DevProjects/AIProjects/elmos/.ai-progress/bin/dp_slice_strategy_engine.py",
+        "--db-path",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/dp-state.sqlite3",
+        "--repo-root",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+        "verify-slice",
+        "--plan-id",
+        "ailifetime-vercel-b15-cache-amended-20261104",
+        "--agent",
+        "codex",
+        "--slice-id",
+        "garment"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 9496,
+      "exit_code": 0,
+      "started_at": "2026-11-03T22:04:43.796593+00:00",
+      "ended_at": "2026-11-03T22:04:47.778910+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/amended-garment.log",
+      "sha256": "b11cad25f3c7e86eecef5f13f7cb77d76fca3fc6724d8473a956c408c105f336"
+    },
+    "amended-coverage": {
+      "command": [
+        "python3",
+        "/Users/stephen/DevProjects/AIProjects/elmos/.ai-progress/bin/dp_slice_strategy_engine.py",
+        "--db-path",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/dp-state.sqlite3",
+        "--repo-root",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+        "verify-slice",
+        "--plan-id",
+        "ailifetime-vercel-b15-cache-amended-20261104",
+        "--agent",
+        "codex",
+        "--slice-id",
+        "coverage"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 9525,
+      "exit_code": 0,
+      "started_at": "2026-11-03T22:04:47.870528+00:00",
+      "ended_at": "2026-11-03T22:05:08.030650+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/amended-coverage.log",
+      "sha256": "f858c3404219d92885d3542335a889371c1dda274272effcb76f90bb272c0969"
+    },
+    "amended-cache-revision": {
+      "command": [
+        "python3",
+        "/Users/stephen/DevProjects/AIProjects/elmos/.ai-progress/bin/dp_slice_strategy_engine.py",
+        "--db-path",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/dp-state.sqlite3",
+        "--repo-root",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+        "verify-slice",
+        "--plan-id",
+        "ailifetime-vercel-b15-cache-amended-20261104",
+        "--agent",
+        "codex",
+        "--slice-id",
+        "cache-revision"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 9611,
+      "exit_code": 0,
+      "started_at": "2026-11-03T22:05:08.182587+00:00",
+      "ended_at": "2026-11-03T22:05:14.013789+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/amended-cache-revision.log",
+      "sha256": "6e1b3fbd651e2b350556e8a2fd7d7ff8fcc33101c0583aaf6cd68ffddc602d19"
+    },
+    "amended-global": {
+      "command": [
+        "python3",
+        "/Users/stephen/DevProjects/AIProjects/elmos/.ai-progress/bin/dp_slice_strategy_engine.py",
+        "--db-path",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/dp-state.sqlite3",
+        "--repo-root",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+        "verify-regression",
+        "--plan-id",
+        "ailifetime-vercel-b15-cache-amended-20261104",
+        "--agent",
+        "codex"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 9752,
+      "exit_code": 1,
+      "started_at": "2026-11-03T22:05:14.354052+00:00",
+      "ended_at": "2026-11-03T22:10:15.233845+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/amended-global.log",
+      "sha256": "cf61cba040208ca5bcb6cb9793646b089b88392694776687e216b1f3eb6194ac"
+    },
+    "amended-global-recovered": {
+      "command": [
+        "python3",
+        "/Users/stephen/DevProjects/AIProjects/elmos/.ai-progress/bin/dp_slice_strategy_engine.py",
+        "--db-path",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/dp-state.sqlite3",
+        "--repo-root",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+        "verify-regression",
+        "--plan-id",
+        "ailifetime-vercel-b15-cache-amended-20261104",
+        "--agent",
+        "codex"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 18669,
+      "exit_code": 2,
+      "started_at": "2026-11-03T22:13:21.163456+00:00",
+      "ended_at": "2026-11-03T22:13:22.763684+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/amended-global-recovered.log",
+      "sha256": "196d03a7804aff2e1fe5f1c96e15835bf83f7f1d735c23e408f56ae7b22509de"
+    },
+    "resource-readmitted": {
+      "command": [
+        "python3",
+        "-c",
+        "import os,shutil,json;load=os.getloadavg();free=shutil.disk_usage(\"/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104\").free;print(json.dumps({\"load\":load,\"free_bytes\":free,\"max_load1\":64,\"min_free_bytes\":4294967296}));assert load[0]<=64 and free>4294967296"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 18606,
+      "exit_code": 1,
+      "started_at": "2026-11-03T22:13:15.000360+00:00",
+      "ended_at": "2026-11-03T22:13:15.084412+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/resource-readmitted.log",
+      "sha256": "57f559fd011fdd268a0593dc369afbc507cd8ff1d674fa248499f00f43aa5b70"
+    },
+    "admitted-global": {
+      "command": [
+        "python3",
+        "/Users/stephen/DevProjects/AIProjects/elmos/.ai-progress/bin/dp_slice_strategy_engine.py",
+        "--db-path",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/dp-state.sqlite3",
+        "--repo-root",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+        "verify-regression",
+        "--plan-id",
+        "ailifetime-vercel-b15-cache-amended-20261104",
+        "--agent",
+        "codex"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 19121,
+      "exit_code": 0,
+      "started_at": "2026-11-03T22:14:22.599012+00:00",
+      "ended_at": "2026-11-03T22:16:22.979575+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/admitted-global.log",
+      "sha256": "7caf8c383151da6532267e16651826b645c05859b21de8328ed98ea7024096c6"
+    },
+    "admitted-regression": {
+      "command": [
+        "python3",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/admitted-regression.py"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 19119,
+      "exit_code": 0,
+      "started_at": "2026-11-03T22:14:22.533060+00:00",
+      "ended_at": "2026-11-03T22:16:22.989332+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/admitted-regression.log",
+      "sha256": "b93b023f632b5675ba61abb4ab02f808707f89946cea5a30ed77bebf0668585b"
+    },
+    "strict-amended": {
+      "command": [
+        "python3",
+        "/Users/stephen/DevProjects/AIProjects/elmos/certification/strict_zero_fake_industrial_evaluator.py",
+        "--strict-slice",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/b15-formal-20261104/resume-amended-code-gate"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 9569,
+      "exit_code": 0,
+      "started_at": "2026-11-03T22:04:56.413312+00:00",
+      "ended_at": "2026-11-03T22:04:56.667500+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/strict-amended.log",
+      "sha256": "da593ec76da01f2afd1fab3a9667ff1b4a6b81f84fed38363712393cd25f21f8"
+    },
+    "formal-b15": {
+      "command": [
+        "python3",
+        ".ai-life-time-machine/skill-package/scripts/verify_release.py",
+        "--repo",
+        ".",
+        "--batch",
+        "B15"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 92337,
+      "exit_code": 1,
+      "started_at": "2026-11-03T21:52:44.046845+00:00",
+      "ended_at": "2026-11-03T21:52:44.236801+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/formal-b15.log",
+      "sha256": "e3366f72d1d3d023cb0da56560e415ceac7763c1e91086936e5a821b2ea08594"
+    }
+  },
+  "current_runtime_receipts": [
+    {
+      "command": [
+        "node",
+        "--test",
+        "--test-concurrency=1",
+        "tools/native-album-build.test.mjs",
+        "tools/native-album-serverless.test.mjs",
+        "tools/native-album-api.test.mjs",
+        "tools/native-album-entry.test.mjs",
+        "tools/native-album-preview.test.mjs"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 20675,
+      "actual_child_pid": 20675,
+      "exit_code": 0,
+      "postgres_pid": 18691,
+      "started_at": "2026-11-03T22:15:10.880117+00:00",
+      "ended_at": "2026-11-03T22:16:22.881030+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/native-20675.log",
+      "sha256": "29cc997fb8a4f4e38c63ab8464ed1096b8916df68c3d795e72701fd38b1a480a",
+      "credential_values": "NOT_LOGGED"
+    },
+    {
+      "command": [
+        "pnpm",
+        "--workspace-concurrency=1",
+        "--filter",
+        "@ltm/core",
+        "--filter",
+        "@ltm/providers",
+        "--filter",
+        "@ltm/capabilities",
+        "--filter",
+        "@ltm/api",
+        "--filter",
+        "@ltm/workers",
+        "--filter",
+        "@ltm/integration-gateway",
+        "--filter",
+        "@ltm/wechat-mini-core",
+        "--filter",
+        "@ltm/experience-platform",
+        "--filter",
+        "@ltm/commerce-platform",
+        "-r",
+        "test"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 19126,
+      "actual_child_pid": 19126,
+      "exit_code": 0,
+      "postgres_pid": 18691,
+      "started_at": "2026-11-03T22:14:22.709224+00:00",
+      "ended_at": "2026-11-03T22:15:10.838187+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/native-19126.log",
+      "sha256": "2738d791a53abbe4b7f7ba77222b25a8e4c9cdc394c7f16b3b7361b982849d8b",
+      "credential_values": "NOT_LOGGED"
+    }
+  ],
+  "current_runtime_counts": {
+    "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/native-20675.log": {
+      "tests": 9,
+      "pass": 9,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0
+    },
+    "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/native-19126.log": {
+      "tests": 739,
+      "pass": 739,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0
+    }
+  },
+  "restored_source": [
+    {
+      "original": "/Users/stephen/.codex/visualizations/2026/11/03/01a1a064-40eb-7883-bf65-a0595f72ba9e/album-save/merge-validation-tree/tools/native-album-serverless.mjs",
+      "file": "tools/native-album-serverless.mjs",
+      "sha256": "a53cb2c2629ededee616935a52decb794a1d8bb1e0eedd4fc36b9b2d463ac3ec",
+      "verified_remote_source_commit": "9e6dfdaf8b1526f786821258efecb1c6934d4091"
+    },
+    {
+      "original": "/Users/stephen/.codex/visualizations/2026/11/03/01a1a064-40eb-7883-bf65-a0595f72ba9e/album-save/merge-validation-tree/api/native-album.mjs",
+      "file": "api/native-album.mjs",
+      "sha256": "7a9155ee47e8bda48d203c697d72c76fd7bc1d9210c4455aa26bd4fbec931159",
+      "verified_remote_source_commit": "9e6dfdaf8b1526f786821258efecb1c6934d4091"
+    },
+    {
+      "original": "/Users/stephen/.codex/visualizations/2026/11/03/01a1a064-40eb-7883-bf65-a0595f72ba9e/album-save/merge-validation-tree/tools/native-album-serverless.test.mjs",
+      "file": "tools/native-album-serverless.test.mjs",
+      "sha256": "3db3163ec5b7a8e573219d092b2b7c5ed952098729b30c40946745bb2ee7363b",
+      "verified_remote_source_commit": "9e6dfdaf8b1526f786821258efecb1c6934d4091"
+    },
+    {
+      "original": "/Users/stephen/.codex/visualizations/2026/11/03/01a1a064-40eb-7883-bf65-a0595f72ba9e/album-save/merge-validation-tree/tools/native-album-build.mjs",
+      "file": "tools/native-album-build.mjs",
+      "sha256": "f46a6ca35cbd528523f87956d99a352574957ed5eb88351774934e4da61378d2",
+      "verified_remote_source_commit": "9e6dfdaf8b1526f786821258efecb1c6934d4091"
+    },
+    {
+      "original": "/Users/stephen/.codex/visualizations/2026/11/03/01a1a064-40eb-7883-bf65-a0595f72ba9e/album-save/merge-validation-tree/vercel.json",
+      "file": "vercel.json",
+      "sha256": "58af245de7611fa66eb7797da0c96af2d80a9c4174144994022f3cd496239f3d",
+      "verified_remote_source_commit": "9e6dfdaf8b1526f786821258efecb1c6934d4091"
+    }
+  ],
+  "source_files": [
+    {
+      "file": "tools/native-album-serverless.mjs",
+      "sha256": "a53cb2c2629ededee616935a52decb794a1d8bb1e0eedd4fc36b9b2d463ac3ec"
+    },
+    {
+      "file": "api/native-album.mjs",
+      "sha256": "7a9155ee47e8bda48d203c697d72c76fd7bc1d9210c4455aa26bd4fbec931159"
+    },
+    {
+      "file": "tools/native-album-serverless.test.mjs",
+      "sha256": "3db3163ec5b7a8e573219d092b2b7c5ed952098729b30c40946745bb2ee7363b"
+    },
+    {
+      "file": "tools/native-album-build.mjs",
+      "sha256": "f46a6ca35cbd528523f87956d99a352574957ed5eb88351774934e4da61378d2"
+    },
+    {
+      "file": "vercel.json",
+      "sha256": "58af245de7611fa66eb7797da0c96af2d80a9c4174144994022f3cd496239f3d"
+    },
+    {
+      "file": "tools/native-album-build.test.mjs",
+      "sha256": "95d9cf525c7c8bd49aea47ace31b7b4290dfbc2f6eb63623fd23949c213234e3"
+    },
+    {
+      "file": "services/api/src/photo-score-contract.ts",
+      "sha256": "d8e03caf21c12a3521a7c8c1995f20f0d931d11d6b4c2e4ce435f5aab1ed02cb"
+    },
+    {
+      "file": "services/api/test/photo-score-wardrobe-contract.test.mjs",
+      "sha256": "23be45a2649bbb78d25b358c94c6ae8e184364abf5605e298345f14b5cb26427"
+    },
+    {
+      "file": "services/api/test/photo-score-age-coverage.test.mjs",
+      "sha256": "9ab75814c4b834a5e05cda7b5d5bceefc8ceb674463be4bb594515780ebbb534"
+    },
+    {
+      "file": ".gitignore",
+      "sha256": "953d41dc2973adeaa668f6019213af6e9788759e853762d4a8ec1c5469b9bd9f"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "sha256": "211d7f01c305c6d12fb037fd678bd4208eb9e1643265f7c73f982969581d8058"
+    },
+    {
+      "file": "docs/B15_LOCAL_RESUME.md",
+      "sha256": "68fe1689d1700a0a3e0f2ce08941508dae77116641b14b79d1af843db496686a"
+    },
+    {
+      "file": "services/api/src/timeline-photo-quality.ts",
+      "sha256": "8a1fdca6a4c3f63379e7cd429a00db6ae0565bd475793a13b7f7aac59a118110"
+    },
+    {
+      "file": "services/api/test/photo-quality-cache-version.test.mjs",
+      "sha256": "914fe198a0a38b99bec4567354f384d1cc5c7d49a13e72099f25bfdfc6f88d9e"
+    }
+  ],
+  "traceability": {
+    "B15-R01": "Localidentity/age/realism42agescenarios and garmentminimum fixed; independent aestheticdimension contract and actualmodelaccuracy incomplete",
+    "B15-R02": "Failclosed pinnedcalibration/version checks only; actualstratifiedcalibration incomplete",
+    "B15-R03": "Only syntheticnonpersonpixels; authorizedrealgoldens absent",
+    "B15-R04": "Local503/modelbindingrestart/cancellation recovery tested; operationalreview/repair and calibratedcostroutes incomplete",
+    "B15-R05": "Perdimension/modelbindings persistent and algorithmcacheversion migrationtested; productionpersistenttrafficstop incomplete"
+  },
+  "boundaries": {
+    "paid_generation": 0,
+    "real_model": "NOT_RUN",
+    "realism": "NOT_CERTIFIED",
+    "phone_permissions": "NOT_RUN"
+  },
+  "upstream_reports": {
+    "B00": "No validatedcompletionreport",
+    "B14": "No validatedcompletionreport"
+  }
+}

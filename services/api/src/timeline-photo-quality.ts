@@ -15,7 +15,7 @@ function active(record:RecordEnvelope):void {
   if(record.data._externalDecisionState==="frozen" || record.data._externalReconciliationState==="reconciliation_required" || ["cancelled","compensated"].includes(String(record.data.commandState))) throw new DomainError("VERSION_CONFLICT","photo scoring command is frozen, cancelled or compensated");
 }
 export function photoQualityId(tenant:string,command:string,age:number,outputSha:string,referenceSha:string,policy:PhotoPolicy):string {
-  return "photo-quality-"+digest(canonicalJson([tenant,command,age,outputSha,referenceSha,policy]));
+  return "photo-quality-v2-"+digest(canonicalJson([tenant,command,age,outputSha,referenceSha,policy]));
 }
 /** Reads approved media, calls a real perception boundary, and persists through the existing B15 validator. */
 export class TimelinePhotoQualityService {
