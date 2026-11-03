@@ -15,8 +15,14 @@ async function download(node) {
   if (!node || node.status !== "ready" || !node.asset || !/^\/v1\/timelines\/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\/nodes\/\d{1,3}\/image$/.test(node.downloadPath) ||
       !/^[a-f0-9]{64}$/.test(node.asset.sha256) || !Number.isSafeInteger(node.asset.byteLength) || node.asset.byteLength < 1 || node.asset.byteLength > 25 * 1024 * 1024) throw new Error("TIMELINE_IMAGE_UNAVAILABLE");
   const generation = epoch, activeSession = session.requireSession();
-  const random = new Uint8Array(16);
-  wx.getRandomValues(random);
+  let random;
+  try {
+    const result = await call(wx.getRandomValues, { length: 16 });
+    const size = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "byteLength").get.call(result.randomValues);
+    if (size !== 16) throw new Error("INVALID_RANDOM_LENGTH");
+    random = new Uint8Array(result.randomValues);
+  } catch { throw new Error("TIMELINE_RANDOM_UNAVAILABLE"); }
+  if (generation !== epoch || session.requireSession().accessToken !== activeSession.accessToken) throw new Error("MEDIA_REQUEST_CANCELLED");
   const directory = wx.env && wx.env.USER_DATA_PATH;
   if (typeof directory !== "string" || !directory) throw new Error("TIMELINE_PRIVATE_DIRECTORY_UNAVAILABLE");
   // Platform download-cache files cannot be unlinked in DevTools. An explicit

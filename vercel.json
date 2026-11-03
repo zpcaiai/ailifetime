@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "node tools/native-album-build.mjs",
+  "outputDirectory": "native-album-public",
+  "functions": {
+    "api/native-album.mjs": {
+      "maxDuration": 30,
+      "includeFiles": "{tools/native-album-api.mjs,tools/native-album-serverless.mjs,services/api/dist/**,services/api/test/timeline-fixtures.mjs,packages/*/dist/**,apps/wechat-mini/miniprogram/policies/*.js}"
+    }
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/api/native-album" }
+  ]
+}
