@@ -1,0 +1,268 @@
+{
+  "schemaVersion": "ltm.repository-baseline.v1",
+  "startedAt": "2026-11-03T16:48:43.994Z",
+  "completedAt": "2026-11-03T16:49:02.775Z",
+  "repositoryRoot": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+  "inventorySha256": "906b36579dbbe317349dc357ce9d28c8314c5cf789873b64cfc3cc65ed6a8f57",
+  "inventory": {
+    "schemaVersion": "ltm.repository-inventory.v1",
+    "repository": {
+      "kind": "monorepo",
+      "git": {
+        "present": true,
+        "head": "f0da9c1275afb46cb9d74ddb67b8ab369a34c034",
+        "branch": "codex/b15-formal-20261104",
+        "dirty": true
+      },
+      "packageManager": "pnpm@10.12.4",
+      "nodeEngine": ">=26"
+    },
+    "workspacePackages": [
+      "apps/developer-portal",
+      "apps/mobile",
+      "apps/web",
+      "apps/wechat-mini",
+      "services/api",
+      "services/client-integration-broker",
+      "services/commerce-platform",
+      "services/commercial-operations",
+      "services/data-intelligence",
+      "services/developer-platform",
+      "services/enterprise-control-plane",
+      "services/experience-platform",
+      "services/growth-operations-platform",
+      "services/integration-gateway",
+      "services/migrator",
+      "services/notification-platform",
+      "services/orchestration-platform",
+      "services/partner-channel-platform",
+      "services/support-platform",
+      "services/workers",
+      "packages/capabilities",
+      "packages/core",
+      "packages/experience-governance",
+      "packages/providers",
+      "packages/public-web-platform",
+      "packages/sdk-java",
+      "packages/sdk-python",
+      "packages/sdk-ts"
+    ],
+    "languages": [
+      {
+        "name": "Java",
+        "fileCount": 21
+      },
+      {
+        "name": "JavaScript",
+        "fileCount": 244
+      },
+      {
+        "name": "JSON",
+        "fileCount": 161
+      },
+      {
+        "name": "Markdown",
+        "fileCount": 386
+      },
+      {
+        "name": "Python",
+        "fileCount": 25
+      },
+      {
+        "name": "SQL",
+        "fileCount": 14
+      },
+      {
+        "name": "TypeScript",
+        "fileCount": 285
+      },
+      {
+        "name": "WXML",
+        "fileCount": 12
+      },
+      {
+        "name": "WXSS",
+        "fileCount": 12
+      },
+      {
+        "name": "YAML",
+        "fileCount": 94
+      }
+    ],
+    "buildManifests": [
+      ".ai-life-time-machine/skill-package/starter/repository/package.json",
+      ".ai-life-time-machine/skill-package/starter/repository/pnpm-workspace.yaml",
+      "apps/developer-portal/package.json",
+      "apps/developer-portal/tsconfig.json",
+      "apps/mobile/native/package.json",
+      "apps/mobile/native/tsconfig.json",
+      "apps/mobile/package.json",
+      "apps/mobile/tsconfig.json",
+      "apps/web/package.json",
+      "apps/web/tsconfig.json",
+      "apps/wechat-mini/package.json",
+      "apps/wechat-mini/release/package.json",
+      "apps/wechat-mini/tsconfig.json",
+      "package.json",
+      "packages/capabilities/package.json",
+      "packages/capabilities/tsconfig.json",
+      "packages/core/package.json",
+      "packages/core/tsconfig.json",
+      "packages/experience-governance/package.json",
+      "packages/experience-governance/tsconfig.json",
+      "packages/providers/package.json",
+      "packages/providers/tsconfig.json",
+      "packages/public-web-platform/package.json",
+      "packages/sdk-ts/package.json",
+      "packages/sdk-ts/tsconfig.json",
+      "pnpm-workspace.yaml",
+      "services/api/Dockerfile",
+      "services/api/package.json",
+      "services/api/tsconfig.json",
+      "services/client-integration-broker/Dockerfile",
+      "services/client-integration-broker/package.json",
+      "services/client-integration-broker/tsconfig.json",
+      "services/commerce-platform/package.json",
+      "services/commerce-platform/tsconfig.json",
+      "services/commercial-operations/package.json",
+      "services/commercial-operations/tsconfig.json",
+      "services/data-intelligence/package.json",
+      "services/data-intelligence/tsconfig.json",
+      "services/developer-platform/package.json",
+      "services/developer-platform/tsconfig.json",
+      "services/enterprise-control-plane/package.json",
+      "services/enterprise-control-plane/tsconfig.json",
+      "services/experience-platform/package.json",
+      "services/experience-platform/tsconfig.json",
+      "services/growth-operations-platform/package.json",
+      "services/growth-operations-platform/tsconfig.json",
+      "services/integration-gateway/Dockerfile",
+      "services/integration-gateway/package.json",
+      "services/integration-gateway/tsconfig.json",
+      "services/migrator/Dockerfile",
+      "services/migrator/package.json",
+      "services/notification-platform/package.json",
+      "services/orchestration-platform/package.json",
+      "services/orchestration-platform/tsconfig.json",
+      "services/partner-channel-platform/package.json",
+      "services/partner-channel-platform/tsconfig.json",
+      "services/support-platform/package.json",
+      "services/workers/Dockerfile",
+      "services/workers/package.json",
+      "services/workers/tsconfig.json"
+    ],
+    "entrypoints": [
+      "services/api/Dockerfile",
+      "services/api/src/main.ts",
+      "services/client-integration-broker/Dockerfile",
+      "services/client-integration-broker/src/main.ts",
+      "services/integration-gateway/Dockerfile",
+      "services/integration-gateway/src/main.ts",
+      "services/migrator/Dockerfile",
+      "services/migrator/src/main.mjs",
+      "services/workers/Dockerfile",
+      "services/workers/src/main.ts"
+    ],
+    "databases": {
+      "migrations": [
+        "infra/postgres/migrations/001_core.sql",
+        "infra/postgres/migrations/002_external_evidence.sql",
+        "infra/postgres/migrations/003_runtime_compatibility.sql",
+        "infra/postgres/migrations/004_external_business_events.sql",
+        "infra/postgres/migrations/005_participant_authority_and_processing_purpose.sql",
+        "infra/postgres/migrations/006_data_intelligence_durability.sql",
+        "infra/postgres/migrations/007_commerce_partner_growth.sql",
+        "infra/postgres/migrations/manifest.json"
+      ],
+      "postgres": true,
+      "redis": true,
+      "objectStorage": true
+    },
+    "deployment": [
+      ".github/workflows/ci.yml",
+      ".github/workflows/production-release-candidate.yml",
+      "compose.yaml",
+      "infra/kubernetes/production/README.md",
+      "infra/kubernetes/production/api.yaml",
+      "infra/kubernetes/production/availability.yaml",
+      "infra/kubernetes/production/client-integration-broker.yaml",
+      "infra/kubernetes/production/configmap.yaml",
+      "infra/kubernetes/production/ingress.yaml",
+      "infra/kubernetes/production/integration-gateway.yaml",
+      "infra/kubernetes/production/kustomization.yaml",
+      "infra/kubernetes/production/migration-job.yaml",
+      "infra/kubernetes/production/namespace-serviceaccounts.yaml",
+      "infra/kubernetes/production/networking.yaml",
+      "infra/kubernetes/production/policies/integration-gateway-readiness-iam-policy.json",
+      "infra/kubernetes/production/workers.yaml"
+    ],
+    "directories": [
+      ".agents",
+      ".ai-life-time-machine",
+      ".git",
+      ".github",
+      "apps",
+      "data",
+      "deploy",
+      "docs",
+      "evidence",
+      "infra",
+      "node_modules",
+      "packages",
+      "security",
+      "services",
+      "skills",
+      "tools"
+    ],
+    "skillCount": 22,
+    "sourceFileCount": 1298
+  },
+  "commands": [
+    {
+      "name": "build",
+      "command": "pnpm run build",
+      "status": "skipped",
+      "exitCode": null,
+      "durationMs": 0
+    },
+    {
+      "name": "lint",
+      "command": "pnpm run lint",
+      "status": "passed",
+      "exitCode": 0,
+      "durationMs": 8039,
+      "stdoutSha256": "93982d70ae826c25f5447345ee652f830c6c94f54e0b660ec40be010b1f69759",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutTail": "\n> ai-life-time-machine-project@1.0.0 lint /Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout\n> pnpm -r --if-present run lint && node tools/verify-source.mjs\n\nScope: 26 of 27 workspace projects\napps/developer-portal lint$ tsc -p tsconfig.json --noEmit\napps/mobile lint$ tsc -p tsconfig.json --noEmit\napps/web lint$ tsc -p tsconfig.json --noEmit\napps/wechat-mini lint$ tsc -p tsconfig.json --noEmit\napps/wechat-mini lint: Done\npackages/experience-governance lint$ tsc -p tsconfig.json --noEmit\napps/developer-portal lint: Done\npackages/public-web-platform lint$ for file in ./src/*.mjs ./bin/*.mjs; do node --check \"$file\" || exit; done\napps/mobile lint: Done\npackages/sdk-ts lint$ tsc -p tsconfig.json --noEmit\napps/web lint: Done\nservices/client-integration-broker lint$ tsc -p tsconfig.json --noEmit\npackages/experience-governance lint: Done\nservices/commerce-platform lint$ tsc -p tsconfig.json --noEmit\npackages/sdk-ts lint: Done\nservices/commercial-operations lint$ tsc -p tsconfig.json --noEmit\npackages/public-web-platform lint: Done\nservices/data-intelligence lint$ tsc -p tsconfig.json --noEmit\nservices/commercial-operations lint: Done\nservices/developer-platform lint$ tsc -p tsconfig.json --noEmit\nservices/commerce-platform lint: Done\nservices/enterprise-control-plane lint$ tsc -p tsconfig.json --noEmit\nservices/data-intelligence lint: Done\nservices/experience-platform lint$ tsc -p tsconfig.json --noEmit\nservices/enterprise-control-plane lint: Done\nservices/growth-operations-platform lint$ tsc -p tsconfig.json --noEmit\nservices/developer-platform lint: Done\nservices/migrator lint$ node --check src/main.mjs && node --check src/runner.mjs\nservices/client-integration-broker lint: Done\nservices/notification-platform lint$ for file in ./src/*.mjs ./bin/*.mjs; do node --check \"$file\" || exit; done\nservices/experience-platform lint: Done\nservices/orchestration-platform lint$ tsc -p tsconfig.json --noEmit\nservices/migrator lint: Done\nservices/partner-channel-platform lint$ tsc -p tsconfig.json --noEmit\nservices/growth-operations-platform lint: Done\nservices/support-platform lint$ for file in ./src/*.mjs ./bin/*.mjs; do node --check \"$file\" || exit; done\nservices/notification-platform lint: Done\nservices/partner-channel-platform lint: Done\nservices/orchestration-platform lint: Done\nservices/support-platform lint: Done\npackages/providers lint$ tsc -p tsconfig.json --noEmit\npackages/providers lint: Done\npackages/capabilities lint$ tsc -p tsconfig.json --noEmit\nservices/workers lint$ tsc -p tsconfig.json --noEmit\nservices/workers lint: Done\npackages/capabilities lint: Done\nPASS source placeholder and secret gate\n",
+      "stderrTail": ""
+    },
+    {
+      "name": "typecheck",
+      "command": "pnpm run typecheck",
+      "status": "passed",
+      "exitCode": 0,
+      "durationMs": 10502,
+      "stdoutSha256": "c5a3f688f8b03018a9f34024119db0ba3cfbf459e4ffcb03529f83c5104700f3",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutTail": "\n> ai-life-time-machine-project@1.0.0 typecheck /Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout\n> pnpm -r --if-present run typecheck\n\nScope: 26 of 27 workspace projects\napps/mobile typecheck$ tsc -p tsconfig.json --noEmit\napps/developer-portal typecheck$ tsc -p tsconfig.json --noEmit\napps/web typecheck$ tsc -p tsconfig.json --noEmit\napps/wechat-mini typecheck$ tsc -p tsconfig.json --noEmit\napps/wechat-mini typecheck: Done\npackages/core typecheck$ tsc -p tsconfig.json --noEmit\napps/developer-portal typecheck: Done\npackages/experience-governance typecheck$ tsc -p tsconfig.json --noEmit\napps/mobile typecheck: Done\npackages/public-web-platform typecheck$ for file in ./src/*.mjs ./bin/*.mjs; do node --check \"$file\" || exit; done\napps/web typecheck: Done\npackages/sdk-ts typecheck$ tsc -p tsconfig.json --noEmit\npackages/experience-governance typecheck: Done\nservices/client-integration-broker typecheck$ tsc -p tsconfig.json --noEmit\npackages/core typecheck: Done\npackages/public-web-platform typecheck: Done\nservices/commerce-platform typecheck$ tsc -p tsconfig.json --noEmit\nservices/commercial-operations typecheck$ tsc -p tsconfig.json --noEmit\npackages/sdk-ts typecheck: Done\nservices/data-intelligence typecheck$ tsc -p tsconfig.json --noEmit\nservices/commerce-platform typecheck: Done\nservices/developer-platform typecheck$ tsc -p tsconfig.json --noEmit\nservices/commercial-operations typecheck: Done\nservices/enterprise-control-plane typecheck$ tsc -p tsconfig.json --noEmit\nservices/data-intelligence typecheck: Done\nservices/experience-platform typecheck$ tsc -p tsconfig.json --noEmit\nservices/enterprise-control-plane typecheck: Done\nservices/growth-operations-platform typecheck$ tsc -p tsconfig.json --noEmit\nservices/developer-platform typecheck: Done\nservices/migrator typecheck$ node --check src/main.mjs && node --check src/runner.mjs\nservices/client-integration-broker typecheck: Done\nservices/notification-platform typecheck$ for file in ./src/*.mjs ./bin/*.mjs; do node --check \"$file\" || exit; done\nservices/migrator typecheck: Done\nservices/orchestration-platform typecheck$ tsc -p tsconfig.json --noEmit\nservices/experience-platform typecheck: Done\nservices/partner-channel-platform typecheck$ tsc -p tsconfig.json --noEmit\nservices/growth-operations-platform typecheck: Done\nservices/support-platform typecheck$ for file in ./src/*.mjs ./bin/*.mjs; do node --check \"$file\" || exit; done\nservices/orchestration-platform typecheck: Done\nservices/partner-channel-platform typecheck: Done\nservices/notification-platform typecheck: Done\nservices/support-platform typecheck: Done\npackages/providers typecheck$ tsc -p tsconfig.json --noEmit\npackages/providers typecheck: Done\npackages/capabilities typecheck$ tsc -p tsconfig.json --noEmit\nservices/workers typecheck$ tsc -p tsconfig.json --noEmit\nservices/workers typecheck: Done\npackages/capabilities typecheck: Done\nservices/api typecheck$ tsc -p tsconfig.json --noEmit\nservices/integration-gateway typecheck$ tsc -p tsconfig.json --noEmit\nservices/api typecheck: Done\nservices/integration-gateway typecheck: Done\n",
+      "stderrTail": ""
+    },
+    {
+      "name": "test",
+      "command": "pnpm run test",
+      "status": "skipped",
+      "exitCode": null,
+      "durationMs": 0
+    },
+    {
+      "name": "test:e2e",
+      "command": null,
+      "status": "missing",
+      "exitCode": null,
+      "durationMs": 0
+    }
+  ],
+  "dependencyPlanSha256": "20a1b516bb0fcb30c41ae5117f05797140e276aa6c7f2114f89ce2e68978675a",
+  "riskRegisterSha256": "88cbd8168ab7ad3b66bae1a5c0f4f609acb977b56627eac53914d5bd93fa190c",
+  "status": "OBSERVED"
+}

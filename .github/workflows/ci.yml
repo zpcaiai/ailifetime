@@ -52,6 +52,8 @@ jobs:
           java-version: "21"
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+      - name: Verify isolated native album build and authenticated transport
+        run: APP_ENV=test node --test --test-concurrency=1 tools/native-album-build.test.mjs tools/native-album-serverless.test.mjs
       - name: Verify photo storage migrations and isolated Vercel artifact
         run: APP_ENV=test node --test --test-concurrency=1 tools/photo-service-migrate.test.mjs tools/vercel-photo-package.test.mjs
       - name: Verify native mobile production shell

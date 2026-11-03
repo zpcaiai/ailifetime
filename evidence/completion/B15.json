@@ -7,7 +7,7 @@
   "base_commit": "1e9efd8d367c2878988f09f2685b159ba8e9942a",
   "result_commit": null,
   "started_at": "2026-11-03T08:48:14.840767+00:00",
-  "completed_at": "2026-11-03T10:27:18.853811+00:00",
+  "completed_at": "2026-11-03T16:53:03.423784+00:00",
   "agent": {
     "host": "codex",
     "model": null,
@@ -140,6 +140,111 @@
       "path": "services/api/test/timeline-photo-quality.test.mjs",
       "change": "added",
       "reason": "Local byte-bound scorer integration; real-image acceptance remains blocked"
+    },
+    {
+      "path": "services/api/test/photo-quality-private-reader.test.mjs",
+      "change": "added",
+      "reason": "Actual local private-owner integration repair and observedbaseline; formalB15 remains blocked"
+    },
+    {
+      "path": "docs/B15_FORMAL_GAPS.md",
+      "change": "added",
+      "reason": "Actual local private-owner integration repair and observedbaseline; formalB15 remains blocked"
+    },
+    {
+      "path": "evidence/B15/formal-gap-evidence.json",
+      "change": "added",
+      "reason": "Actual local private-owner integration repair and observedbaseline; formalB15 remains blocked"
+    },
+    {
+      "path": "evidence/baseline/baseline-report.json",
+      "change": "added",
+      "reason": "Actual local private-owner integration repair and observedbaseline; formalB15 remains blocked"
+    },
+    {
+      "path": "evidence/baseline/baseline-report.md",
+      "change": "added",
+      "reason": "Actual local private-owner integration repair and observedbaseline; formalB15 remains blocked"
+    },
+    {
+      "path": "evidence/baseline/command-log.ndjson",
+      "change": "added",
+      "reason": "Actual local private-owner integration repair and observedbaseline; formalB15 remains blocked"
+    },
+    {
+      "path": "evidence/baseline/dependency-plan.json",
+      "change": "added",
+      "reason": "Actual local private-owner integration repair and observedbaseline; formalB15 remains blocked"
+    },
+    {
+      "path": "evidence/baseline/inventory.json",
+      "change": "added",
+      "reason": "Actual local private-owner integration repair and observedbaseline; formalB15 remains blocked"
+    },
+    {
+      "path": "evidence/baseline/risk-register.json",
+      "change": "added",
+      "reason": "Actual local private-owner integration repair and observedbaseline; formalB15 remains blocked"
+    },
+    {
+      "path": "tools/native-album-serverless.mjs",
+      "change": "added",
+      "reason": "Existingpath localmaintenance only; formalB15 blocked"
+    },
+    {
+      "path": "api/native-album.mjs",
+      "change": "added",
+      "reason": "Existingpath localmaintenance only; formalB15 blocked"
+    },
+    {
+      "path": "tools/native-album-serverless.test.mjs",
+      "change": "added",
+      "reason": "Existingpath localmaintenance only; formalB15 blocked"
+    },
+    {
+      "path": "tools/native-album-build.mjs",
+      "change": "added",
+      "reason": "Existingpath localmaintenance only; formalB15 blocked"
+    },
+    {
+      "path": "vercel.json",
+      "change": "added",
+      "reason": "Existingpath localmaintenance only; formalB15 blocked"
+    },
+    {
+      "path": "tools/native-album-build.test.mjs",
+      "change": "added",
+      "reason": "Existingpath localmaintenance only; formalB15 blocked"
+    },
+    {
+      "path": "services/api/test/photo-score-age-coverage.test.mjs",
+      "change": "added",
+      "reason": "Existingpath localmaintenance only; formalB15 blocked"
+    },
+    {
+      "path": ".gitignore",
+      "change": "modified",
+      "reason": "Existingpath localmaintenance only; formalB15 blocked"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "change": "modified",
+      "reason": "Existingpath localmaintenance only; formalB15 blocked"
+    },
+    {
+      "path": "docs/B15_LOCAL_RESUME.md",
+      "change": "added",
+      "reason": "Existingpath localmaintenance only; formalB15 blocked"
+    },
+    {
+      "path": "services/api/test/photo-quality-cache-version.test.mjs",
+      "change": "added",
+      "reason": "Existingpath localmaintenance only; formalB15 blocked"
+    },
+    {
+      "path": "evidence/B15/vercel-local-resume-evidence.json",
+      "change": "added",
+      "reason": "Existingpath localmaintenance only; formalB15 blocked"
     }
   ],
   "entrypoints": [
@@ -227,6 +332,33 @@
       "status": "passed",
       "artifact": "evidence/B15/photo-scorer-local-evidence.json",
       "duration_ms": null
+    },
+    {
+      "name": "Private PostgreSQL owner integration and existing quality/21 recovery (local)",
+      "scope": "integration",
+      "command": "python3 /Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/b15-formal-20261104/native-env.py node --test services/api/test/photo-quality-private-reader.test.mjs services/api/test/timeline-photo-quality.test.mjs services/api/test/photo-score-wardrobe-contract.test.mjs services/api/test/photo-score.http.test.mjs",
+      "exit_code": 0,
+      "status": "passed",
+      "artifact": "evidence/B15/formal-gap-evidence.json",
+      "duration_ms": null
+    },
+    {
+      "name": "Current9packages677 native PostgreSQL regression (local)",
+      "scope": "integration",
+      "command": "pnpm --workspace-concurrency=1 --filter @ltm/core --filter @ltm/providers --filter @ltm/capabilities --filter @ltm/api --filter @ltm/workers --filter @ltm/integration-gateway --filter @ltm/wechat-mini-core --filter @ltm/experience-platform --filter @ltm/commerce-platform -r test",
+      "exit_code": 0,
+      "status": "passed",
+      "artifact": "evidence/B15/formal-gap-evidence.json",
+      "duration_ms": null
+    },
+    {
+      "name": "Current21agepairs garment/cache revision and restoredHTTPdeployment (local)",
+      "scope": "integration",
+      "command": "python3 /Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/vercel-b15-resume-20261104/final-regression.py",
+      "exit_code": 0,
+      "status": "passed",
+      "artifact": "evidence/B15/vercel-local-resume-evidence.json",
+      "duration_ms": null
     }
   ],
   "evidence": [
@@ -263,6 +395,38 @@
       "contains_sensitive_data": false,
       "redaction": null,
       "notes": "Supports local execution and records incomplete R02/R03/R05 external/model requirements; not full Batch acceptance."
+    },
+    {
+      "type": "test-result",
+      "path": "evidence/B15/formal-gap-evidence.json",
+      "sha256": "fd65697de31505c2226cf6e59b2c4160c56073e9683250329a0082a8aa5bcf90",
+      "created_at": "2026-11-03T16:53:03.423784+00:00",
+      "producer": "Actual SQL/HTTP process receipts and observed baseline; no real model or formalBatch acceptance",
+      "supports": [
+        "B15-R01",
+        "B15-R02",
+        "B15-R03",
+        "B15-R04",
+        "B15-R05"
+      ],
+      "contains_sensitive_data": false,
+      "redaction": null,
+      "notes": "R02/R03/R04/R05 gaps explicit; current677 tests verify local orchestration only."
+    },
+    {
+      "type": "test-result",
+      "path": "evidence/B15/vercel-local-resume-evidence.json",
+      "sha256": "fc14acfcf4f11a0790277c3f9f2cf67d80b6a38769f920b0e306555c955e6569",
+      "created_at": "2026-11-03T22:18:22.739520+00:00",
+      "producer": "ActualSQLHTTPprocesses with synthetic external measurements; no realmodelcertificate",
+      "supports": [
+        "B15-R01",
+        "B15-R04",
+        "B15-R05"
+      ],
+      "contains_sensitive_data": false,
+      "redaction": null,
+      "notes": "Includes unchangedfailedformalB15 and priorDPtimeout; neither promotedtoPASS."
     }
   ],
   "traceability": [
@@ -280,10 +444,12 @@
       ],
       "tests": [
         "services/api/test/photo-score.http.test.mjs",
-        "services/api/test/timeline-photo-quality.test.mjs"
+        "services/api/test/timeline-photo-quality.test.mjs",
+        "services/api/test/photo-quality-private-reader.test.mjs"
       ],
       "evidence": [
-        "evidence/B15/photo-scorer-local-evidence.json"
+        "evidence/B15/photo-scorer-local-evidence.json",
+        "evidence/B15/formal-gap-evidence.json"
       ],
       "notes": "Actual original/output JPEG/PNG bytes reach the external-model boundary and then B15; per-person identity/age and photorealism reports gated. No real scoring model or quality effect accepted."
     },
@@ -377,11 +543,13 @@
   "follow_ups": [
     "Provide actual authorized scorer model service and pinned weights, real generated-photo lineage and consented golden data under explicit free or authorized budget.",
     "Calibrate and assess per-person identity/age/photorealism across21 ages, couple and wardrobe conditions and wire production regression stopping/manual review.",
-    "Provide approved tenant-scoped HTTPS media service and physical WeChat device for permission/save acceptance."
+    "Provide approved tenant-scoped HTTPS media service and physical WeChat device for permission/save acceptance.",
+    "See docs/B15_FORMAL_GAPS.md: current observed baseline now exists; validated B00/B14 completion reports and actual model/golden/calibration/review/regression-stop evidence remain absent.",
+    "See docs/B15_LOCAL_RESUME.md and evidence/B15/vercel-local-resume-evidence.json for restoredVercelbuild, garmentminimum and cacheIDrevision; formaldependency/model/golden/aesthetic/review/trafficstop boundaries unchanged."
   ],
   "blockers": [
     "Full B15 remains BLOCKED_INCOMPLETE; only local scorer integration and maintenance are verified.",
-    "Validated B00/B14 dependency reports are absent; no fabricated dependency success.",
+    "Observed current-base baseline artifacts exist; validated B00/B14 completion reports remain absent. No fabricated dependency success.",
     "Actual scorer/generator model, authorized golden set, calibration accuracy/realism, production regression stopping and real device permissions remain unaccepted."
   ],
   "assertions": {
