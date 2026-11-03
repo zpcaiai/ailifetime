@@ -74,8 +74,10 @@ export class TimelinePhotoQualityService {
     const {plan,intake,participantIds,reference,context,policy}=loaded;
     const workId=photoQualityId(actor.tenantId,commandId,targetAge,asset.sha256,reference.sha256,policy);
     await this.runtime.assertConsent(actor,{participantIds,purpose:"quality_assurance",scope:{resource:`${REPORTS}:${workId}`,action:"process"}});
-    const referenceBytes=await this.media.read(reference),outputBytes=await this.media.read(asset);
-    const wardrobe=loaded.wardrobe===undefined?undefined:{...loaded.wardrobe,bytes:await this.media.read(loaded.wardrobe.asset)};
+    if(typeof loaded.command.ownerActorId!=="string")return invalid("photo scoring requires a bound media owner");
+    const owner={tenantId:actor.tenantId,actorId:loaded.command.ownerActorId};
+    const referenceBytes=await this.media.read(reference,owner),outputBytes=await this.media.read(asset,owner);
+    const wardrobe=loaded.wardrobe===undefined?undefined:{...loaded.wardrobe,bytes:await this.media.read(loaded.wardrobe.asset,owner)};
     const request=makePhotoScoreRequest({tenantId:actor.tenantId,commandId,sourceAssetId:reference.id,targetAge,context,
       people:participantIds.map((participantId,index)=>({participantId,position:participantIds.length===1?"single":index===0?"left":"right"})),referenceAsset:reference,referenceBytes,outputAsset:asset,outputBytes,...(wardrobe?{wardrobe}:{})},policy);
     const current=async()=>{
