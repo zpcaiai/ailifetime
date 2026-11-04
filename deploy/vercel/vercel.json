@@ -4,5 +4,5 @@
   "regions": ["sin1"],
   "functions": { "api/index.mjs": { "maxDuration": 300 } },
   "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }],
-  "crons": [{ "path": "/internal/media-cleanup", "schedule": "*/15 * * * *" }]
+  "crons": [{ "path": "/internal/media-cleanup", "schedule": "15 11 * * *" }]
 }
