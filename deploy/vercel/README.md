@@ -14,7 +14,7 @@ pnpm install --frozen-lockfile
 pnpm --workspace-concurrency=1 --filter @ltm/api... build
 # New absolute directories only. Default packaging omits production cron.
 node tools/vercel-photo-package.mjs /absolute/new-preview-artifact
-# Production explicitly retains the existing authenticated 15-minute cleanup.
+# Production explicitly retains the user-approved authenticated daily cleanup.
 node tools/vercel-photo-package.mjs --production /absolute/new-production-artifact
 ```
 
@@ -22,14 +22,18 @@ Deploy only the artifact with the logged-in Vercel CLI and explicit
 `--project ailifetime-private-api --scope zpchoney-6160s-projects`. Use preview
 first; use `--prod` only after verifying production configuration and the
 approved scheduler/plan. CLI packaging never reads deployment secrets or calls
-Ark. Do not remove the cleanup schedule to bypass a hosting-plan restriction;
-if the current plan cannot run it, retain that launch blocker until an approved
-external scheduler or plan is configured. No upgrade is authorized by packaging.
+Ark. Do not remove the cleanup schedule to bypass a hosting-plan restriction.
+The user approved daily cleanup on2026-11-04, preserving the current plan and
+the exact720-hour read deadline. No upgrade is authorized by packaging.
 
-The live team inventory on 2026-11-04 reports **Hobby**. Its cron frequency limit
-is once per day, so the required 15-minute cleanup is a concrete production
-deployment blocker, even after credentials are added. Keep the schedule intact
-and obtain an approved scheduler/hosting arrangement before production launch.
+The live team inventory on2026-11-04 reports **Hobby**. The production schedule
+is `15 11 * * *` UTC, daily at19:15 Asia/Shanghai, within Hobby's hourly timing
+precision. TOS lifecycle independently expires stored photos after30days;
+the application job drains eligible metadata and deletion retries, up to1000
+objects or150seconds plus the final bounded object operation per invocation.
+Backlog beyond those limits remains durable for a later invocation. This is not
+an exact-second physical-erasure guarantee. Verify actual schedule registration
+and invocation after deployment; source configuration alone is not execution.
 See [Vercel cron limits](https://vercel.com/docs/cron-jobs/usage-and-pricing).
 
 Use `node tools/seedream-launch-check.mjs` in an already secured server
@@ -55,7 +59,7 @@ New v3 lifespan orders: standard11/21 cost1990/2990 CNY cents, HD11/21 cost2990/
 
 Store generated originals and each derivative in a **private unversioned S3-compatible bucket**, with one journal entry per object and the same original completion time. Neon stores metadata/orders, not image bytes. The chosen object provider must support authenticated `GetBucketVersioning`; Enabled/Suspended or unsupported responses fail closed. Neon branchable storage lifecycle expiry is currently not implemented; do not rely on it or assume a soft delete removes historical copies. Actual storage credentials/provider acceptance are still required.
 
-Photo access expires after720 hours from successful generation, checked against database time before and after reading bytes. The authenticated API streams verified bytes, sets no-store, and issues no reusable public URLs. Every15 minutes a secret-protected cron claims up to5 expired objects, deletes and checks absence. Physical removal is eventual after expiry; outages retain durable retry records. Never promise exact-second physical erasure or removal of pre-existing provider backups without separate proof. Do not enable bucket versioning, public ACLs, public CDN caching or backup/branch copies for this photo bucket.
+Photo access expires after720 hours from successful generation, checked against database time before and after reading bytes. The authenticated API streams verified bytes, sets no-store, and issues no reusable public URLs. The daily secret-protected cron claims one fenced object at a time and drains eligible expired objects within its object/time limits, deletes and checks absence. Physical removal is eventual after expiry; outages retain durable retry records. Never promise exact-second physical erasure or removal of pre-existing provider backups without separate proof. Do not enable bucket versioning, public ACLs, public CDN caching or backup/branch copies for this photo bucket.
 
 ## Configuration
 
@@ -67,7 +71,7 @@ Apply the existing core migrations first with the existing migrator, then `LTM_M
 
 ## Packaging and gates
 
-Run the API build and relevant HTTP/PostgreSQL/mini-program tests. `node tools/vercel-photo-package.mjs ABSOLUTE_NEW_DIRECTORY` creates an isolated artifact containing only the API bundle and dependency/configuration manifests. It preserves function names required by domain validation and intentionally omits cron; it cannot establish automatic retention. Actual first deployment was assigned Vercel target `production` and default aliases despite the CLI request for preview; record the returned target and aliases, not the requested label. This platform build status is not business readiness. Configure production crons from `deploy/vercel/vercel.json` only after verifying the team's plan supports15-minute schedules; no automatic plan upgrade is authorized.
+Run the API build and relevant HTTP/PostgreSQL/mini-program tests. `node tools/vercel-photo-package.mjs ABSOLUTE_NEW_DIRECTORY` creates an isolated artifact containing only the API bundle and dependency/configuration manifests. It preserves function names required by domain validation and intentionally omits cron; it cannot establish automatic retention. Actual first deployment was assigned Vercel target `production` and default aliases despite the CLI request for preview; record the returned target and aliases, not the requested label. This platform build status is not business readiness. Configure the user-approved daily production cron from `deploy/vercel/vercel.json` and verify the registered schedule plus authenticated invocation. No automatic plan upgrade is authorized.
 
 Local gitignored mini-program `ext.json` now points development requests to the actual default HTTPS API. No release origin allowlist, WeChat server-domain enrollment or TLS/domain bypass was added. Original client code reaches the deployed catalog and receives the truthful missing-backend response for the session route; this transport probe is not a real wx.login or phone test.
 

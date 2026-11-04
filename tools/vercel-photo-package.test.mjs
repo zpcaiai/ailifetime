@@ -34,7 +34,7 @@ test('explicit production CLI retains authenticated cleanup schedule in an isola
   const result=spawnSync(process.execPath,['tools/vercel-photo-package.mjs','--production',output],{encoding:'utf8'});
   assert.equal(result.status,0,result.stderr);const receipt=JSON.parse(result.stdout);assert.equal(receipt.preview,false);
   const config=JSON.parse(await readFile(join(output,'vercel.json'),'utf8'));
-  assert.deepEqual(config.crons,[{path:'/internal/media-cleanup',schedule:'*/15 * * * *'}]);
+  assert.deepEqual(config.crons,[{path:'/internal/media-cleanup',schedule:'15 11 * * *'}]);
   assert.deepEqual(config.functions,{'api/index.mjs':{maxDuration:300}});
   assert.deepEqual(config.rewrites,[{source:'/(.*)',destination:'/api/index'}]);
   assert.deepEqual((await readdir(output)).sort(),['api','package.json','vercel.json']);

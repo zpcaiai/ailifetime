@@ -15,6 +15,7 @@ import { PHOTO_PRICE_VERSION,PHOTO_PRODUCTS } from "./photo-catalog.js";
 import { configuredPhotoScoring } from "./photo-score-config.js";
 import { TimelinePhotoQualityService } from "./timeline-photo-quality.js";
 import { configuredSeedream } from "./seedream-config.js";
+import { drainExpiredMedia } from "./media-cleanup.js";
 
 function json(response: ServerResponse,status: number,body: unknown): void {
   response.statusCode=status;response.setHeader("content-type","application/json; charset=utf-8");response.setHeader("cache-control","private, no-store");response.end(JSON.stringify(body));
@@ -63,7 +64,7 @@ export function createVercelHandler(environment: NodeJS.ProcessEnv,productRoot: 
     const connectionString=required(env,"DATABASE_URL"),url=new URL(connectionString);
     if (url.searchParams.get("sslmode")!=="verify-full") throw new Error("CONFIGURATION_INVALID");
     const objects=new PrivateS3Images({endpoint:required(env,"LTM_PHOTO_S3_ENDPOINT"),region:required(env,"LTM_PHOTO_S3_REGION"),bucket:required(env,"LTM_PHOTO_S3_BUCKET"),accessKeyId:required(env,"LTM_PHOTO_S3_ACCESS_KEY_ID"),secretAccessKey:required(env,"LTM_PHOTO_S3_SECRET_ACCESS_KEY")});
-    const pool=new Pool({connectionString,max:2,connectionTimeoutMillis:5000,idleTimeoutMillis:10_000,application_name:"ltm-vercel-media"});
+    const pool=new Pool({connectionString,max:2,connectionTimeoutMillis:5000,idleTimeoutMillis:10_000,statement_timeout:15_000,query_timeout:20_000,application_name:"ltm-vercel-media"});
     storage={media:new PostgresGeneratedMedia(pool,objects),pool,objects};return storage;
   }
   async function initialize() {
@@ -96,7 +97,11 @@ export function createVercelHandler(environment: NodeJS.ProcessEnv,productRoot: 
     if (url.pathname==="/internal/media-cleanup") {
       if (!cronAllowed(request,env)) {json(response,401,{error:{code:"AUTH_REQUIRED"}});return;}
       if (request.method!=="GET" || url.search) {json(response,400,{error:{code:"VALIDATION_FAILED"}});return;}
-      try {json(response,200,await media().media.cleanup(5));}
+      try {
+        const result=await drainExpiredMedia(media().media);
+        console.info(JSON.stringify({event:"media_cleanup",...result}));
+        json(response,200,result);
+      }
       catch {json(response,503,{error:{code:"MEDIA_CLEANUP_UNAVAILABLE"}});}return;
     }
     try {
