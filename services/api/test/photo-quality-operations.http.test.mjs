@@ -7,10 +7,12 @@ import {createApiServer,StaticTokenAuthenticator} from '../dist/index.js';
 import {PhotoQualityGovernance} from '../dist/photo-quality-governance.js';
 import {withPhotoFixture} from './photo-score-fixtures.mjs';
 import {governancePolicy,persistQuality} from './photo-quality-v2-fixtures.mjs';
+import {syntheticPng} from './timeline-fixtures.mjs';
 for(const backend of ['sqlite','postgresql'])test(`real HTTP review, preview, CAS retry, two-human resume, restart and authorization on ${backend}`,async()=>{
  if(backend==='postgresql')assert.ok(process.env.LTM_TEST_POSTGRES_URL);
  await withPhotoFixture(async f=>{
-  const p=governancePolicy(f.policy),g=new PhotoQualityGovernance(f.runtime),a=await persistQuality(f,p,'http-review'),state=await g.observe(f.service,'http-review',p,a.asset);
+  const large=await f.store.put('large-private-candidate',syntheticPng(17,1536,1536,true),'image/png');assert.ok(large.byteLength>4.5*1024**2,'Exercise a real PNG above buffered serverless response limit');
+  const p=governancePolicy(f.policy),g=new PhotoQualityGovernance(f.runtime),a=await persistQuality(f,p,'http-review','aestheticUsability',large),state=await g.observe(f.service,'http-review',p,a.asset);
   const b=await persistQuality(f,p,'http-regression');await g.observe(f.service,'http-regression',p,b.asset);
   const token=id=>'synthetic-quality-ops-token-'+id;
   const principals=['alice','bob','weak','service','consumer','other'].map(id=>({token:token(id),actorId:id,tenantId:id==='other'?'other-tenant':f.actor.tenantId,roles:id==='service'?['platform_admin','service_account']:id==='consumer'?['consumer']:['platform_admin'],permissions:['*'],allowedPurposes:['age_transformation','quality_assurance'],stepUp:id!=='weak'}));
@@ -25,7 +27,7 @@ for(const backend of ['sqlite','postgresql'])test(`real HTTP review, preview, CA
    assert.equal((await fetch(base+queue)).status,401);for(const id of ['weak','service','consumer'])assert.equal((await get(queue,id)).status,403);
    assert.equal((await get(preview,'other')).status,404);
    const rows=await success(await get(queue));assert.equal(rows.length,2);assert.equal('outputAsset' in rows[0],false);
-   const image=await get(preview);assert.equal(image.status,200);assert.match(image.headers.get('cache-control'),/no-store/);assert.equal(image.headers.get('content-disposition'),'inline');assert.equal(image.headers.get('x-ltm-image-sha256'),a.asset.sha256);assert.deepEqual(Buffer.from(await image.arrayBuffer()),Buffer.from(await f.store.read(a.asset)));
+   const image=await get(preview);assert.equal(image.status,200);assert.match(image.headers.get('cache-control'),/no-store/);assert.equal(image.headers.get('content-disposition'),'inline');assert.equal(image.headers.get('x-ltm-image-sha256'),a.asset.sha256);assert.equal(image.headers.get('transfer-encoding'),'chunked');assert.deepEqual(Buffer.from(await image.arrayBuffer()),Buffer.from(await f.store.read(a.asset)));
    const input={action:'propose',decision:'approve',expectedVersion:state.review.version,reason:'manual composition review',ticket:'QA-400'};
    assert.equal((await post(path,{...input,scores:{identity:1}},'forge-score')).status,422);
    assert.equal((await post('/v1/commands',{command:'record.create',input:{collection:'media.quality-controls',id:'forged',data:{state:'active'}}},'forge-control')).status,403);

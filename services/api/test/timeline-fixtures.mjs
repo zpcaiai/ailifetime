@@ -1,4 +1,4 @@
-import { generateKeyPairSync, createHash } from 'node:crypto';
+import { generateKeyPairSync, createHash, randomBytes } from 'node:crypto';
 import { LifeTimeMachineRuntime, PostgresLifeTimeMachineRuntime, participantEvidenceScope, signExternalEvidence, canonicalBusinessClaimsSha256, canonicalBusinessEventSha256, signConsentPolicyCatalog } from '@ltm/core';
 import { capabilityEvidenceScope } from '../../../packages/providers/dist/index.js';
 import { createCapabilityRegistry, externalBusinessEventReducerRegistry } from '@ltm/capabilities';
@@ -81,7 +81,7 @@ export async function timelineFixture(databasePath = ':memory:', options = {}) {
   return {runtime,runtimeOptions, actor, service, consent, consents, participantIds, registry, callback, callbackAsync, fixtures,readyNode};
 }
 
-export function syntheticPng(index, width=64, height=64) {
+export function syntheticPng(index, width=64, height=64, randomNoise=false) {
   function chunk(type,data) {
     const body=Buffer.concat([Buffer.from(type),data]);let crc=0xffffffff;
     for (const byte of body) {crc^=byte;for(let i=0;i<8;i++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}
@@ -89,7 +89,10 @@ export function syntheticPng(index, width=64, height=64) {
     return Buffer.concat([length,body,checksum]);
   }
   const header=Buffer.alloc(13);header.writeUInt32BE(width);header.writeUInt32BE(height,4);header[8]=8;header[9]=2;
-  const pixels=Buffer.alloc((width*3+1)*height);
-  for(let y=0;y<height;y++)for(let x=0;x<width;x++){const p=y*(width*3+1)+1+x*3;pixels[p]=index*11%256;pixels[p+1]=x%256;pixels[p+2]=y%256;}
+  const pixels=randomNoise?randomBytes((width*3+1)*height):Buffer.alloc((width*3+1)*height);
+  for(let y=0;y<height;y++){
+    pixels[y*(width*3+1)]=0;
+    if(!randomNoise)for(let x=0;x<width;x++){const p=y*(width*3+1)+1+x*3;pixels[p]=index*11%256;pixels[p+1]=x%256;pixels[p+2]=y%256;}
+  }
   return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',header),chunk('IDAT',deflateSync(pixels)),chunk('IEND',Buffer.alloc(0))]);
 }

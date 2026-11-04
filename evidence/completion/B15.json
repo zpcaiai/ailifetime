@@ -566,7 +566,7 @@
     {
       "type": "test-result",
       "path": "evidence/B15/quality-operations-local.json",
-      "sha256": "8277ac8b57ee4b9615996742b8140215692a755ff985c899dd473f659bfd9647",
+      "sha256": "57ffc1901ac2eaa5e41276644af3f6e8480f3684caba1dc413479bff06ac598a",
       "created_at": "2026-11-04T01:32:29.787182+00:00",
       "producer": "Actual SQLite/PostgreSQL/HTTP and deterministic AST processes; synthetic model boundary only",
       "supports": [
@@ -717,7 +717,7 @@
   "local_quality_operations": {
     "status": "VERIFIED_LOCAL_ONLY",
     "artifact": "evidence/B15/quality-operations-local.json",
-    "sha256": "8277ac8b57ee4b9615996742b8140215692a755ff985c899dd473f659bfd9647",
+    "sha256": "57ffc1901ac2eaa5e41276644af3f6e8480f3684caba1dc413479bff06ac598a",
     "formal_status": "BLOCKED_INCOMPLETE",
     "notes": "Versioned aesthetic protocol, real SQL/HTTP review and persistent traffic stop locally implemented. Actual calibration/models/goldens, production review/stop and device remain unaccepted.",
     "tests": "764 affected package tests +9 album transport tests, 0 failed/skipped/cancelled; formal acceptance remains blocked"

@@ -10,7 +10,7 @@
     "real 21-result signed PostgreSQL publication within original64-row bound"
   ],
   "sourceFiles": {
-    "docs/B15_QUALITY_OPERATIONS.md": "36d43810beadc329416e9c6b9a5f7ba051e3581583cbca37f39676e03515d1ef",
+    "docs/B15_QUALITY_OPERATIONS.md": "e2686dd23d839b5816d221279079bb5141f9163805d667f61cc6346923d602b0",
     "packages/capabilities/src/photo-quality-v2.test.ts": "a741bf32ed2640089ccd477bb8c607683913052e64f681080cc432ae0b1c4151",
     "packages/core/src/quality-traffic.test.ts": "e354150e19c34bce90be56c3dfbbed1d4d9382b989640c7c098dbf46232f5c69",
     "packages/core/src/quality-traffic.ts": "eb722018a63837cdd220c43b6b79974f0e46c83016bc32d8eeb550e6d10a1370",
@@ -19,7 +19,7 @@
     "services/api/test/photo-quality-generation-stop.test.mjs": "caceb5bca1d164d072ff3d8e80b712d7e6256f1c19c5c6de9c152b5c00d60f22",
     "services/api/test/photo-quality-governance.test.mjs": "aec1267d9a2c6e7806d84269e493c44ba369a0fa6ef4c2ae44660776287ece58",
     "services/api/test/photo-quality-native-fixture.test.mjs": "d7676423c353b660770c395aab81aec08c724dc43b45fb308be68776e1691a46",
-    "services/api/test/photo-quality-operations.http.test.mjs": "fa0d36ce3e531f2800e38240f01ddac5b6d8c4c862fae3d8cb0c4f897dfc5c71",
+    "services/api/test/photo-quality-operations.http.test.mjs": "87f3d1b046508ad73dc6ed1c6b36645e21eaffeef7c6f683eb4aff9052cc76c2",
     "services/api/test/photo-quality-publication.test.mjs": "7ecc7b426dc0d4a2ba0c925790bc17ed2beb08721f96747e0bdaea684ac1013b",
     "services/api/test/photo-quality-review.test.mjs": "9844e265968415bb2641eaa6da934cbb0e93548513b56c6d47d3c01560f8bcf0",
     "services/api/test/photo-quality-v2-fixtures.mjs": "6b2bb5e933bd80b42ee42d4718a724dad7cdd36f94cc865e3cca60aea80252ae",
@@ -36,11 +36,11 @@
     "services/api/src/dispatch.ts": "7e3bce2976a2faf913833397c297b811216cc1cbf48f879f2a0bb11458a178f6",
     "services/api/src/photo-score-client.ts": "cc0ecd92078fc2d13dfc406ad177fd0dfeab3b201f531221cde77fac3d39b4d5",
     "services/api/src/photo-score-contract.ts": "275e736196f527660b3f69ed1f609f9ff25199d5f40d8abd9479ddc96cf7ff8a",
-    "services/api/src/server.ts": "b5ca515f5692b419267ce1348d8ff191b87e6bdae86d2cbcbcfc30dd4273e11e",
+    "services/api/src/server.ts": "0b8461ac188670440c442dc463f34d74cb5a40296213ad4202ac96957e583339",
     "services/api/src/timeline-photo-quality.ts": "e319a2af3f857e29d6aab3afd08af7a9b1cd51862b6e1b4fd6add2631cce695e",
     "services/api/src/timeline-seedream.ts": "56382cdd009ee8593e11eba777e6e191d8d56e84ad2aad8d562da6f3b0a84e27",
     "services/api/test/photo-score-fixtures.mjs": "5f133e6f810a06d649f8e2440de235fa5d12d4d5a867f1bf65bde6900c523259",
-    "services/api/test/timeline-fixtures.mjs": "57369c666c5c8004a1ba597949fd5aae8fced470ae743c84a92f1bbe3106f4d4",
+    "services/api/test/timeline-fixtures.mjs": "4c86a401d97020d2155ae3726ce2c713c3eccccee80be2425fd57b38342d5027",
     "services/workers/src/index.ts": "d8d5031018510950d91672efd65d8fd9f5de20162bb8a6ed353e17a7de9426c6"
   },
   "verification": [
@@ -415,6 +415,80 @@
       "ended_at": "2026-11-04T01:28:51.138770+00:00",
       "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/b15-operations-20261104/secrets-final.log",
       "sha256": "e2cf560e6535217bbf273eac86feda3e235e392ac031c83cddbed2f31afda0fa"
+    },
+    {
+      "command": [
+        "python3",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/b15-operations-20261104/stream-env.py",
+        "node",
+        "--test",
+        "services/api/test/photo-quality-operations.http.test.mjs"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 91665,
+      "exit_code": 1,
+      "started_at": "2026-11-04T01:39:23.270469+00:00",
+      "ended_at": "2026-11-04T01:39:24.957419+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/b15-operations-20261104/preview-stream-red.log",
+      "sha256": "d46aba328a57f0f5abc4b3cddc80796d446c5ca1a9a4ad96d396f045368f8df4"
+    },
+    {
+      "command": [
+        "python3",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/b15-operations-20261104/stream-env.py",
+        "node",
+        "--test",
+        "services/api/test/photo-quality-operations.http.test.mjs",
+        "services/api/test/timeline.http.test.mjs"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 91869,
+      "exit_code": 0,
+      "started_at": "2026-11-04T01:40:02.476756+00:00",
+      "ended_at": "2026-11-04T01:40:04.533312+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/b15-operations-20261104/preview-stream-green.log",
+      "sha256": "a880295395b22bcb5ebcb4974ed91cad0812a2da038ee167cd0672a2c349f9d6"
+    },
+    {
+      "command": [
+        "python3",
+        "/Users/stephen/DevProjects/AIProjects/elmos/certification/strict_zero_fake_industrial_evaluator.py",
+        "--strict-slice",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/b15-formal-20261104/operations-all-stream-gate"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 92080,
+      "exit_code": 0,
+      "started_at": "2026-11-04T01:40:40.402579+00:00",
+      "ended_at": "2026-11-04T01:40:40.600937+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/b15-operations-20261104/all-stream-zero.log",
+      "sha256": "77c53aeaeff49bcbdf231bbeda5ed48ebdee89b0e89e3477ca43f9f08aebc4d4"
+    },
+    {
+      "command": [
+        "python3",
+        "/Users/stephen/DevProjects/AIProjects/elmos/.ai-progress/bin/dp_slice_strategy_engine.py",
+        "--db-path",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/b15-operations-20261104/dp.sqlite3",
+        "--repo-root",
+        "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+        "verify-regression",
+        "--plan-id",
+        "ailifetime-b15-operations-20261104",
+        "--agent",
+        "codex"
+      ],
+      "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+      "executed": true,
+      "pid": 91960,
+      "exit_code": 0,
+      "started_at": "2026-11-04T01:40:38.756865+00:00",
+      "ended_at": "2026-11-04T01:42:45.051723+00:00",
+      "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/b15-operations-20261104/dp-stream-final-regression.log",
+      "sha256": "71e77a0b975ae1cfde405651cfe1ff8f1d1a6157e6b63861dcb7aa7504d99a98"
     }
   ],
   "boundaries": {
@@ -497,14 +571,14 @@
         ],
         "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
         "executed": true,
-        "pid": 88552,
-        "actual_child_pid": 88552,
+        "pid": 91963,
+        "actual_child_pid": 91963,
         "exit_code": 0,
-        "postgres_pid": 88467,
-        "started_at": "2026-11-04T01:28:48.913172+00:00",
-        "ended_at": "2026-11-04T01:29:40.871516+00:00",
-        "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/b15-operations-20261104/native-88552.log",
-        "sha256": "898977fe721868863d244812981f48aa4fc6fa2672918bf1460b573d34aa3ce0",
+        "postgres_pid": 91637,
+        "started_at": "2026-11-04T01:40:38.862658+00:00",
+        "ended_at": "2026-11-04T01:41:32.325256+00:00",
+        "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/b15-operations-20261104/native-91963.log",
+        "sha256": "7482dbfc13c8fe0b76071d85d4d3c2cdb454758f1e87e0b99f7ffb9da540131d",
         "credential_values": "NOT_LOGGED"
       }
     },
@@ -537,16 +611,129 @@
         ],
         "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
         "executed": true,
-        "pid": 89773,
-        "actual_child_pid": 89773,
+        "pid": 93045,
+        "actual_child_pid": 93045,
         "exit_code": 0,
-        "postgres_pid": 88467,
-        "started_at": "2026-11-04T01:29:40.929771+00:00",
-        "ended_at": "2026-11-04T01:30:53.023327+00:00",
-        "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/b15-operations-20261104/native-89773.log",
-        "sha256": "388b90464c07ce162d1d50a09b535e89065dae85d9d284246d37d315bef34fa5",
+        "postgres_pid": 91637,
+        "started_at": "2026-11-04T01:41:32.676308+00:00",
+        "ended_at": "2026-11-04T01:42:44.911118+00:00",
+        "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/b15-operations-20261104/native-93045.log",
+        "sha256": "e0d3c23b36efc35d98f47716380e8d5e312423b0262b58a2ad732f0098a8ea29",
         "credential_values": "NOT_LOGGED"
       }
     }
-  ]
+  ],
+  "priorFinalRegressions": [
+    [
+      {
+        "command": [
+          "pnpm",
+          "--workspace-concurrency=1",
+          "--filter",
+          "@ltm/core",
+          "--filter",
+          "@ltm/providers",
+          "--filter",
+          "@ltm/capabilities",
+          "--filter",
+          "@ltm/api",
+          "--filter",
+          "@ltm/workers",
+          "--filter",
+          "@ltm/integration-gateway",
+          "--filter",
+          "@ltm/wechat-mini-core",
+          "--filter",
+          "@ltm/experience-platform",
+          "--filter",
+          "@ltm/commerce-platform",
+          "-r",
+          "test"
+        ],
+        "testsRan": 764,
+        "passed": 764,
+        "failed": 0,
+        "skipped": 0,
+        "cancelled": 0,
+        "receipt": {
+          "command": [
+            "pnpm",
+            "--workspace-concurrency=1",
+            "--filter",
+            "@ltm/core",
+            "--filter",
+            "@ltm/providers",
+            "--filter",
+            "@ltm/capabilities",
+            "--filter",
+            "@ltm/api",
+            "--filter",
+            "@ltm/workers",
+            "--filter",
+            "@ltm/integration-gateway",
+            "--filter",
+            "@ltm/wechat-mini-core",
+            "--filter",
+            "@ltm/experience-platform",
+            "--filter",
+            "@ltm/commerce-platform",
+            "-r",
+            "test"
+          ],
+          "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+          "executed": true,
+          "pid": 88552,
+          "actual_child_pid": 88552,
+          "exit_code": 0,
+          "postgres_pid": 88467,
+          "started_at": "2026-11-04T01:28:48.913172+00:00",
+          "ended_at": "2026-11-04T01:29:40.871516+00:00",
+          "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/b15-operations-20261104/native-88552.log",
+          "sha256": "898977fe721868863d244812981f48aa4fc6fa2672918bf1460b573d34aa3ce0",
+          "credential_values": "NOT_LOGGED"
+        }
+      },
+      {
+        "command": [
+          "node",
+          "--test",
+          "--test-concurrency=1",
+          "tools/native-album-build.test.mjs",
+          "tools/native-album-serverless.test.mjs",
+          "tools/native-album-api.test.mjs",
+          "tools/native-album-entry.test.mjs",
+          "tools/native-album-preview.test.mjs"
+        ],
+        "testsRan": 9,
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0,
+        "cancelled": 0,
+        "receipt": {
+          "command": [
+            "node",
+            "--test",
+            "--test-concurrency=1",
+            "tools/native-album-build.test.mjs",
+            "tools/native-album-serverless.test.mjs",
+            "tools/native-album-api.test.mjs",
+            "tools/native-album-entry.test.mjs",
+            "tools/native-album-preview.test.mjs"
+          ],
+          "cwd": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/cli-native-delivery-20261103/delivery-checkout",
+          "executed": true,
+          "pid": 89773,
+          "actual_child_pid": 89773,
+          "exit_code": 0,
+          "postgres_pid": 88467,
+          "started_at": "2026-11-04T01:29:40.929771+00:00",
+          "ended_at": "2026-11-04T01:30:53.023327+00:00",
+          "raw_output_path": "/Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/b15-operations-20261104/native-89773.log",
+          "sha256": "388b90464c07ce162d1d50a09b535e89065dae85d9d284246d37d315bef34fa5",
+          "credential_values": "NOT_LOGGED"
+        }
+      }
+    ]
+  ],
+  "hdPreview": "Actual>7MB synthetic PNG streams with exact bytes in SQLite/PostgreSQL HTTP tests; physical device and deployed real-photo service unaccepted"
 }
