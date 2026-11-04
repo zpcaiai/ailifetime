@@ -1,4 +1,4 @@
-import { bindTimelineResultManifest, DomainError, resolveExternalCommandCallbackRoute } from "@ltm/core";
+import { assertQualityTrafficAllowed, bindTimelineResultManifest, DomainError, resolveExternalCommandCallbackRoute, type JsonObject } from "@ltm/core";
 import type {
   ActorContext,
   LifeTimeMachineRuntimePort,
@@ -173,6 +173,7 @@ export class ProductionExternalCommandPublisher implements OutboxPublisher {
       });
     }
     if (batchId === "B14" && current.data.wardrobeEdit !== undefined) await revalidateWardrobeEgress(this.runtime, this.actor, current);
+    if (batchId === "B14") await assertQualityTrafficAllowed(this.runtime,this.actor,current.data.generationPlan as JsonObject);
     const receipt = await sender.send({
       tenantId: event.tenantId,
       batchId: batchId as `B${string}`,
@@ -233,6 +234,10 @@ export class ProductionRoutePublisher implements OutboxPublisher {
       await this.#externalCommands.publish(event);
       return;
     }
+    // SQL quality bookkeeping is internal state, not a provider command. The
+    // normal outbox acknowledgement retains audit/history without leaking a
+    // private review projection or repeatedly poisoning the delivery queue.
+    if ((event.aggregateType.startsWith("media.quality-") && event.aggregateType !== "media.quality-decisions") || event.aggregateType.startsWith("media.qsample.")) return;
     // Aggregate create/update and command lifecycle events are projections of
     // the one requested intent. Delivering any of them would duplicate the
     // provider side effect under a different outbox idempotency key.

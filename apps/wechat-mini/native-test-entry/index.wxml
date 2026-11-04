@@ -3,11 +3,15 @@
   <view class="card">
     <view class="section-title">仅用于保存链路验证</view>
     <view class="muted">图片是 512 × 512 的测试图案。保存结果不代表真实人像、模型质量或生产验收。</view>
-    <view wx:if="{{enabled &amp;&amp; !connected}}">
-      <input class="test-credential" password="true" maxlength="64" bindinput="tokenChanged" placeholder="输入部署负责人提供的短期测试凭据" aria-label="短期测试凭据" />
-      <button class="button" bindtap="connect" loading="{{busy}}" disabled="{{busy}}">校验测试身份</button>
+    <view wx:if="{{enabled}}">
+      <button class="button secondary" bindtap="checkConnection" loading="{{checking}}" disabled="{{busy || checking}}">检查测试连接（无需凭据）</button>
+      <view class="muted" wx:if="{{connectionMessage}}" aria-live="polite">{{connectionMessage}}</view>
     </view>
-    <view wx:if="{{enabled &amp;&amp; connected}}">
+    <view wx:if="{{enabled && !connected}}">
+      <input class="test-credential" password="true" maxlength="64" bindinput="tokenChanged" placeholder="输入部署负责人提供的短期测试凭据" aria-label="短期测试凭据" />
+      <button class="button" bindtap="connect" loading="{{busy}}" disabled="{{busy || checking}}">校验测试身份</button>
+    </view>
+    <view wx:if="{{enabled && connected}}">
       <view class="muted">身份已由服务端校验，有效至 {{expiresAt}}</view>
       <button class="button" bindtap="openSingle">单张保存测试</button>
       <button class="button secondary" bindtap="openBatch">21 张批量保存测试</button>

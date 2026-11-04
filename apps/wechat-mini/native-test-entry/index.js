@@ -2,14 +2,16 @@ const api = require("../../services/api");
 const session = require("../../services/session");
 
 Page({
-  data: {enabled:false,connected:false,busy:false,error:"",expiresAt:""},
+  data: {enabled:false,connected:false,busy:false,checking:false,connectionMessage:"",error:"",expiresAt:""},
   credential: "", active:true, epoch:0,
   onLoad() {
-    const ext=wx.getExtConfigSync ? wx.getExtConfigSync() : {};
-    const development=wx.getAccountInfoSync().miniProgram.envVersion === "develop";
+    const version=wx.getAccountInfoSync().miniProgram.envVersion;
+    const development=version === "develop";
     try {
-      if (!development || ext.nativeAlbumTestEnabled !== true) throw Error("联调入口只允许显式开启的开发预览。");
-      const base=api.configuration().baseUrl;
+      if (!development) throw Error(`联调环境不符：${["develop","trial","release"].includes(version)?version:"unknown"}。请使用本轮开发预览。`);
+      const config=api.configuration();
+      if (config.nativeAlbumTestEnabled !== true) throw Error("联调配置未传入：TEST_FLAG_MISSING。请反馈此代码。");
+      const base=config.baseUrl;
       const https=/^https:\/\/(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/.test(base) && !/\.(?:invalid|example|test)$/.test(base);
       const local=wx.getSystemInfoSync().platform === "devtools" && /^http:\/\/127\.0\.0\.1:\d+$/.test(base);
       if (!https && !local) throw Error("手机联调必须使用已登记的实际 HTTPS 服务。");
@@ -17,11 +19,33 @@ Page({
     } catch(error) {this.setData({enabled:false,error:error.message || "联调配置无效。"});}
   },
   onShow() {this.active=true;},
-  onHide() {this.active=false;this.epoch++;this.credential="";this.setData({busy:false});},
+  onHide() {this.active=false;this.epoch++;this.credential="";this.setData({busy:false,checking:false});},
   onUnload() {this.onHide();},
   tokenChanged(event) {this.credential=String(event.detail.value || "").trim();},
+  async checkConnection() {
+    if (!this.data.enabled || this.data.busy || this.data.checking || !this.active) return;
+    const epoch=++this.epoch,current=()=>this.active && epoch===this.epoch;
+    this.setData({checking:true,connectionMessage:"正在检查 request 和 downloadFile…"});
+    let path="",message="连接检查未完成。";
+    try {
+      const base=api.configuration().baseUrl;
+      const directory=wx.env && wx.env.USER_DATA_PATH;
+      if (!directory) throw Error("PRIVATE_DIRECTORY_UNAVAILABLE");
+      path=`${directory}/ltm-network-probe-${Date.now()}-${epoch}`;
+      const request=new Promise(resolve=>wx.request({url:`${base}/v1/session`,method:"GET",timeout:8000,
+        success:response=>resolve(`HTTP_${response.statusCode}`),fail:error=>resolve(connectionFailure(error))}));
+      const download=new Promise(resolve=>wx.downloadFile({url:`${base}/v1/timelines/single-root/nodes/0/image`,filePath:path,timeout:8000,
+        success:response=>resolve(`HTTP_${response.statusCode}`),fail:error=>resolve(connectionFailure(error))}));
+      const results=await Promise.all([request,download]);
+      message=`request：${results[0]}；downloadFile：${results[1]}。仅检查连接，不代表已登录或保存成功。`;
+    } catch {message="连接检查无法执行：DIAGNOSTIC_UNAVAILABLE。";}
+    finally {
+      const removed=await removeProbe(path);
+      if(current())this.setData({checking:false,connectionMessage:message+(removed?"":" 临时文件清理失败，请反馈。")});
+    }
+  },
   async connect() {
-    if (!this.data.enabled || this.data.busy || !this.active) return;
+    if (!this.data.enabled || this.data.busy || this.data.checking || !this.active) return;
     const token=this.credential;
     if (!/^[a-f0-9]{64}$/.test(token)) {this.setData({error:"请输入部署负责人提供的短期测试凭据。"});return;}
     const epoch=++this.epoch,current=()=>this.active && epoch===this.epoch;
@@ -51,3 +75,19 @@ Page({
     wx.navigateTo({url:`/pages/job/index?commandId=${commandId}`});
   },
 });
+
+function connectionFailure(error) {
+  const message=String(error && error.errMsg || "").toLowerCase();
+  if(message.includes("url not in domain list"))return "DOMAIN_NOT_ALLOWED";
+  if(message.includes("timeout"))return "NETWORK_TIMEOUT";
+  if(message.includes("ssl")||message.includes("certificate"))return "TLS_FAILURE";
+  return "NETWORK_UNAVAILABLE";
+}
+function removeProbe(path) {
+  if(!path)return Promise.resolve(true);
+  return new Promise(resolve=>{
+    try {wx.getFileSystemManager().unlink({filePath:path,success:()=>resolve(true),
+      fail:error=>resolve(/no such|not exist|not exit|enoent/i.test(String(error && error.errMsg || "")))});}
+    catch {resolve(false);}
+  });
+}

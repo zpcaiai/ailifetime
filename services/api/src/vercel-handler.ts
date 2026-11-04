@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import { mkdtemp,writeFile } from "node:fs/promises";
+import { mkdtemp,writeFile,rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { IncomingMessage,ServerResponse,Server } from "node:http";
@@ -14,6 +14,7 @@ import { PrivateS3Images } from "./private-s3.js";
 import { PHOTO_PRICE_VERSION,PHOTO_PRODUCTS } from "./photo-catalog.js";
 import { configuredPhotoScoring } from "./photo-score-config.js";
 import { TimelinePhotoQualityService } from "./timeline-photo-quality.js";
+import { configuredSeedream } from "./seedream-config.js";
 
 function json(response: ServerResponse,status: number,body: unknown): void {
   response.statusCode=status;response.setHeader("content-type","application/json; charset=utf-8");response.setHeader("cache-control","private, no-store");response.end(JSON.stringify(body));
@@ -27,14 +28,27 @@ function cronAllowed(request: IncomingMessage,env: NodeJS.ProcessEnv): boolean {
   const expected=Buffer.from(`Bearer ${secret}`),provided=Buffer.from(actual);
   return provided.length===expected.length && timingSafeEqual(provided,expected);
 }
-async function secretFiles(environment: NodeJS.ProcessEnv): Promise<NodeJS.ProcessEnv> {
+/** Vercel environment values become bounded private files. The existing loaders
+ * still validate signatures, trust, policy calibration and credential format. */
+export async function materializeVercelConfiguration(environment: NodeJS.ProcessEnv) {
   const env={...environment};let directory: string|undefined;
-  for (const name of ["LTM_WECHAT_IDENTITY_TOKEN","LTM_WECHAT_PLATFORM_BROKER_TOKEN","LTM_UPLOAD_BROKER_TOKEN"]) {
-    if (!env[name] || env[`${name}_FILE`]) continue;
-    directory ??= await mkdtemp(join(tmpdir(),"ltm-vercel-secrets-"));
-    const path=join(directory,name);await writeFile(path,env[name],{mode:0o600,flag:"wx"});env[`${name}_FILE`]=path;
-  }
-  return env;
+  const mappings: readonly (readonly [string,string,number,boolean])[] = [
+    ...["LTM_WECHAT_IDENTITY_TOKEN","LTM_WECHAT_PLATFORM_BROKER_TOKEN","LTM_UPLOAD_BROKER_TOKEN","LTM_PHOTO_SCORER_TOKEN"].map(name=>[name,`${name}_FILE`,8192,false] as const),
+    ["LTM_PHOTO_SCORER_POLICIES_JSON","LTM_PHOTO_SCORER_POLICY_FILE",512*1024,true],
+    ["LTM_CONSENT_POLICY_CATALOG_JSON","LTM_CONSENT_POLICY_CATALOG_FILE",2*1024*1024,true],
+  ];
+  async function close() { if(directory) {await rm(directory,{recursive:true,force:true});directory=undefined;} }
+  try {
+    for (const [name,target,limit,jsonDocument] of mappings) {
+      const value=env[name];if(value===undefined)continue;
+      if(env[target]!==undefined || !value.trim() || Buffer.byteLength(value)>limit) throw new Error("CONFIGURATION_INVALID");
+      if(jsonDocument) {try{JSON.parse(value);}catch{throw new Error("CONFIGURATION_INVALID");}}
+      directory ??= await mkdtemp(join(tmpdir(),"ltm-vercel-secrets-"));
+      const path=join(directory,target);await writeFile(path,value,{mode:0o600,flag:"wx"});env[target]=path;
+      delete env[name];
+    }
+    return {environment:env,close};
+  } catch(error) {await close();throw error;}
 }
 /** The production API's authentication, consent, evidence and payment gates are
  * reused intact. No listener, SQLite database, local media or background loop.
@@ -42,6 +56,7 @@ async function secretFiles(environment: NodeJS.ProcessEnv): Promise<NodeJS.Proce
 export function createVercelHandler(environment: NodeJS.ProcessEnv,productRoot: string) {
   const env={...environment,APP_ENV:"production",LTM_DEPLOYMENT_PROFILE:"distributed",LTM_STATIC_DIR:"disabled"};
   let api: Promise<{server: Server;close():Promise<void>}>|undefined;
+  let materialized: Awaited<ReturnType<typeof materializeVercelConfiguration>>|undefined;
   let storage: {media:PostgresGeneratedMedia;pool:Pool;objects:PrivateS3Images}|undefined;
   function media() {
     if (storage) return storage;
@@ -52,21 +67,27 @@ export function createVercelHandler(environment: NodeJS.ProcessEnv,productRoot: 
     storage={media:new PostgresGeneratedMedia(pool,objects),pool,objects};return storage;
   }
   async function initialize() {
-    const configuration=loadApiConfiguration(await secretFiles(env),productRoot);
+    materialized=await materializeVercelConfiguration(env);
+    const effectiveEnv=materialized.environment;
+    const configuration=loadApiConfiguration(effectiveEnv,productRoot);
     if (!configuration.postgresRuntimeOptions) throw new Error("CONFIGURATION_INVALID");
     const runtime=await PostgresLifeTimeMachineRuntime.connect(configuration.postgresRuntimeOptions);
     let domain: ProductionDomainRuntime|undefined;
+    let seedream: ReturnType<typeof configuredSeedream>;
     try {
       domain=new ProductionDomainRuntime(configuration.postgresRuntimeOptions.connectionString,{poolMax:2,applicationName:"ltm-vercel-domain"});
-      const registry=createCapabilityRegistry(),scoring=configuredPhotoScoring(env,"production");
-      const photoQuality=scoring===undefined?undefined:new TimelinePhotoQualityService(runtime,registry,media().media,scoring.scorer,scoring.policies,scoring.channel);
+      seedream=configuredSeedream(effectiveEnv,"production",runtime);
+      const artifacts=seedream?.media ?? media().media;
+      const registry=createCapabilityRegistry(),scoring=configuredPhotoScoring(effectiveEnv,"production");
+      const photoQuality=scoring===undefined?undefined:new TimelinePhotoQualityService(runtime,registry,artifacts,scoring.scorer,scoring.policies,scoring.channel);
       const server=createApiServer({runtime,authenticator:configuration.authenticator,capabilityRegistry:registry,externalBusinessEventReducerRegistry,
-        appEnvironment:"production",clientIntegrations:configuration.clientIntegrations,timelineArtifacts:media().media,domainRuntime:domain,staticDirectory:null,
+        appEnvironment:"production",clientIntegrations:configuration.clientIntegrations,timelineArtifacts:artifacts,domainRuntime:domain,staticDirectory:null,
         ...(photoQuality===undefined?{}:{photoQuality}),
+        ...(seedream===undefined?{}:{seedream:seedream.generation,seedreamReadiness:seedream.readiness}),
         ...(configuration.metricsTokenSha256?{metricsTokenSha256:configuration.metricsTokenSha256}:{})});
       const activeDomain=domain;
-      return {server,close:async()=>{await runtime.close();await activeDomain.close();}};
-    }catch(error){await runtime.close();await domain?.close();throw error;}
+      return {server,close:async()=>{await seedream?.close();await runtime.close();await activeDomain.close();}};
+    }catch(error){await seedream?.close();await runtime.close();await domain?.close();throw error;}
   }
   async function handler(request: IncomingMessage,response: ServerResponse):Promise<void> {
     const url=new URL(request.url??"/","https://function.invalid");
@@ -79,7 +100,7 @@ export function createVercelHandler(environment: NodeJS.ProcessEnv,productRoot: 
       catch {json(response,503,{error:{code:"MEDIA_CLEANUP_UNAVAILABLE"}});}return;
     }
     try {
-      api ??= initialize();
+      api ??= initialize().catch(async error=>{await materialized?.close();throw error;});
       const {server}=await api;
       if (request.method==="GET" && url.pathname==="/health/ready") {
         const photo=media();
@@ -95,5 +116,5 @@ export function createVercelHandler(environment: NodeJS.ProcessEnv,productRoot: 
       json(response,503,{error:{code:"BACKEND_NOT_CONFIGURED"},status:"not_ready"});
     }
   }
-  return {handler,close:async()=>{if(api)await api.then(v=>v.close(),()=>undefined);if(storage){storage.objects.close();await storage.pool.end();}}};
+  return {handler,close:async()=>{try{if(api)await api.then(v=>v.close(),()=>undefined);if(storage){storage.objects.close();await storage.pool.end();}}finally{await materialized?.close();}}};
 }

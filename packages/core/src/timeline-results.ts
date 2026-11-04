@@ -7,6 +7,7 @@ export interface TimelineImageAsset {
 export interface TimelineResultNode {
   readonly nodeId: string; readonly targetAge: number; readonly status: "ready" | "failed" | "review";
   readonly asset?: TimelineImageAsset; readonly qualityResultId?: string; readonly safetyResultId?: string;
+  readonly qualityControlKey?: string;
   readonly errorCode?: "PROVIDER_TRANSIENT" | "QUALITY_REJECTED" | "POLICY_BLOCKED" | "CANCELLED";
 }
 export interface TimelineResultManifest {
@@ -42,16 +43,16 @@ export function parseTimelineResultManifest(value: unknown): TimelineResultManif
   if (manifest.schemaVersion !== "ltm.timeline-results.v1" || manifest.aiLabel !== true ||
       !Array.isArray(manifest.nodes) || manifest.nodes.length < 1 || manifest.nodes.length > 101) return invalid("timeline manifest version, label or node count is invalid");
   const nodes: TimelineResultNode[] = manifest.nodes.map((entry) => {
-    const node = object(entry, ["nodeId", "targetAge", "status", "asset", "qualityResultId", "safetyResultId", "errorCode"]);
+    const node = object(entry, ["nodeId", "targetAge", "status", "asset", "qualityResultId", "safetyResultId", "errorCode", "qualityControlKey"]);
     const targetAge = integer(node.targetAge, 0, 100);
     if (node.nodeId !== `age-${targetAge}`) return invalid("timeline node ID must match its age");
     if (node.status === "ready") {
       if (node.errorCode !== undefined) return invalid("ready timeline node cannot have an error");
       return { nodeId: node.nodeId, targetAge, status: "ready", asset: parseTimelineImageAsset(node.asset),
-        qualityResultId: identifier(node.qualityResultId), safetyResultId: identifier(node.safetyResultId) };
+        qualityResultId: identifier(node.qualityResultId), safetyResultId: identifier(node.safetyResultId),...(node.qualityControlKey===undefined?{}:{qualityControlKey:identifier(node.qualityControlKey)}) };
     }
     if ((node.status !== "failed" && node.status !== "review") || node.asset !== undefined ||
-        node.qualityResultId !== undefined || node.safetyResultId !== undefined ||
+        node.qualityResultId !== undefined || node.safetyResultId !== undefined || node.qualityControlKey !== undefined ||
         !["PROVIDER_TRANSIENT", "QUALITY_REJECTED", "POLICY_BLOCKED", "CANCELLED"].includes(String(node.errorCode))) return invalid("non-ready timeline node must contain a closed error and no image");
     return { nodeId: node.nodeId as string, targetAge, status: node.status,
       errorCode: node.errorCode as TimelineResultNode["errorCode"] } as TimelineResultNode;

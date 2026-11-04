@@ -10,11 +10,11 @@ import { runInNewContext } from 'node:vm';
 const image=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=','base64');
 function load(file,context){const module={exports:{}};runInNewContext(readFileSync(new URL(file,import.meta.url),'utf8'),{module,exports:module.exports,ArrayBuffer,Uint8Array,...context});return module.exports;}
 test('actual HTTP/filesystem with cross-realm native buffers verifies original bytes, rejects spoofed buffers and cleans denied saves',async()=>{
-  const directory=mkdtempSync(join(tmpdir(),'ltm-mini-media-'));let count=0,deny=false,spoof=false,denyUnlink=false,privacyHook=()=>{};const downloads=[];
+  const directory=mkdtempSync(join(tmpdir(),'ltm-mini-media-'));let count=0,deny=false,spoof=false,denyUnlink=false,privacyHook=()=>{},randomMode='valid',randomHook=()=>{};const downloads=[];
   const server=createServer((request,response)=>{assert.equal(request.headers.authorization,'Bearer test-memory-session');assert.equal(request.headers['x-purpose'],'age_transformation');response.setHeader('content-type','image/png');response.end(image);});
   server.listen(0,'127.0.0.1');await once(server,'listening');const baseUrl=`http://127.0.0.1:${server.address().port}`;
   const filesystem={stat({path,success}){success({stats:statSync(path)});},readFile({filePath,position,length,success}){const value=readFileSync(filePath).subarray(position,position+length);const binary=runInNewContext('Uint8Array.from(bytes).buffer',{bytes:[...value]});assert.equal(binary instanceof ArrayBuffer,false);success({data:spoof?{byteLength:length,[Symbol.toStringTag]:'ArrayBuffer'}:binary});},unlink({filePath,success,fail}){try{if(denyUnlink)throw new Error('permission denied');unlinkSync(filePath);success();}catch{fail();}}};
-  const wx={env:{USER_DATA_PATH:directory},getRandomValues:randomFillSync,getFileSystemManager:()=>filesystem,
+  const wx={env:{USER_DATA_PATH:directory},getRandomValues(options){assert.equal(options.length,16);assert.equal(typeof options.success,'function');queueMicrotask(()=>{randomHook();if(randomMode==='fail')options.fail({errMsg:'getRandomValues:fail'});else{const bytes=randomFillSync(new Uint8Array(randomMode==='short'?15:16));const binary=runInNewContext('Uint8Array.from(bytes).buffer',{bytes:[...bytes]});options.success({randomValues:randomMode==='spoof'?{byteLength:16,[Symbol.toStringTag]:'ArrayBuffer'}:binary});}});},getFileSystemManager:()=>filesystem,
     downloadFile(options){assert.ok(options.filePath.startsWith(directory+'/ltm-timeline-'));fetch(options.url,{headers:options.header}).then(async response=>{const path=options.filePath;count++;downloads.push(path);writeFileSync(path,Buffer.from(await response.arrayBuffer()));options.success({statusCode:response.status,filePath:path});}).catch(options.fail);},
     getImageInfo({success}){success({width:1,height:1});},saveImageToPhotosAlbum({filePath,success,fail}){if(deny)fail({errMsg:'auth deny'});else{copyFileSync(filePath,join(directory,'album.png'));success({});}}};
   const sha=load('../miniprogram/services/sha256.js',{});
@@ -34,5 +34,7 @@ test('actual HTTP/filesystem with cross-realm native buffers verifies original b
     const cancelled={cancelled:false};privacyHook=()=>{cancelled.cancelled=true;};await assert.rejects(media.save(node,cancelled),/MEDIA_REQUEST_CANCELLED/);assert.equal(count,6);privacyHook=()=>{};
     wx.openSetting=({success})=>success({authSetting:{'scope.writePhotosAlbum':true}});assert.equal(await media.openAlbumSettings(),true);wx.openSetting=({success})=>success({authSetting:{'scope.writePhotosAlbum':false}});assert.equal(await media.openAlbumSettings(),false);assert.equal(count,6);
     await assert.rejects(media.download({...node,downloadPath:'https://other.invalid/image'}),/UNAVAILABLE/);
+    for(const mode of ['fail','short','spoof']){randomMode=mode;await assert.rejects(media.download(node),/TIMELINE_RANDOM_UNAVAILABLE/);assert.equal(count,6);}
+    randomMode='valid';randomHook=()=>{void media.clearAll();};await assert.rejects(media.download(node),/MEDIA_REQUEST_CANCELLED/);assert.equal(count,6);randomHook=()=>{};
   }finally{await media.clearAll();await new Promise(resolve=>server.close(resolve));rmSync(directory,{recursive:true,force:true});}
 });

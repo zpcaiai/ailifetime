@@ -2,9 +2,10 @@
   <view class="page-header">
 
     <view class="section-head"><view class="page-title">岁月相册</view><button class="button secondary compact" bindtap="load">刷新</button></view>
-    <view class="muted">收藏每个年龄的你。照片默认私密，随时回来翻阅。</view>
+    <view class="muted">{{nativeAlbumTest ? '以下为明确标注的测试图片，仅验证保存链路，不调用付费模型。' : '收藏每个年龄的你。照片默认私密，随时回来翻阅。'}}</view>
   </view>
-  <view class="empty-state" wx:if="{{!items.length && !activeCommandId && !error}}"><view class="section-title">还没有照片</view><view class="muted">选一张照片，生成完整时间轴或指定年龄的照片。</view><navigator class="button" url="/pages/capture/index" open-type="switchTab">选照片，开始创作</navigator></view>
+  <view class="empty-state" wx:if="{{!nativeAlbumTest && !items.length && !activeCommandId && !error}}"><view class="section-title">还没有照片</view><view class="muted">选一张照片，生成完整时间轴或指定年龄的照片。</view><navigator class="button" url="/pages/capture/index" open-type="switchTab">选照片，开始创作</navigator></view>
+  <view class="status" wx:if="{{nativeAlbumTest && !items.length && !error}}">正在读取测试照片…</view>
   <view class="card album-card" wx:if="{{activeCommandId}}">
     <view class="section-head"><view class="section-title">{{delivery.expectedCount === 1 ? '指定年龄照片' : '年龄时间轴'}}</view><text class="tag" wx:if="{{delivery}}">{{delivery.readyCount}} / {{delivery.expectedCount}} 已就绪</text></view>
     <view class="album-progress" wx:if="{{delivery}}"><view style="width: {{delivery.readyCount / delivery.expectedCount * 100}}%;"></view></view>
@@ -21,8 +22,8 @@
     <view wx:if="{{batchTotal > 1}}"><button class="button secondary" bindtap="saveAll" disabled="{{timelineBusy || batchSaved >= batchTotal}}">{{batchSaved >= batchTotal ? '本次就绪原图已保存' : batchSaved > 0 ? '继续保存剩余原图' : '保存全部就绪原图'}}</button><view class="original-caption">本次页面内已保存 {{batchSaved}} / {{batchTotal}} 张 · 每张重新校验授权与画质</view></view>
     <button class="button danger" wx:if="{{batchSaving}}" bindtap="cancelBatch">停止后续保存</button>
     <button class="button secondary" wx:if="{{albumPermissionDenied}}" bindtap="albumSettings" disabled="{{timelineBusy}}">前往设置，允许保存到相册</button>
-    <button class="button secondary" wx:if="{{selectedNode.status === 'ready' && selectedNode.downloadPath && delivery.creationKind !== 'wardrobe'}}" bindtap="changeClothes" disabled="{{timelineBusy}}">一生衣橱 · 为这张照片换装</button>
-    <button class="button" wx:if="{{selectedNode.canRetry}}" bindtap="retryAge" disabled="{{timelineBusy}}">重新生成 {{selectedAge}} 岁的照片 ↻</button>
+    <button class="button secondary" wx:if="{{!nativeAlbumTest && selectedNode.status === 'ready' && selectedNode.downloadPath && delivery.creationKind !== 'wardrobe'}}" bindtap="changeClothes" disabled="{{timelineBusy}}">一生衣橱 · 为这张照片换装</button>
+    <button class="button" wx:if="{{!nativeAlbumTest && selectedNode.canRetry}}" bindtap="retryAge" disabled="{{timelineBusy}}">重新生成 {{selectedAge}} 岁的照片 ↻</button>
     <view class="original-caption" wx:if="{{selectedNode.canRetry}}">这个年龄已重试 {{selectedNode.attempts}} / 3 次</view>
     <view class="status" wx:if="{{selectedNode.status === 'reconciliation_required'}}">结果尚待核对，暂不重复生成。</view>
     <button class="button secondary" bindtap="refreshTimeline" disabled="{{timelineBusy}}">{{timelineBusy ? '正在处理' : '刷新时间轴 / 重试下载'}}</button>
@@ -31,9 +32,10 @@
   <view class="section-head album-list-title" wx:if="{{items.length}}"><view class="section-title">我的时光记录</view><text class="caption">{{items.length}} 次创作</text></view>
   <view class="card archive-card" wx:for="{{items}}" wx:key="id">
     <image class="preview" wx:if="{{item.previewUrl}}" src="{{item.previewUrl}}" mode="aspectFit" />
-    <view class="section-head"><view class="section-title">{{item.creationKind === 'wardrobe' ? '一生衣橱' : '年龄照片'}}</view><text class="tag">{{item.state === 'succeeded' ? '查看交付' : item.state === 'failed' ? '可查看恢复' : item.state === 'cancelled' ? '已取消' : '处理中'}}</text></view><view class="record-reference">作品编号 · {{item.id}}</view>
+    <view class="section-head"><view class="section-title">{{nativeAlbumTest ? item.testLabel : item.creationKind === 'wardrobe' ? '一生衣橱' : '年龄照片'}}</view><text class="tag">{{item.state === 'succeeded' ? '查看交付' : item.state === 'failed' ? '可查看恢复' : item.state === 'cancelled' ? '已取消' : '处理中'}}</text></view><view class="record-reference">作品编号 · {{item.id}}</view>
+    <view class="muted" wx:if="{{nativeAlbumTest}}">{{item.testReadyCount}} / {{item.testExpectedCount}} 张测试图片已就绪</view>
     <button class="button" data-id="{{item.id}}" bindtap="openTimeline">查看照片 / 恢复任务</button>
-    <button class="button secondary" data-id="{{item.id}}" bindtap="prepareShare">创建可撤销的分享授权</button>
+    <button class="button secondary" wx:if="{{!nativeAlbumTest}}" data-id="{{item.id}}" bindtap="prepareShare">创建可撤销的分享授权</button>
     <button class="button" wx:if="{{item.shareReady}}" open-type="share" data-id="{{item.id}}">分享带 AI 标识的卡片</button>
     <button class="button danger" wx:if="{{item.shareReady}}" data-id="{{item.id}}" bindtap="revoke">撤回分享</button>
   </view>

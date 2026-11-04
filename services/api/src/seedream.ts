@@ -10,6 +10,10 @@ export interface SeedreamInput {
   tenantId: string; actorId: string; idempotencyKey: string; prompt: string;
   source: Uint8Array; mimeType: "image/png" | "image/jpeg";
   imageQuality?: "standard" | "hd";
+  editReference?: { source: Uint8Array; mimeType: "image/png" | "image/jpeg" };
+  /** Runs after the durable intent, immediately before the single paid POST. */
+  beforeSubmit?: () => Promise<void>;
+  planSha256?: string;
 }
 export interface GeneratedImageSink {
   put(input: { tenantId: string; actorId: string; id: string; bytes: Uint8Array; generatedAt: string }): Promise<TimelineImageAsset>;
@@ -39,10 +43,13 @@ export class SeedreamImageGenerator {
     const dimension = quality === "standard" ? 1536 : 2048, size = `${dimension}x${dimension}`;
     for (const id of [input.tenantId,input.actorId,input.idempotencyKey]) if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(id)) throw new DomainError("VALIDATION_FAILED", "invalid generation identity");
     if (typeof input.prompt !== "string" || !input.prompt.trim() || input.prompt.length > 4000 || input.source.byteLength < 1 || input.source.byteLength > MAX_IMAGE || !["image/png","image/jpeg"].includes(input.mimeType)) throw new DomainError("VALIDATION_FAILED", "invalid generation source or prompt");
+    const original = `data:${input.mimeType};base64,${Buffer.from(input.source).toString("base64")}`;
+    if (input.editReference && (input.editReference.source.byteLength < 1 || input.editReference.source.byteLength > MAX_IMAGE || !["image/png","image/jpeg"].includes(input.editReference.mimeType))) throw new DomainError("VALIDATION_FAILED","invalid edit reference");
     const request = { model: SEEDREAM_MODEL, size, prompt: input.prompt,
-      image: `data:${input.mimeType};base64,${Buffer.from(input.source).toString("base64")}`,
+      image: input.editReference ? [original, `data:${input.editReference.mimeType};base64,${Buffer.from(input.editReference.source).toString("base64")}`] : original,
       response_format: "b64_json", output_format: "png", watermark: true, optimize_prompt_options: { mode: "standard" } };
-    const requestSha256 = sha(JSON.stringify(request)), keys = [input.tenantId,input.actorId,input.idempotencyKey];
+    if (input.planSha256 !== undefined && !/^[a-f0-9]{64}$/.test(input.planSha256)) throw new DomainError("VALIDATION_FAILED","invalid generation plan digest");
+    const requestSha256 = sha(JSON.stringify(input.planSha256 === undefined ? request : { request, planSha256: input.planSha256 })), keys = [input.tenantId,input.actorId,input.idempotencyKey];
     const claim = await this.pool.query("INSERT INTO photo_service.generations (tenant_id,actor_id,idempotency_key,request_sha256,state) VALUES ($1,$2,$3,$4,'executing') ON CONFLICT DO NOTHING RETURNING state", [...keys,requestSha256]);
     if (claim.rowCount !== 1) {
       const prior = (await this.pool.query("SELECT request_sha256,state,asset,generated_at FROM photo_service.generations WHERE tenant_id=$1 AND actor_id=$2 AND idempotency_key=$3",keys)).rows[0];
@@ -51,6 +58,7 @@ export class SeedreamImageGenerator {
       throw new DomainError("DEPENDENCY_UNAVAILABLE", "SEEDREAM_RECONCILIATION_REQUIRED");
     }
     try {
+      await input.beforeSubmit?.();
       const response = await fetch(this.endpoint, { method: "POST", redirect: "error", signal: AbortSignal.timeout(120_000),
         headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" }, body: JSON.stringify(request) });
       if (!response.ok) { await response.body?.cancel(); throw new Error("SEEDREAM_PROVIDER_REJECTED"); }

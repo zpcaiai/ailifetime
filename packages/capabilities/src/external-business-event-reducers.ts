@@ -5,6 +5,12 @@ import {
   externalCommandCallbackProviderAllowed,
   parseTimelineResultManifest,
   bindTimelineResultManifest,
+  QUALITY_CONTROLS,
+  QUALITY_REVIEWS,
+  qualityControlId,
+  qualityDigest,
+  qualityMeasurementFingerprint,
+  qualityReviewId,
 } from "@ltm/core";
 import { participantQuality } from "./participant-quality.js";
 import { parseWardrobeBinding, wardrobeBinding } from "./wardrobe-plan.js";
@@ -522,10 +528,13 @@ function commandReducer(options: CommandReducerOptions): RoutedReducer {
       const base = target(options.route.collection, event.subjectId);
       if (options.route.batchId !== "B14" || event.canonicalClaims.resultManifest === undefined) return base;
       const manifest = parseTimelineResultManifest(event.canonicalClaims.resultManifest);
+      const controls=manifest.nodes.filter(node=>node.status==="ready"&&node.qualityControlKey).map(node=>node.qualityControlKey!);
+      if(new Set(controls).size>1)throw invalid("one v2 album must use one pinned model stream across its age calibrations");
       return { ...base, relatedRecords: manifest.nodes.filter(node => node.status === "ready").flatMap(node => [
         { key: `quality-${node.targetAge}`, collection: "media.quality-decisions", id: node.qualityResultId!, required: true, lock: "share" as const },
         { key: `safety-${node.targetAge}`, collection: "media.safety-certificates", id: node.safetyResultId!, required: true, lock: "share" as const },
-      ]) };
+        ...(node.qualityControlKey?[{ key: `review-${node.targetAge}`, collection: QUALITY_REVIEWS, id: qualityReviewId(node.qualityResultId!), required: false, lock: "share" as const }]:[]),
+      ]).concat(controls.filter((key,index)=>controls.indexOf(key)===index).map(id=>({key:`control-${id}`,collection:QUALITY_CONTROLS,id,required:true,lock:"share" as const}))) };
     },
     reduce(event, context) {
       commandRoute(event, options);
@@ -594,11 +603,23 @@ function timelineResultPatch(event: VerifiedBusinessEvent, context: ExternalBusi
     if ((wardrobe || current.participantIds.length > 1) && participantQuality(quality!.data.participantAssessments, current.participantIds, true, wardrobe).failedDimensions.length > 0) {
       throw invalid("timeline image has not passed every participant identity and age gate");
     }
-    const dimensions = ["identity", "ageRange", "facialDrift", "pose", "artifacts", "clarity", "background", "handsTeethEyes", "photorealism", ...(wardrobe ? ["garmentMatch", "regionPreservation"] : [])];
+    const evidence=quality!.data.photoScoreEvidence as JsonObject|undefined,v2=evidence?.schemaVersion==="ltm.photo-score.evidence.v2";
+    let aestheticApproved=false;
+    if(v2){
+      const calibration=evidence.calibration as JsonObject,control=context.relatedRecords[`control-${node.qualityControlKey}`];
+      if(!calibration||node.qualityControlKey!==evidence.controlKey||evidence.commandId!==current.id||qualityControlId(calibration)!==evidence.controlKey||!control||control.deletedAt!==null||control.data.state!=="active"||control.data.modelVersion!==quality!.data.modelVersion||control.data.modelSha256!==evidence.modelSha256||qualityDigest(control.data.context)!==qualityDigest(calibration.context)||qualityDigest(control.data.rule)!==qualityDigest(calibration.regression))throw invalid("v2 publication requires its authoritative active model control");
+      const reviewEvidence=quality!.data.reviewEvidence as JsonObject|undefined;
+      if(reviewEvidence!==undefined){
+        const review=context.relatedRecords[`review-${node.targetAge}`],approval=review?.data.approval as JsonObject|undefined;
+        if(!review||review.deletedAt!==null||review.data.state!=="approved"||review.data.qualityId!==quality!.id||review.data.controlKey!==control.id||review.data.fingerprint!==qualityMeasurementFingerprint(quality!)||reviewEvidence.caseId!==review.id||reviewEvidence.caseVersion!==review.version||reviewEvidence.fingerprint!==review.data.fingerprint||Number(review.data.reportVersion)+1!==quality!.version||!approval||approval.decision!=="approve"||typeof approval.proposer!=="string"||typeof approval.confirmer!=="string"||approval.proposer===approval.confirmer)throw invalid("aesthetic exception requires the exact two-person authoritative review");
+        aestheticApproved=true;
+      }
+    }else if(node.qualityControlKey!==undefined)throw invalid("v1 report cannot impersonate a v2 control");
+    const dimensions = ["identity", "ageRange", "facialDrift", "pose", "artifacts", "clarity", "background", "handsTeethEyes", "photorealism",...(v2?["aestheticUsability"]:[]), ...(wardrobe ? ["garmentMatch", "regionPreservation"] : [])];
     if (quality!.data.decision !== "pass" || !scores || !thresholds ||
         dimensions.some(d => typeof scores[d] !== "number" || !Number.isFinite(scores[d]) || (scores[d] as number) > 1 ||
           typeof thresholds[d] !== "number" || !Number.isFinite(thresholds[d]) || (thresholds[d] as number) <= 0 ||
-          (thresholds[d] as number) > 1 || (scores[d] as number) < (thresholds[d] as number)) ||
+          (thresholds[d] as number) > 1 || (scores[d] as number) < 0 || ((scores[d] as number) < (thresholds[d] as number) && !(d==="aestheticUsability"&&aestheticApproved))) ||
         safety!.data.inputSafety !== "allowed" || safety!.data.outputSafety !== "allowed" || safety!.data.aiLabel !== true) throw invalid("timeline image has not passed every quality and safety gate");
   }
   const ready = manifest.nodes.filter(node => node.status === "ready").length;

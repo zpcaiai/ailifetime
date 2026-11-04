@@ -1,0 +1,1786 @@
+{
+  "schemaVersion": "ltm.batch-dependency-plan.v1",
+  "batches": [
+    {
+      "batchId": "B00",
+      "skill": "orchestrating-life-time-machine",
+      "dependsOn": [],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/orchestrating-life-time-machine.ts"
+      ]
+    },
+    {
+      "batchId": "B01",
+      "skill": "bootstrapping-life-time-machine-platform",
+      "dependsOn": [
+        "B00"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/bootstrapping-life-time-machine-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B02",
+      "skill": "bootstrapping-life-time-machine-platform",
+      "dependsOn": [
+        "B01"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/bootstrapping-life-time-machine-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B03",
+      "skill": "bootstrapping-life-time-machine-platform",
+      "dependsOn": [
+        "B01",
+        "B02"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/bootstrapping-life-time-machine-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B04",
+      "skill": "bootstrapping-life-time-machine-platform",
+      "dependsOn": [
+        "B02",
+        "B03"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/bootstrapping-life-time-machine-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B05",
+      "skill": "bootstrapping-life-time-machine-platform",
+      "dependsOn": [
+        "B01",
+        "B02",
+        "B04"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/bootstrapping-life-time-machine-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B06",
+      "skill": "building-consumer-time-machine",
+      "dependsOn": [
+        "B02",
+        "B03",
+        "B04"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-consumer-time-machine.ts"
+      ]
+    },
+    {
+      "batchId": "B07",
+      "skill": "building-consumer-time-machine",
+      "dependsOn": [
+        "B05",
+        "B06"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-consumer-time-machine.ts"
+      ]
+    },
+    {
+      "batchId": "B08",
+      "skill": "building-consumer-time-machine",
+      "dependsOn": [
+        "B07"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-consumer-time-machine.ts"
+      ]
+    },
+    {
+      "batchId": "B09",
+      "skill": "building-consumer-time-machine",
+      "dependsOn": [
+        "B08",
+        "B12",
+        "B13"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-consumer-time-machine.ts"
+      ]
+    },
+    {
+      "batchId": "B10",
+      "skill": "building-consumer-time-machine",
+      "dependsOn": [
+        "B09",
+        "B17"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-consumer-time-machine.ts"
+      ]
+    },
+    {
+      "batchId": "B11",
+      "skill": "building-consumer-time-machine",
+      "dependsOn": [
+        "B03",
+        "B10"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-consumer-time-machine.ts"
+      ]
+    },
+    {
+      "batchId": "B12",
+      "skill": "bootstrapping-life-time-machine-platform",
+      "dependsOn": [
+        "B01",
+        "B02"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/bootstrapping-life-time-machine-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B13",
+      "skill": "bootstrapping-life-time-machine-platform",
+      "dependsOn": [
+        "B01",
+        "B02",
+        "B12"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/bootstrapping-life-time-machine-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B14",
+      "skill": "building-age-media-pipeline",
+      "dependsOn": [
+        "B07",
+        "B12",
+        "B13"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-age-media-pipeline.ts"
+      ]
+    },
+    {
+      "batchId": "B15",
+      "skill": "building-age-media-pipeline",
+      "dependsOn": [
+        "B14"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-age-media-pipeline.ts"
+      ]
+    },
+    {
+      "batchId": "B16",
+      "skill": "building-age-media-pipeline",
+      "dependsOn": [
+        "B14",
+        "B15"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-age-media-pipeline.ts"
+      ]
+    },
+    {
+      "batchId": "B17",
+      "skill": "building-age-media-pipeline",
+      "dependsOn": [
+        "B04",
+        "B05",
+        "B14",
+        "B16"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-age-media-pipeline.ts"
+      ]
+    },
+    {
+      "batchId": "B18",
+      "skill": "building-age-media-pipeline",
+      "dependsOn": [
+        "B12",
+        "B13",
+        "B14",
+        "B15",
+        "B16"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-age-media-pipeline.ts"
+      ]
+    },
+    {
+      "batchId": "B19",
+      "skill": "building-family-future-self",
+      "dependsOn": [
+        "B04",
+        "B11"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-family-future-self.ts"
+      ]
+    },
+    {
+      "batchId": "B20",
+      "skill": "building-family-future-self",
+      "dependsOn": [
+        "B15",
+        "B19"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-family-future-self.ts"
+      ]
+    },
+    {
+      "batchId": "B21",
+      "skill": "building-family-future-self",
+      "dependsOn": [
+        "B04",
+        "B17",
+        "B19"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-family-future-self.ts"
+      ]
+    },
+    {
+      "batchId": "B22",
+      "skill": "building-family-future-self",
+      "dependsOn": [
+        "B11",
+        "B17"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-family-future-self.ts"
+      ]
+    },
+    {
+      "batchId": "B23",
+      "skill": "building-family-future-self",
+      "dependsOn": [
+        "B17",
+        "B22"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-family-future-self.ts"
+      ]
+    },
+    {
+      "batchId": "B24",
+      "skill": "building-family-future-self",
+      "dependsOn": [
+        "B11",
+        "B20",
+        "B22",
+        "B23"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-family-future-self.ts"
+      ]
+    },
+    {
+      "batchId": "B25",
+      "skill": "building-commerce-fulfillment",
+      "dependsOn": [
+        "B02",
+        "B03"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-commerce-fulfillment.ts"
+      ]
+    },
+    {
+      "batchId": "B26",
+      "skill": "building-commerce-fulfillment",
+      "dependsOn": [
+        "B13",
+        "B25"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-commerce-fulfillment.ts"
+      ]
+    },
+    {
+      "batchId": "B27",
+      "skill": "building-commerce-fulfillment",
+      "dependsOn": [
+        "B25",
+        "B26"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-commerce-fulfillment.ts"
+      ]
+    },
+    {
+      "batchId": "B28",
+      "skill": "building-commerce-fulfillment",
+      "dependsOn": [
+        "B09",
+        "B10",
+        "B26",
+        "B27"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-commerce-fulfillment.ts"
+      ]
+    },
+    {
+      "batchId": "B29",
+      "skill": "building-commerce-fulfillment",
+      "dependsOn": [
+        "B28"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-commerce-fulfillment.ts"
+      ]
+    },
+    {
+      "batchId": "B30",
+      "skill": "building-commerce-fulfillment",
+      "dependsOn": [
+        "B26",
+        "B28",
+        "B29"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-commerce-fulfillment.ts"
+      ]
+    },
+    {
+      "batchId": "B31",
+      "skill": "building-partner-platform",
+      "dependsOn": [
+        "B02",
+        "B03",
+        "B04"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-partner-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B32",
+      "skill": "building-partner-platform",
+      "dependsOn": [
+        "B31",
+        "B04",
+        "B05"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-partner-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B33",
+      "skill": "building-partner-platform",
+      "dependsOn": [
+        "B13",
+        "B31",
+        "B32"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-partner-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B34",
+      "skill": "building-partner-platform",
+      "dependsOn": [
+        "B25",
+        "B26",
+        "B31",
+        "B33"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-partner-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B35",
+      "skill": "building-channel-solutions",
+      "dependsOn": [
+        "B08",
+        "B28",
+        "B31",
+        "B32",
+        "B33"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-channel-solutions.ts"
+      ]
+    },
+    {
+      "batchId": "B36",
+      "skill": "building-channel-solutions",
+      "dependsOn": [
+        "B24",
+        "B28",
+        "B29",
+        "B31",
+        "B32"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-channel-solutions.ts"
+      ]
+    },
+    {
+      "batchId": "B37",
+      "skill": "building-channel-solutions",
+      "dependsOn": [
+        "B22",
+        "B23",
+        "B31",
+        "B32"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-channel-solutions.ts"
+      ]
+    },
+    {
+      "batchId": "B38",
+      "skill": "building-channel-solutions",
+      "dependsOn": [
+        "B31",
+        "B32",
+        "B33",
+        "B37"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-channel-solutions.ts"
+      ]
+    },
+    {
+      "batchId": "B39",
+      "skill": "building-growth-data-loop",
+      "dependsOn": [
+        "B10",
+        "B27",
+        "B31",
+        "B33"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-growth-data-loop.ts"
+      ]
+    },
+    {
+      "batchId": "B40",
+      "skill": "building-growth-data-loop",
+      "dependsOn": [
+        "B24",
+        "B27"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-growth-data-loop.ts"
+      ]
+    },
+    {
+      "batchId": "B41",
+      "skill": "building-growth-data-loop",
+      "dependsOn": [
+        "B02",
+        "B26",
+        "B34",
+        "B39",
+        "B40"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-growth-data-loop.ts"
+      ]
+    },
+    {
+      "batchId": "B42",
+      "skill": "building-growth-data-loop",
+      "dependsOn": [
+        "B18",
+        "B41"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-growth-data-loop.ts"
+      ]
+    },
+    {
+      "batchId": "B43",
+      "skill": "building-growth-data-loop",
+      "dependsOn": [
+        "B17",
+        "B30",
+        "B39"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-growth-data-loop.ts"
+      ]
+    },
+    {
+      "batchId": "B44",
+      "skill": "securing-operating-life-time-machine",
+      "dependsOn": [
+        "B04",
+        "B05",
+        "B17",
+        "B21",
+        "B23",
+        "B31"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/securing-operating-life-time-machine.ts"
+      ]
+    },
+    {
+      "batchId": "B45",
+      "skill": "securing-operating-life-time-machine",
+      "dependsOn": [
+        "B09",
+        "B13",
+        "B18",
+        "B44"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/securing-operating-life-time-machine.ts"
+      ]
+    },
+    {
+      "batchId": "B46",
+      "skill": "securing-operating-life-time-machine",
+      "dependsOn": [
+        "B05",
+        "B13",
+        "B44",
+        "B45"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/securing-operating-life-time-machine.ts"
+      ]
+    },
+    {
+      "batchId": "B47",
+      "skill": "securing-operating-life-time-machine",
+      "dependsOn": [
+        "B01",
+        "B44",
+        "B45",
+        "B46"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/securing-operating-life-time-machine.ts"
+      ]
+    },
+    {
+      "batchId": "B48",
+      "skill": "certifying-life-time-machine-release",
+      "dependsOn": [
+        "B10",
+        "B24",
+        "B30",
+        "B35",
+        "B36",
+        "B37",
+        "B38",
+        "B39",
+        "B40",
+        "B47"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/certifying-life-time-machine-release.ts"
+      ]
+    },
+    {
+      "batchId": "B49",
+      "skill": "certifying-life-time-machine-release",
+      "dependsOn": [
+        "B41",
+        "B43",
+        "B44",
+        "B45",
+        "B46",
+        "B47",
+        "B48",
+        "B50"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/certifying-life-time-machine-release.ts"
+      ]
+    },
+    {
+      "batchId": "B50",
+      "skill": "orchestrating-life-time-machine",
+      "dependsOn": [
+        "B00",
+        "B01",
+        "B02",
+        "B13"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/orchestrating-life-time-machine.ts"
+      ]
+    },
+    {
+      "batchId": "B51",
+      "skill": "designing-life-time-machine-experience",
+      "dependsOn": [
+        "B00"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/designing-life-time-machine-experience.ts"
+      ]
+    },
+    {
+      "batchId": "B52",
+      "skill": "designing-life-time-machine-experience",
+      "dependsOn": [
+        "B51"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/designing-life-time-machine-experience.ts"
+      ]
+    },
+    {
+      "batchId": "B53",
+      "skill": "designing-life-time-machine-experience",
+      "dependsOn": [
+        "B52",
+        "B06",
+        "B19",
+        "B31"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/designing-life-time-machine-experience.ts"
+      ]
+    },
+    {
+      "batchId": "B54",
+      "skill": "designing-life-time-machine-experience",
+      "dependsOn": [
+        "B01",
+        "B53"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/designing-life-time-machine-experience.ts"
+      ]
+    },
+    {
+      "batchId": "B55",
+      "skill": "designing-life-time-machine-experience",
+      "dependsOn": [
+        "B54"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/designing-life-time-machine-experience.ts"
+      ]
+    },
+    {
+      "batchId": "B56",
+      "skill": "designing-life-time-machine-experience",
+      "dependsOn": [
+        "B41",
+        "B54",
+        "B55"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/designing-life-time-machine-experience.ts"
+      ]
+    },
+    {
+      "batchId": "B57",
+      "skill": "building-marketing-content-platform",
+      "dependsOn": [
+        "B06",
+        "B41",
+        "B54"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-marketing-content-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B58",
+      "skill": "building-marketing-content-platform",
+      "dependsOn": [
+        "B53",
+        "B54",
+        "B57"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-marketing-content-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B59",
+      "skill": "building-marketing-content-platform",
+      "dependsOn": [
+        "B04",
+        "B41",
+        "B57"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-marketing-content-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B60",
+      "skill": "building-marketing-content-platform",
+      "dependsOn": [
+        "B39",
+        "B57",
+        "B59"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-marketing-content-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B61",
+      "skill": "building-marketing-content-platform",
+      "dependsOn": [
+        "B10",
+        "B39",
+        "B57"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-marketing-content-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B62",
+      "skill": "building-marketing-content-platform",
+      "dependsOn": [
+        "B32",
+        "B44",
+        "B45",
+        "B57",
+        "B58"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-marketing-content-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B63",
+      "skill": "building-mobile-and-mini-programs",
+      "dependsOn": [
+        "B01",
+        "B03",
+        "B54"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-mobile-and-mini-programs.ts"
+      ]
+    },
+    {
+      "batchId": "B64",
+      "skill": "building-mobile-and-mini-programs",
+      "dependsOn": [
+        "B05",
+        "B07",
+        "B63"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-mobile-and-mini-programs.ts"
+      ]
+    },
+    {
+      "batchId": "B65",
+      "skill": "building-mobile-and-mini-programs",
+      "dependsOn": [
+        "B08",
+        "B09",
+        "B10",
+        "B11",
+        "B64"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-mobile-and-mini-programs.ts"
+      ]
+    },
+    {
+      "batchId": "B66",
+      "skill": "building-mobile-and-mini-programs",
+      "dependsOn": [
+        "B25",
+        "B26",
+        "B27",
+        "B63"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-mobile-and-mini-programs.ts"
+      ]
+    },
+    {
+      "batchId": "B67",
+      "skill": "building-mobile-and-mini-programs",
+      "dependsOn": [
+        "B40",
+        "B63",
+        "B65"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-mobile-and-mini-programs.ts"
+      ]
+    },
+    {
+      "batchId": "B68",
+      "skill": "building-mobile-and-mini-programs",
+      "dependsOn": [
+        "B21",
+        "B44",
+        "B55",
+        "B63",
+        "B64",
+        "B65",
+        "B66",
+        "B67"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-mobile-and-mini-programs.ts"
+      ]
+    },
+    {
+      "batchId": "B69",
+      "skill": "building-mobile-and-mini-programs",
+      "dependsOn": [
+        "B47",
+        "B56",
+        "B68"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-mobile-and-mini-programs.ts"
+      ]
+    },
+    {
+      "batchId": "B70",
+      "skill": "building-mobile-and-mini-programs",
+      "dependsOn": [
+        "B03",
+        "B04",
+        "B07",
+        "B08",
+        "B09",
+        "B54"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-mobile-and-mini-programs.ts"
+      ]
+    },
+    {
+      "batchId": "B71",
+      "skill": "building-mobile-and-mini-programs",
+      "dependsOn": [
+        "B10",
+        "B25",
+        "B26",
+        "B27",
+        "B39",
+        "B70"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-mobile-and-mini-programs.ts"
+      ]
+    },
+    {
+      "batchId": "B72",
+      "skill": "building-mobile-and-mini-programs",
+      "dependsOn": [
+        "B44",
+        "B47",
+        "B55",
+        "B70",
+        "B71"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-mobile-and-mini-programs.ts"
+      ]
+    },
+    {
+      "batchId": "B73",
+      "skill": "building-notification-lifecycle-platform",
+      "dependsOn": [
+        "B03",
+        "B04",
+        "B40"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-notification-lifecycle-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B74",
+      "skill": "building-notification-lifecycle-platform",
+      "dependsOn": [
+        "B12",
+        "B13",
+        "B73"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-notification-lifecycle-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B75",
+      "skill": "building-notification-lifecycle-platform",
+      "dependsOn": [
+        "B55",
+        "B74"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-notification-lifecycle-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B76",
+      "skill": "building-notification-lifecycle-platform",
+      "dependsOn": [
+        "B24",
+        "B27",
+        "B40",
+        "B74",
+        "B75"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-notification-lifecycle-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B77",
+      "skill": "building-notification-lifecycle-platform",
+      "dependsOn": [
+        "B45",
+        "B74",
+        "B75",
+        "B76"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-notification-lifecycle-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B78",
+      "skill": "building-notification-lifecycle-platform",
+      "dependsOn": [
+        "B41",
+        "B42",
+        "B73",
+        "B76",
+        "B77"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-notification-lifecycle-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B79",
+      "skill": "building-customer-support-success",
+      "dependsOn": [
+        "B58",
+        "B75"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-customer-support-success.ts"
+      ]
+    },
+    {
+      "batchId": "B80",
+      "skill": "building-customer-support-success",
+      "dependsOn": [
+        "B03",
+        "B30",
+        "B43",
+        "B74"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-customer-support-success.ts"
+      ]
+    },
+    {
+      "batchId": "B81",
+      "skill": "building-customer-support-success",
+      "dependsOn": [
+        "B23",
+        "B75",
+        "B79",
+        "B80"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-customer-support-success.ts"
+      ]
+    },
+    {
+      "batchId": "B82",
+      "skill": "building-customer-support-success",
+      "dependsOn": [
+        "B03",
+        "B04",
+        "B11",
+        "B30",
+        "B43"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-customer-support-success.ts"
+      ]
+    },
+    {
+      "batchId": "B83",
+      "skill": "building-customer-support-success",
+      "dependsOn": [
+        "B28",
+        "B29",
+        "B30",
+        "B44",
+        "B80",
+        "B82"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-customer-support-success.ts"
+      ]
+    },
+    {
+      "batchId": "B84",
+      "skill": "building-customer-support-success",
+      "dependsOn": [
+        "B31",
+        "B32",
+        "B38",
+        "B62",
+        "B80"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-customer-support-success.ts"
+      ]
+    },
+    {
+      "batchId": "B85",
+      "skill": "building-customer-support-success",
+      "dependsOn": [
+        "B34",
+        "B41",
+        "B76",
+        "B82",
+        "B84"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-customer-support-success.ts"
+      ]
+    },
+    {
+      "batchId": "B86",
+      "skill": "building-customer-support-success",
+      "dependsOn": [
+        "B41",
+        "B42",
+        "B80",
+        "B81",
+        "B85"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-customer-support-success.ts"
+      ]
+    },
+    {
+      "batchId": "B87",
+      "skill": "building-finance-tax-operations",
+      "dependsOn": [
+        "B26",
+        "B34"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-finance-tax-operations.ts"
+      ]
+    },
+    {
+      "batchId": "B88",
+      "skill": "building-finance-tax-operations",
+      "dependsOn": [
+        "B26",
+        "B34",
+        "B87"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-finance-tax-operations.ts"
+      ]
+    },
+    {
+      "batchId": "B89",
+      "skill": "building-finance-tax-operations",
+      "dependsOn": [
+        "B25",
+        "B26",
+        "B31",
+        "B87"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-finance-tax-operations.ts"
+      ]
+    },
+    {
+      "batchId": "B90",
+      "skill": "building-finance-tax-operations",
+      "dependsOn": [
+        "B27",
+        "B28",
+        "B34",
+        "B87",
+        "B89"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-finance-tax-operations.ts"
+      ]
+    },
+    {
+      "batchId": "B91",
+      "skill": "building-finance-tax-operations",
+      "dependsOn": [
+        "B26",
+        "B30",
+        "B43",
+        "B87",
+        "B88"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-finance-tax-operations.ts"
+      ]
+    },
+    {
+      "batchId": "B92",
+      "skill": "building-finance-tax-operations",
+      "dependsOn": [
+        "B34",
+        "B87",
+        "B88",
+        "B89"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-finance-tax-operations.ts"
+      ]
+    },
+    {
+      "batchId": "B93",
+      "skill": "building-finance-tax-operations",
+      "dependsOn": [
+        "B18",
+        "B41",
+        "B45",
+        "B87",
+        "B90",
+        "B92"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-finance-tax-operations.ts"
+      ]
+    },
+    {
+      "batchId": "B94",
+      "skill": "building-finance-tax-operations",
+      "dependsOn": [
+        "B88",
+        "B89",
+        "B90",
+        "B91",
+        "B92",
+        "B93"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-finance-tax-operations.ts"
+      ]
+    },
+    {
+      "batchId": "B95",
+      "skill": "building-physical-supply-network",
+      "dependsOn": [
+        "B08",
+        "B25",
+        "B29",
+        "B54"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-physical-supply-network.ts"
+      ]
+    },
+    {
+      "batchId": "B96",
+      "skill": "building-physical-supply-network",
+      "dependsOn": [
+        "B29",
+        "B31",
+        "B32",
+        "B95"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-physical-supply-network.ts"
+      ]
+    },
+    {
+      "batchId": "B97",
+      "skill": "building-physical-supply-network",
+      "dependsOn": [
+        "B28",
+        "B29",
+        "B95",
+        "B96"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-physical-supply-network.ts"
+      ]
+    },
+    {
+      "batchId": "B98",
+      "skill": "building-physical-supply-network",
+      "dependsOn": [
+        "B13",
+        "B29",
+        "B96",
+        "B97"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-physical-supply-network.ts"
+      ]
+    },
+    {
+      "batchId": "B99",
+      "skill": "building-physical-supply-network",
+      "dependsOn": [
+        "B29",
+        "B74",
+        "B98"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-physical-supply-network.ts"
+      ]
+    },
+    {
+      "batchId": "B100",
+      "skill": "building-physical-supply-network",
+      "dependsOn": [
+        "B25",
+        "B96",
+        "B98"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-physical-supply-network.ts"
+      ]
+    },
+    {
+      "batchId": "B101",
+      "skill": "building-physical-supply-network",
+      "dependsOn": [
+        "B30",
+        "B80",
+        "B83",
+        "B99",
+        "B100"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-physical-supply-network.ts"
+      ]
+    },
+    {
+      "batchId": "B102",
+      "skill": "building-physical-supply-network",
+      "dependsOn": [
+        "B34",
+        "B41",
+        "B92",
+        "B96",
+        "B98",
+        "B99",
+        "B101"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-physical-supply-network.ts"
+      ]
+    },
+    {
+      "batchId": "B103",
+      "skill": "building-developer-integration-platform",
+      "dependsOn": [
+        "B33",
+        "B54",
+        "B58"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-developer-integration-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B104",
+      "skill": "building-developer-integration-platform",
+      "dependsOn": [
+        "B03",
+        "B31",
+        "B33",
+        "B103"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-developer-integration-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B105",
+      "skill": "building-developer-integration-platform",
+      "dependsOn": [
+        "B33",
+        "B103",
+        "B104"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-developer-integration-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B106",
+      "skill": "building-developer-integration-platform",
+      "dependsOn": [
+        "B13",
+        "B33",
+        "B43",
+        "B103",
+        "B104"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-developer-integration-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B107",
+      "skill": "building-developer-integration-platform",
+      "dependsOn": [
+        "B12",
+        "B13",
+        "B33",
+        "B103",
+        "B104",
+        "B106"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-developer-integration-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B108",
+      "skill": "building-developer-integration-platform",
+      "dependsOn": [
+        "B38",
+        "B60",
+        "B80",
+        "B84",
+        "B94",
+        "B107"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-developer-integration-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B109",
+      "skill": "building-developer-integration-platform",
+      "dependsOn": [
+        "B33",
+        "B43",
+        "B103",
+        "B104",
+        "B105",
+        "B106",
+        "B107"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-developer-integration-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B110",
+      "skill": "building-developer-integration-platform",
+      "dependsOn": [
+        "B45",
+        "B62",
+        "B103",
+        "B105",
+        "B106",
+        "B109"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-developer-integration-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B111",
+      "skill": "building-data-intelligence-platform",
+      "dependsOn": [
+        "B02",
+        "B41",
+        "B54"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-data-intelligence-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B112",
+      "skill": "building-data-intelligence-platform",
+      "dependsOn": [
+        "B41",
+        "B111"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-data-intelligence-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B113",
+      "skill": "building-data-intelligence-platform",
+      "dependsOn": [
+        "B34",
+        "B43",
+        "B45",
+        "B87",
+        "B112"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-data-intelligence-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B114",
+      "skill": "building-data-intelligence-platform",
+      "dependsOn": [
+        "B39",
+        "B40",
+        "B59",
+        "B60",
+        "B78",
+        "B112"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-data-intelligence-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B115",
+      "skill": "building-data-intelligence-platform",
+      "dependsOn": [
+        "B18",
+        "B34",
+        "B87",
+        "B93",
+        "B102",
+        "B112"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-data-intelligence-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B116",
+      "skill": "building-data-intelligence-platform",
+      "dependsOn": [
+        "B42",
+        "B56",
+        "B78",
+        "B111",
+        "B112"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-data-intelligence-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B117",
+      "skill": "building-data-intelligence-platform",
+      "dependsOn": [
+        "B44",
+        "B46",
+        "B111",
+        "B112"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-data-intelligence-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B118",
+      "skill": "building-data-intelligence-platform",
+      "dependsOn": [
+        "B14",
+        "B15",
+        "B16",
+        "B17",
+        "B18",
+        "B43",
+        "B112",
+        "B117"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/building-data-intelligence-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B119",
+      "skill": "hardening-enterprise-platform",
+      "dependsOn": [
+        "B03",
+        "B31",
+        "B44",
+        "B47"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/hardening-enterprise-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B120",
+      "skill": "hardening-enterprise-platform",
+      "dependsOn": [
+        "B05",
+        "B44",
+        "B45",
+        "B46",
+        "B47",
+        "B119"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/hardening-enterprise-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B121",
+      "skill": "hardening-enterprise-platform",
+      "dependsOn": [
+        "B18",
+        "B45",
+        "B47",
+        "B120"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/hardening-enterprise-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B122",
+      "skill": "hardening-enterprise-platform",
+      "dependsOn": [
+        "B13",
+        "B45",
+        "B46",
+        "B47",
+        "B74",
+        "B98",
+        "B120",
+        "B121"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/hardening-enterprise-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B123",
+      "skill": "hardening-enterprise-platform",
+      "dependsOn": [
+        "B44",
+        "B47",
+        "B103",
+        "B119"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/hardening-enterprise-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B124",
+      "skill": "hardening-enterprise-platform",
+      "dependsOn": [
+        "B44",
+        "B46",
+        "B49",
+        "B89",
+        "B94",
+        "B110",
+        "B117",
+        "B123"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/hardening-enterprise-platform.ts"
+      ]
+    },
+    {
+      "batchId": "B125",
+      "skill": "launching-complete-commercial-product",
+      "dependsOn": [
+        "B56",
+        "B59",
+        "B60",
+        "B61",
+        "B62",
+        "B78",
+        "B86",
+        "B94",
+        "B102",
+        "B108",
+        "B110",
+        "B113",
+        "B114",
+        "B115",
+        "B116",
+        "B118",
+        "B120",
+        "B121",
+        "B122",
+        "B124"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/launching-complete-commercial-product.ts"
+      ]
+    },
+    {
+      "batchId": "B126",
+      "skill": "launching-complete-commercial-product",
+      "dependsOn": [
+        "B48",
+        "B49",
+        "B69",
+        "B72",
+        "B125"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/launching-complete-commercial-product.ts"
+      ]
+    },
+    {
+      "batchId": "B127",
+      "skill": "launching-complete-commercial-product",
+      "dependsOn": [
+        "B126"
+      ],
+      "decision": "reuse",
+      "sourceFiles": [
+        "packages/capabilities/src/domains/launching-complete-commercial-product.ts"
+      ]
+    }
+  ]
+}

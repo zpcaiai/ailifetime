@@ -7,14 +7,15 @@
     <view class="muted job-description">{{description}}</view>
     <view class="job-track"><view><text class="track-dot filled"></text><text>保存创作请求</text></view><view><text class="track-dot {{state !== 'requested' ? 'filled' : ''}}"></text><text>等待生成回执</text></view><view><text class="track-dot"></text><text>逐张照片核验与交付</text></view></view>
     <view wx:if="{{readyCount > 0 || saving || saveMessage}}">
-      <button class="button" bindtap="saveAll" loading="{{saving}}" disabled="{{saving}}">{{saving ? '正在保存到手机相册…' : savedCount > 0 && savedCount < saveTotal ? '继续保存剩余照片' : '一键保存到手机相册'}}</button>
+      <button class="button" bindtap="saveAll" loading="{{saving}}" disabled="{{saving || refreshing}}">{{saving ? '正在保存到手机相册…' : savedCount > 0 && savedCount < saveTotal ? '继续保存剩余照片' : '一键保存到手机相册'}}</button>
       <view class="muted" wx:if="{{saveTotal > 0}}">已保存 {{savedCount}} / {{saveTotal}} 张 · 原图画质</view>
       <button class="button secondary" wx:if="{{saving}}" bindtap="cancelSave">停止后续保存</button>
       <button class="button secondary" wx:if="{{albumPermissionDenied}}" bindtap="albumSettings" disabled="{{saving}}">前往设置，允许保存到相册</button>
       <view class="status" wx:if="{{saveMessage}}" aria-live="polite">{{saveMessage}}</view>
     </view>
     <button class="button secondary" wx:if="{{canOpenLibrary}}" bindtap="library">查看照片 / 恢复任务</button>
-    <button class="button secondary" bindtap="refresh" disabled="{{saving}}">查看最新进展</button>
+    <button class="button secondary" bindtap="refresh" loading="{{refreshing}}" disabled="{{saving || refreshing}}">{{refreshing ? '正在刷新…' : '查看最新进展'}}</button>
+    <view class="status" wx:if="{{refreshMessage}}" aria-live="polite">{{refreshMessage}}</view>
     <view class="status error" wx:if="{{error}}">{{error}}</view>
   </view>
   <view class="privacy-foot">可以稍后从相册继续查看。已完成的照片会保留，单个年龄失败时可在相册中恢复。</view>
