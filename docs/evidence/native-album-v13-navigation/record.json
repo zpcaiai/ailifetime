@@ -1,0 +1,95 @@
+{
+  "schema_version": "native-album-navigation-validation/1",
+  "preview": "v13",
+  "fixture": "synthetic-album-transport-only",
+  "paid_model_calls": 0,
+  "source": {
+    "base_main": "e836049676406c2812e8a6f40b0c2dfae2285dda",
+    "state_at_phone_test": "base_main_plus_uncommitted_patch",
+    "file_sha256": {
+      "apps/wechat-mini/miniprogram/pages/library/index.js": "180cde08354d71dd204d54c56a077580238e4f3b7b3af738d25ef05997417427",
+      "apps/wechat-mini/miniprogram/pages/library/index.wxml": "2fe8dfb496b211e803af20f67e135b6f7ec071ff4b6ae47943ad8a75fb036265",
+      "apps/wechat-mini/tools/library-native-test.test.mjs": "0b5f17f7d0728e241ed88e7878328a7e3acdbd53b85d7149ca41072594c2f5a2",
+      "apps/wechat-mini/miniprogram/pages/job/index.js": "bc63b5a488bcbb39bd18ed31707b4e6ee18bf55401cd70e6961ce492946b0a08",
+      "apps/wechat-mini/miniprogram/pages/job/index.wxml": "601b05b415f5ba856ae7c268f5af731ecad31dcb48a76410eee833a96417182a",
+      "apps/wechat-mini/tools/job-album.test.mjs": "31770317a6ae9bdfbc40d4ccaa74ddd0304896c9b78ef0007c0d92494001354e"
+    }
+  },
+  "original_local_record_sha256": "9044a4bc5444a42b46ba7601e7db0f313a28623a0895052d36cb51901c9daee2",
+  "device": {
+    "os_name": "HyperOS",
+    "os_version": "3.0.308",
+    "wechat_version": "8.0.80",
+    "model": "UNKNOWN",
+    "android_base_version": "UNKNOWN",
+    "execution_time": "UNKNOWN"
+  },
+  "agent_direct_phone_observation": false,
+  "native_ui_result": "PASS_USER_REPORTED",
+  "cases": {
+    "library_without_404_and_real_test_timelines": "PASS_USER_REPORTED",
+    "progress_button_visible_refresh_feedback": "PASS_USER_REPORTED"
+  },
+  "phone_confirmation_question_verbatim": "使用刚提供的新 accessToken 校验 v13 后，两项是否正常：①岁月相册不再HTTP_404，显示单张和21张标注测试作品，能打开时间轴；②点击“查看最新进展”有加载反馈，随后显示“已更新…”及就绪数量？不要回传凭据；有错误请写原文。",
+  "phone_confirmation_answer_verbatim": "两项均正常，仍为HyperOS3.0.308／微信8.0.80",
+  "earlier_confirmation_answer_verbatim": "两项均正常，仍是HyperOS3.0.308／微信8.0.80",
+  "host_receipts": {
+    "historical_affected_regression": {
+      "executed": true,
+      "pid": 17594,
+      "exit_code": 0,
+      "sha256": "4510c61e102d0296aa8d68da8dabe47d93c41b046c1ca061f7d7c8a08c7efd03",
+      "local_raw_basename": "holistic-regression.log",
+      "raw_output_in_git": false,
+      "command": [
+        "node",
+        "--test",
+        "apps/wechat-mini/tools/library-native-test.test.mjs",
+        "apps/wechat-mini/tools/library-batch.test.mjs",
+        "apps/wechat-mini/tools/library-share-lifecycle.test.mjs",
+        "apps/wechat-mini/tools/job-album.test.mjs",
+        "apps/wechat-mini/tools/timeline-media.test.mjs",
+        "tools/native-album-preview.test.mjs",
+        "tools/native-album-entry.test.mjs"
+      ],
+      "tests": 25
+    },
+    "delivery_wechat_regression": {
+      "executed": true,
+      "pid": 30949,
+      "exit_code": 0,
+      "sha256": "f2aec7b8c90e94360d111638f9bcbc55bfc2e50e6730a8efa178633d64066f86",
+      "local_raw_basename": "wechat-regression.log",
+      "raw_output_in_git": false,
+      "command": [
+        "pnpm",
+        "--filter",
+        "@ltm/wechat-mini-core",
+        "test"
+      ],
+      "tests": 139
+    },
+    "delivery_preview_regression": {
+      "executed": true,
+      "pid": 31034,
+      "exit_code": 0,
+      "sha256": "953e6fa08a8f68f3c7f62a261bff118a6d19151a750941f8c447f94a19af64de",
+      "local_raw_basename": "preview-regression.log",
+      "raw_output_in_git": false,
+      "command": [
+        "node",
+        "--test",
+        "tools/native-album-preview.test.mjs",
+        "tools/native-album-entry.test.mjs"
+      ],
+      "tests": 2
+    }
+  },
+  "boundaries": [
+    "Two native UI cases were confirmed by the phone operator; this is not agent-direct observation or independent certification.",
+    "This v13 navigation record does not replace the earlier five-step album permission/save records.",
+    "The initial v12 0/21 cause remains UNKNOWN; later successful v12-d1 retests do not establish a permanent fix for that incident.",
+    "Historical raw receipts and credential files remain private outside Git; recorded hashes identify the retained raw evidence.",
+    "No production release or paid model acceptance is established by this record."
+  ]
+}
