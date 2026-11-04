@@ -1,0 +1,213 @@
+{
+  "revision": 1,
+  "recorded_at": "2026-11-04T13:13:59.488575+00:00",
+  "status": "PASS_USER_REPORTED",
+  "preview": "v16",
+  "source_main": "59f856d65552384bea81d80770f916a361689bb1",
+  "source_clean": true,
+  "qr_sha256": "135a23f7025b09b2bd1f639c39f972a25d8065dc7bc274fbf293e093b772c86a",
+  "source_provenance_sha256": "8eb232656b84579c1182512cf1d38cc569844cb684f0470c7ba9ed95c02beb54",
+  "fixture": "synthetic-album-transport-only",
+  "paid_model_calls": 0,
+  "window": 11,
+  "expires_at": "2026-11-04T12:51:34.800Z",
+  "agent_direct_phone_observation": false,
+  "schema_version": "ltm.album-seven-case-public-record.v1",
+  "source_record_name": "REGRESSION-RESULTS-REV1.json",
+  "source_record_sha256": "3a02aecb0a1b99eb1a1a7451d97a76ff77eea67c958f69c20204a483018f6065",
+  "supersedes_source_record_sha256": "643b23d7ab76e715391c31547124fef6e00e2f21cd176952b58de48ff39e19bf",
+  "boundary": "Current operator-reported observations only. Host commands verify archives/transport, not phone writes or independent production certification. Unknown model/time stay UNKNOWN; earlier v12 initial0/21cause remains UNKNOWN.",
+  "reported_device": {
+    "model": "UNKNOWN",
+    "os_name": "HyperOS",
+    "os_version": "3.0.308",
+    "wechat_version": "8.0.80",
+    "android_base_version": "UNKNOWN",
+    "execution_time": "UNKNOWN"
+  },
+  "target_device": {
+    "os": "HyperOS",
+    "version": "3.0.308",
+    "wechat": "8.0.80"
+  },
+  "operator_feedback_verbatim": [
+    {
+      "question": "请在 HyperOS 3.0.308／微信 8.0.80 上，用本轮 v16＋window11 完成并核对：①单张保存成功，系统相册新增1张；②批量21/21，新增21张且批内不同；③返回入口重新打开批量页，关闭“添加到相册”权限后保存，出现权限提示及设置按钮，新增0张；④通过页面按钮恢复授权，返回未点保存时新增0张；⑤手动重试21/21，新增21张且批内不同；⑥岁月相册无HTTP_404，展示单张和21张标注测试作品，时间轴可打开；⑦查看最新进展有加载反馈，随后显示“已更新…”及就绪数量。是否七项全部符合？若未完成或失败，请回复当前步骤和错误原文，不要发送凭据。",
+      "answer": "本轮 v16＋window11 七项全部符合，设备仍是 HyperOS 3.0.308、微信 8.0.80。请整理并保存本轮真机验证记录，保留历史记录，不要记录任何凭据。"
+    }
+  ],
+  "native_cases": {
+    "single": {
+      "status": "PASS_USER_REPORTED",
+      "evidence_kind": "CURRENT_OPERATOR_CONFIRMATION",
+      "actual": {
+        "page_result": "保存成功",
+        "album_delta": 1
+      },
+      "feedback_item_index": 0
+    },
+    "batch": {
+      "status": "PASS_USER_REPORTED",
+      "evidence_kind": "CURRENT_OPERATOR_CONFIRMATION",
+      "actual": {
+        "progress": "21/21",
+        "album_delta": 21,
+        "batch_distinct": true
+      },
+      "feedback_item_index": 0
+    },
+    "denial": {
+      "status": "PASS_USER_REPORTED",
+      "evidence_kind": "CURRENT_OPERATOR_CONFIRMATION",
+      "actual": {
+        "fresh_batch_page": true,
+        "permission_disabled": true,
+        "permission_message": true,
+        "settings_button": true,
+        "album_delta": 0
+      },
+      "feedback_item_index": 0
+    },
+    "restore_without_save": {
+      "status": "PASS_USER_REPORTED",
+      "evidence_kind": "CURRENT_OPERATOR_CONFIRMATION",
+      "actual": {
+        "settings_opened_via_page": true,
+        "permission_restored": true,
+        "save_clicked": false,
+        "album_delta": 0
+      },
+      "feedback_item_index": 0
+    },
+    "manual_retry": {
+      "status": "PASS_USER_REPORTED",
+      "evidence_kind": "CURRENT_OPERATOR_CONFIRMATION",
+      "actual": {
+        "manual_retry": true,
+        "progress": "21/21",
+        "album_delta": 21,
+        "batch_distinct": true
+      },
+      "feedback_item_index": 0
+    },
+    "library": {
+      "status": "PASS_USER_REPORTED",
+      "evidence_kind": "CURRENT_OPERATOR_CONFIRMATION",
+      "actual": {
+        "no_http404": true,
+        "labelled_test_counts": [
+          1,
+          21
+        ],
+        "timeline_opens": true
+      },
+      "feedback_item_index": 0
+    },
+    "progress": {
+      "status": "PASS_USER_REPORTED",
+      "evidence_kind": "CURRENT_OPERATOR_CONFIRMATION",
+      "actual": {
+        "loading_feedback": true,
+        "updated_feedback": true,
+        "ready_count": true
+      },
+      "feedback_item_index": 0
+    }
+  },
+  "host_evidence": [
+    {
+      "local_raw_basename": "verify-source.log",
+      "sha256": "5562dc6ad2c631acd23e96343e7993c0f856f4dbb703c61102cc7544c021bc1e",
+      "executed": true,
+      "pid": 69722,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "local_raw_basename": "preview-generate.log",
+      "sha256": "cb124b618ba6b11d9cfd9a169b48eac9e8094ce61dc7542b4dd820021afda464",
+      "executed": true,
+      "pid": 70044,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "local_raw_basename": "qr-generate.log",
+      "sha256": "87c432cda878800077996e9c85d4e0dc2328b975a4f50471df671a8ff8770959",
+      "executed": true,
+      "pid": 71025,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "local_raw_basename": "preview-entry-tests.log",
+      "sha256": "32b5b7f9882297478a867fa295cf9b66b8a4ba1483b41d3120680b1fa3a95039",
+      "executed": true,
+      "pid": 70306,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "local_raw_basename": "verify-preview-window11.log",
+      "sha256": "37259db453a47089f0de2ce1041aaa551c3327e062765053d5e3026277b5ef0c",
+      "executed": true,
+      "pid": 72762,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "local_raw_basename": "provider-inspect.log",
+      "sha256": "1b6c935af3474d3b4d4ec81308b274e896c4cb49d8fa9758a621fac6c1ec6af3",
+      "executed": true,
+      "pid": 70405,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "local_raw_basename": "window11-create.log",
+      "sha256": "f65b051b773a84e1f3a16180cfa6c4d04caeec3a4b8eff507f5a2066a02d7eba",
+      "executed": true,
+      "pid": 72016,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "local_raw_basename": "select-pinned-deployment.log",
+      "sha256": "58f8266e30dde964cf72b9f8168260da098cf1c4ae90cafd0ac5f49e33741be9",
+      "executed": true,
+      "pid": 71744,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "local_raw_basename": "deployment-status-2.log",
+      "sha256": "436899ea0704ab3ba975c8ee343f9bc03ad272465659545017b3f67ded60325c",
+      "executed": true,
+      "pid": 73965,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "local_raw_basename": "public-full-check.log",
+      "sha256": "2e3882a1f6c29d82c6849aa5db555055233751a454be51282539f41efd7eaa99",
+      "executed": true,
+      "pid": 74951,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "local_raw_basename": "helper-strict-gate.log",
+      "sha256": "d7b915080025337b4b6dcf133bbb4675547ef21b60c8edeb40cdd8eea31449fe",
+      "executed": true,
+      "pid": 72046,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    }
+  ],
+  "preserved_history_sha256": {
+    "REGRESSION-RESULTS-REV0.json": "643b23d7ab76e715391c31547124fef6e00e2f21cd176952b58de48ff39e19bf",
+    "REGRESSION-REPORT-REV0.md": "001221fe6c4cc1578ff71fe98f2d0b99c99155eb1b082a9f952251583cb8c46a",
+    "REGRESSION-REV0.sha256": "36d7fe0885002046bcc65f8274a9873102fceee93a5eb3850b2c1be08b0fee1a",
+    "AWAITING-PHONE-OPERATOR.json": "6af54be0bab458597caac9fb1b46a60bb685eda1edfcfac3c3df3768f14c9686"
+  }
+}

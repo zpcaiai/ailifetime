@@ -1,0 +1,38 @@
+{
+  "schema": "ltm.album-curl-archive-readback.v1",
+  "source_main": "59f856d65552384bea81d80770f916a361689bb1",
+  "preview": "v16",
+  "window": 11,
+  "preserved_transport": {
+    "executed": true,
+    "pid": 74951,
+    "exit_code": 0,
+    "aggregate_stdout_sha256": "2e3882a1f6c29d82c6849aa5db555055233751a454be51282539f41efd7eaa99",
+    "availability": "LOCAL_RAW_ARCHIVE",
+    "boundary": "Host HTTPS test only; no phone operations or paid model calls."
+  },
+  "readback": {
+    "receipt_integrity": "PASS",
+    "actual_process_receipts": 43,
+    "successful_requests": 42,
+    "preserved_failed_attempts": 1,
+    "failed_exit_codes": [
+      35
+    ],
+    "verified_pngs": 22,
+    "previous_identities_rejected": 10,
+    "custom_ca_requests": 0,
+    "summary_sha256": "143f6ac56cc3836847d568af607e9a66c429c75a8cf180f08d02ca602c5a3e78",
+    "private_capture_manifest_sha256": "6d2bdfc5da8ac97ab5e28c320fbb2d3d1d045c8f7e2b24f09caa4847f4843e40",
+    "boundary": "READ_ONLY_RECEIPT_INTEGRITY_NO_NEW_NETWORK_OR_PHONE_EXECUTION_NOT_INDEPENDENT_CERTIFICATION"
+  },
+  "readback_verification": {
+    "command": "python3 tools/native-album-curl-receipts.py --capture-directory PRIVATE_CAPTURE_DIRECTORY",
+    "executed": true,
+    "pid": 34218,
+    "exit_code": 0,
+    "sha256": "285c6dff273207e1f7648adefacce8aae61fcb076ebe6f35b0ab18881c532b46",
+    "availability": "LOCAL_RAW_ARCHIVE",
+    "reader_sha256": "76aa85a6e0a3148631434eb0baaa885fec3acc7af988e9797439055d22735256"
+  }
+}

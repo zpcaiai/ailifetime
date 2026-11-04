@@ -36,6 +36,10 @@ test('curl transport verifies real TLS/SQLite originals, retains private process
     assert.equal(result.verified['single-root'].downloaded, 1); assert.equal(result.verified.root.downloaded, 21);
     assert.equal(new Set(result.verified.root.unique_sha256).size, 21); assert.equal(result.rejected_previous_identities, 1);
     assert.equal(result.actual_child_processes, 33); assert.equal(result.failed_connection_attempts_retained, 0);
+    const receiptReadback = JSON.parse((await run('python3', ['tools/native-album-curl-receipts.py', '--capture-directory', join(directory, 'good')])).stdout);
+    assert.equal(receiptReadback.receipt_integrity, 'PASS');
+    assert.equal(receiptReadback.successful_requests, 33); assert.equal(receiptReadback.preserved_failed_attempts, 0);
+    assert.equal(receiptReadback.custom_ca_requests, 33); assert.equal(receiptReadback.verified_pngs, 22);
     assert.ok(!stdout.includes(token) && !stdout.includes(oldToken));
     assert.equal(statSync(join(directory, 'good')).mode & 0o777, 0o700);
     const files = readdirSync(join(directory, 'good'));
