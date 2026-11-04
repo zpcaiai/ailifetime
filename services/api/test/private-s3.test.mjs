@@ -90,3 +90,30 @@ test('TOS addressing uses actual SDK signing over verified TLS virtual hosts whi
   store?.close();agent?.destroy();if(server?.listening)await new Promise(r=>server.close(r));await rm(dir,{recursive:true,force:true});
  }
 });
+
+test('a stalled multi-megabyte S3 upload rejects at the configured deadline without mutation retries',{timeout:35_000},async()=>{
+ let putCalls=0,received=0,fallback;
+ const server=createServer(async(req,res)=>{
+  const url=new URL(req.url,'http://localhost');
+  if(req.method==='GET'&&url.searchParams.has('versioning')){res.setHeader('content-type','application/xml');res.end('<VersioningConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/"/>');return;}
+  if(req.method==='PUT'){
+   putCalls++;assert.match(req.headers.authorization,/^AWS4-HMAC-SHA256 /);
+   for await(const chunk of req)received+=chunk.length;
+   // The real external-service boundary delays its response beyond the20s
+   // deadline. Old warning-only behavior succeeds at25s and fails this test.
+   fallback=setTimeout(()=>res.end(),25_000);return;
+  }
+  res.statusCode=404;res.end();
+ });
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ const store=new PrivateS3Images({endpoint:'http://127.0.0.1:'+server.address().port,region:'us-east-1',bucket:'private-photos',accessKeyId:'synthetic-key',secretAccessKey:'synthetic-secret',testLoopback:true});
+ const bytes=Buffer.alloc(3_613_106,123),started=performance.now();
+ try{
+  await assert.rejects(store.put('generated/'+'c'.repeat(64)+'.png',bytes),error=>{
+   assert.equal(error.name,'TimeoutError');assert.equal(error.code,'ETIMEDOUT');assert.equal(error.$metadata.attempts,1);return true;
+  });
+  const elapsed=performance.now()-started;
+  assert.ok(elapsed>=19_000&&elapsed<30_000,`actual SDK deadline elapsed ${elapsed}ms`);
+  assert.equal(putCalls,1);assert.equal(received,bytes.length);
+ }finally{clearTimeout(fallback);store.close();await new Promise(resolve=>server.close(resolve));}
+});

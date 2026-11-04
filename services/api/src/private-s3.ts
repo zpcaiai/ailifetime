@@ -20,7 +20,7 @@ export class PrivateS3Images implements PrivateImageObjects {
     if (tos && (url.hostname !== `tos-s3-${config.region}.volces.com` || config.bucket.includes("."))) throw new DomainError("CONFIGURATION_INVALID","TOS S3 region or bucket configuration is invalid");
     this.bucket = config.bucket;
     this.client = new S3Client({ endpoint: url.origin, region: config.region, forcePathStyle: !tos, maxAttempts: 1,
-      requestHandler: { connectionTimeout: 5000, requestTimeout: 20_000 },
+      requestHandler: { connectionTimeout: 5000, requestTimeout: 20_000, throwOnRequestTimeout: true, socketTimeout: 20_000 },
       requestChecksumCalculation: "WHEN_REQUIRED", responseChecksumValidation: "WHEN_REQUIRED",
       credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey } });
   }
