@@ -1,0 +1,201 @@
+{
+  "schema_version": "ltm.album-v14-tool-delivery.v1",
+  "native_test_source_main": "2faf110cefbe947a92eea9c0979833e5b952a5da",
+  "native_preview": "v14",
+  "native_cases": 7,
+  "native_evidence_kind": "PASS_USER_REPORTED",
+  "paid_model_calls": 0,
+  "original_raw_records_sha256": {
+    "REGRESSION-RESULTS-REV0.json": "dc9932e47fd443e3bb2645a1f5122934611aee8216305b55db22d05928b816a6",
+    "REGRESSION-RESULTS-REV1.json": "14b1849509b4c297f30c068e8eabead3dfd0d4cd8af6f871e7bca7dc09faf9b2"
+  },
+  "private_script_provenance": [
+    {
+      "name": "public-check-curl.py",
+      "sha256": "4dfccf3ff31f3481c8f24c9244838a7c606fa1114f54327f1dcba5078d420ee0",
+      "delivery_mapping": "tools/native-album-curl-check.py"
+    },
+    {
+      "name": "archive_preparation.py",
+      "sha256": "9ba043cb393f534656e28bab0c7cd44679e759866a8f544f656856bb24028614",
+      "delivery_mapping": "tools/native-album-regression-record.py (pending revision export)"
+    },
+    {
+      "name": "finalize_phone.py",
+      "sha256": "e74648a14d343e9d579f30df0986d757047d19b28135169455d39989897542fc",
+      "delivery_mapping": "tools/native-album-regression-record.py (operator-confirmed revision export)"
+    },
+    {
+      "name": "verify_archive.py",
+      "sha256": "3882a68f1cad8ea35f4f0b1a1bb52de1fdcaf5bb16a531e7c61555fe0bbdee02",
+      "delivery_mapping": "tools/native-album-regression-record.py (manifest/credential/boundary verification)"
+    },
+    {
+      "name": "verify_phone_archive.py",
+      "sha256": "c513c5e1d74382d838805ae78f0f44a48405d0dda02481138176223be9f2b0d0",
+      "delivery_mapping": "tools/native-album-regression-record.py (seven-case observation validation)"
+    },
+    {
+      "name": "verify_source.py",
+      "sha256": "6fe64f33433f4c6e60fc74a1fd37b2a98d8c6e2f41a73ada6416534dfe632e6d",
+      "delivery_mapping": "Task source receipt retained locally; existing official preview generator unchanged"
+    },
+    {
+      "name": "verify_preview.mjs",
+      "sha256": "0646a0281d02cdf8a9358cbe5df1e6fc8c164eeb8e047050a10e0422a59c1601",
+      "delivery_mapping": "Task preview receipt retained locally; existing official preview generator unchanged"
+    },
+    {
+      "name": "deployment.py",
+      "sha256": "ab20f48595dd8ab615e4d3b77d87801d2cdc50f22a954182d547e05ee9c0f818",
+      "delivery_mapping": "Private account-bound execution driver retained locally; existing generic window/deployment tools unchanged"
+    },
+    {
+      "name": "api-dns.cjs",
+      "sha256": "f384f0b67f20c046ff16384a4a4888246dab91187711b1483b582beb0869cfbc",
+      "delivery_mapping": "Private process-local network workaround retained locally; no global DNS/proxy mutation shipped"
+    }
+  ],
+  "delivered_tool_and_record_sha256": {
+    "tools/native-album-curl-check.py": "56a32215b18b860612b33cdadfb8038395f49b6da2d3dd6845afe419d66e06d6",
+    "tools/native-album-curl-check.test.mjs": "8eb8d8b29816d4110f2d25f76762925b15a4620aaaf7e4ddaeba8d67684c4b08",
+    "tools/native-album-regression-record.py": "d55e9116becd5fb16a5aa0b5875dbaaa70653877f29847cc20357b31fc940d64",
+    "tools/test_native_album_regression_record.py": "a309b18be176413bf9c580cf7efcc0f9842af4ad5c3c9d0be703dbd14dde67f0",
+    ".github/workflows/ci.yml": "929bec0d79a329333164a5806afe394be333e0ebec92a1a6c08551f0f6ad18d5",
+    "docs/evidence/native-album-v14/revision-0/record.json": "58cb8f25ea5d3487618b42de8af2ae6b4a2196f8f702bf5645bf3e798907fa21",
+    "docs/evidence/native-album-v14/revision-0/report.md": "1f8d34410279f9fbf1a1e94ebd730367971d1d0bd6090625913ed6fc18a67633",
+    "docs/evidence/native-album-v14/revision-0/SHA256SUMS": "ddc1cd9c826f07a104e387cb7c9e8b73972d88f18492881f3a221a1853df1587",
+    "docs/evidence/native-album-v14/revision-1/record.json": "d74ad36d64ee99cad2c123931f1184ac2d6d2db88a21f9c864986158b1248e02",
+    "docs/evidence/native-album-v14/revision-1/report.md": "0eacb726266e940762bf43ea5f441c85ec9913ab734f2f34195fdb2c9df4fdf0",
+    "docs/evidence/native-album-v14/revision-1/SHA256SUMS": "9fac8805f144523530e3fd922458ee2b13b15f6035315529564575f4580f7ac0"
+  },
+  "delivery_verification_receipts": {
+    "curl-green": {
+      "executed": true,
+      "pid": 67140,
+      "exit_code": 0,
+      "sha256": "de2b882c440dd254ba8f64a43d14890b7bd1289da4cd9f5ad87147713c5958c6",
+      "local_raw_basename": "curl-green.log",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    "ci-native-runtime": {
+      "executed": true,
+      "pid": 70250,
+      "exit_code": 0,
+      "sha256": "8687cb97e5f14187308eb5ef3d6df77d845398058835273b2218a9d0196cc9f4",
+      "local_raw_basename": "ci-native-runtime.log",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    "preview-entry-regression": {
+      "executed": true,
+      "pid": 70566,
+      "exit_code": 0,
+      "sha256": "4ea19dea47806a9531a58f696ca218d431add59e8cee8c72ffec42bf6288de26",
+      "local_raw_basename": "preview-entry-regression.log",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    "portable-curl-live": {
+      "executed": true,
+      "pid": 69520,
+      "exit_code": 0,
+      "sha256": "51091ff139d97e7999148f71333a86f0f5d94cc8459bb1d342ae93d9bb0ad0b4",
+      "local_raw_basename": "portable-curl-live.log",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    "export-revision-0": {
+      "executed": true,
+      "pid": 69322,
+      "exit_code": 0,
+      "sha256": "407a45e4e43c8d2d777d6a2ae58c1933ce3da6c65b18b6e3a4cb32908434c04d",
+      "local_raw_basename": "export-revision-0.log",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    "export-revision-1": {
+      "executed": true,
+      "pid": 69507,
+      "exit_code": 0,
+      "sha256": "dcc5e80495e6eda972ba8ffb3f2996884eb1423252fddf924efa4b20b7f94365",
+      "local_raw_basename": "export-revision-1.log",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    "all-record-window-tests-r2": {
+      "executed": true,
+      "pid": 72110,
+      "exit_code": 0,
+      "sha256": "694338995a0954d5eef124261338de1e3959dab75165050a064de5fd0706a846",
+      "local_raw_basename": "all-record-window-tests-r2.log",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    }
+  },
+  "portable_curl_actual_public_result": {
+    "origin": "https://album-test.holiness.uk",
+    "tlsValidation": true,
+    "verified": {
+      "single-root": {
+        "downloaded": 1,
+        "unique_sha256": [
+          "4c642852c890d6f437102b78013e5d9f7ec1d599fd5681bdba770aa67477b463"
+        ]
+      },
+      "root": {
+        "downloaded": 21,
+        "unique_sha256": [
+          "33b94dd1f528775b754fda0c094a93c44be846a8d9bf997b4c422331e7b94320",
+          "83cfac646dee63a4d3320a6375c4e95dbf4514b944ee7ae89677827de6e3a557",
+          "b5bfdb116d529d9c33622461c800545cdf55e58cdf2a6ccc5a35248c2f70a62d",
+          "badbb7300f7170de6b7fd4eb50dda60bf15d041797598501343ac11e06476b30",
+          "ba628ff0923fc3aa7b0ff26e1bf2a0f5328b6e63258aec4f9b41dd8db554cfc3",
+          "6f6be883c6b261ca5a64c5e2a67796bd2f0fc67b1f0a1ff4f185570fc89bb14a",
+          "7d52180d0c05a3caf322ed219d392fdac8898fb1e8cf4eaa10695235db904ded",
+          "42b4c4d99895050e9633f052696f5dc87bdb7595e3795f3b253a231f73089f38",
+          "ba8d197460051336ed335fa73b69d849ac4cb03e46aa9ac482037b89e28c10d5",
+          "a0c78ed20eb36851db1363037474ad2c400d80831e95fe2c27ea22dd400abde6",
+          "67d1f1984ff1b048b1019b8aa4586fcb7ded1e05c53ec7c7d2347351a2743f60",
+          "97772872d4a2f49d6150e077eaa2c72b5747a7415826890c076f9ce6e94ea5ae",
+          "1342661e8a5190cd24f7a872d97c0b794ea7cb69e39b20044d3f19c8bcafc685",
+          "a4c430fa08f643c184c810da2c214a6bb31ebd2be09e765fd0a67824f884e813",
+          "02a0a5dcf76a60bf66ef1dee92378b8748aa87b937b6b54e8f9ac4011f413ab4",
+          "19196d7946e3f461609d15dde0944e920b043ac6a45350816edb0845be7e3c1d",
+          "b2feaaafa95b6c3f3bf9aea7d87d42faef0de50debcf0c8e35519f1a33677b9c",
+          "e15361cae9be5176a8d3c4f1000ea70738019211cf3084ee1a7339a5dcd559b4",
+          "60e8495eb7b4cdc037ab4f1f50e2a3cbf35dad28ce78b243270fb580432893e6",
+          "41406f0b073f6b89bf9a97e5424de87ec337124343d731af4743cea1242e75cc",
+          "607eb16962320dfe317ec67fdfa13d4f1d97d863b0d57e8b138a544a496c2113"
+        ]
+      }
+    },
+    "rejected_previous_identities": 8,
+    "nativePhone": "NOT_RUN",
+    "paidModelCalls": 0,
+    "transport": "ACTUAL_CURL_VERIFIED_HTTPS",
+    "authoritative_checker_sha256": "bca9e6e7a918cfd34a3af00b23ca322434f96614ce3aa5bf3798d2b7958191a9",
+    "actual_child_processes": 40,
+    "failed_connection_attempts_retained": 0
+  },
+  "historical_repository_record_sha256": {
+    "docs/NATIVE_ALBUM_DEVICE_VALIDATION.md": "b5a5c1e20d4b9c926bcad054ffd6dffecd7dc06bc8ff984c7eb884c89bd9bf70",
+    "docs/NATIVE_ALBUM_TEST_SERVICE.md": "fe8a36a1d6751a3d251119ad52d3d56b54b824abb00ba589eb9eb1ee06b4d030",
+    "docs/NATIVE_ALBUM_V10_DEVICE_VALIDATION.md": "8bfaf8bc576954a02575903bf6371dcb4bbcf4c2268b5c54751ce73f81001033",
+    "docs/NATIVE_ALBUM_V13_NAVIGATION_VALIDATION.md": "9cd99e24cde6a62531f1bb76cd5440f48a32379228c3df70120ffc6be0b73362",
+    "docs/evidence/native-album-device-2026-11-04.json": "d64d646f3b125e4ddd1a4a0a5f490e57e814720cef17e30a1f4043a5fb7c339f",
+    "docs/evidence/native-album-v10/SHA256SUMS": "c893cbabd39f5ac2f2cf73662e93bed6d61c09a84ef256f0957f787c7c1bf18c",
+    "docs/evidence/native-album-v10/https-window-4.jsonl": "081fdb8127116f6b2e981024e913f87b5fe95a237121174d45a60bd6c9851939",
+    "docs/evidence/native-album-v10/https-window-5.jsonl": "70b8a8a6d38df0d55ff36e5d3c1fef4ec14d16e5b8d3afb4f48583f377283433",
+    "docs/evidence/native-album-v10/revision-1/SHA256SUMS": "cd916c46ac1bf8797aa8a6db5dbfb2e69f88dbc5906545e49cbab79ddb4cf49b",
+    "docs/evidence/native-album-v10/revision-1/record.json": "f79fcf36c42cec21adff0e7eb06a2e9c09649ec72b26aabd023fc9caec1adec2",
+    "docs/evidence/native-album-v10/revision-1/report.md": "ae8a7a788a7eae790001c3407e323127bc7848733cf1a38fac40e763e9f7dd0b",
+    "docs/evidence/native-album-v10/revision-2/SHA256SUMS": "154f8e630459157006d7d5be03f85c0a25d57d8de939674210b3bbcad8d1aeff",
+    "docs/evidence/native-album-v10/revision-2/record.json": "a9f322302613ee48cc6c3c6ef72f93396088bb68d16c83fe609fb67ae5dd3055",
+    "docs/evidence/native-album-v10/revision-2/report.md": "7a40d1ba9f618dfcebc8de77281d0a6a7f751aa77a3137557d8d45ff67179267",
+    "docs/evidence/native-album-v10/tool-provenance.json": "4c82fbb3c1e2d38dae7c0eac7010b2f4a21eed2138bf429b9d10fd2f9fc4a456",
+    "docs/evidence/native-album-v13-navigation/SHA256SUMS": "f1b0cae62d2fbacc34940781fab0238e28fa72e77e91da8dc86a8adb40e518c6",
+    "docs/evidence/native-album-v13-navigation/record.json": "816f7a6040d2eecfb9226e70ffbd069bec2d45c30431be0125d82ab3182a6d50"
+  },
+  "boundaries": [
+    "Current native seven-case outcomes are exact operator confirmations, not agent-direct or independent certification.",
+    "Portable curl tool executed real public HTTPS reads and local real Node TLS/SQLite integration; it never writes phone photos.",
+    "Historical host nativePhone NOT_RUN remains unchanged and does not replace the separately reported phone outcomes.",
+    "Account-bound driver/DNS scripts, identities, environment preimages, request headers and raw private captures remain outside Git.",
+    "Original v12 initial0/21cause remains UNKNOWN. No new phone execution or production certification is claimed by this Git delivery."
+  ]
+}
