@@ -69,6 +69,7 @@ jobs:
           python3 -m unittest discover -s tools -p 'test_native_album_*.py' -v
           python3 tools/native-album-phone-record.py verify --output docs/evidence/native-album-v10/revision-1
           python3 tools/native-album-phone-record.py verify --output docs/evidence/native-album-v10/revision-2
+          python3 tools/native-album-regression-history.py --prepared docs/evidence/native-album-v15/revision-0 --confirmed docs/evidence/native-album-v15/revision-1 --source-proof docs/evidence/native-album-v15/source-verification.json
       - name: Verify photo storage migrations and isolated Vercel artifact
         run: APP_ENV=test node --test --test-concurrency=1 tools/photo-service-migrate.test.mjs tools/vercel-photo-package.test.mjs tools/vercel-identity-package.test.mjs
       - name: Verify native mobile production shell
