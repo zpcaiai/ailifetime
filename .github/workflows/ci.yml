@@ -51,6 +51,10 @@ jobs:
           distribution: temurin
           java-version: "21"
       - run: pnpm install --frozen-lockfile
+      - name: Provision least-privilege core SQL for B15 native tests
+        env:
+          APP_ENV: test
+        run: node tools/b15-postgres-test-setup.mjs
       - run: pnpm check
       - name: Verify isolated native album build and authenticated transport
         run: APP_ENV=test node --test --test-concurrency=1 tools/native-album-build.test.mjs tools/native-album-serverless.test.mjs

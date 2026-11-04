@@ -245,6 +245,126 @@
       "path": "evidence/B15/vercel-local-resume-evidence.json",
       "change": "added",
       "reason": "Existingpath localmaintenance only; formalB15 blocked"
+    },
+    {
+      "path": "docs/B15_QUALITY_OPERATIONS.md",
+      "change": "added",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "packages/capabilities/src/photo-quality-v2.test.ts",
+      "change": "added",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "packages/core/src/quality-traffic.test.ts",
+      "change": "added",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "packages/core/src/quality-traffic.ts",
+      "change": "added",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "services/api/src/photo-quality-governance.ts",
+      "change": "added",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "services/api/src/photo-quality-review.ts",
+      "change": "added",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "services/api/test/photo-quality-generation-stop.test.mjs",
+      "change": "added",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "services/api/test/photo-quality-governance.test.mjs",
+      "change": "added",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "services/api/test/photo-quality-native-fixture.test.mjs",
+      "change": "added",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "services/api/test/photo-quality-operations.http.test.mjs",
+      "change": "added",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "services/api/test/photo-quality-publication.test.mjs",
+      "change": "added",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "services/api/test/photo-quality-review.test.mjs",
+      "change": "added",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "services/api/test/photo-quality-v2-fixtures.mjs",
+      "change": "added",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "services/api/test/photo-quality-v2.http.test.mjs",
+      "change": "added",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "services/api/test/photo-score-v2.test.mjs",
+      "change": "added",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "services/workers/src/quality-stop.test.ts",
+      "change": "added",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "tools/b15-postgres-test-setup.mjs",
+      "change": "added",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "packages/capabilities/src/external-business-event-reducers.ts",
+      "change": "modified",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "packages/core/src/index.ts",
+      "change": "modified",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "packages/core/src/timeline-results.ts",
+      "change": "modified",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "services/api/src/dispatch.ts",
+      "change": "modified",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "services/api/src/timeline-seedream.ts",
+      "change": "modified",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "services/workers/src/index.ts",
+      "change": "modified",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
+    },
+    {
+      "path": "evidence/B15/quality-operations-local.json",
+      "change": "added",
+      "reason": "Local v2 quality operations; formal B15 remains blocked"
     }
   ],
   "entrypoints": [
@@ -252,12 +372,18 @@
     "configuredPhotoScoring",
     "HttpPhotoScorer.evaluate",
     "TimelinePhotoQualityService.evaluate",
-    "B15.evaluateQuality"
+    "B15.evaluateQuality",
+    "GET /v1/quality/reviews",
+    "GET /v1/quality/reviews/{id}/preview/{kind}",
+    "POST /v1/quality/reviews/{id}/decisions",
+    "GET /v1/quality/controls",
+    "POST /v1/quality/controls/{id}/resume"
   ],
   "contracts": [
     "services/api/openapi.yaml",
     "services/api/src/photo-score-contract.ts",
-    "docs/PHOTO_SCORER_LOCAL.md"
+    "docs/PHOTO_SCORER_LOCAL.md",
+    "docs/B15_QUALITY_OPERATIONS.md"
   ],
   "migrations": [],
   "tests": [
@@ -359,6 +485,15 @@
       "status": "passed",
       "artifact": "evidence/B15/vercel-local-resume-evidence.json",
       "duration_ms": null
+    },
+    {
+      "name": "v2-local-quality-operations-regression",
+      "scope": "integration",
+      "command": "python3 /Users/stephen/.codex/visualizations/2026/11/02/01a19b90-24e5-7591-8205-438965d262a6/b15-operations-20261104/final-regression.py",
+      "exit_code": 0,
+      "status": "passed",
+      "artifact": "evidence/B15/quality-operations-local.json",
+      "duration_ms": null
     }
   ],
   "evidence": [
@@ -427,6 +562,21 @@
       "contains_sensitive_data": false,
       "redaction": null,
       "notes": "Includes unchangedfailedformalB15 and priorDPtimeout; neither promotedtoPASS."
+    },
+    {
+      "type": "test-result",
+      "path": "evidence/B15/quality-operations-local.json",
+      "sha256": "8277ac8b57ee4b9615996742b8140215692a755ff985c899dd473f659bfd9647",
+      "created_at": "2026-11-04T01:32:29.787182+00:00",
+      "producer": "Actual SQLite/PostgreSQL/HTTP and deterministic AST processes; synthetic model boundary only",
+      "supports": [
+        "B15-R01",
+        "B15-R04",
+        "B15-R05"
+      ],
+      "contains_sensitive_data": false,
+      "redaction": null,
+      "notes": "Local protocol/review/stop implemented and tested; no actual model/golden/production/device acceptance."
     }
   ],
   "traceability": [
@@ -449,9 +599,10 @@
       ],
       "evidence": [
         "evidence/B15/photo-scorer-local-evidence.json",
-        "evidence/B15/formal-gap-evidence.json"
+        "evidence/B15/formal-gap-evidence.json",
+        "evidence/B15/quality-operations-local.json"
       ],
-      "notes": "Actual original/output JPEG/PNG bytes reach the external-model boundary and then B15; per-person identity/age and photorealism reports gated. No real scoring model or quality effect accepted."
+      "notes": "Actual original/output JPEG/PNG bytes reach the external-model boundary and then B15; per-person identity/age and photorealism reports gated. No real scoring model or quality effect accepted. Current local v2 operations: see docs/B15_QUALITY_OPERATIONS.md; protocol/aesthetic-only two-human review and persistent SQL regression stop are wired and locally exercised. Real-model calibration, staffed production effects and acceptance remain NOT_RUN."
     },
     {
       "requirement_id": "B15-R02",
@@ -506,9 +657,10 @@
         "services/api/test/photo-score-stream.test.mjs"
       ],
       "evidence": [
-        "evidence/B15/photo-scorer-local-evidence.json"
+        "evidence/B15/photo-scorer-local-evidence.json",
+        "evidence/B15/quality-operations-local.json"
       ],
-      "notes": "Low scores/review cannot publish; actual21 partial recovery preserves originals/siblings. No automatic inference retry; stable key and persisted report reuse. Real upstream dedup/cost, alternate providers, repair and staffed review not accepted."
+      "notes": "Low scores/review cannot publish; actual21 partial recovery preserves originals/siblings. No automatic inference retry; stable key and persisted report reuse. Real upstream dedup/cost, alternate providers, repair and staffed review not accepted. Current local v2 operations: see docs/B15_QUALITY_OPERATIONS.md; protocol/aesthetic-only two-human review and persistent SQL regression stop are wired and locally exercised. Real-model calibration, staffed production effects and acceptance remain NOT_RUN."
     },
     {
       "requirement_id": "B15-R05",
@@ -526,9 +678,10 @@
         "services/api/test/photo-score.http.test.mjs"
       ],
       "evidence": [
-        "evidence/B15/photo-scorer-local-evidence.json"
+        "evidence/B15/photo-scorer-local-evidence.json",
+        "evidence/B15/quality-operations-local.json"
       ],
-      "notes": "Model/policy/request/response hashes, dimensions and per-person age confidence persisted without pixels/features. Production model/template regression-stop remains unwired/unaccepted."
+      "notes": "Model/policy/request/response hashes, dimensions and per-person age confidence persisted without pixels/features. The previous snapshot had no regression stop. Current code now wires persistent stop into scoring, generation, worker send and signed publication; actual production calibration/effect remains unaccepted. Current local v2 operations: see docs/B15_QUALITY_OPERATIONS.md; protocol/aesthetic-only two-human review and persistent SQL regression stop are wired and locally exercised. Real-model calibration, staffed production effects and acceptance remain NOT_RUN."
     }
   ],
   "risks": [
@@ -542,10 +695,11 @@
   ],
   "follow_ups": [
     "Provide actual authorized scorer model service and pinned weights, real generated-photo lineage and consented golden data under explicit free or authorized budget.",
-    "Calibrate and assess per-person identity/age/photorealism across21 ages, couple and wardrobe conditions and wire production regression stopping/manual review.",
+    "Calibrate and assess per-person identity/age/photorealism across21 ages, couple and wardrobe conditions and accept the implemented local regression stopping/manual review on actual production traffic.",
     "Provide approved tenant-scoped HTTPS media service and physical WeChat device for permission/save acceptance.",
     "See docs/B15_FORMAL_GAPS.md: current observed baseline now exists; validated B00/B14 completion reports and actual model/golden/calibration/review/regression-stop evidence remain absent.",
-    "See docs/B15_LOCAL_RESUME.md and evidence/B15/vercel-local-resume-evidence.json for restoredVercelbuild, garmentminimum and cacheIDrevision; formaldependency/model/golden/aesthetic/review/trafficstop boundaries unchanged."
+    "See docs/B15_LOCAL_RESUME.md and evidence/B15/vercel-local-resume-evidence.json for restoredVercelbuild, garmentminimum and cacheIDrevision; formaldependency/model/golden/aesthetic/review/trafficstop boundaries unchanged.",
+    "Local v2 aesthetic/review/stop implementation now exists; perform actual calibration, staffed review and production stop/recovery acceptance after authorized prerequisites. See docs/B15_QUALITY_OPERATIONS.md."
   ],
   "blockers": [
     "Full B15 remains BLOCKED_INCOMPLETE; only local scorer integration and maintenance are verified.",
@@ -559,5 +713,13 @@
     "no_real_customer_media": true,
     "no_secrets": true,
     "clean_room_reproducible": false
+  },
+  "local_quality_operations": {
+    "status": "VERIFIED_LOCAL_ONLY",
+    "artifact": "evidence/B15/quality-operations-local.json",
+    "sha256": "8277ac8b57ee4b9615996742b8140215692a755ff985c899dd473f659bfd9647",
+    "formal_status": "BLOCKED_INCOMPLETE",
+    "notes": "Versioned aesthetic protocol, real SQL/HTTP review and persistent traffic stop locally implemented. Actual calibration/models/goldens, production review/stop and device remain unaccepted.",
+    "tests": "764 affected package tests +9 album transport tests, 0 failed/skipped/cancelled; formal acceptance remains blocked"
   }
 }

@@ -1,9 +1,10 @@
 import { isDeepStrictEqual } from "node:util";
-import { canonicalJson, DomainError, bindTimelineResultManifest, parseTimelineImageAsset, type ActorContext, type JsonObject, type LifeTimeMachineRuntimePort, type RecordEnvelope, type TimelineImageAsset } from "@ltm/core";
+import { canonicalJson, DomainError, assertQualityTrafficAllowed, bindTimelineResultManifest, parseTimelineImageAsset, type ActorContext, type JsonObject, type LifeTimeMachineRuntimePort, type RecordEnvelope, type TimelineImageAsset } from "@ltm/core";
 import type { CapabilityRegistry } from "@ltm/capabilities";
 import type { TimelineArtifactReader } from "./timeline-artifacts.js";
 import type { PhotoScorer } from "./photo-score-client.js";
-import { assessPhotoResponse, digest, makePhotoScoreRequest, validatePhotoPolicy, type PhotoContext, type PhotoPolicy, type PhotoScoreRequest } from "./photo-score-contract.js";
+import { assessPhotoResponse, digest, makePhotoScoreRequest, photoControlKey, validatePhotoPolicy, type PhotoContext, type PhotoPolicy, type PhotoScoreRequest } from "./photo-score-contract.js";
+import {PhotoQualityGovernance} from "./photo-quality-governance.js";
 
 const COMMANDS="generation.timeline-commands", REPORTS="media.quality-decisions";
 function invalid(message:string):never { throw new DomainError("VALIDATION_FAILED",message); }
@@ -24,6 +25,7 @@ export class TimelinePhotoQualityService {
     private readonly media:TimelineArtifactReader,private readonly scorer:PhotoScorer,policies:PhotoPolicy[],private readonly channel:string) {
     this.policies=policies.map(validatePhotoPolicy);
     if(this.policies.length===0 || this.policies.some(p=>p.context.channel!==channel)) throw new DomainError("CONFIGURATION_INVALID","photo calibration channel is missing or inconsistent");
+    for(const p of this.policies.filter(p=>p.protocolVersion===2))if(this.policies.some(other=>other.protocolVersion===2&&photoControlKey(other)===photoControlKey(p)&&!isDeepStrictEqual(other.regression,p.regression)))throw new DomainError("CONFIGURATION_INVALID","one model stream cannot have conflicting regression policies");
   }
   private async load(actor:ActorContext,commandId:string,targetAge:number) {
     if(!actor.roles.includes("service_account") || actor.purpose!=="age_transformation") throw new DomainError("AUTH_FORBIDDEN","photo scoring requires an age-transformation service account");
@@ -74,6 +76,12 @@ export class TimelinePhotoQualityService {
   async evaluate(actor:ActorContext,commandId:string,targetAge:number,assetValue:unknown) {
     const asset=parseTimelineImageAsset(assetValue),loaded=await this.load(actor,commandId,targetAge);
     const {plan,intake,participantIds,reference,context,policy}=loaded;
+    const governance=new PhotoQualityGovernance(this.runtime);
+    const observe=async()=>{
+      if(policy.protocolVersion!==2)return {};
+      const state=await governance.observe(actor,workId,policy,asset);
+      return {qualityControlKey:state.control.id,trafficState:state.control.data.state,...(state.review?{reviewCaseId:state.review.id}:{})};
+    };
     const workId=photoQualityId(actor.tenantId,commandId,targetAge,asset.sha256,reference.sha256,policy);
     await this.runtime.assertConsent(actor,{participantIds,purpose:"quality_assurance",scope:{resource:`${REPORTS}:${workId}`,action:"process"}});
     const mediaOwner={tenantId:actor.tenantId,actorId:loaded.ownerActorId};
@@ -93,10 +101,12 @@ export class TimelinePhotoQualityService {
           binding.sourceAssetId!==reference.id || binding.assetId!==asset.id || binding.outputSha256!==asset.sha256 || binding.targetAge!==targetAge || evidence.requestSha256!==request.requestSha256 || evidence.sourceSha256!==reference.sha256 || evidence.modelSha256!==policy.modelSha256 || evidence.calibrationId!==policy.id ||
           evidence.calibrationSha256!==digest(canonicalJson(policy)) || !isDeepStrictEqual(evidence.calibration,policy)) throw new DomainError("EVENT_FINGERPRINT_CONFLICT","cached photo quality binding changed");
       await current();
-      return {qualityResultId:workId,decision:cached.data.decision,failedDimensions:cached.data.failedDimensions,modelVersion:policy.modelVersion,calibrationId:policy.id,reused:true};
+      return {qualityResultId:workId,decision:cached.data.decision,failedDimensions:cached.data.failedDimensions,modelVersion:policy.modelVersion,calibrationId:policy.id,reused:true,...await observe()};
     }catch(error){if(!(error instanceof DomainError && error.code==="RESOURCE_NOT_FOUND"))throw error;}
     const before=await current();
     if(!["requested","dispatched","acknowledged"].includes(String(before.command.data.commandState)))throw new DomainError("VERSION_CONFLICT","photo scoring cannot create new quality after terminal delivery");
+    await assertQualityTrafficAllowed(this.runtime,actor,plan);
+    if(policy.protocolVersion===2)await governance.assertActive(actor,policy);
     const fingerprint=digest(JSON.stringify(request)),raw=await this.scorer.evaluate(request);
     if(digest(JSON.stringify(request))!==fingerprint)throw new DomainError("DEPENDENCY_UNAVAILABLE","photo scorer mutated the bound request");
     const result=assessPhotoResponse(raw,request,policy);
@@ -105,7 +115,7 @@ export class TimelinePhotoQualityService {
     await this.registry.execute(this.runtime,"B15",{actor,idempotencyKey:`photo-score:${workId}`,input:{workId,participantIds,modelVersion:result.modelVersion,
       artifactBinding:{sourceAssetId:reference.id,assetId:asset.id,outputSha256:asset.sha256,targetAge,...(plan.wardrobeBinding===undefined?{}:{wardrobeBinding:plan.wardrobeBinding})},
       scores:result.scores,thresholds:result.thresholds,participantAssessments:result.participantAssessments,decision:result.decision,
-      photoScoreEvidence:{schemaVersion:"ltm.photo-score.evidence.v1",requestSha256:request.requestSha256,responseSha256:digest(JSON.stringify(raw)),sourceSha256:reference.sha256,modelSha256:policy.modelSha256,calibrationId:policy.id,calibrationSha256:digest(canonicalJson(policy)),calibration:JSON.parse(canonicalJson(policy)) as JsonObject,ages:result.ages}}});
-    return {qualityResultId:workId,decision:result.decision,failedDimensions:result.failedDimensions,modelVersion:policy.modelVersion,calibrationId:policy.id,reused:false};
+      photoScoreEvidence:{schemaVersion:policy.protocolVersion===2?"ltm.photo-score.evidence.v2":"ltm.photo-score.evidence.v1",...(policy.protocolVersion===2?{commandId,controlKey:photoControlKey(policy)}:{}),requestSha256:request.requestSha256,responseSha256:digest(JSON.stringify(raw)),sourceSha256:reference.sha256,modelSha256:policy.modelSha256,calibrationId:policy.id,calibrationSha256:digest(canonicalJson(policy)),calibration:JSON.parse(canonicalJson(policy)) as JsonObject,ages:result.ages}}});
+    return {qualityResultId:workId,decision:result.decision,failedDimensions:result.failedDimensions,modelVersion:policy.modelVersion,calibrationId:policy.id,reused:false,...await observe()};
   }
 }

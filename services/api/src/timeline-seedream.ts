@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { requireWardrobeSource } from "@ltm/capabilities";
-import { canonicalJson, DomainError, parseTimelineImageAsset, type ActorContext, type JsonObject, type LifeTimeMachineRuntimePort, type TimelineImageAsset } from "@ltm/core";
+import { assertQualityTrafficAllowed, canonicalJson, DomainError, parseTimelineImageAsset, type ActorContext, type JsonObject, type LifeTimeMachineRuntimePort, type TimelineImageAsset } from "@ltm/core";
 import type { TimelineArtifactReader } from "./timeline-artifacts.js";
 import { SeedreamImageGenerator, SEEDREAM_MODEL } from "./seedream.js";
 
@@ -53,10 +53,12 @@ export class TimelineSeedreamService {
 
   async generate(actor: ActorContext, commandId: string, targetAge: number) {
     const loaded = await this.load(actor, commandId, targetAge), { plan, node, source, edit, owner } = loaded;
+    await assertQualityTrafficAllowed(this.runtime,actor,plan);
     const planSha256 = sha(canonicalJson(plan));
     const current = async () => {
       const fresh = await this.load(actor, commandId, targetAge);
       if (fresh.intake.version !== loaded.intake.version || fresh.command.ownerActorId !== owner.actorId || sha(canonicalJson(fresh.plan)) !== planSha256) throw new DomainError("VERSION_CONFLICT", "generation authorization or plan changed");
+      await assertQualityTrafficAllowed(this.runtime,actor,fresh.plan);
     };
     const bytes = await this.originals.read(source, owner);
     let editBytes: Uint8Array | undefined;

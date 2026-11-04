@@ -1,5 +1,5 @@
 import { generateKeyPairSync, createHash } from 'node:crypto';
-import { LifeTimeMachineRuntime, participantEvidenceScope, signExternalEvidence, canonicalBusinessClaimsSha256, canonicalBusinessEventSha256, signConsentPolicyCatalog } from '@ltm/core';
+import { LifeTimeMachineRuntime, PostgresLifeTimeMachineRuntime, participantEvidenceScope, signExternalEvidence, canonicalBusinessClaimsSha256, canonicalBusinessEventSha256, signConsentPolicyCatalog } from '@ltm/core';
 import { capabilityEvidenceScope } from '../../../packages/providers/dist/index.js';
 import { createCapabilityRegistry, externalBusinessEventReducerRegistry } from '@ltm/capabilities';
 import { createCapabilityValidInputFixtures } from '../../../packages/capabilities/dist/valid-fixtures.js';
@@ -23,18 +23,19 @@ export async function timelineFixture(databasePath = ':memory:', options = {}) {
   } : {allowLegacyConsentPolicy:true};
   const runtimeOptions = { databasePath, ...verifiedPolicy, evidencePolicy: 'development', evidenceEnvironment: 'sandbox',
     trustedEvidenceKeys: ['identity-registry', 'generation-engine'].map(provider => ({ issuer: 'test-authority', provider, keyId: 'test-key', algorithm: 'Ed25519', publicKeyPem: pair.publicKey.export({ type: 'spki', format: 'pem' }).toString(), allowedScopes: ['*'], allowedEnvironments: ['sandbox'] })) };
-  const runtime = new LifeTimeMachineRuntime(runtimeOptions);
-  const actor = { actorId: 'user', tenantId: 'tenant', roles: ['consumer'], purpose: 'age_transformation', requestId: 'timeline-test' };
+  const runtime = options.postgresConnectionString ? await PostgresLifeTimeMachineRuntime.connect({...runtimeOptions,connectionString:options.postgresConnectionString}) : new LifeTimeMachineRuntime(runtimeOptions);
+  const tenantId=options.tenantId??'tenant';
+  const actor = { actorId: 'user', tenantId, roles: ['consumer'], purpose: 'age_transformation', requestId: 'timeline-test' };
   const service = { ...actor, actorId: 'service', roles: ['platform_admin', 'service_account'], permissions: ['*'], stepUp: true, operationId: 'timeline-fixture-service-operation' };
   const expiresAt = new Date(Date.now()+3600000).toISOString();
   const participantIds = options.couple ? ['user', 'partner'] : ['user'];
   const consents = [];
   for (const participantId of participantIds) {
-  const mutation = { operation: 'participant.register', tenantId: 'tenant', participantId, ownerActorId: participantId, minorStatus: 'adult', expiresAt, expectedVersion: null };
-  const identityEvidence = signExternalEvidence({ version: 'ltm.external-evidence.v1', evidenceId: `identity-evidence-${participantId}`, tenantId: 'tenant', issuer: 'test-authority', provider: 'identity-registry', environment: 'sandbox', scope: participantEvidenceScope(mutation), artifactSha256: 'a'.repeat(64), issuedAt: new Date(Date.now()-1000).toISOString(), expiresAt, nonce: `identity-nonce-00000001-${participantId}`, replayPolicy: 'single_use', algorithm: 'Ed25519', keyId: 'test-key' }, privateKey);
-  runtime.registerExternalEvidence(service, { evidence: identityEvidence, idempotencyKey: `identity-evidence-${participantId}` });
-  runtime.registerParticipant(service, { ...mutation, evidenceId: identityEvidence.evidenceId, idempotencyKey: `identity-register-${participantId}` });
-  const consent = runtime.grantConsent({...actor, actorId: participantId}, { participantId, grantorCapacity: 'self', purpose: actor.purpose, scope: { resource: 'media.asset:source', actions: ['ingest','transform'] }, policyVersion, ...(options.verifiedConsent ? {} : {evidenceHash:'b'.repeat(64)}), idempotencyKey: `age-consent-${participantId}` });
+  const mutation = { operation: 'participant.register', tenantId, participantId, ownerActorId: participantId, minorStatus: 'adult', expiresAt, expectedVersion: null };
+  const identityEvidence = signExternalEvidence({ version: 'ltm.external-evidence.v1', evidenceId: `identity-evidence-${participantId}`, tenantId, issuer: 'test-authority', provider: 'identity-registry', environment: 'sandbox', scope: participantEvidenceScope(mutation), artifactSha256: 'a'.repeat(64), issuedAt: new Date(Date.now()-1000).toISOString(), expiresAt, nonce: `identity-nonce-00000001-${participantId}`, replayPolicy: 'single_use', algorithm: 'Ed25519', keyId: 'test-key' }, privateKey);
+  await runtime.registerExternalEvidence(service, { evidence: identityEvidence, idempotencyKey: `identity-evidence-${participantId}` });
+  await runtime.registerParticipant(service, { ...mutation, evidenceId: identityEvidence.evidenceId, idempotencyKey: `identity-register-${participantId}` });
+  const consent = await runtime.grantConsent({...actor, actorId: participantId}, { participantId, grantorCapacity: 'self', purpose: actor.purpose, scope: { resource: 'media.asset:source', actions: ['ingest','transform'] }, policyVersion, ...(options.verifiedConsent ? {} : {evidenceHash:'b'.repeat(64)}), idempotencyKey: `age-consent-${participantId}` });
   consents.push(consent);
   }
   const consent = consents[0];
@@ -50,17 +51,26 @@ export async function timelineFixture(databasePath = ':memory:', options = {}) {
     const current = runtime.getExternalCommand(service, commandId), op = `op-${commandId}`;
     if (current.state === 'requested') runtime.transitionExternalCommand(service, { commandId, batchId: 'B14', operation: 'createTimeline', aggregateCollection: 'generation.timeline-commands', aggregateId: commandId, toState: 'dispatched', idempotencyKey: `dispatch-${commandId}` });
     if (state === 'succeeded' && runtime.getExternalCommand(service,commandId).state === 'dispatched') runtime.transitionExternalCommand(service, { commandId, batchId:'B14', operation:'createTimeline', aggregateCollection:'generation.timeline-commands', aggregateId:commandId, toState:'acknowledged', providerOperationId:op, idempotencyKey:`ack-${commandId}` });
-    const claims = { providerOperationId: op, ...(resultManifest ? {resultManifest} : {}) }, artifactSha256 = createHash('sha256').update(JSON.stringify(claims)).digest('hex');
-    const binding = { tenantId:'tenant', batchId:'B14', operation:'createTimeline', kind:'timeline-generation-result', provider:'generation-engine', artifactSha256, environment:'sandbox', subjectId:commandId };
-    const unsigned = { version:'ltm.external-business-event.v1', eventId:`event-${++sequence}`, tenantId:'tenant', batchId:'B14', operation:'createTimeline', provider:'generation-engine', subjectType:'timeline-job', subjectId:commandId, eventType:`external-command.${state}`, providerOccurredAt:new Date().toISOString(), sequence, correlationId:commandId, artifactSha256, evidenceId:`result-evidence-${sequence}`, evidenceScope:capabilityEvidenceScope(binding), canonicalClaims:claims, canonicalClaimsSha256:canonicalBusinessClaimsSha256(claims) };
+    return signedCallback(commandId,state,resultManifest);
+  }
+  async function callbackAsync(commandId,state,resultManifest){
+    const current=await runtime.getExternalCommand(service,commandId),op=`op-${commandId}`;
+    if(current.state==='requested')await runtime.transitionExternalCommand(service,{commandId,batchId:'B14',operation:'createTimeline',aggregateCollection:'generation.timeline-commands',aggregateId:commandId,toState:'dispatched',idempotencyKey:`dispatch-${commandId}`});
+    if(state==='succeeded'&&(await runtime.getExternalCommand(service,commandId)).state==='dispatched')await runtime.transitionExternalCommand(service,{commandId,batchId:'B14',operation:'createTimeline',aggregateCollection:'generation.timeline-commands',aggregateId:commandId,toState:'acknowledged',providerOperationId:op,idempotencyKey:`ack-${commandId}`});
+    return signedCallback(commandId,state,resultManifest);
+  }
+  function signedCallback(commandId,state,resultManifest){
+    const claims = { providerOperationId: `op-${commandId}`, ...(resultManifest ? {resultManifest} : {}) }, artifactSha256 = createHash('sha256').update(JSON.stringify(claims)).digest('hex');
+    const binding = { tenantId, batchId:'B14', operation:'createTimeline', kind:'timeline-generation-result', provider:'generation-engine', artifactSha256, environment:'sandbox', subjectId:commandId };
+    const unsigned = { version:'ltm.external-business-event.v1', eventId:`event-${++sequence}`, tenantId, batchId:'B14', operation:'createTimeline', provider:'generation-engine', subjectType:'timeline-job', subjectId:commandId, eventType:`external-command.${state}`, providerOccurredAt:new Date().toISOString(), sequence, correlationId:commandId, artifactSha256, evidenceId:`result-evidence-${sequence}`, evidenceScope:capabilityEvidenceScope(binding), canonicalClaims:claims, canonicalClaimsSha256:canonicalBusinessClaimsSha256(claims) };
     const event = {...unsigned,businessEventSha256:canonicalBusinessEventSha256(unsigned)};
-    const evidence = signExternalEvidence({version:'ltm.external-evidence.v1', evidenceId:event.evidenceId, tenantId:'tenant', issuer:'test-authority', provider:'generation-engine', environment:'sandbox', scope:event.evidenceScope, artifactSha256, canonicalClaimsSha256:event.canonicalClaimsSha256, businessEventSha256:event.businessEventSha256, issuedAt:new Date(Date.now()-1000).toISOString(), expiresAt, nonce:`result-nonce-000000-${sequence}`, replayPolicy:'single_use', algorithm:'Ed25519', keyId:'test-key'},privateKey);
+    const evidence = signExternalEvidence({version:'ltm.external-evidence.v1', evidenceId:event.evidenceId, tenantId, issuer:'test-authority', provider:'generation-engine', environment:'sandbox', scope:event.evidenceScope, artifactSha256, canonicalClaimsSha256:event.canonicalClaimsSha256, businessEventSha256:event.businessEventSha256, issuedAt:new Date(Date.now()-1000).toISOString(), expiresAt, nonce:`result-nonce-000000-${sequence}`, replayPolicy:'single_use', algorithm:'Ed25519', keyId:'test-key'},privateKey);
     return { evidence, event, reducer:externalBusinessEventReducerRegistry.resolve(event), idempotencyKey:`apply-${event.eventId}` };
   }
   async function readyNode(asset, targetAge) {
     const q = `q-${targetAge}-${asset.sha256.slice(0,8)}`, s = `s-${targetAge}-${asset.sha256.slice(0,8)}`;
     for (const [id, collection, purposes] of [[q,'media.quality-decisions',['quality_assurance','age_transformation']], [s,'media.safety-certificates',['age_transformation']]]) {
-      for (const participantId of participantIds) for (const purpose of purposes) runtime.grantConsent({...actor,actorId:participantId,purpose},{participantId,grantorCapacity:'self',purpose,scope:{resource:`${collection}:${id}`,actions:['process']},policyVersion:options.verifiedConsent&&purpose==='quality_assurance'?'test-quality-v1':policyVersion,...(options.verifiedConsent ? {} : {evidenceHash:'c'.repeat(64)}),idempotencyKey:`consent-${id}-${purpose}-${participantId}`});
+      for (const participantId of participantIds) for (const purpose of purposes) await runtime.grantConsent({...actor,actorId:participantId,purpose},{participantId,grantorCapacity:'self',purpose,scope:{resource:`${collection}:${id}`,actions:['process']},policyVersion:options.verifiedConsent&&purpose==='quality_assurance'?'test-quality-v1':policyVersion,...(options.verifiedConsent ? {} : {evidenceHash:'c'.repeat(64)}),idempotencyKey:`consent-${id}-${purpose}-${participantId}`});
     }
     const artifactBinding = {sourceAssetId:'source',assetId:asset.id,outputSha256:asset.sha256,targetAge};
     const dimensions = ['identity','ageRange','facialDrift','pose','artifacts','clarity','background','handsTeethEyes','photorealism'];
@@ -68,7 +78,7 @@ export async function timelineFixture(databasePath = ':memory:', options = {}) {
     await registry.execute(runtime,'B17',{actor:service,idempotencyKey:s,input:{...fixtures.B17,workId:s,participantIds,artifactBinding}});
     return {nodeId:`age-${targetAge}`,targetAge,status:'ready',asset,qualityResultId:q,safetyResultId:s};
   }
-  return {runtime,runtimeOptions, actor, service, consent, consents, participantIds, registry, callback, fixtures,readyNode};
+  return {runtime,runtimeOptions, actor, service, consent, consents, participantIds, registry, callback, callbackAsync, fixtures,readyNode};
 }
 
 export function syntheticPng(index, width=64, height=64) {

@@ -648,6 +648,9 @@ export async function dispatchQuery(
 
 function callerMutableCollection(value: unknown): string {
   const collection = string(value, "input.collection", 80);
+  if (collection.startsWith("media.quality-") || collection.startsWith("media.qsample.")) {
+    throw new DomainError("AUTH_FORBIDDEN", "Quality state is server-managed");
+  }
   if (collection === "media.intake-results") {
     throw new DomainError(
       "AUTH_FORBIDDEN",
@@ -665,6 +668,9 @@ function callerMutableCollection(value: unknown): string {
 
 function callerReadableCollection(value: unknown): string {
   const collection = string(value, "input.collection", 80);
+  if ((collection.startsWith("media.quality-") && collection !== "media.quality-decisions") || collection.startsWith("media.qsample.")) {
+    throw new DomainError("AUTH_FORBIDDEN", "Use the minimized quality operations API");
+  }
   if (collection === RIGHTS_REQUEST_COLLECTION) {
     throw new DomainError(
       "AUTH_FORBIDDEN",

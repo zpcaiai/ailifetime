@@ -17,7 +17,7 @@ export class HttpPhotoScorer implements PhotoScorer {
     try { result=await this.broker.json("POST","/v1/photo-scores",request,`photo-score:${requestSha256}`,`photo-score:${requestSha256}`); }
     catch { throw new DomainError("DEPENDENCY_UNAVAILABLE","photo scorer is unavailable"); }
     const response=object(result,["schemaVersion","requestSha256","modelVersion","modelSha256","calibrationId","participants","imageScores"],"photo scorer response");
-    if (response.schemaVersion!=="ltm.photo-score.response.v1" || response.requestSha256!==requestSha256 ||
+    if (!["ltm.photo-score.request.v1","ltm.photo-score.request.v2"].includes(request.schemaVersion) || response.schemaVersion!==request.schemaVersion.replace("request","response") || response.requestSha256!==requestSha256 ||
         response.modelVersion!==request.modelVersion || response.modelSha256!==request.modelSha256 || response.calibrationId!==request.calibrationId) {
       throw new DomainError("DEPENDENCY_UNAVAILABLE","photo scorer response is not bound to the requested image/model/calibration");
     }
