@@ -89,7 +89,9 @@ function qualityGate(input: JsonObject): JsonObject {
   const binding = artifactBinding(input);
   const scorerEvidence = photoScoreEvidence(input, binding, participantIds);
   const wardrobe = binding?.wardrobeBinding !== undefined;
-  const dimensions: readonly string[] = binding === undefined ? QUALITY_DIMENSIONS : [...QUALITY_DIMENSIONS, "background", "handsTeethEyes", "photorealism", ...(wardrobe ? ["garmentMatch", "regionPreservation"] : [])];
+  const v2=scorerEvidence?.schemaVersion==="ltm.photo-score.evidence.v2";
+  if(input.reviewEvidence!==undefined)throw new DomainError("VALIDATION_FAILED","review evidence is server-managed, not a scoring input");
+  const dimensions: readonly string[] = binding === undefined ? QUALITY_DIMENSIONS : [...QUALITY_DIMENSIONS, "background", "handsTeethEyes", "photorealism",...(v2?["aestheticUsability"]:[]), ...(wardrobe ? ["garmentMatch", "regionPreservation"] : [])];
   for (const dimension of dimensions) {
     const score = scores[dimension];
     const threshold = thresholds[dimension];
@@ -134,8 +136,9 @@ function photoScoreEvidence(input: JsonObject, binding: JsonObject | undefined, 
   if (input.photoScoreEvidence === undefined) return undefined;
   if (binding === undefined) throw new DomainError("VALIDATION_FAILED", "photo scoring evidence requires an artifact binding");
   const evidence = requireNonEmptyObject(input, "photoScoreEvidence");
-  const keys = ["schemaVersion", "requestSha256", "responseSha256", "sourceSha256", "modelSha256", "calibrationId", "calibrationSha256", "calibration", "ages"];
-  if (Object.keys(evidence).length !== keys.length || Object.keys(evidence).some(key => !keys.includes(key)) || evidence.schemaVersion !== "ltm.photo-score.evidence.v1") {
+  const v2=evidence.schemaVersion==="ltm.photo-score.evidence.v2";
+  const keys = ["schemaVersion", "requestSha256", "responseSha256", "sourceSha256", "modelSha256", "calibrationId", "calibrationSha256", "calibration", "ages",...(v2?["commandId","controlKey"]:[])];
+  if (Object.keys(evidence).length !== keys.length || Object.keys(evidence).some(key => !keys.includes(key)) || !["ltm.photo-score.evidence.v1","ltm.photo-score.evidence.v2"].includes(String(evidence.schemaVersion))) {
     throw new DomainError("VALIDATION_FAILED", "photo scoring evidence schema is invalid");
   }
   for (const key of ["requestSha256", "responseSha256", "sourceSha256", "modelSha256", "calibrationSha256"]) {
@@ -143,7 +146,12 @@ function photoScoreEvidence(input: JsonObject, binding: JsonObject | undefined, 
   }
   const calibrationId = requiredString(evidence, "calibrationId");
   const calibration = requireNonEmptyObject(evidence, "calibration"), thresholds = requireNonEmptyObject(input, "thresholds");
-  const policyKeys = ["id", "modelVersion", "modelSha256", "context", "minimumTargetAge", "maximumTargetAge", "minimumAgeSpan", "maximumAgeSpan", "ageToleranceYears", "minimumAgeConfidence", "thresholds"];
+  const policyKeys = ["id", "modelVersion", "modelSha256", "context", "minimumTargetAge", "maximumTargetAge", "minimumAgeSpan", "maximumAgeSpan", "ageToleranceYears", "minimumAgeConfidence", "thresholds",...(v2?["protocolVersion","regression"]:[])];
+  if(v2){
+    const rule=requireNonEmptyObject(calibration,"regression");
+    const controlKey="quality-control-"+createHash("sha256").update(canonicalJson({context:calibration.context,modelVersion:calibration.modelVersion,modelSha256:calibration.modelSha256})).digest("hex");
+    if(calibration.protocolVersion!==2 || requiredString(evidence,"controlKey")!==controlKey || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(requiredString(evidence,"commandId")) || Object.keys(rule).length!==3 || !Number.isInteger(rule.windowSize)||Number(rule.windowSize)<2||Number(rule.windowSize)>100 || !Number.isInteger(rule.minimumSamples)||Number(rule.minimumSamples)<2||Number(rule.minimumSamples)>Number(rule.windowSize)||typeof rule.maximumFailureRate!=="number"||!Number.isFinite(rule.maximumFailureRate)||rule.maximumFailureRate<=0||rule.maximumFailureRate>1)throw new DomainError("VALIDATION_FAILED","v2 quality control calibration is invalid");
+  }
   const context = requireNonEmptyObject(calibration, "context"), minimums = requireNonEmptyObject(calibration, "thresholds");
   if (Object.keys(calibration).length !== policyKeys.length || Object.keys(calibration).some(key => !policyKeys.includes(key)) ||
       Object.keys(context).length !== 5 || ["provider", "templateId", "channel", "subjectMode", "operation"].some(key => typeof context[key] !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(context[key] as string)) ||
@@ -169,7 +177,7 @@ function photoScoreEvidence(input: JsonObject, binding: JsonObject | undefined, 
     }
     return { participantId: age.participantId, estimatedAgeYears: age.estimatedAgeYears, confidence: age.confidence };
   });
-  return { schemaVersion: evidence.schemaVersion, requestSha256: evidence.requestSha256!, responseSha256: evidence.responseSha256!, sourceSha256: evidence.sourceSha256!, modelSha256: evidence.modelSha256!, calibrationId, calibrationSha256: evidence.calibrationSha256!, calibration: JSON.parse(JSON.stringify(calibration)) as JsonObject, ages };
+  return { schemaVersion: String(evidence.schemaVersion), requestSha256: evidence.requestSha256!, responseSha256: evidence.responseSha256!, sourceSha256: evidence.sourceSha256!, modelSha256: evidence.modelSha256!, calibrationId, calibrationSha256: evidence.calibrationSha256!, calibration: JSON.parse(JSON.stringify(calibration)) as JsonObject, ages,...(v2?{controlKey:evidence.controlKey!,commandId:evidence.commandId!}:{}) };
 }
 
 function renderVideo(input: JsonObject): JsonObject {

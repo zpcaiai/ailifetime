@@ -6,6 +6,72 @@ info:
 servers:
   - url: http://127.0.0.1:8080
 paths:
+  /v1/quality/reviews:
+    get:
+      operationId: listPhotoQualityReviews
+      description: Minimized v2 human review queue. Requires human moderator/platform_admin, media.quality.review, step-up, record access and current quality consent. No pixels, asset metadata or public URLs in the queue. At most 1000 records; overflow fails closed.
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/Purpose" }]
+      responses:
+        "200": { description: Private no-store review projections with IDs, versions, state, scores, thresholds, targetAge and proposal. }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/quality/reviews/{qualityId}/preview/{kind}:
+    get:
+      operationId: previewPhotoQualityReview
+      description: Authenticated inline original-reference or candidate pixels from private storage. Rechecks report/command binding, consent, SHA256 and byte length before emitting bytes. No public image URL is issued.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+        - $ref: "#/components/parameters/QualityObjectId"
+        - { name: kind, in: path, required: true, schema: { type: string, enum: [output, reference] } }
+      responses:
+        "200":
+          description: Private no-store image, Content-Disposition inline and x-ltm-image-sha256.
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/quality/reviews/{qualityId}/decisions:
+    post:
+      operationId: decidePhotoQualityReview
+      description: Propose and confirm using two distinct human actors, a matching ticket and CAS version. Approve may override only aestheticUsability; identity, age, age confidence, realism and other critical failures never qualify. Original measurements remain unchanged. Reject/retry records a disposition without triggering generation or spending. Exact retries use durable SQL idempotency.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/QualityObjectId"
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: "#/components/schemas/QualityReviewAction" } }
+      responses:
+        "200": { description: Review ID, version, state and qualityResultId. Approval is not publication; active control and B17 plus signed callback remain required. }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/quality/controls:
+    get:
+      operationId: listPhotoQualityControls
+      description: Requires human moderator/platform_admin, media.quality.control and step-up. Returns persistent model/template context, version, state, epoch, window counts, stopReason and resumeProposal. No photo or biometric data.
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/Purpose" }]
+      responses:
+        "200": { description: Private no-store minimized controls. }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/quality/controls/{qualityId}/resume:
+    post:
+      operationId: resumePhotoQualityControl
+      description: Two human step-up actors must propose/confirm against the same stopped window and ticket. A new observation changing the window invalidates confirmation. Confirmation advances epoch and clears the current window without deleting history. Old report replay never counts in the new epoch. No model inference is invoked.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Purpose"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/QualityObjectId"
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: "#/components/schemas/QualityResumeAction" } }
+      responses:
+        "200": { description: Control ID, version, state and epoch. }
+        default: { $ref: "#/components/responses/Error" }
   /health/live:
     get:
       operationId: getLiveness
@@ -157,6 +223,9 @@ paths:
                       modelVersion: { type: string }
                       calibrationId: { type: string }
                       reused: { type: boolean }
+                      qualityControlKey: { type: string, description: Required in a ready v2 result node. A complete v2 album pins one model stream across all age calibrations. }
+                      trafficState: { type: string, enum: [active, stopped] }
+                      reviewCaseId: { type: string }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -838,6 +907,11 @@ components:
       type: http
       scheme: bearer
   parameters:
+    QualityObjectId:
+      name: qualityId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' }
     TimelineCommandId:
       name: commandId
       in: path
@@ -874,6 +948,25 @@ components:
         maxLength: 256
         pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$'
   schemas:
+    QualityResumeAction:
+      type: object
+      additionalProperties: false
+      required: [action, expectedVersion, reason, ticket]
+      properties:
+        action: { type: string, enum: [propose, confirm] }
+        expectedVersion: { type: integer, minimum: 1 }
+        reason: { type: string, minLength: 3, maxLength: 1000 }
+        ticket: { type: string, minLength: 3, maxLength: 1000 }
+    QualityReviewAction:
+      type: object
+      additionalProperties: false
+      required: [action, decision, expectedVersion, reason, ticket]
+      properties:
+        action: { type: string, enum: [propose, confirm] }
+        decision: { type: string, enum: [approve, reject, retry] }
+        expectedVersion: { type: integer, minimum: 1 }
+        reason: { type: string, minLength: 3, maxLength: 1000 }
+        ticket: { type: string, minLength: 3, maxLength: 1000 }
     TimelineImageAsset:
       type: object
       additionalProperties: false

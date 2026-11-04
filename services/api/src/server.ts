@@ -8,9 +8,12 @@ import {
   DomainError,
   hasPermission,
   isDomainError,
+  QUALITY_CONTROLS,
+  listQualityRecords,
   type ActorContext,
   type ExternalBusinessEventReducerRegistry,
   type LifeTimeMachineRuntimePort,
+  type JsonObject,
 } from "@ltm/core";
 import type { RequestAuthenticator } from "./auth.js";
 import type { ProductionDomainRuntime } from "./domain-runtime.js";
@@ -18,6 +21,8 @@ import type { BrowserOidcPublicConfiguration } from "./browser-oidc.js";
 import type { ClientIntegrationPorts, MediaDeletionProjection } from "./client-integrations.js";
 import { TimelineDeliveryService } from "./timeline-delivery.js";
 import type { TimelinePhotoQualityService } from "./timeline-photo-quality.js";
+import {PhotoQualityGovernance,qualityHuman} from "./photo-quality-governance.js";
+import {PhotoQualityReview} from "./photo-quality-review.js";
 import type { TimelineSeedreamService } from "./timeline-seedream.js";
 import { WardrobeService } from "./wardrobe.js";
 import { PHOTO_PRODUCTS, PHOTO_PRICE_VERSION } from "./photo-catalog.js";
@@ -567,6 +572,30 @@ async function handleRequest(
       const data = method === "GET" ? await wardrobe.context(actor, rootId, age) : await wardrobe.create(operationContext(actor, "wardrobe.create", requireIdempotencyKey(request)), rootId, age, object(await readJsonBody(request, bodyLimit), "wardrobe request"), requireIdempotencyKey(request));
       sendJson(response, 200, {data, requestId}); return;
     }
+    if(method==="GET"&&path==="/v1/quality/reviews"){
+      const actor=await authenticate(options,request,requestId),data=await new PhotoQualityReview(options.runtime,options.timelineArtifacts).list(actor);
+      response.setHeader("cache-control","private, no-store");sendJson(response,200,{data,requestId});return;
+    }
+    if(method==="GET"&&path==="/v1/quality/controls"){
+      const actor=await authenticate(options,request,requestId);qualityHuman(options.runtime,actor,"media.quality.control");
+      const rows=await listQualityRecords(options.runtime,actor,QUALITY_CONTROLS),data=rows.map(row=>({id:row.id,version:row.version,state:row.data.state,epoch:row.data.epoch,context:row.data.context,modelVersion:row.data.modelVersion,sampleCount:row.data.sampleCount,failureCount:row.data.failureCount,stopReason:row.data.stopReason??null,resumeProposal:row.data.resumeProposal??null}));
+      response.setHeader("cache-control","private, no-store");sendJson(response,200,{data,requestId});return;
+    }
+    const qualityPreview=/^\/v1\/quality\/reviews\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/preview\/(output|reference)$/.exec(path);
+    if(method==="GET"&&qualityPreview){
+      const actor=await authenticate(options,request,requestId),preview=await new PhotoQualityReview(options.runtime,options.timelineArtifacts).preview(actor,qualityPreview[1]!,qualityPreview[2] as "output"|"reference");
+      response.statusCode=200;response.setHeader("cache-control","private, no-store");response.setHeader("content-type",preview.asset.mimeType);response.setHeader("content-disposition","inline");response.setHeader("x-ltm-image-sha256",preview.asset.sha256);
+      await streamVerifiedImage(response,preview.bytes);return;
+    }
+    const qualityAction=/^\/v1\/quality\/(reviews|controls)\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})\/(decisions|resume)$/.exec(path);
+    if(method==="POST"&&qualityAction&&((qualityAction[1]==="reviews"&&qualityAction[3]==="decisions")||(qualityAction[1]==="controls"&&qualityAction[3]==="resume"))){
+      const actor=await authenticate(options,request,requestId),input=object(await readJsonBody(request,bodyLimit),"quality operation"),key=requireIdempotencyKey(request),review=qualityAction[1]==="reviews";
+      assertExactKeys(input,review?["action","decision","expectedVersion","reason","ticket"]:["action","expectedVersion","reason","ticket"],"quality operation");
+      const context=operationContext(actor,review?"quality.review":"quality.resume",key);
+      const result=review?await new PhotoQualityReview(options.runtime,options.timelineArtifacts).decide(context,qualityAction[2]!,input as JsonObject,key):await new PhotoQualityGovernance(options.runtime).resume(context,qualityAction[2]!,input as JsonObject,key);
+      const data=review?result:{id:result.id,version:result.version,state:(result as import("@ltm/core").RecordEnvelope).data.state,epoch:(result as import("@ltm/core").RecordEnvelope).data.epoch};
+      response.setHeader("cache-control","private, no-store");sendJson(response,200,{data,requestId});return;
+    }
     const generationMatch = /^\/v1\/timelines\/([A-Za-z0-9](?:[A-Za-z0-9._:-]|%3[Aa]){0,127})\/generate$/.exec(path);
     if (method === "POST" && generationMatch?.[1] !== undefined) {
       const actor = await authenticate(options, request, requestId);
@@ -618,19 +647,7 @@ async function handleRequest(
         response.setHeader("content-disposition", `attachment; filename="ai-age-${age}.${node.asset.mimeType === "image/png" ? "png" : "jpg"}"`);
         response.setHeader("x-ltm-image-sha256", node.asset.sha256);
         response.setHeader("x-ltm-ai-generated", "true");
-        // Streaming avoids Vercel's buffered 4.5 MB response limit. Verify all
-        // bytes, authorization and expiry before emitting the first chunk.
-        response.flushHeaders();
-        for (let offset = 0; offset < bytes.byteLength; offset += 64*1024) {
-          if (response.destroyed) return;
-          if (!response.write(bytes.subarray(offset,offset+64*1024))) {
-            await new Promise<void>(resolve => {
-              const done = () => { response.off("drain",done); response.off("close",done); resolve(); };
-              response.once("drain",done); response.once("close",done);
-            });
-          }
-        }
-        response.end(); return;
+        await streamVerifiedImage(response,bytes);return;
       }
       sendJson(response, 200, { data: { ...view, mediaAvailable: options.timelineArtifacts !== undefined,
         nodes: view.nodes.map(node => ({ ...node, downloadPath: node.status === "ready" && options.timelineArtifacts ? `/v1/timelines/${commandId}/nodes/${node.targetAge}/image` : null })) }, requestId }); return;
@@ -1236,4 +1253,20 @@ function requireOperatorGeneration(actor: ActorContext): void {
   if (!actor.roles.some(role => ["platform_admin", "service_account", "studio_operator"].includes(role))) {
     throw new DomainError("AUTH_FORBIDDEN", "consumer generation requires a server-verified paid photo purchase");
   }
+}
+
+/** Call only after byte integrity, ownership and current authorization checks.
+ * Streaming keeps HD previews/downloads above the serverless buffer limit usable. */
+async function streamVerifiedImage(response:ServerResponse,bytes:Uint8Array):Promise<void>{
+  response.flushHeaders();
+  for(let offset=0;offset<bytes.byteLength;offset+=64*1024){
+    if(response.destroyed)return;
+    if(!response.write(bytes.subarray(offset,offset+64*1024))){
+      await new Promise<void>(resolve=>{
+        const done=()=>{response.off("drain",done);response.off("close",done);resolve();};
+        response.once("drain",done);response.once("close",done);
+      });
+    }
+  }
+  if(!response.destroyed)response.end();
 }
