@@ -1,0 +1,162 @@
+{
+  "revision": 0,
+  "recorded_at": "2026-11-04T10:24:40.445195+00:00",
+  "status": "HOST_VERIFIED_PHONE_NOT_RUN",
+  "preview": "v15",
+  "source_main": "bc89eed35315440d648b721d50f3777be8c73e57",
+  "source_clean": true,
+  "qr_sha256": "8475b7afac5812321e1586013f6cf562a346fb836cfad5add576b10583ce7c06",
+  "source_provenance_sha256": "5b397dcc2d83c7e4b453acbb4014dc1151eb4e5c567137b36ece94b350cfd351",
+  "fixture": "synthetic-album-transport-only",
+  "paid_model_calls": 0,
+  "window": 10,
+  "expires_at": "2026-11-04T11:19:01.501Z",
+  "agent_direct_phone_observation": false,
+  "schema_version": "ltm.album-seven-case-public-record.v1",
+  "source_record_name": "REGRESSION-RESULTS-REV0.json",
+  "source_record_sha256": "dea6f78938b1531338d7aa679ddbe48c9dfe2704c86911b8246a32d5aee236d4",
+  "supersedes_source_record_sha256": null,
+  "boundary": "Current operator-reported observations only. Host commands verify archives/transport, not phone writes or independent production certification. Unknown model/time stay UNKNOWN; earlier v12 initial0/21cause remains UNKNOWN.",
+  "reported_device": {
+    "model": "UNKNOWN",
+    "os_name": "UNKNOWN",
+    "os_version": "UNKNOWN",
+    "wechat_version": "UNKNOWN",
+    "android_base_version": "UNKNOWN",
+    "execution_time": "UNKNOWN"
+  },
+  "target_device": {
+    "os": "HyperOS",
+    "version": "3.0.308",
+    "wechat": "8.0.80"
+  },
+  "operator_feedback_verbatim": [],
+  "native_cases": {
+    "single": {
+      "status": "NOT_RUN",
+      "evidence_kind": "AWAITING_CURRENT_OPERATOR_REPORT",
+      "actual": "UNKNOWN"
+    },
+    "batch": {
+      "status": "NOT_RUN",
+      "evidence_kind": "AWAITING_CURRENT_OPERATOR_REPORT",
+      "actual": "UNKNOWN"
+    },
+    "denial": {
+      "status": "NOT_RUN",
+      "evidence_kind": "AWAITING_CURRENT_OPERATOR_REPORT",
+      "actual": "UNKNOWN"
+    },
+    "restore_without_save": {
+      "status": "NOT_RUN",
+      "evidence_kind": "AWAITING_CURRENT_OPERATOR_REPORT",
+      "actual": "UNKNOWN"
+    },
+    "manual_retry": {
+      "status": "NOT_RUN",
+      "evidence_kind": "AWAITING_CURRENT_OPERATOR_REPORT",
+      "actual": "UNKNOWN"
+    },
+    "library": {
+      "status": "NOT_RUN",
+      "evidence_kind": "AWAITING_CURRENT_OPERATOR_REPORT",
+      "actual": "UNKNOWN"
+    },
+    "progress": {
+      "status": "NOT_RUN",
+      "evidence_kind": "AWAITING_CURRENT_OPERATOR_REPORT",
+      "actual": "UNKNOWN"
+    }
+  },
+  "host_evidence": [
+    {
+      "local_raw_basename": "verify-source-r1.log",
+      "sha256": "723a2e68f83b60237e5ce13e1d94bba0bb3dc4ee8b3c4267bed8d280663d7ef4",
+      "executed": true,
+      "pid": 91642,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "local_raw_basename": "preview-generate.log",
+      "sha256": "bf30e123a1409a41d385c952a31f389e49d5ebcf6e23cf5795f58873a028f7bd",
+      "executed": true,
+      "pid": 93481,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "local_raw_basename": "qr-generate.log",
+      "sha256": "ddd4b055b1c2f5045cde5f4f7a869d5b8589753c0937d2dbb11f1de01913d381",
+      "executed": true,
+      "pid": 93700,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "local_raw_basename": "preview-entry-tests.log",
+      "sha256": "ce885931dd4b508da87c0b3f57fb89de4b38458dd92591bd93b197f2ab084c12",
+      "executed": true,
+      "pid": 21403,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "local_raw_basename": "verify-preview-window10.log",
+      "sha256": "e1986e52d1e60f27fcc2e504685811bbe55ab87b35d3d83d4ffdcee7f020ba7b",
+      "executed": true,
+      "pid": 21731,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "local_raw_basename": "provider-inspect.log",
+      "sha256": "87f8901e2e88ea4e96bb91dafb29b6409ed058a90d72c8cc123054d674b2c660",
+      "executed": true,
+      "pid": 93724,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "local_raw_basename": "window10-create.log",
+      "sha256": "72b80b3ce1026f8d6e000333ae3b3828a61fc0c4456b19816f1cbd0b4964651e",
+      "executed": true,
+      "pid": 21390,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "local_raw_basename": "select-pinned-deployment.log",
+      "sha256": "df61734ea7486e55d7dc8e4de0ed2b6e6ec462e3718c41c6f4e6bc8cee5402e9",
+      "executed": true,
+      "pid": 91643,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "local_raw_basename": "deployment-status-1.log",
+      "sha256": "1853df2e10c3aff0cb7b8fd824d5c71a2999c7d9fc93ccdb5265d9352d1b3064",
+      "executed": true,
+      "pid": 22163,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "local_raw_basename": "public-full-check.log",
+      "sha256": "a0ad59f932965b4a8d214472e971939f7684b41e6d585af638fc51bdfbba7749",
+      "executed": true,
+      "pid": 22483,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "local_raw_basename": "helper-strict-gate.log",
+      "sha256": "729c4df5511222439de34f6a8a1c9a95db1931b90f42a717b7b7ded1613f134e",
+      "executed": true,
+      "pid": 21741,
+      "exit_code": 0,
+      "availability": "LOCAL_RAW_ARCHIVE"
+    }
+  ],
+  "preserved_history_sha256": {}
+}
