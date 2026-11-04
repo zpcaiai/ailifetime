@@ -1,0 +1,141 @@
+{
+  "schemaVersion": "ltm.album-v10-tool-provenance.v1",
+  "phone_source_main": "7811c605f5960ba377fba9ef72b53f06afca41ad",
+  "tool_delivery_base": "e89e7ca5ae6115b6f62a861bd5a62346e8ae2eb3",
+  "tool_ports": [
+    {
+      "original_name": "v10-provider-inspect.py",
+      "original_sha256": "21dacd65eaeec041207e0149119855cc07faacdd8a264280cc30a4f3debe740d",
+      "portable_tool": "tools/native-album-window.py",
+      "portable_sha256": "bc0db2b6158c7605cb0afff33816caa4fd458cfd8cbc141240f5fc6eda3e9e83",
+      "original_available": "LOCAL_ARCHIVE_UNCHANGED"
+    },
+    {
+      "original_name": "create-test-window-v4.py",
+      "original_sha256": "adae48bdd788cfdb7c3d5c7d531572b4f0310612ced43a42ee22cf745dc49f49",
+      "portable_tool": "tools/native-album-window.py",
+      "portable_sha256": "bc0db2b6158c7605cb0afff33816caa4fd458cfd8cbc141240f5fc6eda3e9e83",
+      "original_available": "LOCAL_ARCHIVE_UNCHANGED"
+    },
+    {
+      "original_name": "create-test-window-v5.py",
+      "original_sha256": "27c05974fb0b747da89bcf4b8799fe64a525b00f6450ce4ea996bc6a8093cec0",
+      "portable_tool": "tools/native-album-window.py",
+      "portable_sha256": "bc0db2b6158c7605cb0afff33816caa4fd458cfd8cbc141240f5fc6eda3e9e83",
+      "original_available": "LOCAL_ARCHIVE_UNCHANGED"
+    },
+    {
+      "original_name": "verify-v10-public.py",
+      "original_sha256": "6c4aeb7806e7e42aa089b2415cf711e5f5b9ffb1038796522981dc33d1cf9c87",
+      "portable_tool": "tools/native-album-public-check.py",
+      "portable_sha256": "bca9e6e7a918cfd34a3af00b23ca322434f96614ce3aa5bf3798d2b7958191a9",
+      "original_available": "LOCAL_ARCHIVE_UNCHANGED"
+    },
+    {
+      "original_name": "verify-v10-window5-public.py",
+      "original_sha256": "d5b28e3c9533653f29eb440f6c840dc2fa0c83cab9bdcd590fb14551047c3199",
+      "portable_tool": "tools/native-album-public-check.py",
+      "portable_sha256": "bca9e6e7a918cfd34a3af00b23ca322434f96614ce3aa5bf3798d2b7958191a9",
+      "original_available": "LOCAL_ARCHIVE_UNCHANGED"
+    },
+    {
+      "original_name": "finalize-v10-phone-record.py",
+      "original_sha256": "dbcf08c93132ecbc7d34a3d0c6a73fbb6f4d44b6f607da48cf23ae56f003c99e",
+      "portable_tool": "tools/native-album-phone-record.py",
+      "portable_sha256": "55f6c96fb9b075c6f5176885611d83eb3ee3ce9195a348a37c27eef71ff56877",
+      "original_available": "LOCAL_ARCHIVE_UNCHANGED"
+    }
+  ],
+  "safe_actual_http_logs": [
+    {
+      "path": "https-window-4.jsonl",
+      "sha256": "081fdb8127116f6b2e981024e913f87b5fe95a237121174d45a60bd6c9851939",
+      "source_raw_name": "v10-public-https-regression.log",
+      "source_main": "7811c605f5960ba377fba9ef72b53f06afca41ad",
+      "scope": "historical actualHTTPS synthetic transport; phoneNOT_RUN in these host logs"
+    },
+    {
+      "path": "https-window-5.jsonl",
+      "sha256": "70b8a8a6d38df0d55ff36e5d3c1fef4ec14d16e5b8d3afb4f48583f377283433",
+      "source_raw_name": "v10-window5-https-regression-retry1.log",
+      "source_main": "7811c605f5960ba377fba9ef72b53f06afca41ad",
+      "scope": "historical actualHTTPS synthetic transport; phoneNOT_RUN in these host logs"
+    }
+  ],
+  "verification": [
+    {
+      "receipt_name": "v10-delivery-adversarial-tls",
+      "executed": true,
+      "pid": 30635,
+      "exit_code": 0,
+      "raw_sha256": "c02c2de3fa418389c9a73c8181993387256dbee463cd87178dccf0ae1f7ef36f",
+      "raw_availability": "LOCAL_ARCHIVE"
+    },
+    {
+      "receipt_name": "v10-delivery-adversarial-runtime",
+      "executed": true,
+      "pid": 30637,
+      "exit_code": 0,
+      "raw_sha256": "f8a87b9b7cd1930fc07b877cbded1fa8bf5aa2d2e5d7faf817bb42a63445ca5a",
+      "raw_availability": "LOCAL_ARCHIVE"
+    },
+    {
+      "receipt_name": "v10-delivery-adversarial-zero-fake",
+      "executed": true,
+      "pid": 30636,
+      "exit_code": 0,
+      "raw_sha256": "d7b915080025337b4b6dcf133bbb4675547ef21b60c8edeb40cdd8eea31449fe",
+      "raw_availability": "LOCAL_ARCHIVE"
+    },
+    {
+      "receipt_name": "v10-delivery-s2-live-inspect",
+      "executed": true,
+      "pid": 29417,
+      "exit_code": 0,
+      "raw_sha256": "38221fe8782301570d93bbfe792b9cd7a59ce805c9482646e9a6c7b65d375b9c",
+      "raw_availability": "LOCAL_ARCHIVE"
+    },
+    {
+      "receipt_name": "v10-delivery-export-r1",
+      "executed": true,
+      "pid": 30721,
+      "exit_code": 0,
+      "raw_sha256": "d461d38ee0ff8fd9686eb70d3dc3b08f76f0f649335dc62f3448913924ce63b9",
+      "raw_availability": "LOCAL_ARCHIVE"
+    },
+    {
+      "receipt_name": "v10-delivery-export-r2",
+      "executed": true,
+      "pid": 30725,
+      "exit_code": 0,
+      "raw_sha256": "263b620acfee75994cab7571b127bca5d6afbdf034a7780fad27b016c8c0afbe",
+      "raw_availability": "LOCAL_ARCHIVE"
+    }
+  ],
+  "preserved_failures": [
+    {
+      "receipt_name": "v10-create-test-window",
+      "executed": true,
+      "exit_code": 1,
+      "raw_sha256": "d889eb3e493c2dd830b7e9f8fce163761c8211f05c11a407b351916d113053b9",
+      "raw_availability": "LOCAL_ARCHIVE_UNCHANGED"
+    },
+    {
+      "receipt_name": "v10-window5-https-regression",
+      "executed": true,
+      "exit_code": 1,
+      "raw_sha256": "225edd47e6a837f69621aa2bdbdfe79957ee32bdd0710411f3b3e83b3c666fb8",
+      "raw_availability": "LOCAL_ARCHIVE_UNCHANGED"
+    },
+    {
+      "receipt_name": "v10-delivery-s1-runtime",
+      "executed": true,
+      "exit_code": 1,
+      "raw_sha256": "49158eeea77bdef3a39bdbf9f841924ceeaf2aa46e342cb191050ada5de6b998",
+      "raw_availability": "LOCAL_ARCHIVE_UNCHANGED"
+    }
+  ],
+  "remote_mutating_portable_tool": "NOT_RUN: no new window, PATCH, deploy or modelcall duringGitdelivery",
+  "device_result": "PASS_USER_REPORTED from explicitcurrentoperatorstatements, not hostlogPhoneNOT_RUN fields",
+  "excluded_scope": "Unrelatedmain-mergeCI/SQLdebughelpers and privateprovider/state/rawcredential artifacts remain local; originalsixv10scripts retained andmapped"
+}

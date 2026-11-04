@@ -1,0 +1,14 @@
+{"path": "/v1/session", "expected": 401, "actual": 401}
+{"path": "/v1/session", "expected": 403, "actual": 403}
+{"path": "/v1/session", "expected": 403, "actual": 403}
+{"path": "/v1/session", "expected": 403, "actual": 403}
+{"path": "/package.json", "expected": 404, "actual": 404}
+{"path": "/v1/session?unexpected=true", "expected": 404, "actual": 404}
+{"path": "/v1/session", "actual": 200, "bytes": 233}
+{"path": "/native-album/config", "actual": 200, "bytes": 237}
+{"previous_identity": "serverless-live-identity-v1.json", "result": "rejected", "actual": 401}
+{"previous_identity": "serverless-live-identity-v2.json", "result": "rejected", "actual": 401}
+{"previous_identity": "serverless-live-identity-v3.json", "result": "rejected", "actual": 401}
+{"timeline": "single-root", "verified_downloads": 1}
+{"timeline": "root", "verified_downloads": 21}
+{"origin": "https://album-test.holiness.uk", "tlsValidation": true, "verified": {"single-root": {"downloaded": 1, "unique_sha256": ["4c642852c890d6f437102b78013e5d9f7ec1d599fd5681bdba770aa67477b463"]}, "root": {"downloaded": 21, "unique_sha256": ["33b94dd1f528775b754fda0c094a93c44be846a8d9bf997b4c422331e7b94320", "83cfac646dee63a4d3320a6375c4e95dbf4514b944ee7ae89677827de6e3a557", "b5bfdb116d529d9c33622461c800545cdf55e58cdf2a6ccc5a35248c2f70a62d", "badbb7300f7170de6b7fd4eb50dda60bf15d041797598501343ac11e06476b30", "ba628ff0923fc3aa7b0ff26e1bf2a0f5328b6e63258aec4f9b41dd8db554cfc3", "6f6be883c6b261ca5a64c5e2a67796bd2f0fc67b1f0a1ff4f185570fc89bb14a", "7d52180d0c05a3caf322ed219d392fdac8898fb1e8cf4eaa10695235db904ded", "42b4c4d99895050e9633f052696f5dc87bdb7595e3795f3b253a231f73089f38", "ba8d197460051336ed335fa73b69d849ac4cb03e46aa9ac482037b89e28c10d5", "a0c78ed20eb36851db1363037474ad2c400d80831e95fe2c27ea22dd400abde6", "67d1f1984ff1b048b1019b8aa4586fcb7ded1e05c53ec7c7d2347351a2743f60", "97772872d4a2f49d6150e077eaa2c72b5747a7415826890c076f9ce6e94ea5ae", "1342661e8a5190cd24f7a872d97c0b794ea7cb69e39b20044d3f19c8bcafc685", "a4c430fa08f643c184c810da2c214a6bb31ebd2be09e765fd0a67824f884e813", "02a0a5dcf76a60bf66ef1dee92378b8748aa87b937b6b54e8f9ac4011f413ab4", "19196d7946e3f461609d15dde0944e920b043ac6a45350816edb0845be7e3c1d", "b2feaaafa95b6c3f3bf9aea7d87d42faef0de50debcf0c8e35519f1a33677b9c", "e15361cae9be5176a8d3c4f1000ea70738019211cf3084ee1a7339a5dcd559b4", "60e8495eb7b4cdc037ab4f1f50e2a3cbf35dad28ce78b243270fb580432893e6", "41406f0b073f6b89bf9a97e5424de87ec337124343d731af4743cea1242e75cc", "607eb16962320dfe317ec67fdfa13d4f1d97d863b0d57e8b138a544a496c2113"]}}, "nativePhone": "NOT_RUN", "paidModelCalls": 0}
