@@ -1,0 +1,227 @@
+{
+  "schemaVersion": "ltm.album-device-public-record.v1",
+  "revision": 2,
+  "source_main": "7811c605f5960ba377fba9ef72b53f06afca41ad",
+  "preview_version": "v10",
+  "qr_sha256": "1c6f8d0d664750de3bc2307677eb15f5bd40bd7ee2cf18710c1da9e030a3a063",
+  "source_record_name": "V10-PHONE-VALIDATION-REPORT-REV2.json",
+  "source_record_sha256": "e8a3d4bc780882072030ff6c8298ddcff710b6cf54ad265aa510d1a78372ac66",
+  "supersedes_source_record_sha256": "ed2cacb5a6de8f49c610889fe5ea0f1d8347fb4452b80f34bb6c61e481161890",
+  "recorded_at": "2026-11-04T03:29:24.554744+00:00",
+  "metadata_updated_at": "2026-11-04T03:38:29.594128+00:00",
+  "device": {
+    "different_from_previous_phone": true,
+    "model": "UNKNOWN",
+    "os_name": "Xiaomi HyperOS",
+    "os_version": "3.0.308",
+    "wechat_version": "8.0.80",
+    "android_base_version": "UNKNOWN"
+  },
+  "cases": {
+    "single": {
+      "label": "单张保存",
+      "status": "PASS_USER_REPORTED",
+      "actual_photos_delta": 1,
+      "ui_progress": null,
+      "distinct_within_batch": null,
+      "operator_report": "单张保存后相册新增1张",
+      "execution_time": "UNKNOWN",
+      "agent_direct_device_observation": false
+    },
+    "batch": {
+      "label": "批量保存",
+      "status": "PASS_USER_REPORTED",
+      "actual_photos_delta": 21,
+      "ui_progress": "21/21",
+      "distinct_within_batch": true,
+      "operator_report": "批量显示21/21，新增21张不同测试图",
+      "execution_time": "UNKNOWN",
+      "agent_direct_device_observation": false
+    },
+    "denied_batch": {
+      "label": "关闭权限后保存",
+      "status": "PASS_USER_REPORTED",
+      "actual_photos_delta": 0,
+      "ui_progress": null,
+      "distinct_within_batch": null,
+      "operator_report": "重新进入批量页并关闭权限后，出现权限提示和设置按钮，新增0张",
+      "execution_time": "UNKNOWN",
+      "agent_direct_device_observation": false
+    },
+    "settings_no_auto_write": {
+      "label": "页面按钮恢复授权后未点保存",
+      "status": "PASS_USER_REPORTED",
+      "actual_photos_delta": 0,
+      "ui_progress": null,
+      "distinct_within_batch": null,
+      "operator_report": "通过页面按钮恢复授权后未自动保存",
+      "execution_time": "UNKNOWN",
+      "agent_direct_device_observation": false
+    },
+    "manual_batch_retry": {
+      "label": "手动重试批量保存",
+      "status": "PASS_USER_REPORTED",
+      "actual_photos_delta": 21,
+      "ui_progress": "21/21",
+      "distinct_within_batch": true,
+      "operator_report": "手动重试显示21/21，新增21张不同测试图",
+      "execution_time": "UNKNOWN",
+      "agent_direct_device_observation": false
+    }
+  },
+  "operator_statement_verbatim": "单张保存后相册新增1张；批量显示21/21，新增21张不同测试图。重新进入批量页并关闭权限后，出现权限提示和设置按钮，新增0张；通过页面按钮恢复授权后未自动保存，手动重试显示21/21，新增21张不同测试图。请整理并保存本轮真机验证记录。",
+  "metadata_user_report_verbatim": "Xiaomi HyperOS 3.0.308  ,wechat version 8.0.80",
+  "evidence_class": "PASS_USER_REPORTED",
+  "paid_model_calls": 0,
+  "boundary": "Operator-reported phone observations. Host verification checks records/backend only; no independent device or production certification.",
+  "host_evidence": [
+    {
+      "name": "v10-phone-observations-02.json",
+      "sha256": "065fb9b859abd75df24ff217562a2729e583b4129963822062e281bf314d39de",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-phone-user-report-03.txt",
+      "sha256": "bdff3b69d01ae705f516164e300ddca2cafb600a5ae6fbd879d9c55b4d6c46ee",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-main-fetch.log",
+      "sha256": "e9bba6000fcec11dc6ab8d08daf697e433309095d9a6ad8bb1d0e17cd1e659e4",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-checkout-preimage.log",
+      "sha256": "f42af8b2a411f55107ac0b10727e941c0e1f0fb16739a1fbb90e5870bf1ad33c",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-preview-prepare.log",
+      "sha256": "2363660d04a8e49c5e445eb199ddd4a73eee6344a4804b50697747eb6fd8fe6b",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-preview-media-regression.log",
+      "sha256": "d25e9db609b69f5b65eda57a5bda353a4c2192c8b4db2a64103aa799fac1a1cd",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-official-preview.log",
+      "sha256": "a8401448ed8fa17c8985674e9ebcebf48db19dee94e56b60f7e976b6d292e2c8",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-artifact-verification.log",
+      "sha256": "a9f8f18b60f789307c90ce93876cdc1dd414d5777573698b8853aa3533679ec0",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-provider-inspect.log",
+      "sha256": "7777b7d9a51de19c53e05f6edaf4fded83c50e62a22f14744a26221c6888a185",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-create-test-window-fixed.log",
+      "sha256": "cff83f85a29daceda279e9200a704329b1df915b546af51a3f74092beee25ab3",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-test-deployment-create.log",
+      "sha256": "0f38e88502d3223d3c0aa486b9d60e4532a2e7ce2c3766f01803b1af282d62ab",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-deployment-status-2.log",
+      "sha256": "1a56c4d12f5abb3129e3bf09bd651307d567c4e2a34221767d9c22b86e85c896",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-public-https-regression.log",
+      "sha256": "081fdb8127116f6b2e981024e913f87b5fe95a237121174d45a60bd6c9851939",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-final-tools-zero-fake.log",
+      "sha256": "3efd9a35da74f0c515dfd04a78a61e2f14f5b9fc1e60b727b5ba741816cc035e",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-v4-expiry-readback.log",
+      "sha256": "81e590ff2e54e80aa1764881b3bca0c6ba3cfb60da5ea211f9336e1a6b8f0f63",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-window5-zero-fake.log",
+      "sha256": "3efd9a35da74f0c515dfd04a78a61e2f14f5b9fc1e60b727b5ba741816cc035e",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-phone-feedback-01.log",
+      "sha256": "dad8105923b3d0abe75ef4a4491d6156d4ab02071ad9fef6b9032fa3e143aa8c",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-create-test-window5.log",
+      "sha256": "9c999d1028075590d57b35d7c4c2f89c9d21f455e8bf9ad90b17ef1b3be9e4ce",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-window5-deployment-create.log",
+      "sha256": "84db142f1c377cc07e9a6b2dc121726f7e0734bc46a670a233661b3408ab234a",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-window5-status-1.log",
+      "sha256": "34d803f3f0dec982a31d651eeabf9880dd6e17e59f22a0a9a51099c27fd8cb44",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-window5-https-regression-retry1.log",
+      "sha256": "70b8a8a6d38df0d55ff36e5d3c1fef4ec14d16e5b8d3afb4f48583f377283433",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-phone-observations-00.json",
+      "sha256": "48daf8442cf24c619d9662431b5def8cb8adc030a4c657229cf5c6474af80e94",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-phone-observations-01.json",
+      "sha256": "2b4f4762ee82995fd44c684b2a782c99f2b327aa54b660a1930638edde324f8c",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-create-test-window.log",
+      "sha256": "d889eb3e493c2dd830b7e9f8fce163761c8211f05c11a407b351916d113053b9",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "v10-window5-https-regression.log",
+      "sha256": "225edd47e6a837f69621aa2bdbdfe79957ee32bdd0710411f3b3e83b3c666fb8",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "phone-domain-preview-v10.jpg",
+      "sha256": "1c6f8d0d664750de3bc2307677eb15f5bd40bd7ee2cf18710c1da9e030a3a063",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "PHONE-VALIDATION-REPORT.md",
+      "sha256": "290928d42fc91fba6fe082f2b680ebbfc0761e8398b307badbc9a81425aca4e8",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "PHONE-VALIDATION-RESULTS.json",
+      "sha256": "0f2e9d577cb4bde672936bc96d94ca4b5ce389ac2407c94228b77e96e6881730",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    },
+    {
+      "name": "PHONE-VALIDATION-REPORT.sha256",
+      "sha256": "698e17217fda3d1a4002a2bbd1e59312e57b63cc4c57559e48c014fa5c0b15ae",
+      "availability": "LOCAL_RAW_ARCHIVE"
+    }
+  ],
+  "prepared_test_window": 5,
+  "prepared_window_expires_at": "2026-11-04T02:57:14.004Z",
+  "operator_explicit_credential_window_confirmation": "NOT_REPORTED"
+}
