@@ -59,7 +59,7 @@ jobs:
       - name: Verify isolated native album build and authenticated transport
         run: |
           APP_ENV=test node --test --test-concurrency=1 tools/native-album-build.test.mjs tools/native-album-serverless.test.mjs
-          APP_ENV=test node --test tools/native-album-public-check.test.mjs
+          APP_ENV=test node --test tools/native-album-public-check.test.mjs tools/native-album-curl-check.test.mjs
           python3 -m unittest discover -s tools -p 'test_native_album_*.py' -v
           python3 tools/native-album-phone-record.py verify --output docs/evidence/native-album-v10/revision-1
           python3 tools/native-album-phone-record.py verify --output docs/evidence/native-album-v10/revision-2
