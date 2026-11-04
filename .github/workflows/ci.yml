@@ -32,6 +32,8 @@ jobs:
     env:
       PGPASSWORD: postgres
       LTM_PHOTO_TEST_POSTGRES_URL: postgresql://postgres@127.0.0.1:5432/ltm_photo_test?sslmode=disable
+      LTM_IDENTITY_TEST_POSTGRES_ADMIN_URL: postgresql://postgres@127.0.0.1:5432/ltm_identity_test?sslmode=disable
+      LTM_IDENTITY_TEST_POSTGRES_URL: postgresql://ltm_identity_test_runtime@127.0.0.1:5432/ltm_identity_test?sslmode=disable
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -51,6 +53,10 @@ jobs:
           distribution: temurin
           java-version: "21"
       - run: pnpm install --frozen-lockfile
+      - name: Provision isolated WeChat identity test database
+        run: |
+          psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 -c "CREATE ROLE ltm_identity_test_runtime LOGIN PASSWORD 'postgres' NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE NOREPLICATION;"
+          createdb -h 127.0.0.1 -U postgres ltm_identity_test
       - name: Provision least-privilege core SQL for B15 native tests
         env:
           APP_ENV: test
@@ -64,7 +70,7 @@ jobs:
           python3 tools/native-album-phone-record.py verify --output docs/evidence/native-album-v10/revision-1
           python3 tools/native-album-phone-record.py verify --output docs/evidence/native-album-v10/revision-2
       - name: Verify photo storage migrations and isolated Vercel artifact
-        run: APP_ENV=test node --test --test-concurrency=1 tools/photo-service-migrate.test.mjs tools/vercel-photo-package.test.mjs
+        run: APP_ENV=test node --test --test-concurrency=1 tools/photo-service-migrate.test.mjs tools/vercel-photo-package.test.mjs tools/vercel-identity-package.test.mjs
       - name: Verify native mobile production shell
         run: |
           npm ci --prefix apps/mobile/native
@@ -129,6 +135,12 @@ jobs:
           psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d ltm_integration -c
           "CREATE ROLE ltm_migrator LOGIN PASSWORD 'postgres' NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE NOREPLICATION;
           GRANT CREATE ON DATABASE ltm_integration TO ltm_migrator;"
+      - name: Provision isolated WeChat identity test database
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 -c "CREATE ROLE ltm_identity_test_runtime LOGIN PASSWORD 'postgres' NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE NOREPLICATION;"
+          createdb -h 127.0.0.1 -U postgres ltm_identity_test
       - name: Apply checksum-bound migrations and prove idempotence
         env:
           PGPASSWORD: postgres
@@ -158,6 +170,8 @@ jobs:
           LTM_TEST_POSTGRES_URL: postgresql://ltm_runtime@127.0.0.1:5432/ltm_integration?sslmode=disable
           LTM_TEST_POSTGRES_ADMIN_URL: postgresql://postgres@127.0.0.1:5432/ltm_integration?sslmode=disable
           LTM_PHOTO_TEST_POSTGRES_URL: postgresql://postgres@127.0.0.1:5432/ltm_integration?sslmode=disable
+          LTM_IDENTITY_TEST_POSTGRES_ADMIN_URL: postgresql://postgres@127.0.0.1:5432/ltm_identity_test?sslmode=disable
+          LTM_IDENTITY_TEST_POSTGRES_URL: postgresql://ltm_identity_test_runtime@127.0.0.1:5432/ltm_identity_test?sslmode=disable
         run: |
           pnpm run build
           pnpm --filter @ltm/core test
@@ -170,7 +184,7 @@ jobs:
           pnpm --filter @ltm/orchestration-platform test
           pnpm run test:release-certification
           pnpm run test:infra
-          APP_ENV=test node --test --test-concurrency=1 tools/photo-service-migrate.test.mjs tools/vercel-photo-package.test.mjs
+          APP_ENV=test node --test --test-concurrency=1 tools/photo-service-migrate.test.mjs tools/vercel-photo-package.test.mjs tools/vercel-identity-package.test.mjs
       - name: Upload PostgreSQL migration evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

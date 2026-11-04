@@ -14,9 +14,13 @@ export class PrivateS3Images implements PrivateImageObjects {
     const url = new URL(config.endpoint);
     const test = config.testLoopback === true && process.env.APP_ENV === "test" && url.hostname === "127.0.0.1" && url.protocol === "http:";
     if ((!test && url.protocol !== "https:") || url.username || url.password || url.search || url.hash || url.pathname !== "/" || !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(config.bucket) || !config.region || !config.accessKeyId || !config.secretAccessKey) throw new DomainError("CONFIGURATION_INVALID","private S3 configuration is invalid");
+    const tos = /^tos-s3-[a-z0-9-]+\.volces\.com$/.test(url.hostname);
+    // TOS S3 supports virtual hosts only. Dotted buckets trigger the SDK's
+    // TLS/path-style fallback, which TOS cannot serve.
+    if (tos && (url.hostname !== `tos-s3-${config.region}.volces.com` || config.bucket.includes("."))) throw new DomainError("CONFIGURATION_INVALID","TOS S3 region or bucket configuration is invalid");
     this.bucket = config.bucket;
-    this.client = new S3Client({ endpoint: url.origin, region: config.region, forcePathStyle: true, maxAttempts: 1,
-      requestHandler: { connectionTimeout: 5000, requestTimeout: 20_000 },
+    this.client = new S3Client({ endpoint: url.origin, region: config.region, forcePathStyle: !tos, maxAttempts: 1,
+      requestHandler: { connectionTimeout: 5000, requestTimeout: 20_000, throwOnRequestTimeout: true, socketTimeout: 20_000 },
       requestChecksumCalculation: "WHEN_REQUIRED", responseChecksumValidation: "WHEN_REQUIRED",
       credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey } });
   }
