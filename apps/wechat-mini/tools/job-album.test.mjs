@@ -109,3 +109,29 @@ test('generation result exposes an album action, progress, cancel and settings c
   for (const handler of ['saveAll', 'cancelSave', 'albumSettings']) assert.match(template, new RegExp(`bindtap="${handler}"`));
   assert.match(template, /一键保存到手机相册/); assert.match(template, /savedCount/); assert.match(template, /saveTotal/);
 });
+
+test('refresh exposes in-flight and success feedback and prevents duplicate requests or concurrent saving',async()=>{
+  let release,requests=0;
+  const f=fixture({request:()=>++requests===1?new Promise(resolve=>release=resolve):{data:delivery(21)}});
+  const pending=f.page.refresh();
+  try{
+    assert.equal(f.page.data.refreshing,true);assert.match(f.page.data.refreshMessage,/正在刷新/);
+    await f.page.refresh();await f.page.saveAll();assert.equal(f.calls.length,1);assert.equal(f.saved.length,0);
+  }finally{release({data:delivery(21)});await pending;}
+  assert.equal(f.page.data.refreshing,false);assert.match(f.page.data.refreshMessage,/已更新.*21\/21/);
+});
+test('successful refresh clears stale errors and failed refresh visibly reports failure',async()=>{
+  const f=fixture();f.page.data.error='HTTP_404';await f.page.refresh();
+  assert.equal(f.page.data.error,'');assert.match(f.page.data.refreshMessage,/已更新.*3\/3/);
+  const g=fixture({request:()=>{throw Error('NETWORK_TIMEOUT');}});await g.page.refresh();
+  assert.equal(g.page.data.refreshing,false);assert.match(g.page.data.refreshMessage,/刷新失败/);
+  assert.equal(g.page.data.error,'NETWORK_TIMEOUT');assert.equal(g.timers.size,1);
+});
+test('hiding a pending refresh ends loading and late success cannot overwrite the hidden page',async()=>{
+  let release;const f=fixture({request:()=>new Promise(resolve=>release=resolve)});
+  const pending=f.page.refresh();f.page.onHide();release({data:delivery(21)});await pending;
+  assert.equal(f.page.data.refreshing,false);assert.equal(f.page.data.readyCount,0);
+  assert.ok(!f.page.data.refreshMessage.includes('已更新'));
+  const template=readFileSync(new URL('../miniprogram/pages/job/index.wxml',import.meta.url),'utf8');
+  assert.match(template,/loading="\{\{refreshing\}\}"/);assert.match(template,/\{\{refreshMessage\}\}/);
+});
