@@ -1,0 +1,8 @@
+{
+  "level": "E3",
+  "status": "BLOCKED",
+  "blocker_reason": "Local verification uses SQLite WAL + local filesystem vault; live PostgreSQL 16 + S3/OSS + distributed worker cluster not provisioned in local sandbox.",
+  "unlock_condition": "Provide TIMECAPSULE_E3_POSTGRES_DSN and TIMECAPSULE_E3_S3_ENDPOINT pointing to real PostgreSQL and S3/COS instances.",
+  "anti_fake_policy": "Simulated or local SQLite/in-memory runs are strictly prohibited from claiming E3/E4/E5 PASS.",
+  "recorded_at": "2026-11-07T13:16:27.733298Z"
+}

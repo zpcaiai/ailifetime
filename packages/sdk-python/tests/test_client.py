@@ -25,6 +25,7 @@ from ailifetime_sdk import (
 
 class _ContractHandler(BaseHTTPRequestHandler):
     requests: list[dict[str, Any]] = []
+    logs: list[str] = []
 
     def do_GET(self) -> None:
         self.requests.append({"path": self.path, "headers": dict(self.headers.items()), "body": None})
@@ -105,7 +106,8 @@ class _ContractHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def log_message(self, _format: str, *_args: object) -> None:
-        pass
+        message = _format % _args if _args else _format
+        self.logs.append(message)
 
 
 class ClientTests(unittest.TestCase):

@@ -1,0 +1,15 @@
+=== COMMAND: /opt/homebrew/opt/python@3.12/bin/python3.12 -m unittest /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p05_p06_ai_and_jobs.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p08_p09_export_payments.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p10_p11_timeline_moderation.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p07_p12_p13_p14_http_e2e.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_evidence_runner.py -v (PID=61817, EXIT=0) ===
+test_a02_100x_duplicate_idempotency_key_creates_single_logical_job (services.timecapsule.tests.test_p05_p06_ai_and_jobs.TestP05AndP06AIAndJobs.test_a02_100x_duplicate_idempotency_key_creates_single_logical_job) ... ok
+test_a03_provider_429_503_failover_and_disconnect_reconciliation (services.timecapsule.tests.test_p05_p06_ai_and_jobs.TestP05AndP06AIAndJobs.test_a03_provider_429_503_failover_and_disconnect_reconciliation) ... ok
+test_a04_outbox_scanner_and_a07_consent_revocation_and_a13_budget_cap (services.timecapsule.tests.test_p05_p06_ai_and_jobs.TestP05AndP06AIAndJobs.test_a04_outbox_scanner_and_a07_consent_revocation_and_a13_budget_cap) ... ok
+test_a08_100x_duplicate_and_out_of_order_payment_callbacks_and_refund_reconciliation (services.timecapsule.tests.test_p08_p09_export_payments.TestP08AndP09ExportPayments.test_a08_100x_duplicate_and_out_of_order_payment_callbacks_and_refund_reconciliation) ... ok
+test_p08_a09_transcoding_label_preservation_and_a15_anti_bypass_guard (services.timecapsule.tests.test_p08_p09_export_payments.TestP08AndP09ExportPayments.test_p08_a09_transcoding_label_preservation_and_a15_anti_bypass_guard) ... ok
+test_p10_a11_share_revocation_a10_isolation_and_a12_historical_rerender (services.timecapsule.tests.test_p10_p11_timeline_moderation.TestP10AndP11TimelineModeration.test_p10_a11_share_revocation_a10_isolation_and_a12_historical_rerender) ... ok
+test_p11_moderation_blocks_prompt_injection_and_forgery_and_handles_appeal_sla (services.timecapsule.tests.test_p10_p11_timeline_moderation.TestP10AndP11TimelineModeration.test_p11_moderation_blocks_prompt_injection_and_forgery_and_handles_appeal_sla) ... ok
+test_full_http_openapi_e2e_miniapp_h5_album_and_slo (services.timecapsule.tests.test_p07_p12_p13_p14_http_e2e.TestP07P12P13P14HttpE2E.test_full_http_openapi_e2e_miniapp_h5_album_and_slo) ... ok
+test_e0_e5_evidence_generation_and_schema_compliance (services.timecapsule.tests.test_evidence_runner.TestIndependentEvidenceRunner.test_e0_e5_evidence_generation_and_schema_compliance) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 1.794s
+
+OK

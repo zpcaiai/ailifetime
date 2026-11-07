@@ -51,6 +51,57 @@
       </view>
     </view>
 
+    <!-- 一生拾忆时光机 P02: 12 大分类 × 20 首发模板 × 5 视觉风格 (100 种组合) -->
+    <view class="card">
+      <view class="section-title">
+        一生拾忆 · 12 大分类 / 20 首发模板 / 5 风格 ({{ tcTemplates.length * tcStyles.length }} 种组合)
+      </view>
+      <view class="pill-wrap">
+        <text
+          v-for="styleItem in tcStyles"
+          :key="styleItem.id"
+          class="filter-pill"
+          :class="{ active: selectedTcStyleId === styleItem.id }"
+          @click="selectedTcStyleId = styleItem.id"
+        >
+          风格：{{ styleItem.name }}
+        </text>
+      </view>
+      <view class="pill-wrap">
+        <text
+          class="filter-pill"
+          :class="{ active: selectedTcCategory === 'all' }"
+          @click="selectedTcCategory = 'all'"
+        >
+          全部 (20)
+        </text>
+        <text
+          v-for="cat in tcCategories"
+          :key="cat.id"
+          class="filter-pill"
+          :class="{ active: selectedTcCategory === cat.id }"
+          @click="selectedTcCategory = cat.id"
+        >
+          {{ cat.name }}
+        </text>
+      </view>
+      <view
+        v-for="cardTpl in filteredTcTemplates"
+        :key="cardTpl.id"
+        class="scene-item"
+        @click="goToTimeCapsuleCard(cardTpl.id)"
+      >
+        <view class="scene-main">
+          <text class="scene-name">{{ cardTpl.name }} ({{ cardTpl.id }})</text>
+          <text class="scene-summary">
+            画幅 {{ cardTpl.sizes.join(' / ') }} · {{ cardTpl.image_slots }} 张素材槽 ·
+            {{ cardTpl.label_policy === 'ai_required' ? 'GB 45438 显隐双标识必选' : '确定性排版卡片' }}
+          </text>
+        </view>
+        <text class="scene-tag">{{ cardTpl.pricing_tier }}</text>
+      </view>
+    </view>
+
     <!-- 隐私与安全承诺卡 -->
     <view class="card safety-card">
       <view class="section-title">四大隐私与安全承诺 (B70/B72)</view>
@@ -63,12 +114,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { AI_SIMULATION_DISCLOSURE, type PortraitTemplateSpec } from '@ailifetime/contracts';
 import {
   apiClient,
   BUILTIN_PORTRAIT_TEMPLATES,
+  TIMECAPSULE_CATEGORIES,
+  TIMECAPSULE_STYLES,
+  TIMECAPSULE_TEMPLATES,
   setPreferredTemplateId,
+  setPreferredTimeCapsuleSelection,
 } from '../../services/api';
 import { performPlatformLogin } from '../../utils/xhs-platform';
 
@@ -85,6 +140,18 @@ const ageMilestones = [
 ];
 
 const builtinTemplates = ref<PortraitTemplateSpec[]>(BUILTIN_PORTRAIT_TEMPLATES);
+const tcCategories = ref(TIMECAPSULE_CATEGORIES);
+const tcStyles = ref(TIMECAPSULE_STYLES);
+const tcTemplates = ref(TIMECAPSULE_TEMPLATES);
+const selectedTcCategory = ref<string>('all');
+const selectedTcStyleId = ref<string>('retro');
+
+const filteredTcTemplates = computed(() => {
+  if (selectedTcCategory.value === 'all') {
+    return tcTemplates.value;
+  }
+  return tcTemplates.value.filter((item) => item.category === selectedTcCategory.value);
+});
 
 async function handleInitSession() {
   try {
@@ -106,6 +173,13 @@ function goToStudio(templateId?: string) {
   if (templateId) {
     setPreferredTemplateId(templateId);
   }
+  uni.switchTab({
+    url: '/pages/studio/index',
+  });
+}
+
+function goToTimeCapsuleCard(cardId: string) {
+  setPreferredTimeCapsuleSelection(cardId, selectedTcStyleId.value);
   uni.switchTab({
     url: '/pages/studio/index',
   });
@@ -264,5 +338,26 @@ onMounted(() => {
   font-size: 24rpx;
   color: #444444;
   margin-bottom: 10rpx;
+}
+
+.pill-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.filter-pill {
+  font-size: 22rpx;
+  padding: 8rpx 18rpx;
+  border-radius: 999rpx;
+  background-color: #f4f4f8;
+  color: #444444;
+}
+
+.filter-pill.active {
+  background-color: #ff2442;
+  color: #ffffff;
+  font-weight: 600;
 }
 </style>

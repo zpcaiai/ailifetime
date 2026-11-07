@@ -1,0 +1,203 @@
+{
+  "package": "TimeCapsule_Industrial_Skills_v1_0",
+  "domain": "services/timecapsule",
+  "slices_implemented": [
+    "P00",
+    "P01",
+    "P02",
+    "P03",
+    "P04",
+    "P05",
+    "P06",
+    "P07",
+    "P08",
+    "P09",
+    "P10",
+    "P11",
+    "P12",
+    "P13",
+    "P14"
+  ],
+  "fault_scenarios_verified_in_e2": [
+    "A01",
+    "A02",
+    "A03",
+    "A04",
+    "A05",
+    "A06",
+    "A07",
+    "A08",
+    "A09",
+    "A10",
+    "A11",
+    "A12",
+    "A13",
+    "A14",
+    "A15"
+  ],
+  "generated_at": "2026-11-07T13:16:27.733947Z",
+  "commit_sha": "45c3b0e5b91a7aede07925108e9144dcb1473968",
+  "environment_digest": "sha256:a0e4061132590ecefed2e71d7665793b8c7bb39561cbde15c0f7d0051478ede5",
+  "summary": {
+    "E0": "PASS",
+    "E1": "PASS",
+    "E2": "PASS",
+    "E3": "BLOCKED",
+    "E4": "BLOCKED",
+    "E5": "BLOCKED"
+  },
+  "evidence_records": [
+    {
+      "execution_id": "exec_e0_9c2d7f7f5ff4",
+      "level": "E0",
+      "commit_sha": "45c3b0e5b91a7aede07925108e9144dcb1473968",
+      "environment_digest": "sha256:a0e4061132590ecefed2e71d7665793b8c7bb39561cbde15c0f7d0051478ede5",
+      "contract_revision": "TimeCapsule_Industrial_Skills_v1_0",
+      "status": "PASS",
+      "artifact_sha256": "9aa73a757ae80251e3db15bff474344ce4e8e97735adb15e0145f139fe3643bb",
+      "timestamp": "2026-11-07T13:16:25.608735Z",
+      "notes": "suite=timecapsule-static-schema-and-zero-fake-gate; exit_code=0; pids=[61812, 61813, 61814]; commands=3; log=evidence/timecapsule/logs/E0-static-schema.log"
+    },
+    {
+      "execution_id": "exec_e1_e974e7b30002",
+      "level": "E1",
+      "commit_sha": "45c3b0e5b91a7aede07925108e9144dcb1473968",
+      "environment_digest": "sha256:a0e4061132590ecefed2e71d7665793b8c7bb39561cbde15c0f7d0051478ede5",
+      "contract_revision": "TimeCapsule_Industrial_Skills_v1_0",
+      "status": "PASS",
+      "artifact_sha256": "5ccd180dcf4dc4e871cfb3e462a51cbfbd6fec4e00e964aa658824f0a91ec55d",
+      "timestamp": "2026-11-07T13:16:25.819455Z",
+      "notes": "suite=timecapsule-contract-and-state-machine-tests; exit_code=0; pids=[61815, 61816]; commands=2; log=evidence/timecapsule/logs/E1-contracts-and-state-machines.log"
+    },
+    {
+      "execution_id": "exec_e2_42536f69094e",
+      "level": "E2",
+      "commit_sha": "45c3b0e5b91a7aede07925108e9144dcb1473968",
+      "environment_digest": "sha256:a0e4061132590ecefed2e71d7665793b8c7bb39561cbde15c0f7d0051478ede5",
+      "contract_revision": "TimeCapsule_Industrial_Skills_v1_0",
+      "status": "PASS",
+      "artifact_sha256": "8aa3bce249435e5eddd67cfe3d97e45fff9007ebcf1d22d549be7d160338e0d4",
+      "timestamp": "2026-11-07T13:16:27.733110Z",
+      "notes": "suite=timecapsule-hermetic-integration-and-fault-injection-A01-A15; exit_code=0; pids=[61817]; commands=1; log=evidence/timecapsule/logs/E2-hermetic-integration-A01-A15.log"
+    },
+    {
+      "execution_id": "exec_e3_c5b2a924294e",
+      "level": "E3",
+      "commit_sha": "45c3b0e5b91a7aede07925108e9144dcb1473968",
+      "environment_digest": "sha256:a0e4061132590ecefed2e71d7665793b8c7bb39561cbde15c0f7d0051478ede5",
+      "contract_revision": "TimeCapsule_Industrial_Skills_v1_0",
+      "status": "BLOCKED",
+      "artifact_sha256": "0630655b38ea18f49d24f955c66a72a7a5e5810b0b8aa8a8c891fda3157f45bc",
+      "timestamp": "2026-11-07T13:16:27.733518Z",
+      "notes": "suite=timecapsule-real-postgres-s3-outbox-worker-verification | Local verification uses SQLite WAL + local filesystem vault; live PostgreSQL 16 + S3/OSS + distributed worker cluster not provisioned in local sandbox. | Unlock: Provide TIMECAPSULE_E3_POSTGRES_DSN and TIMECAPSULE_E3_S3_ENDPOINT pointing to real PostgreSQL and S3/COS instances."
+    },
+    {
+      "execution_id": "exec_e4_5718cd6f8ae6",
+      "level": "E4",
+      "commit_sha": "45c3b0e5b91a7aede07925108e9144dcb1473968",
+      "environment_digest": "sha256:a0e4061132590ecefed2e71d7665793b8c7bb39561cbde15c0f7d0051478ede5",
+      "contract_revision": "TimeCapsule_Industrial_Skills_v1_0",
+      "status": "BLOCKED",
+      "artifact_sha256": "7154cbfe38a19518218d66729c08219e007aa605f7d6c955d0608190b9276616",
+      "timestamp": "2026-11-07T13:16:27.733727Z",
+      "notes": "suite=timecapsule-wechat-pay-sandbox-and-live-ai-provider-e2e | Live WeChat Pay merchant APIv3 private key/certificates and external GPU model API keys (Seedream/Doubao) are not present in offline environment. | Unlock: Provision TIMECAPSULE_E4_WECHAT_MCH_ID, TIMECAPSULE_E4_WECHAT_API_V3_KEY, and TIMECAPSULE_E4_AI_API_KEY in staging environment."
+    },
+    {
+      "execution_id": "exec_e5_97792abb6fea",
+      "level": "E5",
+      "commit_sha": "45c3b0e5b91a7aede07925108e9144dcb1473968",
+      "environment_digest": "sha256:a0e4061132590ecefed2e71d7665793b8c7bb39561cbde15c0f7d0051478ede5",
+      "contract_revision": "TimeCapsule_Industrial_Skills_v1_0",
+      "status": "BLOCKED",
+      "artifact_sha256": "23c6f0487ce704d0c24513716dd61f8ff6c86280201cc93431b2a491ab233b1e",
+      "timestamp": "2026-11-07T13:16:27.733913Z",
+      "notes": "suite=timecapsule-physical-device-ios-android-wechat-release-gate | Physical iOS and Android WeChat client device farm execution and screen-reader manual accessibility sign-off require hardware devices. | Unlock: Attach signed physical device test receipt via TIMECAPSULE_E5_DEVICE_RECEIPT_PATH."
+    }
+  ],
+  "execution_details": [
+    {
+      "execution_id": "exec_e0_9c2d7f7f5ff4",
+      "level": "E0",
+      "suite": "timecapsule-static-schema-and-zero-fake-gate",
+      "command": "/opt/homebrew/opt/python@3.12/bin/python3.12 /Users/stephen/Documents/Projects/python/ailifetime/spec/timecapsule/tests/validate_package.py && node /Users/stephen/Documents/Projects/python/ailifetime/tools/verify-source.mjs && /opt/homebrew/opt/python@3.12/bin/python3.12 /Users/stephen/DevProjects/AIProjects/elmos/certification/strict_zero_fake_industrial_evaluator.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule",
+      "exit_code": 0,
+      "pid": 61814,
+      "child_pids": [
+        61812,
+        61813,
+        61814
+      ],
+      "artifact_sha256": "9aa73a757ae80251e3db15bff474344ce4e8e97735adb15e0145f139fe3643bb",
+      "log_path": "evidence/timecapsule/logs/E0-static-schema.log",
+      "status": "PASS"
+    },
+    {
+      "execution_id": "exec_e1_e974e7b30002",
+      "level": "E1",
+      "suite": "timecapsule-contract-and-state-machine-tests",
+      "command": "/opt/homebrew/opt/python@3.12/bin/python3.12 -m unittest discover -s /Users/stephen/Documents/Projects/python/ailifetime/spec/timecapsule/tests -p test_*.py -v && /opt/homebrew/opt/python@3.12/bin/python3.12 -m unittest /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p00_p01_identity_consent.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p02_p03_catalog_media.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p04_deterministic_renderer.py -v",
+      "exit_code": 0,
+      "pid": 61816,
+      "child_pids": [
+        61815,
+        61816
+      ],
+      "artifact_sha256": "5ccd180dcf4dc4e871cfb3e462a51cbfbd6fec4e00e964aa658824f0a91ec55d",
+      "log_path": "evidence/timecapsule/logs/E1-contracts-and-state-machines.log",
+      "status": "PASS"
+    },
+    {
+      "execution_id": "exec_e2_42536f69094e",
+      "level": "E2",
+      "suite": "timecapsule-hermetic-integration-and-fault-injection-A01-A15",
+      "command": "/opt/homebrew/opt/python@3.12/bin/python3.12 -m unittest /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p05_p06_ai_and_jobs.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p08_p09_export_payments.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p10_p11_timeline_moderation.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p07_p12_p13_p14_http_e2e.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_evidence_runner.py -v",
+      "exit_code": 0,
+      "pid": 61817,
+      "child_pids": [
+        61817
+      ],
+      "artifact_sha256": "8aa3bce249435e5eddd67cfe3d97e45fff9007ebcf1d22d549be7d160338e0d4",
+      "log_path": "evidence/timecapsule/logs/E2-hermetic-integration-A01-A15.log",
+      "status": "PASS"
+    },
+    {
+      "execution_id": "exec_e3_c5b2a924294e",
+      "level": "E3",
+      "suite": "timecapsule-real-postgres-s3-outbox-worker-verification",
+      "command": "TIMECAPSULE_E3_POSTGRES_DSN=... TIMECAPSULE_E3_S3_ENDPOINT=... pytest -m e3_real_middleware",
+      "exit_code": 0,
+      "pid": 61808,
+      "child_pids": [],
+      "artifact_sha256": "0630655b38ea18f49d24f955c66a72a7a5e5810b0b8aa8a8c891fda3157f45bc",
+      "status": "BLOCKED",
+      "blocker_reason": "Local verification uses SQLite WAL + local filesystem vault; live PostgreSQL 16 + S3/OSS + distributed worker cluster not provisioned in local sandbox.",
+      "unlock_condition": "Provide TIMECAPSULE_E3_POSTGRES_DSN and TIMECAPSULE_E3_S3_ENDPOINT pointing to real PostgreSQL and S3/COS instances."
+    },
+    {
+      "execution_id": "exec_e4_5718cd6f8ae6",
+      "level": "E4",
+      "suite": "timecapsule-wechat-pay-sandbox-and-live-ai-provider-e2e",
+      "command": "TIMECAPSULE_E4_WECHAT_MCH_ID=... TIMECAPSULE_E4_AI_API_KEY=... pytest -m e4_vendor_sandbox",
+      "exit_code": 0,
+      "pid": 61808,
+      "child_pids": [],
+      "artifact_sha256": "7154cbfe38a19518218d66729c08219e007aa605f7d6c955d0608190b9276616",
+      "status": "BLOCKED",
+      "blocker_reason": "Live WeChat Pay merchant APIv3 private key/certificates and external GPU model API keys (Seedream/Doubao) are not present in offline environment.",
+      "unlock_condition": "Provision TIMECAPSULE_E4_WECHAT_MCH_ID, TIMECAPSULE_E4_WECHAT_API_V3_KEY, and TIMECAPSULE_E4_AI_API_KEY in staging environment."
+    },
+    {
+      "execution_id": "exec_e5_97792abb6fea",
+      "level": "E5",
+      "suite": "timecapsule-physical-device-ios-android-wechat-release-gate",
+      "command": "TIMECAPSULE_E5_DEVICE_RECEIPT_PATH=... python3 -m services.timecapsule.verify_device_release",
+      "exit_code": 0,
+      "pid": 61808,
+      "child_pids": [],
+      "artifact_sha256": "23c6f0487ce704d0c24513716dd61f8ff6c86280201cc93431b2a491ab233b1e",
+      "status": "BLOCKED",
+      "blocker_reason": "Physical iOS and Android WeChat client device farm execution and screen-reader manual accessibility sign-off require hardware devices.",
+      "unlock_condition": "Attach signed physical device test receipt via TIMECAPSULE_E5_DEVICE_RECEIPT_PATH."
+    }
+  ]
+}

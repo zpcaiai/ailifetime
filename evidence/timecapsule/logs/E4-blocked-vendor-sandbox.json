@@ -1,0 +1,8 @@
+{
+  "level": "E4",
+  "status": "BLOCKED",
+  "blocker_reason": "Live WeChat Pay merchant APIv3 private key/certificates and external GPU model API keys (Seedream/Doubao) are not present in offline environment.",
+  "unlock_condition": "Provision TIMECAPSULE_E4_WECHAT_MCH_ID, TIMECAPSULE_E4_WECHAT_API_V3_KEY, and TIMECAPSULE_E4_AI_API_KEY in staging environment.",
+  "anti_fake_policy": "Simulated or local SQLite/in-memory runs are strictly prohibited from claiming E3/E4/E5 PASS.",
+  "recorded_at": "2026-11-07T13:16:27.733571Z"
+}

@@ -1,0 +1,8 @@
+{
+  "level": "E5",
+  "status": "BLOCKED",
+  "blocker_reason": "Physical iOS and Android WeChat client device farm execution and screen-reader manual accessibility sign-off require hardware devices.",
+  "unlock_condition": "Attach signed physical device test receipt via TIMECAPSULE_E5_DEVICE_RECEIPT_PATH.",
+  "anti_fake_policy": "Simulated or local SQLite/in-memory runs are strictly prohibited from claiming E3/E4/E5 PASS.",
+  "recorded_at": "2026-11-07T13:16:27.733763Z"
+}

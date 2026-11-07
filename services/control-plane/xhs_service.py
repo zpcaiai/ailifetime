@@ -27,9 +27,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+REPO_ROOT_DIR = Path(__file__).resolve().parents[2]
 MEDIA_WORKER_DIR = Path(__file__).resolve().parent.parent / "media-worker"
-if str(MEDIA_WORKER_DIR) not in sys.path:
-    sys.path.insert(0, str(MEDIA_WORKER_DIR))
+for _extra_dir in (REPO_ROOT_DIR, MEDIA_WORKER_DIR):
+    if str(_extra_dir) not in sys.path:
+        sys.path.insert(0, str(_extra_dir))
 
 from portrait_template_engine import (  # noqa: E402
     CompositionDraftRecord,
@@ -39,6 +41,8 @@ from portrait_template_engine import (  # noqa: E402
     TemplateEngineError,
     TimelineGenerationPlan,
 )
+from services.timecapsule.db_and_identity import TimeCapsuleError  # noqa: E402
+from services.timecapsule.http_server import TimeCapsuleApplication  # noqa: E402
 
 
 AI_WATERMARK_BADGE = "AI生成·艺术示意非真实预测"
@@ -120,6 +124,7 @@ class XhsControlPlaneService:
         self._conn.row_factory = sqlite3.Row
         self._init_schema()
         self._template_engine = PortraitTemplateEngine(db_path=db_path)
+        self._timecapsule_app = TimeCapsuleApplication(db_path=db_path)
 
     def _init_schema(self) -> None:
         self._conn.execute("BEGIN IMMEDIATE")
@@ -181,6 +186,92 @@ class XhsControlPlaneService:
     @property
     def template_engine(self) -> PortraitTemplateEngine:
         return self._template_engine
+
+    @property
+    def timecapsule_app(self) -> TimeCapsuleApplication:
+        return self._timecapsule_app
+
+    def list_timecapsule_catalog(
+        self,
+        *,
+        category: str | None = None,
+        include_retired: bool = False,
+    ) -> dict[str, Any]:
+        """P02: Expose 12 categories, 20 launch templates, 5 visual styles (100 combinations)."""
+        try:
+            return self._timecapsule_app.catalog.list_catalog(
+                category=category,
+                include_retired=include_retired,
+            )
+        except TimeCapsuleError as exc:
+            raise ControlPlaneError(exc.code, exc.message, exc.status_code) from exc
+
+    def render_and_export_timecapsule_card(
+        self,
+        *,
+        template_id: str,
+        style_id: str,
+        fields: dict[str, Any],
+        output_format: str = "png",
+        quality_tier: str = "preview",
+        qr_url: str = "https://timecapsule.cn/s/demo",
+    ) -> dict[str, Any]:
+        """P04 & P08: Render deterministic card and attach mandatory explicit+implicit GB 45438-2025 AI synthesis labels."""
+        try:
+            template = self._timecapsule_app.catalog.get_template_revision(template_id)
+            style = self._timecapsule_app.catalog.get_style(style_id)
+            export_size = str(template["sizes"][0])
+            rendered = self._timecapsule_app.renderer.render_card(
+                template_manifest=template,
+                style_manifest=style,
+                fields=fields,
+                asset_digests=[hashlib.sha256(b"cp_portrait_seed").hexdigest()],
+                export_size=export_size,
+                quality_tier=quality_tier,
+                qr_url=qr_url,
+            )
+            now_str = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            implicit_label = self._timecapsule_app.exports._build_implicit_aigc_metadata(
+                job_id=f"job_cp_{template_id}_{style_id}",
+                user_id="cp_actor",
+                template_id=template["id"],
+                template_revision=template["version"],
+                ai_mode=template["ai_mode"],
+                label_policy=template["label_policy"],
+                provider_id="control_plane_deterministic_renderer",
+                media_digest=rendered.media_digest,
+                now_str=now_str,
+            )
+            labeled_png = self._timecapsule_app.exports._inject_png_implicit_label(
+                rendered.png_bytes,
+                implicit_label,
+            )
+            target_fmt = output_format.lower()
+            if target_fmt == "webp":
+                final_bytes = self._timecapsule_app.exports.transcode_exported_bytes(
+                    source_bytes=labeled_png,
+                    target_format="webp",
+                )
+            else:
+                final_bytes = labeled_png
+            verification = self._timecapsule_app.exports.verify_export_labels(
+                exported_bytes=final_bytes,
+                export_format=target_fmt,
+                require_ai_label=(template["label_policy"] == "ai_required"),
+            )
+            return {
+                "template_id": template["id"],
+                "template_revision": template["version"],
+                "style_id": style_id,
+                "output_format": target_fmt,
+                "width": rendered.width_px,
+                "height": rendered.height_px,
+                "svg_sha256": rendered.input_digest,
+                "media_bytes": final_bytes,
+                "ai_label_verification": verification,
+            }
+        except TimeCapsuleError as exc:
+            raise ControlPlaneError(exc.code, exc.message, exc.status_code) from exc
 
     def list_portrait_templates(
         self,

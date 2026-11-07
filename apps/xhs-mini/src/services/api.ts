@@ -43,6 +43,93 @@ interface SandboxProjectContext {
 
 const sandboxProjectRegistry = new Map<string, SandboxProjectContext>();
 
+export interface TimeCapsuleCategoryItem {
+  id: string;
+  name: string;
+}
+
+export interface TimeCapsuleStyleItem {
+  id: string;
+  name: string;
+  description: string;
+  accent: string;
+}
+
+export interface TimeCapsuleTemplateItem {
+  id: string;
+  category: string;
+  name: string;
+  version: string;
+  image_slots: number;
+  sizes: Array<'3:4' | '9:16' | '1:1'>;
+  ai_mode: 'none' | 'portrait_style' | 'age_simulation' | 'composite' | 'restoration';
+  label_policy: 'conditional' | 'ai_required';
+  pricing_tier: 'FREE' | 'SINGLE' | 'BUNDLE';
+}
+
+export const TIMECAPSULE_CATEGORIES: TimeCapsuleCategoryItem[] = [
+  { id: 'profile', name: '个人介绍与社交名片' },
+  { id: 'career', name: '职业与商务形象' },
+  { id: 'timeline', name: '人生时光机' },
+  { id: 'anniversary', name: '生日与纪念日' },
+  { id: 'baby', name: '宝宝成长与亲子' },
+  { id: 'couple', name: '恋爱婚姻纪念' },
+  { id: 'family', name: '家庭代际记忆' },
+  { id: 'travel', name: '旅行生活记录' },
+  { id: 'achievement', name: '成就学习里程碑' },
+  { id: 'pet', name: '宠物时光机' },
+  { id: 'creative', name: 'AI创意写真' },
+  { id: 'memory', name: '珍贵回忆' },
+];
+
+export const TIMECAPSULE_STYLES: TimeCapsuleStyleItem[] = [
+  { id: 'minimal', name: '极简商务', description: '高对比网格排版', accent: '#AA785A' },
+  { id: 'scrapbook', name: '可爱手账', description: '柔和拼贴与温度感纸张', accent: '#AA785A' },
+  { id: 'luxury', name: '黑金高级', description: '典藏画册与克制鎏金', accent: '#AA785A' },
+  { id: 'retro', name: '复古胶片', description: '暖调银盐颗粒与胶片边框', accent: '#AA785A' },
+  { id: 'futuristic', name: '科技未来', description: '冷调流光与结构化面板', accent: '#1F6FEB' },
+];
+
+export const TIMECAPSULE_TEMPLATES: TimeCapsuleTemplateItem[] = [
+  { id: 'personal_intro', category: 'profile', name: '个人介绍信息卡', version: '1.0.0', image_slots: 1, sizes: ['3:4', '9:16', '1:1'], ai_mode: 'none', label_policy: 'conditional', pricing_tier: 'FREE' },
+  { id: 'social_contact', category: 'profile', name: '微信交友名片', version: '1.0.0', image_slots: 1, sizes: ['3:4', '9:16'], ai_mode: 'none', label_policy: 'conditional', pricing_tier: 'FREE' },
+  { id: 'business_card', category: 'career', name: '职业商务名片', version: '1.0.0', image_slots: 1, sizes: ['3:4', '9:16'], ai_mode: 'none', label_policy: 'conditional', pricing_tier: 'FREE' },
+  { id: 'personal_portrait', category: 'career', name: 'AI个人形象卡', version: '1.0.0', image_slots: 1, sizes: ['3:4', '9:16', '1:1'], ai_mode: 'portrait_style', label_policy: 'ai_required', pricing_tier: 'SINGLE' },
+  { id: 'life_0_100', category: 'timeline', name: '人生0-100岁照片', version: '1.0.0', image_slots: 1, sizes: ['3:4', '9:16'], ai_mode: 'age_simulation', label_policy: 'ai_required', pricing_tier: 'SINGLE' },
+  { id: 'past_me', category: 'timeline', name: '童年与现在合影', version: '1.0.0', image_slots: 2, sizes: ['3:4', '9:16'], ai_mode: 'composite', label_policy: 'ai_required', pricing_tier: 'SINGLE' },
+  { id: 'future_me', category: 'timeline', name: '未来20年的自己', version: '1.0.0', image_slots: 1, sizes: ['3:4', '9:16', '1:1'], ai_mode: 'age_simulation', label_policy: 'ai_required', pricing_tier: 'SINGLE' },
+  { id: 'birthday', category: 'anniversary', name: '生日祝福卡', version: '1.0.0', image_slots: 1, sizes: ['3:4', '9:16'], ai_mode: 'none', label_policy: 'conditional', pricing_tier: 'FREE' },
+  { id: 'baby_month', category: 'baby', name: '宝宝成长月龄卡', version: '1.0.0', image_slots: 1, sizes: ['3:4', '9:16'], ai_mode: 'none', label_policy: 'conditional', pricing_tier: 'FREE' },
+  { id: 'couple_anniversary', category: 'couple', name: '情侣纪念卡', version: '1.0.0', image_slots: 2, sizes: ['3:4', '9:16', '1:1'], ai_mode: 'none', label_policy: 'conditional', pricing_tier: 'FREE' },
+  { id: 'moments_grid', category: 'travel', name: '朋友圈九宫格', version: '1.0.0', image_slots: 9, sizes: ['3:4', '9:16'], ai_mode: 'none', label_policy: 'conditional', pricing_tier: 'FREE' },
+  { id: 'retro_portrait', category: 'creative', name: '复古年代写真', version: '1.0.0', image_slots: 1, sizes: ['3:4', '9:16'], ai_mode: 'portrait_style', label_policy: 'ai_required', pricing_tier: 'SINGLE' },
+  { id: 'graduation', category: 'achievement', name: '毕业纪念卡', version: '1.0.0', image_slots: 1, sizes: ['3:4', '9:16', '1:1'], ai_mode: 'none', label_policy: 'conditional', pricing_tier: 'FREE' },
+  { id: 'family_photo', category: 'family', name: '全家福生成', version: '1.0.0', image_slots: 5, sizes: ['3:4', '9:16'], ai_mode: 'composite', label_policy: 'ai_required', pricing_tier: 'BUNDLE' },
+  { id: 'old_photo_restore', category: 'memory', name: '老照片修复纪念', version: '1.0.0', image_slots: 1, sizes: ['3:4', '9:16'], ai_mode: 'restoration', label_policy: 'ai_required', pricing_tier: 'SINGLE' },
+  { id: 'pet_identity', category: 'pet', name: '宠物身份卡', version: '1.0.0', image_slots: 1, sizes: ['3:4', '9:16', '1:1'], ai_mode: 'none', label_policy: 'conditional', pricing_tier: 'FREE' },
+  { id: 'travel_postcard', category: 'travel', name: '旅行明信片', version: '1.0.0', image_slots: 1, sizes: ['3:4', '9:16'], ai_mode: 'none', label_policy: 'conditional', pricing_tier: 'FREE' },
+  { id: 'annual_review', category: 'timeline', name: '年度人生回顾', version: '1.0.0', image_slots: 12, sizes: ['3:4', '9:16'], ai_mode: 'none', label_policy: 'conditional', pricing_tier: 'BUNDLE' },
+  { id: 'portfolio', category: 'career', name: '个人作品展示卡', version: '1.0.0', image_slots: 3, sizes: ['3:4', '9:16', '1:1'], ai_mode: 'none', label_policy: 'conditional', pricing_tier: 'FREE' },
+  { id: 'life_album', category: 'memory', name: '人生数字纪念册', version: '1.0.0', image_slots: 12, sizes: ['3:4', '9:16'], ai_mode: 'composite', label_policy: 'ai_required', pricing_tier: 'BUNDLE' },
+];
+
+let preferredTimeCapsuleCardId = 'life_0_100';
+let preferredTimeCapsuleStyleId = 'retro';
+
+export function setPreferredTimeCapsuleSelection(cardId: string, styleId?: string): void {
+  preferredTimeCapsuleCardId = cardId;
+  if (styleId) {
+    preferredTimeCapsuleStyleId = styleId;
+  }
+}
+
+export function getPreferredTimeCapsuleSelection(): { cardId: string; styleId: string } {
+  return {
+    cardId: preferredTimeCapsuleCardId,
+    styleId: preferredTimeCapsuleStyleId,
+  };
+}
+
 export function setPreferredTemplateId(templateId: string): void {
   preferredTemplateId = templateId;
 }

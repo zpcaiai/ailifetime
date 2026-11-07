@@ -356,6 +356,43 @@ class XhsControlPlaneTests(unittest.TestCase):
         )
         self.assertEqual(manual_report.recommended_action, "manual-review")
 
+    def test_timecapsule_12_categories_20_templates_100_combinations_and_labeled_export(self) -> None:
+        catalog = self.svc.list_timecapsule_catalog()
+        self.assertEqual(len(catalog["categories"]), 12)
+        self.assertEqual(len(catalog["styles"]), 5)
+        self.assertEqual(len(catalog["templates"]), 20)
+        self.assertEqual(catalog["combination_count"], 100)
+
+        png_export = self.svc.render_and_export_timecapsule_card(
+            template_id="life_0_100",
+            style_id="retro",
+            fields={
+                "title": "人生0-100岁时光纪念",
+                "subtitle": "愿每一程都有温暖相伴",
+                "event_date": "2026-11-07",
+                "display_name": "林小满",
+            },
+            output_format="png",
+        )
+        self.assertTrue(png_export["ai_label_verification"]["verified"])
+        self.assertTrue(png_export["ai_label_verification"]["has_explicit_label"])
+        self.assertEqual(png_export["output_format"], "png")
+
+        webp_export = self.svc.render_and_export_timecapsule_card(
+            template_id="life_0_100",
+            style_id="luxury",
+            fields={
+                "title": "人生0-100岁时光纪念",
+                "subtitle": "愿每一程都有温暖相伴",
+                "event_date": "2026-11-07",
+                "display_name": "林小满",
+            },
+            output_format="webp",
+        )
+        self.assertTrue(webp_export["ai_label_verification"]["verified"])
+        self.assertTrue(webp_export["ai_label_verification"]["has_explicit_label"])
+        self.assertEqual(webp_export["output_format"], "webp")
+
 
 if __name__ == "__main__":
     unittest.main()

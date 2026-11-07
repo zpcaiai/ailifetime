@@ -185,6 +185,59 @@
       </button>
     </view>
 
+    <!-- 一生拾忆时光机 P04/P08: 20 首发模板 × 5 风格确定性排版与 GB 45438 双标识导出 -->
+    <view class="card">
+      <view class="step-header">
+        <text class="step-title">一生拾忆 · 20 模板 × 5 视觉风格卡片编排</text>
+        <text class="step-sub">P04 确定性排版 + P08 显隐双标识</text>
+      </view>
+      <view class="form-row">
+        <text class="form-label">当前选中卡片模板 ({{ currentTcCard.pricing_tier }})：</text>
+        <view class="pill-group">
+          <text
+            v-for="tcTpl in tcTemplates"
+            :key="tcTpl.id"
+            class="choice-pill"
+            :class="{ active: selectedTcCardId === tcTpl.id }"
+            @click="handleSelectTcCard(tcTpl.id)"
+          >
+            {{ tcTpl.name }}
+          </text>
+        </view>
+      </view>
+      <view class="form-row">
+        <text class="form-label">选择 5 套基础视觉风格：</text>
+        <view class="pill-group">
+          <text
+            v-for="st in tcStyles"
+            :key="st.id"
+            class="choice-pill"
+            :class="{ active: selectedTcStyleId === st.id }"
+            @click="handleSelectTcStyle(st.id)"
+          >
+            {{ st.name }} ({{ st.description }})
+          </text>
+        </view>
+      </view>
+      <view class="optics-inspector">
+        <view class="inspector-title">
+          当前组合：{{ currentTcCard.name }} × {{ currentTcStyle.name }} (v{{ currentTcCard.version }})
+        </view>
+        <view class="inspector-line">
+          <text class="inspector-key">画幅与槽位：</text>
+          <text class="inspector-val">
+            支持 {{ currentTcCard.sizes.join(' / ') }} · {{ currentTcCard.image_slots }} 张素材槽 · AI模式 {{ currentTcCard.ai_mode }}
+          </text>
+        </view>
+        <view class="inspector-line">
+          <text class="inspector-key">合规双标识：</text>
+          <text class="inspector-val">
+            显式角标「本作品含AI生成/合成内容」+ 隐式 PNG iTXt / RIFF WebP HMAC 签名元数据 (A09/A15)
+          </text>
+        </view>
+      </view>
+    </view>
+
     <!-- 步骤 3: 生成进度、B15 质量门控分、光学 Prompt 检视、小红书分享与相册下单 -->
     <view v-if="activeJob" class="card">
       <view class="step-header">
@@ -274,11 +327,15 @@ import type {
 import {
   apiClient,
   BUILTIN_PORTRAIT_TEMPLATES,
+  TIMECAPSULE_STYLES,
+  TIMECAPSULE_TEMPLATES,
   getCurrentPlatformChannel,
   getPreferredTemplateId,
+  getPreferredTimeCapsuleSelection,
   getTrackedShare,
   purgeEphemeralMediaCache,
   setPreferredTemplateId,
+  setPreferredTimeCapsuleSelection,
 } from '../../services/api';
 import { buildCompliantShareConfig } from '../../utils/xhs-platform';
 import XhsNoteMountCard from '../../components/XhsNoteMountCard.vue';
@@ -291,6 +348,35 @@ const capacities: { label: string; value: GrantorCapacity }[] = [
 
 const templates = ref<PortraitTemplateSpec[]>(BUILTIN_PORTRAIT_TEMPLATES);
 const selectedTemplateId = ref<string>(getPreferredTemplateId());
+const tcTemplates = ref(TIMECAPSULE_TEMPLATES);
+const tcStyles = ref(TIMECAPSULE_STYLES);
+const initialTc = getPreferredTimeCapsuleSelection();
+const selectedTcCardId = ref<string>(initialTc.cardId);
+const selectedTcStyleId = ref<string>(initialTc.styleId);
+
+const currentTcCard = computed(() => {
+  return (
+    tcTemplates.value.find((c) => c.id === selectedTcCardId.value) ||
+    tcTemplates.value[0]
+  );
+});
+
+const currentTcStyle = computed(() => {
+  return (
+    tcStyles.value.find((s) => s.id === selectedTcStyleId.value) ||
+    tcStyles.value[0]
+  );
+});
+
+function handleSelectTcCard(cardId: string) {
+  selectedTcCardId.value = cardId;
+  setPreferredTimeCapsuleSelection(cardId, selectedTcStyleId.value);
+}
+
+function handleSelectTcStyle(styleId: string) {
+  selectedTcStyleId.value = styleId;
+  setPreferredTimeCapsuleSelection(selectedTcCardId.value, styleId);
+}
 
 const currentTemplate = computed<PortraitTemplateSpec>(() => {
   return (
@@ -480,6 +566,9 @@ onShow(() => {
       handleSelectTemplate(found);
     }
   }
+  const tcSelection = getPreferredTimeCapsuleSelection();
+  selectedTcCardId.value = tcSelection.cardId;
+  selectedTcStyleId.value = tcSelection.styleId;
   if (activeShare.value) {
     const tracked = getTrackedShare(activeShare.value.id);
     if (tracked) {
