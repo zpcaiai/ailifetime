@@ -1,0 +1,38 @@
+{
+  "name": "AI人生时光机",
+  "appid": "__UNI__AILIFETIME_XHS",
+  "description": "AI 人生时光机 - 0—100岁时光影像、家庭合拍与未来自我对话小红书小程序",
+  "versionName": "1.0.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "mp-xhs": {
+    "appid": "YOUR_XHS_MINI_APPID",
+    "setting": {
+      "urlCheck": true,
+      "es6": true,
+      "postcss": true,
+      "minified": true
+    },
+    "optimization": {
+      "subPackages": true
+    }
+  },
+  "mp-weixin": {
+    "appid": "YOUR_WECHAT_MINI_APPID",
+    "setting": {
+      "urlCheck": true,
+      "es6": true,
+      "postcss": true,
+      "minified": true
+    },
+    "usingComponents": true,
+    "lazyCodeLoading": "requiredComponents",
+    "optimization": {
+      "subPackages": true
+    }
+  },
+  "uniStatistics": {
+    "enable": false
+  },
+  "vueVersion": "3"
+}

@@ -1,0 +1,66 @@
+{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationBarTitleText": "AI 人生时光机",
+        "navigationBarBackgroundColor": "#FF2442",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/studio/index",
+      "style": {
+        "navigationBarTitleText": "时光工坊 · 授权与生成",
+        "navigationBarBackgroundColor": "#FFFFFF",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/future-self/index",
+      "style": {
+        "navigationBarTitleText": "对话未来自我",
+        "navigationBarBackgroundColor": "#FFFFFF",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/profile/index",
+      "style": {
+        "navigationBarTitleText": "我的作品与隐私权",
+        "navigationBarBackgroundColor": "#FFFFFF",
+        "navigationBarTextStyle": "black"
+      }
+    }
+  ],
+  "tabBar": {
+    "color": "#666666",
+    "selectedColor": "#FF2442",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "时光首页"
+      },
+      {
+        "pagePath": "pages/studio/index",
+        "text": "时光工坊"
+      },
+      {
+        "pagePath": "pages/future-self/index",
+        "text": "未来自我"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "隐私与订单"
+      }
+    ]
+  },
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "AI 人生时光机",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "backgroundColor": "#F8F8FA"
+  }
+}
