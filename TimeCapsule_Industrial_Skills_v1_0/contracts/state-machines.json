@@ -1,0 +1,70 @@
+{
+  "job": {
+    "CREATED": [
+      "VALIDATED",
+      "FAILED",
+      "CANCELLED"
+    ],
+    "VALIDATED": [
+      "QUEUED",
+      "FAILED",
+      "CANCELLED"
+    ],
+    "QUEUED": [
+      "RUNNING",
+      "CANCEL_REQUESTED",
+      "FAILED"
+    ],
+    "RUNNING": [
+      "MODERATION",
+      "CANCEL_REQUESTED",
+      "FAILED"
+    ],
+    "MODERATION": [
+      "RENDERING",
+      "FAILED",
+      "CANCEL_REQUESTED"
+    ],
+    "RENDERING": [
+      "READY",
+      "FAILED",
+      "CANCEL_REQUESTED"
+    ],
+    "READY": [
+      "EXPIRED"
+    ],
+    "FAILED": [],
+    "CANCEL_REQUESTED": [
+      "CANCELLED",
+      "FAILED"
+    ],
+    "CANCELLED": [],
+    "EXPIRED": []
+  },
+  "order": {
+    "CREATED": [
+      "PENDING",
+      "CLOSED"
+    ],
+    "PENDING": [
+      "PAID",
+      "CLOSED"
+    ],
+    "PAID": [
+      "FULFILLED",
+      "REFUNDING"
+    ],
+    "FULFILLED": [
+      "REFUNDING"
+    ],
+    "REFUNDING": [
+      "REFUNDED",
+      "REFUND_FAILED"
+    ],
+    "REFUND_FAILED": [
+      "REFUNDING"
+    ],
+    "REFUNDED": [],
+    "CLOSED": []
+  }
+}

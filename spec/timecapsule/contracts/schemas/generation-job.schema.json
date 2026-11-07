@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GenerationJob",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "user_id",
+    "template_id",
+    "template_version",
+    "status",
+    "idempotency_key",
+    "consent_ref",
+    "created_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "user_id": {
+      "type": "string"
+    },
+    "template_id": {
+      "type": "string"
+    },
+    "template_version": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "CREATED",
+        "VALIDATED",
+        "QUEUED",
+        "RUNNING",
+        "MODERATION",
+        "RENDERING",
+        "READY",
+        "FAILED",
+        "CANCEL_REQUESTED",
+        "CANCELLED",
+        "EXPIRED"
+      ]
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 8
+    },
+    "consent_ref": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "error_code": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

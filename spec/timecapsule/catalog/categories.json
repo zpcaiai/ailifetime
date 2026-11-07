@@ -1,0 +1,50 @@
+[
+  {
+    "id": "profile",
+    "name": "个人介绍与社交名片"
+  },
+  {
+    "id": "career",
+    "name": "职业与商务形象"
+  },
+  {
+    "id": "timeline",
+    "name": "人生时光机"
+  },
+  {
+    "id": "anniversary",
+    "name": "生日与纪念日"
+  },
+  {
+    "id": "baby",
+    "name": "宝宝成长与亲子"
+  },
+  {
+    "id": "couple",
+    "name": "恋爱婚姻纪念"
+  },
+  {
+    "id": "family",
+    "name": "家庭代际记忆"
+  },
+  {
+    "id": "travel",
+    "name": "旅行生活记录"
+  },
+  {
+    "id": "achievement",
+    "name": "成就学习里程碑"
+  },
+  {
+    "id": "pet",
+    "name": "宠物时光机"
+  },
+  {
+    "id": "creative",
+    "name": "AI创意写真"
+  },
+  {
+    "id": "memory",
+    "name": "珍贵回忆"
+  }
+]

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RenderRequest",
+  "type": "object",
+  "required": [
+    "template_id",
+    "template_version",
+    "style_id",
+    "fields",
+    "asset_ids",
+    "export_size",
+    "idempotency_key"
+  ],
+  "properties": {
+    "template_id": {
+      "type": "string"
+    },
+    "template_version": {
+      "type": "string"
+    },
+    "style_id": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean"
+        ]
+      }
+    },
+    "asset_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "export_size": {
+      "enum": [
+        "3:4",
+        "9:16",
+        "1:1"
+      ]
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 8
+    }
+  },
+  "additionalProperties": false
+}

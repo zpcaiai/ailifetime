@@ -1,0 +1,82 @@
+[
+  {
+    "id": "minimal",
+    "name": "极简商务",
+    "description": "clean grids, high contrast",
+    "tokens": {
+      "canvas": "#FFFFFF",
+      "text": "#1D2329",
+      "accent": "#AA785A",
+      "radius_px": 12,
+      "font_stack": [
+        "Noto Sans CJK SC",
+        "system-ui",
+        "sans-serif"
+      ]
+    }
+  },
+  {
+    "id": "scrapbook",
+    "name": "可爱手账",
+    "description": "pastels, stickers, gentle shadows",
+    "tokens": {
+      "canvas": "#F6F3EE",
+      "text": "#1D2329",
+      "accent": "#AA785A",
+      "radius_px": 12,
+      "font_stack": [
+        "Noto Sans CJK SC",
+        "system-ui",
+        "sans-serif"
+      ]
+    }
+  },
+  {
+    "id": "luxury",
+    "name": "黑金高级",
+    "description": "premium editorial, restrained gold",
+    "tokens": {
+      "canvas": "#F6F3EE",
+      "text": "#1D2329",
+      "accent": "#AA785A",
+      "radius_px": 12,
+      "font_stack": [
+        "Noto Sans CJK SC",
+        "system-ui",
+        "sans-serif"
+      ]
+    }
+  },
+  {
+    "id": "retro",
+    "name": "复古胶片",
+    "description": "warm film grain, tactile paper",
+    "tokens": {
+      "canvas": "#F6F3EE",
+      "text": "#1D2329",
+      "accent": "#AA785A",
+      "radius_px": 12,
+      "font_stack": [
+        "Noto Sans CJK SC",
+        "system-ui",
+        "sans-serif"
+      ]
+    }
+  },
+  {
+    "id": "futuristic",
+    "name": "科技未来",
+    "description": "cool neon accents, structured panels",
+    "tokens": {
+      "canvas": "#F6F3EE",
+      "text": "#1D2329",
+      "accent": "#1F6FEB",
+      "radius_px": 12,
+      "font_stack": [
+        "Noto Sans CJK SC",
+        "system-ui",
+        "sans-serif"
+      ]
+    }
+  }
+]

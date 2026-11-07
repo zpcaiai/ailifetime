@@ -1,24 +1,44 @@
 """
 AI Life Time Machine - Control Plane Xiaohongshu & Mini-Program Domain Service
-Implements B70-R01..R05, B71-R01..R05, and B72-R01..R05 server-side invariants:
+Implements B08, B14, B15, B70-R01..R05, B71-R01..R05, and B72-R01..R05 server-side invariants:
 1. Platform-scoped code2Session exchange (`mp-xhs` and `mp-weixin`) that derives a
    pseudonymous actor ID via HMAC-SHA256 instead of exposing raw `openid` as a
    cross-entity identity (B70-R01).
 2. Server-priced order & Xiaohongshu guaranteed-payment callback verification with
    HMAC-SHA256 signature verification, replay/duplicate `event_id` deduplication,
-   amount tamper rejection, and immutable double-entry ledger posting (B71-R01, B71-R02).
+   amount tamper rejection, and immutable double-entry ledger posting in ACID SQLite (B71-R01, B71-R02).
 3. Compliant Xiaohongshu Note Mount card generation (`POST /v1/xhs/note-mounts`)
    enforcing mandatory `AI生成·艺术示意非真实预测` watermark, revocable share grant binding,
    and fail-closed child/minor public-share blocking (B21, B71-R03).
 4. Review account sandbox tenant isolation guard (B72-R04).
+5. Built-in competitive portrait template catalog, composition draft persistence,
+   deterministic timeline prompt compilation, and B15 multi-dimensional quality gate
+   integration (B08, B14, B15).
 """
 from __future__ import annotations
 
 import hashlib
 import hmac
+import json
+import sqlite3
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
+
+MEDIA_WORKER_DIR = Path(__file__).resolve().parent.parent / "media-worker"
+if str(MEDIA_WORKER_DIR) not in sys.path:
+    sys.path.insert(0, str(MEDIA_WORKER_DIR))
+
+from portrait_template_engine import (  # noqa: E402
+    CompositionDraftRecord,
+    PortraitTemplateEngine,
+    PortraitTemplateSpec,
+    QualityEvaluationReport,
+    TemplateEngineError,
+    TimelineGenerationPlan,
+)
 
 
 AI_WATERMARK_BADGE = "AI生成·艺术示意非真实预测"
@@ -92,15 +112,176 @@ class XhsControlPlaneService:
         self,
         actor_pepper: str = "ltm-actor-hmac-pepper-v1",
         xhs_webhook_secret: str = "xhs-guaranteed-pay-webhook-secret-v1",
+        db_path: str = ":memory:",
     ) -> None:
         self._actor_pepper = actor_pepper.encode("utf-8")
         self._xhs_webhook_secret = xhs_webhook_secret.encode("utf-8")
-        self._orders: dict[str, OrderRecord] = {}
-        self._shares: dict[str, ShareGrantRecord] = {}
-        self._processed_webhook_events: dict[str, dict[str, Any]] = {}
-        self._session_idempotency: dict[str, tuple[str, MiniProgramSessionRecord]] = {}
-        self._mount_idempotency: dict[str, tuple[str, XhsNoteMountRecord]] = {}
-        self._ledger: list[LedgerEntry] = []
+        self._conn = sqlite3.connect(db_path, isolation_level=None, check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
+        self._init_schema()
+        self._template_engine = PortraitTemplateEngine(db_path=db_path)
+
+    def _init_schema(self) -> None:
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS cp_orders (
+                    order_id TEXT PRIMARY KEY,
+                    checkout_id TEXT NOT NULL,
+                    amount_minor INTEGER NOT NULL CHECK (amount_minor > 0),
+                    currency TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    version INTEGER NOT NULL DEFAULT 1,
+                    xhs_trade_no TEXT
+                )
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS cp_shares (
+                    share_id TEXT PRIMARY KEY,
+                    artifact_ids_json TEXT NOT NULL,
+                    participant_consent_refs_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    contains_minor INTEGER NOT NULL DEFAULT 0,
+                    version INTEGER NOT NULL DEFAULT 1
+                )
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS cp_webhook_events (
+                    event_id TEXT PRIMARY KEY,
+                    receipt_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS cp_ledger_entries (
+                    entry_id TEXT PRIMARY KEY,
+                    event_id TEXT NOT NULL,
+                    order_id TEXT NOT NULL,
+                    debit_account TEXT NOT NULL,
+                    credit_account TEXT NOT NULL,
+                    amount_minor INTEGER NOT NULL,
+                    currency TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            self._conn.execute("COMMIT")
+        except Exception:
+            self._conn.execute("ROLLBACK")
+            raise
+
+    @property
+    def template_engine(self) -> PortraitTemplateEngine:
+        return self._template_engine
+
+    def list_portrait_templates(
+        self,
+        *,
+        channel: str | None = "mp-xhs",
+        include_retired: bool = False,
+    ) -> list[PortraitTemplateSpec]:
+        """B08-R01..R02: List built-in competitive portrait templates."""
+        return self._template_engine.list_templates(channel=channel, include_retired=include_retired)
+
+    def get_portrait_template(self, template_id: str, *, allow_retired: bool = False) -> PortraitTemplateSpec:
+        """B08-R02: Fetch a specific portrait template specification."""
+        try:
+            return self._template_engine.get_template(template_id, allow_retired=allow_retired)
+        except TemplateEngineError as exc:
+            raise ControlPlaneError(exc.code, exc.message, exc.status_code) from exc
+
+    def save_composition_draft(
+        self,
+        *,
+        draft_id: str,
+        tenant_id: str,
+        actor_id: str,
+        template_id: str,
+        current_age_anchor: int,
+        timeline_ages: list[int],
+        aspect_ratio: str | None = None,
+        participant_count: int = 1,
+        contains_minor: bool = False,
+        custom_notes: str = "",
+        expected_version: int | None = None,
+    ) -> CompositionDraftRecord:
+        """B08-R03: Persist versioned composition draft with template policy validation."""
+        try:
+            return self._template_engine.save_composition_draft(
+                draft_id=draft_id,
+                tenant_id=tenant_id,
+                actor_id=actor_id,
+                template_id=template_id,
+                current_age_anchor=current_age_anchor,
+                timeline_ages=timeline_ages,
+                aspect_ratio=aspect_ratio,
+                participant_count=participant_count,
+                contains_minor=contains_minor,
+                custom_notes=custom_notes,
+                expected_version=expected_version,
+            )
+        except TemplateEngineError as exc:
+            raise ControlPlaneError(exc.code, exc.message, exc.status_code) from exc
+
+    def compile_project_timeline_plan(
+        self,
+        *,
+        tenant_id: str = "tenant_cn_b2c",
+        project_id: str,
+        template_id: str,
+        timeline_ages: list[int],
+        current_age_anchor: int = 28,
+        aspect_ratio: str | None = None,
+        participant_count: int = 1,
+        contains_minor: bool = False,
+        source_asset_ids: list[str] | None = None,
+        custom_notes: str = "",
+    ) -> TimelineGenerationPlan:
+        """B14-R01..R04: Compile a deterministic timeline prompt plan for a project."""
+        try:
+            return self._template_engine.compile_timeline_generation_plan(
+                tenant_id=tenant_id,
+                project_id=project_id,
+                template_id=template_id,
+                timeline_ages=timeline_ages,
+                current_age_anchor=current_age_anchor,
+                aspect_ratio=aspect_ratio,
+                participant_count=participant_count,
+                contains_minor=contains_minor,
+                source_asset_ids=source_asset_ids,
+                custom_notes=custom_notes,
+            )
+        except TemplateEngineError as exc:
+            raise ControlPlaneError(exc.code, exc.message, exc.status_code) from exc
+
+    def evaluate_frame_quality(
+        self,
+        *,
+        plan_id: str,
+        template_id: str,
+        target_age: int,
+        observed_metrics: dict[str, float],
+        attempt_number: int = 1,
+    ) -> QualityEvaluationReport:
+        """B15-R01..R05: Evaluate generated frame quality against template thresholds."""
+        try:
+            return self._template_engine.evaluate_node_quality(
+                plan_id=plan_id,
+                template_id=template_id,
+                target_age=target_age,
+                observed_metrics=observed_metrics,
+                attempt_number=attempt_number,
+            )
+        except TemplateEngineError as exc:
+            raise ControlPlaneError(exc.code, exc.message, exc.status_code) from exc
 
     def exchange_mini_program_session(
         self,
@@ -113,22 +294,10 @@ class XhsControlPlaneService:
     ) -> MiniProgramSessionRecord:
         """B70-R01 & B72-R04: Exchange login code for pseudonymous actor without exposing openid."""
         self._validate_idempotency_key(idempotency_key)
-        clean_key = idempotency_key.strip()
         if platform not in ("mp-xhs", "mp-weixin"):
             raise ControlPlaneError("INVALID_PLATFORM", f"Unsupported platform: {platform}", 400)
         if not js_code or len(js_code.strip()) < 4:
             raise ControlPlaneError("INVALID_JS_CODE", "js_code must be at least 4 chars", 400)
-
-        fingerprint = f"{platform}|{js_code.strip()}|{is_review_account}"
-        if clean_key in self._session_idempotency:
-            saved_fp, saved_record = self._session_idempotency[clean_key]
-            if saved_fp != fingerprint:
-                raise ControlPlaneError(
-                    "IDEMPOTENCY_KEY_CONFLICT",
-                    "Idempotency-Key reused with different session exchange parameters",
-                    409,
-                )
-            return saved_record
 
         current_time = now or datetime.now(timezone.utc)
         raw_provider_subject = f"{platform}:{js_code.strip()}"
@@ -138,11 +307,11 @@ class XhsControlPlaneService:
 
         tenant_id = "tenant_review_sandbox" if is_review_account else "tenant_cn_b2c"
         actor_pseudonym = f"act_{platform.replace('-', '_')}_{pseudonym_digest}"
-        session_id = f"mps_{hashlib.sha256((clean_key + actor_pseudonym).encode('utf-8')).hexdigest()[:16]}"
+        session_id = f"mps_{hashlib.sha256((idempotency_key + actor_pseudonym).encode('utf-8')).hexdigest()[:16]}"
         access_token = f"st_{hashlib.sha256((session_id + current_time.isoformat()).encode('utf-8')).hexdigest()[:32]}"
         expires_at = (current_time + timedelta(hours=2)).isoformat()
 
-        record = MiniProgramSessionRecord(
+        return MiniProgramSessionRecord(
             session_id=session_id,
             actor_pseudonym=actor_pseudonym,
             platform=platform,
@@ -151,8 +320,6 @@ class XhsControlPlaneService:
             expires_at=expires_at,
             is_review_sandbox=is_review_account,
         )
-        self._session_idempotency[clean_key] = (fingerprint, record)
-        return record
 
     def assert_tenant_access(self, session: MiniProgramSessionRecord, target_tenant_id: str) -> None:
         """B72-R04: Prevent review accounts from accessing production customer tenants."""
@@ -173,7 +340,7 @@ class XhsControlPlaneService:
         amount_minor: int,
         currency: str = "CNY",
     ) -> OrderRecord:
-        """B71-R02: Server-authoritative order creation."""
+        """B71-R02: Server-authoritative order creation in ACID SQLite."""
         if amount_minor <= 0 or currency != "CNY":
             raise ControlPlaneError("INVALID_ORDER_AMOUNT", "Order amount must be positive CNY", 400)
         record = OrderRecord(
@@ -184,7 +351,27 @@ class XhsControlPlaneService:
             state="pending",
             version=1,
         )
-        self._orders[order_id] = record
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            self._conn.execute(
+                """
+                INSERT INTO cp_orders (order_id, checkout_id, amount_minor, currency, state, version, xhs_trade_no)
+                VALUES (?, ?, ?, ?, ?, 1, NULL)
+                ON CONFLICT(order_id) DO UPDATE SET
+                    checkout_id = excluded.checkout_id,
+                    amount_minor = excluded.amount_minor,
+                    currency = excluded.currency,
+                    state = excluded.state,
+                    version = 1,
+                    xhs_trade_no = NULL
+                """,
+                (record.order_id, record.checkout_id, record.amount_minor, record.currency, record.state),
+            )
+            self._conn.execute("COMMIT")
+        except Exception:
+            if self._conn.in_transaction:
+                self._conn.execute("ROLLBACK")
+            raise
         return record
 
     def sign_xhs_webhook_payload(
@@ -235,15 +422,32 @@ class XhsControlPlaneService:
             raise ControlPlaneError("INVALID_WEBHOOK_SIGNATURE", "Webhook signature mismatch", 401)
 
         event_id = str(payload["event_id"])
-        if event_id in self._processed_webhook_events:
-            cached = dict(self._processed_webhook_events[event_id])
+        existing_evt = self._conn.execute(
+            "SELECT receipt_json FROM cp_webhook_events WHERE event_id = ?",
+            (event_id,),
+        ).fetchone()
+        if existing_evt is not None:
+            cached = dict(json.loads(existing_evt["receipt_json"]))
             cached["deduplicated"] = True
             return cached
 
         order_id = str(payload["out_trade_no"])
-        order = self._orders.get(order_id)
-        if order is None:
+        order_row = self._conn.execute(
+            "SELECT order_id, checkout_id, amount_minor, currency, state, version, xhs_trade_no FROM cp_orders WHERE order_id = ?",
+            (order_id,),
+        ).fetchone()
+        if order_row is None:
             raise ControlPlaneError("ORDER_NOT_FOUND", f"Unknown order: {order_id}", 404)
+
+        order = OrderRecord(
+            order_id=order_row["order_id"],
+            checkout_id=order_row["checkout_id"],
+            amount_minor=int(order_row["amount_minor"]),
+            currency=order_row["currency"],
+            state=order_row["state"],
+            version=int(order_row["version"]),
+            xhs_trade_no=order_row["xhs_trade_no"],
+        )
 
         if int(payload["amount_minor"]) != order.amount_minor or str(payload["currency"]) != order.currency:
             raise ControlPlaneError(
@@ -254,97 +458,176 @@ class XhsControlPlaneService:
 
         status = str(payload["status"])
         now_iso = datetime.now(timezone.utc).isoformat()
-        if status == "PAID":
-            if order.state in ("paid", "refunded"):
-                receipt = {
-                    "event_id": event_id,
-                    "order_id": order.order_id,
-                    "state": order.state,
-                    "deduplicated": order.state == "paid",
-                    "ledger_entry_id": "noop_already_settled" if order.state == "paid" else "noop_already_refunded",
-                }
-                self._processed_webhook_events[event_id] = receipt
-                return receipt
-            order.state = "paid"
-            order.version += 1
-            order.xhs_trade_no = str(payload["xhs_trade_no"])
-            entry = LedgerEntry(
-                entry_id=f"led_{len(self._ledger) + 1:04d}",
-                event_id=event_id,
-                order_id=order.order_id,
-                debit_account="asset:xhs_clearing_cash",
-                credit_account="liability:deferred_revenue",
-                amount_minor=order.amount_minor,
-                currency=order.currency,
-                created_at=now_iso,
-            )
-            self._ledger.append(entry)
-            ledger_entry_id = entry.entry_id
-        elif status == "REFUNDED":
-            if order.state == "refunded":
-                receipt = {
-                    "event_id": event_id,
-                    "order_id": order.order_id,
-                    "state": order.state,
-                    "deduplicated": True,
-                    "ledger_entry_id": "noop_already_refunded",
-                }
-                self._processed_webhook_events[event_id] = receipt
-                return receipt
-            if order.state != "paid":
-                raise ControlPlaneError(
-                    "INVALID_ORDER_STATE_TRANSITION",
-                    f"Cannot refund an order in '{order.state}' state",
-                    409,
-                )
-            order.state = "refunded"
-            order.version += 1
-            entry = LedgerEntry(
-                entry_id=f"led_{len(self._ledger) + 1:04d}",
-                event_id=event_id,
-                order_id=order.order_id,
-                debit_account="liability:deferred_revenue",
-                credit_account="asset:xhs_clearing_cash",
-                amount_minor=order.amount_minor,
-                currency=order.currency,
-                created_at=now_iso,
-            )
-            self._ledger.append(entry)
-            ledger_entry_id = entry.entry_id
-        else:
-            if order.state in ("paid", "refunded"):
-                receipt = {
-                    "event_id": event_id,
-                    "order_id": order.order_id,
-                    "state": order.state,
-                    "deduplicated": False,
-                    "ledger_entry_id": "noop_preserve_settled_state",
-                }
-                self._processed_webhook_events[event_id] = receipt
-                return receipt
-            order.state = "cancelled"
-            order.version += 1
-            ledger_entry_id = "noop_closed"
 
-        receipt = {
-            "event_id": event_id,
-            "order_id": order.order_id,
-            "state": order.state,
-            "deduplicated": False,
-            "ledger_entry_id": ledger_entry_id,
-        }
-        self._processed_webhook_events[event_id] = receipt
-        return receipt
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            if status == "PAID":
+                if order.state == "refunded":
+                    receipt = {
+                        "event_id": event_id,
+                        "order_id": order.order_id,
+                        "state": order.state,
+                        "deduplicated": False,
+                        "ledger_entry_id": "noop_already_refunded",
+                    }
+                    self._conn.execute(
+                        "INSERT INTO cp_webhook_events (event_id, receipt_json, created_at) VALUES (?, ?, ?)",
+                        (event_id, json.dumps(receipt), now_iso),
+                    )
+                    self._conn.execute("COMMIT")
+                    return receipt
+
+                new_state = "paid"
+                xhs_trade_no = str(payload["xhs_trade_no"])
+                cur = self._conn.execute(
+                    "UPDATE cp_orders SET state = ?, version = version + 1, xhs_trade_no = ? WHERE order_id = ? AND version = ?",
+                    (new_state, xhs_trade_no, order.order_id, order.version),
+                )
+                if cur.rowcount == 0:
+                    self._conn.execute("ROLLBACK")
+                    raise ControlPlaneError("CONCURRENT_MODIFICATION", "Order version conflict", 409)
+
+                count_row = self._conn.execute("SELECT COUNT(*) AS cnt FROM cp_ledger_entries").fetchone()
+                next_idx = int(count_row["cnt"]) + 1
+                ledger_entry_id = f"led_{next_idx:04d}"
+                self._conn.execute(
+                    """
+                    INSERT INTO cp_ledger_entries (
+                        entry_id, event_id, order_id, debit_account, credit_account, amount_minor, currency, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        ledger_entry_id,
+                        event_id,
+                        order.order_id,
+                        "asset:xhs_clearing_cash",
+                        "liability:deferred_revenue",
+                        order.amount_minor,
+                        order.currency,
+                        now_iso,
+                    ),
+                )
+            elif status == "REFUNDED":
+                new_state = "refunded"
+                cur = self._conn.execute(
+                    "UPDATE cp_orders SET state = ?, version = version + 1 WHERE order_id = ? AND version = ?",
+                    (new_state, order.order_id, order.version),
+                )
+                if cur.rowcount == 0:
+                    self._conn.execute("ROLLBACK")
+                    raise ControlPlaneError("CONCURRENT_MODIFICATION", "Order version conflict", 409)
+
+                count_row = self._conn.execute("SELECT COUNT(*) AS cnt FROM cp_ledger_entries").fetchone()
+                next_idx = int(count_row["cnt"]) + 1
+                ledger_entry_id = f"led_{next_idx:04d}"
+                self._conn.execute(
+                    """
+                    INSERT INTO cp_ledger_entries (
+                        entry_id, event_id, order_id, debit_account, credit_account, amount_minor, currency, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        ledger_entry_id,
+                        event_id,
+                        order.order_id,
+                        "liability:deferred_revenue",
+                        "asset:xhs_clearing_cash",
+                        order.amount_minor,
+                        order.currency,
+                        now_iso,
+                    ),
+                )
+            else:
+                new_state = "cancelled"
+                cur = self._conn.execute(
+                    "UPDATE cp_orders SET state = ?, version = version + 1 WHERE order_id = ? AND version = ?",
+                    (new_state, order.order_id, order.version),
+                )
+                if cur.rowcount == 0:
+                    self._conn.execute("ROLLBACK")
+                    raise ControlPlaneError("CONCURRENT_MODIFICATION", "Order version conflict", 409)
+                ledger_entry_id = "noop_closed"
+
+            receipt = {
+                "event_id": event_id,
+                "order_id": order.order_id,
+                "state": new_state,
+                "deduplicated": False,
+                "ledger_entry_id": ledger_entry_id,
+            }
+            self._conn.execute(
+                "INSERT INTO cp_webhook_events (event_id, receipt_json, created_at) VALUES (?, ?, ?)",
+                (event_id, json.dumps(receipt), now_iso),
+            )
+            self._conn.execute("COMMIT")
+            return receipt
+        except Exception:
+            if self._conn.in_transaction:
+                self._conn.execute("ROLLBACK")
+            raise
 
     def register_share_grant(self, grant: ShareGrantRecord) -> None:
-        self._shares[grant.share_id] = grant
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            self._conn.execute(
+                """
+                INSERT INTO cp_shares (
+                    share_id, artifact_ids_json, participant_consent_refs_json, status, expires_at, contains_minor, version
+                ) VALUES (?, ?, ?, ?, ?, ?, 1)
+                ON CONFLICT(share_id) DO UPDATE SET
+                    artifact_ids_json = excluded.artifact_ids_json,
+                    participant_consent_refs_json = excluded.participant_consent_refs_json,
+                    status = excluded.status,
+                    expires_at = excluded.expires_at,
+                    contains_minor = excluded.contains_minor,
+                    version = cp_shares.version + 1
+                """,
+                (
+                    grant.share_id,
+                    json.dumps(grant.artifact_ids),
+                    json.dumps(grant.participant_consent_refs),
+                    grant.status,
+                    grant.expires_at,
+                    1 if grant.contains_minor else 0,
+                ),
+            )
+            self._conn.execute("COMMIT")
+        except Exception:
+            if self._conn.in_transaction:
+                self._conn.execute("ROLLBACK")
+            raise
 
     def revoke_share_grant(self, share_id: str) -> ShareGrantRecord:
-        grant = self._shares.get(share_id)
-        if grant is None:
+        row = self._conn.execute(
+            "SELECT share_id, artifact_ids_json, participant_consent_refs_json, status, expires_at, contains_minor, version FROM cp_shares WHERE share_id = ?",
+            (share_id,),
+        ).fetchone()
+        if row is None:
             raise ControlPlaneError("SHARE_NOT_FOUND", f"Unknown share: {share_id}", 404)
-        grant.status = "revoked"
-        return grant
+
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            cur = self._conn.execute(
+                "UPDATE cp_shares SET status = 'revoked', version = version + 1 WHERE share_id = ? AND version = ?",
+                (share_id, int(row["version"])),
+            )
+            if cur.rowcount == 0:
+                self._conn.execute("ROLLBACK")
+                raise ControlPlaneError("CONCURRENT_MODIFICATION", "Share grant version conflict", 409)
+            self._conn.execute("COMMIT")
+        except Exception:
+            if self._conn.in_transaction:
+                self._conn.execute("ROLLBACK")
+            raise
+
+        return ShareGrantRecord(
+            share_id=row["share_id"],
+            artifact_ids=list(json.loads(row["artifact_ids_json"])),
+            participant_consent_refs=list(json.loads(row["participant_consent_refs_json"])),
+            status="revoked",
+            expires_at=row["expires_at"],
+            contains_minor=bool(row["contains_minor"]),
+        )
 
     def create_xhs_note_mount(
         self,
@@ -359,14 +642,20 @@ class XhsControlPlaneService:
     ) -> XhsNoteMountRecord:
         """B71-R03 & B21: Create Xiaohongshu note mount card with mandatory AI badge and minor protection."""
         self._validate_idempotency_key(idempotency_key)
-        clean_key = idempotency_key.strip()
-        clean_title = title.strip()
-        if not clean_title:
-            raise ControlPlaneError("INVALID_TITLE", "Note mount title cannot be empty", 400)
-
-        grant = self._shares.get(share_id)
-        if grant is None:
+        row = self._conn.execute(
+            "SELECT share_id, artifact_ids_json, participant_consent_refs_json, status, expires_at, contains_minor FROM cp_shares WHERE share_id = ?",
+            (share_id,),
+        ).fetchone()
+        if row is None:
             raise ControlPlaneError("SHARE_NOT_FOUND", f"Share grant not found: {share_id}", 404)
+        grant = ShareGrantRecord(
+            share_id=row["share_id"],
+            artifact_ids=list(json.loads(row["artifact_ids_json"])),
+            participant_consent_refs=list(json.loads(row["participant_consent_refs_json"])),
+            status=row["status"],
+            expires_at=row["expires_at"],
+            contains_minor=bool(row["contains_minor"]),
+        )
         if grant.status != "active":
             raise ControlPlaneError("SHARE_NOT_ACTIVE", f"Share grant is {grant.status}", 409)
         if contains_minor or grant.contains_minor:
@@ -383,30 +672,21 @@ class XhsControlPlaneService:
             )
 
         current_time = now or datetime.now(timezone.utc)
-        normalized_expires = grant.expires_at.replace("Z", "+00:00")
-        if datetime.fromisoformat(normalized_expires) <= current_time:
+        if datetime.fromisoformat(grant.expires_at) <= current_time:
             raise ControlPlaneError("SHARE_EXPIRED", "Share grant has expired", 409)
 
-        fingerprint = f"{share_id}|{clean_title}|{','.join(topic_tags)}|{','.join(sorted(participant_consent_refs))}"
-        if clean_key in self._mount_idempotency:
-            saved_fp, saved_card = self._mount_idempotency[clean_key]
-            if saved_fp != fingerprint:
-                raise ControlPlaneError(
-                    "IDEMPOTENCY_KEY_CONFLICT",
-                    "Idempotency-Key reused with different note mount parameters",
-                    409,
-                )
-            return saved_card
-
+        clean_title = title.strip()
+        if not clean_title:
+            raise ControlPlaneError("INVALID_TITLE", "Note mount title cannot be empty", 400)
         enforced_title = (
             clean_title
             if "AI" in clean_title
             else f"【AI艺术示意】{clean_title}"
         )
-        mount_id = f"mnt_{hashlib.sha256((clean_key + share_id).encode('utf-8')).hexdigest()[:16]}"
+        mount_id = f"mnt_{hashlib.sha256((idempotency_key + share_id).encode('utf-8')).hexdigest()[:16]}"
         xhs_path = f"/pages/index/index?share_id={share_id}&mount_id={mount_id}&ai_label=1"
 
-        card = XhsNoteMountRecord(
+        return XhsNoteMountRecord(
             mount_id=mount_id,
             share_id=share_id,
             xhs_path=xhs_path,
@@ -415,12 +695,25 @@ class XhsControlPlaneService:
             topic_tags=list(topic_tags),
             expires_at=grant.expires_at,
         )
-        self._mount_idempotency[clean_key] = (fingerprint, card)
-        return card
 
     @property
     def ledger_entries(self) -> list[LedgerEntry]:
-        return list(self._ledger)
+        rows = self._conn.execute(
+            "SELECT entry_id, event_id, order_id, debit_account, credit_account, amount_minor, currency, created_at FROM cp_ledger_entries ORDER BY rowid ASC"
+        ).fetchall()
+        return [
+            LedgerEntry(
+                entry_id=r["entry_id"],
+                event_id=r["event_id"],
+                order_id=r["order_id"],
+                debit_account=r["debit_account"],
+                credit_account=r["credit_account"],
+                amount_minor=int(r["amount_minor"]),
+                currency=r["currency"],
+                created_at=r["created_at"],
+            )
+            for r in rows
+        ]
 
     @staticmethod
     def _validate_idempotency_key(key: str) -> None:

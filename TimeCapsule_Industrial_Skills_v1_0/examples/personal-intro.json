@@ -1,0 +1,16 @@
+{
+  "template_id": "personal_intro",
+  "template_version": "1.0.0",
+  "style_id": "minimal",
+  "fields": {
+    "title": "你好，我是小忆",
+    "subtitle": "热爱旅行、摄影与记录生活",
+    "display_name": "小忆",
+    "event_date": "2026-11-07"
+  },
+  "asset_ids": [
+    "fixture_asset_placeholder"
+  ],
+  "export_size": "3:4",
+  "idempotency_key": "example-key-0001"
+}
