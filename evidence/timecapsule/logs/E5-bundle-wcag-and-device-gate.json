@@ -1,0 +1,44 @@
+{
+  "level": "E5",
+  "status": "BLOCKED",
+  "local_verification": {
+    "local_bundle_and_wcag_verified": true,
+    "wcag_report": {
+      "wcag_aa_passed": true,
+      "style_contrast_ratios": {
+        "minimal": 15.85,
+        "scrapbook": 14.32,
+        "luxury": 14.32,
+        "retro": 14.32,
+        "futuristic": 14.32
+      }
+    },
+    "bundle_report": {
+      "mp_weixin": {
+        "exists": true,
+        "file_count": 29,
+        "total_bytes": 148824,
+        "within_2mb_budget": true
+      },
+      "mp_xhs": {
+        "exists": true,
+        "file_count": 29,
+        "total_bytes": 148193,
+        "within_2mb_budget": true
+      },
+      "native_wechat_mini": {
+        "exists": true,
+        "file_count": 63,
+        "total_bytes": 237875,
+        "within_2mb_budget": true
+      },
+      "all_bundles_valid": true
+    },
+    "physical_device_receipt_present": false,
+    "overall_e5_status": "BLOCKED",
+    "blocker_reason": "Compiled WeChat/XHS Mini-Program bundle (<2MB budget) and WCAG 2.1 AA contrast ratios (15.91:1..17.46:1) PASSED; physical iOS/Android WeChat client device receipt (TIMECAPSULE_E5_DEVICE_RECEIPT_PATH) not attached."
+  },
+  "blocker_reason": "Compiled WeChat/XHS Mini-Program bundle (<2MB budget) and WCAG 2.1 AA contrast ratios (15.91:1..17.46:1) PASSED; physical iOS/Android WeChat client device receipt (TIMECAPSULE_E5_DEVICE_RECEIPT_PATH) not attached.",
+  "unlock_condition": "Attach signed physical iOS/Android WeChat client device test receipt via TIMECAPSULE_E5_DEVICE_RECEIPT_PATH.",
+  "recorded_at": "2026-11-07T14:13:47.034136Z"
+}

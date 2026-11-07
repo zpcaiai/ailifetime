@@ -13,6 +13,12 @@ from .db_and_identity import (
     utc_now_iso,
 )
 from .deterministic_renderer import DeterministicRenderer
+from .e3_postgres_s3_runtime import E3MiddlewareVerificationSuite, Postgres17ClusterManager, S3CompatibleHttpServer
+from .e4_e5_verification_harnesses import (
+    MiniProgramBundleAndCanaryVerifier,
+    ProgrammaticGlyphAndLabelInspector,
+    WeChatPayApiV3Crypto,
+)
 from .export_labeling import ExportLabelingService
 from .http_server import TimeCapsuleApplication, create_http_server
 from .media_vault import MediaVaultService
@@ -30,21 +36,27 @@ __all__ = [
     "CatalogService",
     "ContentModerationService",
     "DeterministicRenderer",
+    "E3MiddlewareVerificationSuite",
     "ExportLabelingService",
     "GenerationJobService",
     "IdentityConsentService",
     "IndependentEvidenceRunner",
     "MediaVaultService",
     "MemorialAlbumVideoService",
+    "MiniProgramBundleAndCanaryVerifier",
     "ObservabilitySLOService",
     "PaymentEntitlementService",
     "PlatformSurfaceAdapter",
+    "Postgres17ClusterManager",
+    "ProgrammaticGlyphAndLabelInspector",
+    "S3CompatibleHttpServer",
     "SPEC_ROOT",
     "SpecContractValidator",
     "TimeCapsuleApplication",
     "TimeCapsuleDatabase",
     "TimeCapsuleError",
     "TimelineArchiveService",
+    "WeChatPayApiV3Crypto",
     "create_http_server",
     "sha256_hex",
     "utc_now_iso",

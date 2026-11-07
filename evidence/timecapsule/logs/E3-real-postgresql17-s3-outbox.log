@@ -1,0 +1,7 @@
+=== COMMAND: /opt/homebrew/opt/python@3.12/bin/python3.12 -m unittest /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_e3_postgres_s3_outbox.py -v (PID=69760, EXIT=0) ===
+test_e3_real_postgresql_17_force_rls_s3_and_outbox_restart_recovery (services.timecapsule.tests.test_e3_postgres_s3_outbox.TestE3PostgresS3Outbox.test_e3_real_postgresql_17_force_rls_s3_and_outbox_restart_recovery) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 1.985s
+
+OK
