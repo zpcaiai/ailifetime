@@ -236,6 +236,37 @@
           </text>
         </view>
       </view>
+
+      <view class="form-row">
+        <text class="form-label">卡片导出格式 (GB 45438-2025 隐式元数据封装)：</text>
+        <view class="pill-group">
+          <text
+            v-for="fmt in (['PNG', 'WEBP'] as const)"
+            :key="fmt"
+            class="choice-pill"
+            :class="{ active: selectedTcExportFormat === fmt }"
+            @click="selectedTcExportFormat = fmt"
+          >
+            {{ fmt }} ({{ fmt === 'PNG' ? 'iTXt 签名块' : 'RIFF AIGC 签名块' }})
+          </text>
+        </view>
+      </view>
+
+      <button class="btn-secondary" :disabled="isRenderingTcCard" @click="handleRenderTimeCapsuleCard">
+        {{
+          isRenderingTcCard
+            ? '正在排版并写入 GB 45438 双标识...'
+            : `渲染导出「${currentTcCard.name} × ${currentTcStyle.name}」纪念卡`
+        }}
+      </button>
+
+      <view v-if="renderedTcCard" class="share-status-box">
+        <text class="share-info">排版摘要：{{ renderedTcCard.svg_preview_summary }}</text>
+        <text class="share-info">显式标识：{{ renderedTcCard.explicit_visible_label }}</text>
+        <text class="share-info">隐式元数据块：{{ renderedTcCard.implicit_metadata_chunk }}</text>
+        <text class="share-info">Layout Digest：{{ renderedTcCard.layout_digest }}</text>
+        <text class="share-info">HMAC-SHA256：{{ renderedTcCard.signature_hmac }}</text>
+      </view>
     </view>
 
     <!-- 步骤 3: 生成进度、B15 质量门控分、光学 Prompt 检视、小红书分享与相册下单 -->
@@ -306,6 +337,9 @@
         <text class="share-info">
           服务端核价支付单: {{ checkoutResult.id }} (¥{{ (checkoutResult.amount_minor / 100).toFixed(2) }})
         </text>
+        <text v-if="paymentGateReceipt" class="share-info">
+          收银台门控状态: {{ paymentGateReceipt.status }} ({{ paymentGateReceipt.platform }})
+        </text>
       </view>
     </view>
   </view>
@@ -334,10 +368,17 @@ import {
   getPreferredTimeCapsuleSelection,
   getTrackedShare,
   purgeEphemeralMediaCache,
+  renderAndExportTimeCapsuleCard,
   setPreferredTemplateId,
   setPreferredTimeCapsuleSelection,
+  type TimeCapsuleCardRenderResult,
 } from '../../services/api';
-import { buildCompliantShareConfig } from '../../utils/xhs-platform';
+import {
+  buildCompliantShareConfig,
+  ensurePlatformPrivacyAuthorized,
+  requestNativeMiniProgramPayment,
+  type NativePaymentGateReceipt,
+} from '../../utils/xhs-platform';
 import XhsNoteMountCard from '../../components/XhsNoteMountCard.vue';
 
 const capacities: { label: string; value: GrantorCapacity }[] = [
@@ -353,6 +394,10 @@ const tcStyles = ref(TIMECAPSULE_STYLES);
 const initialTc = getPreferredTimeCapsuleSelection();
 const selectedTcCardId = ref<string>(initialTc.cardId);
 const selectedTcStyleId = ref<string>(initialTc.styleId);
+const selectedTcExportFormat = ref<'PNG' | 'WEBP'>('PNG');
+const isRenderingTcCard = ref(false);
+const renderedTcCard = ref<TimeCapsuleCardRenderResult | null>(null);
+const paymentGateReceipt = ref<NativePaymentGateReceipt | null>(null);
 
 const currentTcCard = computed(() => {
   return (
@@ -456,6 +501,11 @@ async function handleGrantConsent() {
     uni.showToast({ title: '请先勾选逐人授权确认项', icon: 'none' });
     return;
   }
+  const privacyCheck = await ensurePlatformPrivacyAuthorized();
+  if (!privacyCheck.authorized) {
+    uni.showToast({ title: '请先同意小程序隐私保护指引', icon: 'none' });
+    return;
+  }
   const receipt = await apiClient.grantConsent({
     participant_id: `part_${Date.now()}`,
     grantor_capacity: grantorCapacity.value,
@@ -470,15 +520,43 @@ async function handleGrantConsent() {
       declared_participant_count: participantCount.value,
       channel: getCurrentPlatformChannel(),
       template_id: currentTemplate.value.template_id,
+      privacy_contract: privacyCheck.privacyContractName,
     },
   });
   consentReceipt.value = receipt;
   uni.showToast({ title: '授权凭证已签发', icon: 'success' });
 }
 
+async function handleRenderTimeCapsuleCard() {
+  isRenderingTcCard.value = true;
+  try {
+    const card = currentTcCard.value;
+    const style = currentTcStyle.value;
+    const result = await renderAndExportTimeCapsuleCard({
+      template_id: card.id,
+      style_id: style.id,
+      size: card.sizes[0],
+      export_format: selectedTcExportFormat.value,
+      title: card.name,
+      subtitle: `${style.name} · 拾忆典藏`,
+      display_name: '一生拾忆体验官',
+      event_date: '2026-11-07',
+    });
+    renderedTcCard.value = result;
+    uni.showToast({ title: '卡片渲染与双标识签名完成', icon: 'success' });
+  } finally {
+    isRenderingTcCard.value = false;
+  }
+}
+
 async function handlePickPhoto() {
   if (!consentReceipt.value) {
     uni.showToast({ title: '请先完成第 1 步逐人授权', icon: 'none' });
+    return;
+  }
+  const privacyCheck = await ensurePlatformPrivacyAuthorized();
+  if (!privacyCheck.authorized) {
+    uni.showToast({ title: '请先完成相册/媒体隐私授权', icon: 'none' });
     return;
   }
   const session = await apiClient.createUploadSession({
@@ -555,6 +633,10 @@ async function handleOrderPhotoBook() {
     return_url: `${schemePrefix}://pages/profile/index`,
   });
   checkoutResult.value = session;
+  paymentGateReceipt.value = await requestNativeMiniProgramPayment({
+    checkoutId: session.id,
+    paymentUrl: session.payment_url,
+  });
   uni.showToast({ title: '服务端核价订单已创建', icon: 'success' });
 }
 

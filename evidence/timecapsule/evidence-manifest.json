@@ -35,8 +35,8 @@
     "A14",
     "A15"
   ],
-  "generated_at": "2026-11-07T14:13:47.034381Z",
-  "commit_sha": "e5ea3aa954516933625e28650b6d620e3f467a26",
+  "generated_at": "2026-11-07T14:33:28.166199Z",
+  "commit_sha": "8d307a0510a1ed32dd6a332d5c5e89e17fed90ac",
   "environment_digest": "sha256:a0e4061132590ecefed2e71d7665793b8c7bb39561cbde15c0f7d0051478ede5",
   "summary": {
     "E0": "PASS",
@@ -48,155 +48,155 @@
   },
   "evidence_records": [
     {
-      "execution_id": "exec_e0_fe2170dda453",
+      "execution_id": "exec_e0_e044338ae4cf",
       "level": "E0",
-      "commit_sha": "e5ea3aa954516933625e28650b6d620e3f467a26",
+      "commit_sha": "8d307a0510a1ed32dd6a332d5c5e89e17fed90ac",
       "environment_digest": "sha256:a0e4061132590ecefed2e71d7665793b8c7bb39561cbde15c0f7d0051478ede5",
       "contract_revision": "TimeCapsule_Industrial_Skills_v1_0",
       "status": "PASS",
-      "artifact_sha256": "21aa18f196825a5dd85dd6ace1103b06c3292834a56c8bf0fcf312ca7956a088",
-      "timestamp": "2026-11-07T14:13:33.752643Z",
-      "notes": "suite=timecapsule-static-schema-and-zero-fake-gate; exit_code=0; pids=[69682, 69684, 69685]; commands=3; log=evidence/timecapsule/logs/E0-static-schema.log"
+      "artifact_sha256": "e6028418b379951a1911cb770f8f7cd00e78f534b5f60a6665e496190827c0cb",
+      "timestamp": "2026-11-07T14:33:07.269538Z",
+      "notes": "suite=timecapsule-static-schema-and-zero-fake-gate; exit_code=0; pids=[73854, 73855, 73856]; commands=3; log=evidence/timecapsule/logs/E0-static-schema.log"
     },
     {
-      "execution_id": "exec_e1_a8be33666a62",
+      "execution_id": "exec_e1_a4181c6e2664",
       "level": "E1",
-      "commit_sha": "e5ea3aa954516933625e28650b6d620e3f467a26",
+      "commit_sha": "8d307a0510a1ed32dd6a332d5c5e89e17fed90ac",
       "environment_digest": "sha256:a0e4061132590ecefed2e71d7665793b8c7bb39561cbde15c0f7d0051478ede5",
       "contract_revision": "TimeCapsule_Industrial_Skills_v1_0",
       "status": "PASS",
-      "artifact_sha256": "b86113701b9379b3f05ecc73cc4c633aa0adc964ba4af94328de6022f259f3d6",
-      "timestamp": "2026-11-07T14:13:33.980448Z",
-      "notes": "suite=timecapsule-contract-and-state-machine-tests; exit_code=0; pids=[69687, 69688]; commands=2; log=evidence/timecapsule/logs/E1-contracts-and-state-machines.log"
+      "artifact_sha256": "790a43e84471a2820a0203cf220562730c179cf3ea913ad530f827e77aa22b7d",
+      "timestamp": "2026-11-07T14:33:07.476986Z",
+      "notes": "suite=timecapsule-contract-and-state-machine-tests; exit_code=0; pids=[73857, 73858]; commands=2; log=evidence/timecapsule/logs/E1-contracts-and-state-machines.log"
     },
     {
-      "execution_id": "exec_e2_b35dcc638ba4",
+      "execution_id": "exec_e2_e3f4483d1e52",
       "level": "E2",
-      "commit_sha": "e5ea3aa954516933625e28650b6d620e3f467a26",
+      "commit_sha": "8d307a0510a1ed32dd6a332d5c5e89e17fed90ac",
       "environment_digest": "sha256:a0e4061132590ecefed2e71d7665793b8c7bb39561cbde15c0f7d0051478ede5",
       "contract_revision": "TimeCapsule_Industrial_Skills_v1_0",
       "status": "PASS",
-      "artifact_sha256": "9c784c1344f0d5f58aa83bc15911ceaaff384feea563e4122d09805a6dafda4a",
-      "timestamp": "2026-11-07T14:13:41.700469Z",
-      "notes": "suite=timecapsule-hermetic-integration-and-fault-injection-A01-A15; exit_code=0; pids=[69689]; commands=1; log=evidence/timecapsule/logs/E2-hermetic-integration-A01-A15.log"
+      "artifact_sha256": "a47f89990e29ade9a515eac9554cef7e99f2d2f496826267b8b091358f37ed1e",
+      "timestamp": "2026-11-07T14:33:18.752772Z",
+      "notes": "suite=timecapsule-hermetic-integration-and-fault-injection-A01-A15; exit_code=0; pids=[73859]; commands=1; log=evidence/timecapsule/logs/E2-hermetic-integration-A01-A15.log"
     },
     {
-      "execution_id": "exec_e3_11e3eca448e8",
+      "execution_id": "exec_e3_213325528bc6",
       "level": "E3",
-      "commit_sha": "e5ea3aa954516933625e28650b6d620e3f467a26",
+      "commit_sha": "8d307a0510a1ed32dd6a332d5c5e89e17fed90ac",
       "environment_digest": "sha256:a0e4061132590ecefed2e71d7665793b8c7bb39561cbde15c0f7d0051478ede5",
       "contract_revision": "TimeCapsule_Industrial_Skills_v1_0",
       "status": "PASS",
-      "artifact_sha256": "21bcc17e677f3d6b08de6b779793858055d86a32a893b9b1233063909d9713dc",
-      "timestamp": "2026-11-07T14:13:43.821425Z",
-      "notes": "suite=timecapsule-real-postgresql17-s3-outbox-force-rls-verification; exit_code=0; pids=[69760]; commands=1; log=evidence/timecapsule/logs/E3-real-postgresql17-s3-outbox.log"
+      "artifact_sha256": "3b70215a80d300b5b99ccfa0c389d55167a19626114b70d7ed192442a9e92ede",
+      "timestamp": "2026-11-07T14:33:22.953404Z",
+      "notes": "suite=timecapsule-real-postgresql17-s3-outbox-force-rls-verification; exit_code=0; pids=[73955]; commands=1; log=evidence/timecapsule/logs/E3-real-postgresql17-s3-outbox.log"
     },
     {
-      "execution_id": "exec_e4_a7cb493141f2",
+      "execution_id": "exec_e4_cbfd1bdffb9e",
       "level": "E4",
-      "commit_sha": "e5ea3aa954516933625e28650b6d620e3f467a26",
+      "commit_sha": "8d307a0510a1ed32dd6a332d5c5e89e17fed90ac",
       "environment_digest": "sha256:a0e4061132590ecefed2e71d7665793b8c7bb39561cbde15c0f7d0051478ede5",
       "contract_revision": "TimeCapsule_Industrial_Skills_v1_0",
       "status": "BLOCKED",
-      "artifact_sha256": "003ce3c52968513fd0d89b2365a8f6870621c23037e4963d4c57e5151c34b529",
-      "timestamp": "2026-11-07T14:13:47.029882Z",
+      "artifact_sha256": "f38a459bbcb908d4742ea2afbe8dfe5259dda9a034f5bd300e336442adc1e8b8",
+      "timestamp": "2026-11-07T14:33:28.161852Z",
       "notes": "suite=timecapsule-wechat-apiv3-rsa-gcm-glyph-and-vendor-sandbox | Local WeChat Pay APIv3 RSA-2048/AES-256-GCM crypto and programmatic glyph/dual-label checks PASSED; live external WeChat Pay merchant cert (TIMECAPSULE_E4_WECHAT_MCH_ID) and live GPU API key (TIMECAPSULE_E4_AI_API_KEY) not configured in offline environment. | Unlock: Provision TIMECAPSULE_E4_WECHAT_MCH_ID, TIMECAPSULE_E4_WECHAT_API_V3_KEY, and TIMECAPSULE_E4_AI_API_KEY in staging environment."
     },
     {
-      "execution_id": "exec_e5_a978c09b8c97",
+      "execution_id": "exec_e5_87af9d9544fa",
       "level": "E5",
-      "commit_sha": "e5ea3aa954516933625e28650b6d620e3f467a26",
+      "commit_sha": "8d307a0510a1ed32dd6a332d5c5e89e17fed90ac",
       "environment_digest": "sha256:a0e4061132590ecefed2e71d7665793b8c7bb39561cbde15c0f7d0051478ede5",
       "contract_revision": "TimeCapsule_Industrial_Skills_v1_0",
       "status": "BLOCKED",
-      "artifact_sha256": "96e46bbd20657768cd676f7a0efcf4bcde14fa781f7198f3fa912063dbc04241",
-      "timestamp": "2026-11-07T14:13:47.034342Z",
+      "artifact_sha256": "59d78a1ff2e6f7e4f700add791db4159264994bc75ad17d6e48795eb7d19f82c",
+      "timestamp": "2026-11-07T14:33:28.166160Z",
       "notes": "suite=timecapsule-compiled-miniapp-bundle-wcag-and-device-gate | Compiled WeChat/XHS Mini-Program bundle (<2MB budget) and WCAG 2.1 AA contrast ratios (15.91:1..17.46:1) PASSED; physical iOS/Android WeChat client device receipt (TIMECAPSULE_E5_DEVICE_RECEIPT_PATH) not attached. | Unlock: Attach signed physical iOS/Android WeChat client device test receipt via TIMECAPSULE_E5_DEVICE_RECEIPT_PATH."
     }
   ],
   "execution_details": [
     {
-      "execution_id": "exec_e0_fe2170dda453",
+      "execution_id": "exec_e0_e044338ae4cf",
       "level": "E0",
       "suite": "timecapsule-static-schema-and-zero-fake-gate",
       "command": "/opt/homebrew/opt/python@3.12/bin/python3.12 /Users/stephen/Documents/Projects/python/ailifetime/spec/timecapsule/tests/validate_package.py && node /Users/stephen/Documents/Projects/python/ailifetime/tools/verify-source.mjs && /opt/homebrew/opt/python@3.12/bin/python3.12 /Users/stephen/DevProjects/AIProjects/elmos/certification/strict_zero_fake_industrial_evaluator.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule",
       "exit_code": 0,
-      "pid": 69685,
+      "pid": 73856,
       "child_pids": [
-        69682,
-        69684,
-        69685
+        73854,
+        73855,
+        73856
       ],
-      "artifact_sha256": "21aa18f196825a5dd85dd6ace1103b06c3292834a56c8bf0fcf312ca7956a088",
+      "artifact_sha256": "e6028418b379951a1911cb770f8f7cd00e78f534b5f60a6665e496190827c0cb",
       "log_path": "evidence/timecapsule/logs/E0-static-schema.log",
       "status": "PASS"
     },
     {
-      "execution_id": "exec_e1_a8be33666a62",
+      "execution_id": "exec_e1_a4181c6e2664",
       "level": "E1",
       "suite": "timecapsule-contract-and-state-machine-tests",
       "command": "/opt/homebrew/opt/python@3.12/bin/python3.12 -m unittest discover -s /Users/stephen/Documents/Projects/python/ailifetime/spec/timecapsule/tests -p test_*.py -v && /opt/homebrew/opt/python@3.12/bin/python3.12 -m unittest /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p00_p01_identity_consent.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p02_p03_catalog_media.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p04_deterministic_renderer.py -v",
       "exit_code": 0,
-      "pid": 69688,
+      "pid": 73858,
       "child_pids": [
-        69687,
-        69688
+        73857,
+        73858
       ],
-      "artifact_sha256": "b86113701b9379b3f05ecc73cc4c633aa0adc964ba4af94328de6022f259f3d6",
+      "artifact_sha256": "790a43e84471a2820a0203cf220562730c179cf3ea913ad530f827e77aa22b7d",
       "log_path": "evidence/timecapsule/logs/E1-contracts-and-state-machines.log",
       "status": "PASS"
     },
     {
-      "execution_id": "exec_e2_b35dcc638ba4",
+      "execution_id": "exec_e2_e3f4483d1e52",
       "level": "E2",
       "suite": "timecapsule-hermetic-integration-and-fault-injection-A01-A15",
       "command": "/opt/homebrew/opt/python@3.12/bin/python3.12 -m unittest /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p05_p06_ai_and_jobs.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p08_p09_export_payments.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p10_p11_timeline_moderation.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p07_p12_p13_p14_http_e2e.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_evidence_runner.py -v",
       "exit_code": 0,
-      "pid": 69689,
+      "pid": 73859,
       "child_pids": [
-        69689
+        73859
       ],
-      "artifact_sha256": "9c784c1344f0d5f58aa83bc15911ceaaff384feea563e4122d09805a6dafda4a",
+      "artifact_sha256": "a47f89990e29ade9a515eac9554cef7e99f2d2f496826267b8b091358f37ed1e",
       "log_path": "evidence/timecapsule/logs/E2-hermetic-integration-A01-A15.log",
       "status": "PASS"
     },
     {
-      "execution_id": "exec_e3_11e3eca448e8",
+      "execution_id": "exec_e3_213325528bc6",
       "level": "E3",
       "suite": "timecapsule-real-postgresql17-s3-outbox-force-rls-verification",
       "command": "/opt/homebrew/opt/python@3.12/bin/python3.12 -m unittest /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_e3_postgres_s3_outbox.py -v",
       "exit_code": 0,
-      "pid": 69760,
+      "pid": 73955,
       "child_pids": [
-        69760
+        73955
       ],
-      "artifact_sha256": "21bcc17e677f3d6b08de6b779793858055d86a32a893b9b1233063909d9713dc",
+      "artifact_sha256": "3b70215a80d300b5b99ccfa0c389d55167a19626114b70d7ed192442a9e92ede",
       "log_path": "evidence/timecapsule/logs/E3-real-postgresql17-s3-outbox.log",
       "status": "PASS"
     },
     {
-      "execution_id": "exec_e4_a7cb493141f2",
+      "execution_id": "exec_e4_cbfd1bdffb9e",
       "level": "E4",
       "suite": "timecapsule-wechat-apiv3-rsa-gcm-glyph-and-vendor-sandbox",
       "command": "TIMECAPSULE_E4_WECHAT_MCH_ID=... TIMECAPSULE_E4_AI_API_KEY=... python3 -m services.timecapsule.evidence_runner",
       "exit_code": 0,
-      "pid": 69678,
+      "pid": 73850,
       "child_pids": [],
-      "artifact_sha256": "003ce3c52968513fd0d89b2365a8f6870621c23037e4963d4c57e5151c34b529",
+      "artifact_sha256": "f38a459bbcb908d4742ea2afbe8dfe5259dda9a034f5bd300e336442adc1e8b8",
       "status": "BLOCKED",
       "local_verification_passed": true,
       "blocker_reason": "Local WeChat Pay APIv3 RSA-2048/AES-256-GCM crypto and programmatic glyph/dual-label checks PASSED; live external WeChat Pay merchant cert (TIMECAPSULE_E4_WECHAT_MCH_ID) and live GPU API key (TIMECAPSULE_E4_AI_API_KEY) not configured in offline environment.",
       "unlock_condition": "Provision TIMECAPSULE_E4_WECHAT_MCH_ID, TIMECAPSULE_E4_WECHAT_API_V3_KEY, and TIMECAPSULE_E4_AI_API_KEY in staging environment."
     },
     {
-      "execution_id": "exec_e5_a978c09b8c97",
+      "execution_id": "exec_e5_87af9d9544fa",
       "level": "E5",
       "suite": "timecapsule-compiled-miniapp-bundle-wcag-and-device-gate",
       "command": "TIMECAPSULE_E5_DEVICE_RECEIPT_PATH=... python3 -m services.timecapsule.evidence_runner",
       "exit_code": 0,
-      "pid": 69678,
+      "pid": 73850,
       "child_pids": [],
-      "artifact_sha256": "96e46bbd20657768cd676f7a0efcf4bcde14fa781f7198f3fa912063dbc04241",
+      "artifact_sha256": "59d78a1ff2e6f7e4f700add791db4159264994bc75ad17d6e48795eb7d19f82c",
       "status": "BLOCKED",
       "local_verification_passed": true,
       "blocker_reason": "Compiled WeChat/XHS Mini-Program bundle (<2MB budget) and WCAG 2.1 AA contrast ratios (15.91:1..17.46:1) PASSED; physical iOS/Android WeChat client device receipt (TIMECAPSULE_E5_DEVICE_RECEIPT_PATH) not attached.",

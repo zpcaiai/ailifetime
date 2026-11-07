@@ -31,6 +31,7 @@
     "dev:weixin": "pnpm --dir apps/xhs-mini run dev:mp-weixin",
     "build:weixin": "pnpm --dir apps/xhs-mini run build:mp-weixin",
     "typecheck:xhs": "pnpm --dir apps/xhs-mini run type-check",
+    "verify:miniprograms": "pnpm run typecheck:xhs && pnpm run build:weixin && pnpm run build:xhs && node apps/xhs-mini/tools/validate-launch-readiness.mjs && node --test apps/xhs-mini/tools/validate-launch-readiness.test.mjs",
     "test:xhs": "python3 -m unittest discover -s services/control-plane -p 'test_*.py' -v",
     "test:timecapsule": "python3 spec/timecapsule/tests/validate_package.py && python3 -m unittest discover -s spec/timecapsule/tests -p 'test_*.py' -v && PYTHONPATH=. python3 -m unittest discover -s services/timecapsule/tests -p 'test_*.py' -v",
     "evidence:timecapsule": "PYTHONPATH=. python3 -m services.timecapsule.evidence_runner",

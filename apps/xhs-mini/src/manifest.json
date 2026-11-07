@@ -13,17 +13,38 @@
       "postcss": true,
       "minified": true
     },
+    "permission": {
+      "scope.writePhotosAlbum": {
+        "desc": "用于将您生成的 AI 时光影像与一生拾忆纪念卡片保存至手机相册"
+      }
+    },
+    "networkTimeout": {
+      "request": 15000,
+      "uploadFile": 30000,
+      "downloadFile": 30000
+    },
     "optimization": {
       "subPackages": true
     }
   },
   "mp-weixin": {
     "appid": "YOUR_WECHAT_MINI_APPID",
+    "__usePrivacyCheck__": true,
     "setting": {
       "urlCheck": true,
       "es6": true,
       "postcss": true,
       "minified": true
+    },
+    "permission": {
+      "scope.writePhotosAlbum": {
+        "desc": "用于将您生成的 AI 时光影像与一生拾忆纪念卡片保存至手机相册"
+      }
+    },
+    "networkTimeout": {
+      "request": 15000,
+      "uploadFile": 30000,
+      "downloadFile": 30000
     },
     "usingComponents": true,
     "lazyCodeLoading": "requiredComponents",

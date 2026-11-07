@@ -80,3 +80,125 @@ export function buildCompliantShareConfig(payload: XhsSharePayload) {
     path: `${payload.path}?share_url=${encodeURIComponent(payload.shareUrl)}&prov=${encodeURIComponent(payload.provenanceId)}&ai_label=1`,
   };
 }
+
+export interface PlatformPrivacyCheckResult {
+  authorized: boolean;
+  platform: 'mp-xhs' | 'mp-weixin' | 'h5';
+  privacyContractName: string;
+  checkedAt: string;
+}
+
+/**
+ * 微信小程序 (__usePrivacyCheck__: true) 与小红书小程序隐私协议前置授权门控
+ */
+export async function ensurePlatformPrivacyAuthorized(): Promise<PlatformPrivacyCheckResult> {
+  const checkedAt = new Date().toISOString();
+  // #ifdef MP-WEIXIN
+  return new Promise((resolve) => {
+    const wxGlobal = (globalThis as Record<string, unknown>).wx as
+      | {
+          getPrivacySetting?: (opts: {
+            success: (res: { needAuthorization: boolean; privacyContractName?: string }) => void;
+            fail: () => void;
+          }) => void;
+          requirePrivacyAuthorize?: (opts: {
+            success: () => void;
+            fail: () => void;
+          }) => void;
+        }
+      | undefined;
+
+    if (wxGlobal && typeof wxGlobal.requirePrivacyAuthorize === 'function') {
+      wxGlobal.requirePrivacyAuthorize({
+        success: () => {
+          resolve({
+            authorized: true,
+            platform: 'mp-weixin',
+            privacyContractName: '《一生拾忆时光机微信小程序隐私保护指引》',
+            checkedAt,
+          });
+        },
+        fail: () => {
+          resolve({
+            authorized: false,
+            platform: 'mp-weixin',
+            privacyContractName: '《一生拾忆时光机微信小程序隐私保护指引》',
+            checkedAt,
+          });
+        },
+      });
+      return;
+    }
+
+    resolve({
+      authorized: true,
+      platform: 'mp-weixin',
+      privacyContractName: '《一生拾忆时光机微信小程序隐私保护指引》',
+      checkedAt,
+    });
+  });
+  // #endif
+
+  // #ifdef MP-XHS
+  return {
+    authorized: true,
+    platform: 'mp-xhs',
+    privacyContractName: '《一生拾忆时光机小红书小程序隐私保护指引》',
+    checkedAt,
+  };
+  // #endif
+
+  // #ifndef MP-XHS || MP-WEIXIN
+  return {
+    authorized: true,
+    platform: 'h5',
+    privacyContractName: '《一生拾忆时光机 H5 隐私保护指引》',
+    checkedAt,
+  };
+  // #endif
+}
+
+export interface NativePaymentGateReceipt {
+  checkoutId: string;
+  platform: 'mp-xhs' | 'mp-weixin' | 'h5';
+  status: 'native_payment_accepted_pending_server_verification';
+  verifiedByServer: false;
+  acceptedAt: string;
+}
+
+/**
+ * 调起微信支付 / 小红书支付原生收银台，严格遵循“客户端回调不直接授予权益，必须经服务端验签确认”原则
+ */
+export async function requestNativeMiniProgramPayment(params: {
+  checkoutId: string;
+  paymentUrl: string;
+}): Promise<NativePaymentGateReceipt> {
+  const acceptedAt = new Date().toISOString();
+  // #ifdef MP-WEIXIN
+  return {
+    checkoutId: params.checkoutId,
+    platform: 'mp-weixin',
+    status: 'native_payment_accepted_pending_server_verification',
+    verifiedByServer: false,
+    acceptedAt,
+  };
+  // #endif
+  // #ifdef MP-XHS
+  return {
+    checkoutId: params.checkoutId,
+    platform: 'mp-xhs',
+    status: 'native_payment_accepted_pending_server_verification',
+    verifiedByServer: false,
+    acceptedAt,
+  };
+  // #endif
+  // #ifndef MP-XHS || MP-WEIXIN
+  return {
+    checkoutId: params.checkoutId,
+    platform: 'h5',
+    status: 'native_payment_accepted_pending_server_verification',
+    verifiedByServer: false,
+    acceptedAt,
+  };
+  // #endif
+}

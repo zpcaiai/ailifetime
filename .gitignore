@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+!.env.*.example
 apps/wechat-mini/project.private.config.json
 apps/wechat-mini/miniprogram/ext.json
 .DS_Store

@@ -45,6 +45,26 @@
         <text class="receipt-line">机器可查收据：{{ rightsCase.receipt_url }}</text>
       </view>
     </view>
+
+    <!-- 微信小程序 & 小红书小程序双端上线预备状态自检看板 -->
+    <view class="card">
+      <view class="section-title">微信 & 小红书双端上线预备状态自检</view>
+      <text class="card-desc">
+        当前通道：{{ launchReadiness.channel }} · 模式：{{ launchReadiness.runtimeMode }} · 开发者工具预览就绪：{{ launchReadiness.readyForDevToolsPreview ? 'PASS' : 'PENDING' }}
+      </text>
+      <view class="order-box">
+        <view
+          v-for="item in launchReadiness.checks"
+          :key="item.id"
+          class="readiness-row"
+        >
+          <text class="order-line">
+            {{ item.passed ? '✅' : '⏳' }} {{ item.label }}
+          </text>
+          <text class="readiness-sub">{{ item.detail }}</text>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -57,6 +77,7 @@ import {
   getCurrentPlatformChannel,
   getLatestOrderId,
   getLatestShareId,
+  getMiniProgramLaunchReadiness,
   getTrackedShare,
   purgeEphemeralMediaCache,
 } from '../../services/api';
@@ -64,10 +85,12 @@ import {
 const currentOrder = ref<Order | null>(null);
 const shareRevoked = ref(false);
 const rightsCase = ref<RightsCase | null>(null);
+const launchReadiness = ref(getMiniProgramLaunchReadiness());
 
 onShow(() => {
   const tracked = getTrackedShare(getLatestShareId());
   shareRevoked.value = Boolean(tracked && tracked.status === 'revoked');
+  launchReadiness.value = getMiniProgramLaunchReadiness();
 });
 
 async function handleQueryOrder() {
@@ -136,6 +159,20 @@ async function handleSubmitDeletion(type: 'delete' | 'withdraw-consent') {
   font-size: 24rpx;
   color: #333333;
   word-break: break-all;
+}
+
+.readiness-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  padding-bottom: 10rpx;
+  border-bottom: 1rpx solid #ececf2;
+}
+
+.readiness-sub {
+  font-size: 21rpx;
+  color: #666666;
+  line-height: 1.4;
 }
 
 .rights-actions {

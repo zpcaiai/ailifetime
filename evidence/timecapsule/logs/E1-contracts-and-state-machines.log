@@ -1,4 +1,4 @@
-=== COMMAND: /opt/homebrew/opt/python@3.12/bin/python3.12 -m unittest discover -s /Users/stephen/Documents/Projects/python/ailifetime/spec/timecapsule/tests -p test_*.py -v (PID=69687, EXIT=0) ===
+=== COMMAND: /opt/homebrew/opt/python@3.12/bin/python3.12 -m unittest discover -s /Users/stephen/Documents/Projects/python/ailifetime/spec/timecapsule/tests -p test_*.py -v (PID=73857, EXIT=0) ===
 test_ai_templates_require_mark (test_state_machine.TestInvariants.test_ai_templates_require_mark) ... ok
 test_cancelled_no_restart (test_state_machine.TestInvariants.test_cancelled_no_restart) ... ok
 test_failed_job_not_ready (test_state_machine.TestInvariants.test_failed_job_not_ready) ... ok
@@ -11,7 +11,7 @@ Ran 6 tests in 0.000s
 
 OK
 
-=== COMMAND: /opt/homebrew/opt/python@3.12/bin/python3.12 -m unittest /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p00_p01_identity_consent.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p02_p03_catalog_media.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p04_deterministic_renderer.py -v (PID=69688, EXIT=0) ===
+=== COMMAND: /opt/homebrew/opt/python@3.12/bin/python3.12 -m unittest /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p00_p01_identity_consent.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p02_p03_catalog_media.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p04_deterministic_renderer.py -v (PID=73858, EXIT=0) ===
 test_a01_expired_login_session_refresh_preserves_draft (services.timecapsule.tests.test_p00_p01_identity_consent.TestP00AndP01IdentityConsent.test_a01_expired_login_session_refresh_preserves_draft) ... ok
 test_a10_cross_user_isolation_and_deletion_cascade (services.timecapsule.tests.test_p00_p01_identity_consent.TestP00AndP01IdentityConsent.test_a10_cross_user_isolation_and_deletion_cascade) ... ok
 test_p00_manifest_and_schema_validation (services.timecapsule.tests.test_p00_p01_identity_consent.TestP00AndP01IdentityConsent.test_p00_manifest_and_schema_validation) ... ok
@@ -24,6 +24,6 @@ test_deterministic_svg_and_png_rendering_and_preview_hd_parity (services.timecap
 test_layout_face_collision_and_qr_domain_allowlist (services.timecapsule.tests.test_p04_deterministic_renderer.TestP04DeterministicRenderer.test_layout_face_collision_and_qr_domain_allowlist) ... ok
 
 ----------------------------------------------------------------------
-Ran 10 tests in 0.039s
+Ran 10 tests in 0.034s
 
 OK

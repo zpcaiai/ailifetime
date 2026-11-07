@@ -17,13 +17,13 @@
       "mp_weixin": {
         "exists": true,
         "file_count": 29,
-        "total_bytes": 148824,
+        "total_bytes": 157492,
         "within_2mb_budget": true
       },
       "mp_xhs": {
         "exists": true,
         "file_count": 29,
-        "total_bytes": 148193,
+        "total_bytes": 156426,
         "within_2mb_budget": true
       },
       "native_wechat_mini": {
@@ -40,5 +40,5 @@
   },
   "blocker_reason": "Compiled WeChat/XHS Mini-Program bundle (<2MB budget) and WCAG 2.1 AA contrast ratios (15.91:1..17.46:1) PASSED; physical iOS/Android WeChat client device receipt (TIMECAPSULE_E5_DEVICE_RECEIPT_PATH) not attached.",
   "unlock_condition": "Attach signed physical iOS/Android WeChat client device test receipt via TIMECAPSULE_E5_DEVICE_RECEIPT_PATH.",
-  "recorded_at": "2026-11-07T14:13:47.034136Z"
+  "recorded_at": "2026-11-07T14:33:28.165941Z"
 }

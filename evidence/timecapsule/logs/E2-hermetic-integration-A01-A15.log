@@ -1,4 +1,4 @@
-=== COMMAND: /opt/homebrew/opt/python@3.12/bin/python3.12 -m unittest /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p05_p06_ai_and_jobs.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p08_p09_export_payments.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p10_p11_timeline_moderation.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p07_p12_p13_p14_http_e2e.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_evidence_runner.py -v (PID=69689, EXIT=0) ===
+=== COMMAND: /opt/homebrew/opt/python@3.12/bin/python3.12 -m unittest /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p05_p06_ai_and_jobs.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p08_p09_export_payments.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p10_p11_timeline_moderation.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_p07_p12_p13_p14_http_e2e.py /Users/stephen/Documents/Projects/python/ailifetime/services/timecapsule/tests/test_evidence_runner.py -v (PID=73859, EXIT=0) ===
 test_a02_100x_duplicate_idempotency_key_creates_single_logical_job (services.timecapsule.tests.test_p05_p06_ai_and_jobs.TestP05AndP06AIAndJobs.test_a02_100x_duplicate_idempotency_key_creates_single_logical_job) ... ok
 test_a03_provider_429_503_failover_and_disconnect_reconciliation (services.timecapsule.tests.test_p05_p06_ai_and_jobs.TestP05AndP06AIAndJobs.test_a03_provider_429_503_failover_and_disconnect_reconciliation) ... ok
 test_a04_outbox_scanner_and_a07_consent_revocation_and_a13_budget_cap (services.timecapsule.tests.test_p05_p06_ai_and_jobs.TestP05AndP06AIAndJobs.test_a04_outbox_scanner_and_a07_consent_revocation_and_a13_budget_cap) ... ok
@@ -12,6 +12,6 @@ test_e4_wechat_apiv3_rsa2048_aes256gcm_and_glyph_inspector (services.timecapsule
 test_e5_compiled_mini_program_bundle_and_wcag_contrast_ratios (services.timecapsule.tests.test_evidence_runner.TestIndependentEvidenceRunner.test_e5_compiled_mini_program_bundle_and_wcag_contrast_ratios) ... ok
 
 ----------------------------------------------------------------------
-Ran 11 tests in 7.595s
+Ran 11 tests in 11.083s
 
 OK
