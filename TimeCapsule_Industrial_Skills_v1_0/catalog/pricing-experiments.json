@@ -1,0 +1,22 @@
+{
+  "currency": "CNY",
+  "experiments_only": true,
+  "plans": [
+    {
+      "id": "free",
+      "min_fen": 0,
+      "max_fen": 0
+    },
+    {
+      "id": "single",
+      "min_fen": 290,
+      "max_fen": 990
+    },
+    {
+      "id": "bundle",
+      "min_fen": 1990,
+      "max_fen": 5900
+    }
+  ],
+  "rule": "Service-side immutable price snapshot and platform eligibility required; no client-authoritative amount."
+}

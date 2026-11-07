@@ -1,0 +1,66 @@
+openapi: 3.0.3
+info:
+  title: TimeCapsule API (contract draft)
+  version: 1.0.0
+servers:
+  - url: https://api.example.invalid/v1
+security:
+  - sessionAuth: []
+paths:
+  /templates:
+    get:
+      operationId: listTemplates
+      responses:
+        '200': {description: Template catalog snapshot}
+  /consents:
+    post:
+      operationId: recordConsent
+      responses:
+        '201': {description: Evidence-backed consent recorded}
+  /uploads/intents:
+    post:
+      operationId: createUploadIntent
+      responses:
+        '201': {description: Private upload intent with limits}
+  /jobs:
+    post:
+      operationId: createGenerationJob
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: {type: string}
+      responses:
+        '202': {description: Job accepted}
+        '409': {description: Idempotency key reused with different payload}
+  /jobs/{jobId}:
+    get:
+      operationId: getGenerationJob
+      parameters:
+        - in: path
+          name: jobId
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: Owner-scoped job state}
+        '404': {description: Not found or unauthorized}
+  /orders:
+    post:
+      operationId: createOrder
+      responses:
+        '201': {description: Server-priced order}
+  /exports:
+    post:
+      operationId: requestExport
+      responses:
+        '202': {description: Export with mandatory labeling scheduled}
+  /privacy/deletion-requests:
+    post:
+      operationId: requestDeletion
+      responses:
+        '202': {description: Asynchronous deletion proof request accepted}
+components:
+  securitySchemes:
+    sessionAuth:
+      type: http
+      scheme: bearer

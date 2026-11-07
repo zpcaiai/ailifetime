@@ -1,0 +1,769 @@
+[
+  {
+    "id": "personal_intro",
+    "category": "profile",
+    "name": "个人介绍信息卡",
+    "version": "1.0.0",
+    "fields": [
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "maxLength": 48
+      },
+      {
+        "name": "subtitle",
+        "type": "text",
+        "required": false,
+        "maxLength": 160
+      },
+      {
+        "name": "event_date",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "text",
+        "required": false,
+        "maxLength": 32
+      }
+    ],
+    "image_slots": 1,
+    "sizes": [
+      "3:4",
+      "9:16",
+      "1:1"
+    ],
+    "ai_mode": "none",
+    "label_policy": "conditional"
+  },
+  {
+    "id": "social_contact",
+    "category": "profile",
+    "name": "微信交友名片",
+    "version": "1.0.0",
+    "fields": [
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "maxLength": 48
+      },
+      {
+        "name": "subtitle",
+        "type": "text",
+        "required": false,
+        "maxLength": 160
+      },
+      {
+        "name": "event_date",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "text",
+        "required": false,
+        "maxLength": 32
+      }
+    ],
+    "image_slots": 1,
+    "sizes": [
+      "3:4",
+      "9:16"
+    ],
+    "ai_mode": "none",
+    "label_policy": "conditional"
+  },
+  {
+    "id": "business_card",
+    "category": "career",
+    "name": "职业商务名片",
+    "version": "1.0.0",
+    "fields": [
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "maxLength": 48
+      },
+      {
+        "name": "subtitle",
+        "type": "text",
+        "required": false,
+        "maxLength": 160
+      },
+      {
+        "name": "event_date",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "text",
+        "required": false,
+        "maxLength": 32
+      }
+    ],
+    "image_slots": 1,
+    "sizes": [
+      "3:4",
+      "9:16"
+    ],
+    "ai_mode": "none",
+    "label_policy": "conditional"
+  },
+  {
+    "id": "personal_portrait",
+    "category": "career",
+    "name": "AI个人形象卡",
+    "version": "1.0.0",
+    "fields": [
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "maxLength": 48
+      },
+      {
+        "name": "subtitle",
+        "type": "text",
+        "required": false,
+        "maxLength": 160
+      },
+      {
+        "name": "event_date",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "text",
+        "required": false,
+        "maxLength": 32
+      }
+    ],
+    "image_slots": 1,
+    "sizes": [
+      "3:4",
+      "9:16",
+      "1:1"
+    ],
+    "ai_mode": "portrait_style",
+    "label_policy": "ai_required"
+  },
+  {
+    "id": "life_0_100",
+    "category": "timeline",
+    "name": "人生0-100岁照片",
+    "version": "1.0.0",
+    "fields": [
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "maxLength": 48
+      },
+      {
+        "name": "subtitle",
+        "type": "text",
+        "required": false,
+        "maxLength": 160
+      },
+      {
+        "name": "event_date",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "text",
+        "required": false,
+        "maxLength": 32
+      }
+    ],
+    "image_slots": 1,
+    "sizes": [
+      "3:4",
+      "9:16"
+    ],
+    "ai_mode": "age_simulation",
+    "label_policy": "ai_required"
+  },
+  {
+    "id": "past_me",
+    "category": "timeline",
+    "name": "童年与现在合影",
+    "version": "1.0.0",
+    "fields": [
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "maxLength": 48
+      },
+      {
+        "name": "subtitle",
+        "type": "text",
+        "required": false,
+        "maxLength": 160
+      },
+      {
+        "name": "event_date",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "text",
+        "required": false,
+        "maxLength": 32
+      }
+    ],
+    "image_slots": 2,
+    "sizes": [
+      "3:4",
+      "9:16"
+    ],
+    "ai_mode": "composite",
+    "label_policy": "ai_required"
+  },
+  {
+    "id": "future_me",
+    "category": "timeline",
+    "name": "未来20年的自己",
+    "version": "1.0.0",
+    "fields": [
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "maxLength": 48
+      },
+      {
+        "name": "subtitle",
+        "type": "text",
+        "required": false,
+        "maxLength": 160
+      },
+      {
+        "name": "event_date",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "text",
+        "required": false,
+        "maxLength": 32
+      }
+    ],
+    "image_slots": 1,
+    "sizes": [
+      "3:4",
+      "9:16",
+      "1:1"
+    ],
+    "ai_mode": "age_simulation",
+    "label_policy": "ai_required"
+  },
+  {
+    "id": "birthday",
+    "category": "anniversary",
+    "name": "生日祝福卡",
+    "version": "1.0.0",
+    "fields": [
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "maxLength": 48
+      },
+      {
+        "name": "subtitle",
+        "type": "text",
+        "required": false,
+        "maxLength": 160
+      },
+      {
+        "name": "event_date",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "text",
+        "required": false,
+        "maxLength": 32
+      }
+    ],
+    "image_slots": 1,
+    "sizes": [
+      "3:4",
+      "9:16"
+    ],
+    "ai_mode": "none",
+    "label_policy": "conditional"
+  },
+  {
+    "id": "baby_month",
+    "category": "baby",
+    "name": "宝宝成长月龄卡",
+    "version": "1.0.0",
+    "fields": [
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "maxLength": 48
+      },
+      {
+        "name": "subtitle",
+        "type": "text",
+        "required": false,
+        "maxLength": 160
+      },
+      {
+        "name": "event_date",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "text",
+        "required": false,
+        "maxLength": 32
+      }
+    ],
+    "image_slots": 1,
+    "sizes": [
+      "3:4",
+      "9:16"
+    ],
+    "ai_mode": "none",
+    "label_policy": "conditional"
+  },
+  {
+    "id": "couple_anniversary",
+    "category": "couple",
+    "name": "情侣纪念卡",
+    "version": "1.0.0",
+    "fields": [
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "maxLength": 48
+      },
+      {
+        "name": "subtitle",
+        "type": "text",
+        "required": false,
+        "maxLength": 160
+      },
+      {
+        "name": "event_date",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "text",
+        "required": false,
+        "maxLength": 32
+      }
+    ],
+    "image_slots": 2,
+    "sizes": [
+      "3:4",
+      "9:16",
+      "1:1"
+    ],
+    "ai_mode": "none",
+    "label_policy": "conditional"
+  },
+  {
+    "id": "moments_grid",
+    "category": "travel",
+    "name": "朋友圈九宫格",
+    "version": "1.0.0",
+    "fields": [
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "maxLength": 48
+      },
+      {
+        "name": "subtitle",
+        "type": "text",
+        "required": false,
+        "maxLength": 160
+      },
+      {
+        "name": "event_date",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "text",
+        "required": false,
+        "maxLength": 32
+      }
+    ],
+    "image_slots": 9,
+    "sizes": [
+      "3:4",
+      "9:16"
+    ],
+    "ai_mode": "none",
+    "label_policy": "conditional"
+  },
+  {
+    "id": "retro_portrait",
+    "category": "creative",
+    "name": "复古年代写真",
+    "version": "1.0.0",
+    "fields": [
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "maxLength": 48
+      },
+      {
+        "name": "subtitle",
+        "type": "text",
+        "required": false,
+        "maxLength": 160
+      },
+      {
+        "name": "event_date",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "text",
+        "required": false,
+        "maxLength": 32
+      }
+    ],
+    "image_slots": 1,
+    "sizes": [
+      "3:4",
+      "9:16"
+    ],
+    "ai_mode": "portrait_style",
+    "label_policy": "ai_required"
+  },
+  {
+    "id": "graduation",
+    "category": "achievement",
+    "name": "毕业纪念卡",
+    "version": "1.0.0",
+    "fields": [
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "maxLength": 48
+      },
+      {
+        "name": "subtitle",
+        "type": "text",
+        "required": false,
+        "maxLength": 160
+      },
+      {
+        "name": "event_date",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "text",
+        "required": false,
+        "maxLength": 32
+      }
+    ],
+    "image_slots": 1,
+    "sizes": [
+      "3:4",
+      "9:16",
+      "1:1"
+    ],
+    "ai_mode": "none",
+    "label_policy": "conditional"
+  },
+  {
+    "id": "family_photo",
+    "category": "family",
+    "name": "全家福生成",
+    "version": "1.0.0",
+    "fields": [
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "maxLength": 48
+      },
+      {
+        "name": "subtitle",
+        "type": "text",
+        "required": false,
+        "maxLength": 160
+      },
+      {
+        "name": "event_date",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "text",
+        "required": false,
+        "maxLength": 32
+      }
+    ],
+    "image_slots": 5,
+    "sizes": [
+      "3:4",
+      "9:16"
+    ],
+    "ai_mode": "composite",
+    "label_policy": "ai_required"
+  },
+  {
+    "id": "old_photo_restore",
+    "category": "memory",
+    "name": "老照片修复纪念",
+    "version": "1.0.0",
+    "fields": [
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "maxLength": 48
+      },
+      {
+        "name": "subtitle",
+        "type": "text",
+        "required": false,
+        "maxLength": 160
+      },
+      {
+        "name": "event_date",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "text",
+        "required": false,
+        "maxLength": 32
+      }
+    ],
+    "image_slots": 1,
+    "sizes": [
+      "3:4",
+      "9:16"
+    ],
+    "ai_mode": "restoration",
+    "label_policy": "ai_required"
+  },
+  {
+    "id": "pet_identity",
+    "category": "pet",
+    "name": "宠物身份卡",
+    "version": "1.0.0",
+    "fields": [
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "maxLength": 48
+      },
+      {
+        "name": "subtitle",
+        "type": "text",
+        "required": false,
+        "maxLength": 160
+      },
+      {
+        "name": "event_date",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "text",
+        "required": false,
+        "maxLength": 32
+      }
+    ],
+    "image_slots": 1,
+    "sizes": [
+      "3:4",
+      "9:16",
+      "1:1"
+    ],
+    "ai_mode": "none",
+    "label_policy": "conditional"
+  },
+  {
+    "id": "travel_postcard",
+    "category": "travel",
+    "name": "旅行明信片",
+    "version": "1.0.0",
+    "fields": [
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "maxLength": 48
+      },
+      {
+        "name": "subtitle",
+        "type": "text",
+        "required": false,
+        "maxLength": 160
+      },
+      {
+        "name": "event_date",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "text",
+        "required": false,
+        "maxLength": 32
+      }
+    ],
+    "image_slots": 1,
+    "sizes": [
+      "3:4",
+      "9:16"
+    ],
+    "ai_mode": "none",
+    "label_policy": "conditional"
+  },
+  {
+    "id": "annual_review",
+    "category": "timeline",
+    "name": "年度人生回顾",
+    "version": "1.0.0",
+    "fields": [
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "maxLength": 48
+      },
+      {
+        "name": "subtitle",
+        "type": "text",
+        "required": false,
+        "maxLength": 160
+      },
+      {
+        "name": "event_date",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "text",
+        "required": false,
+        "maxLength": 32
+      }
+    ],
+    "image_slots": 12,
+    "sizes": [
+      "3:4",
+      "9:16"
+    ],
+    "ai_mode": "none",
+    "label_policy": "conditional"
+  },
+  {
+    "id": "portfolio",
+    "category": "career",
+    "name": "个人作品展示卡",
+    "version": "1.0.0",
+    "fields": [
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "maxLength": 48
+      },
+      {
+        "name": "subtitle",
+        "type": "text",
+        "required": false,
+        "maxLength": 160
+      },
+      {
+        "name": "event_date",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "text",
+        "required": false,
+        "maxLength": 32
+      }
+    ],
+    "image_slots": 3,
+    "sizes": [
+      "3:4",
+      "9:16",
+      "1:1"
+    ],
+    "ai_mode": "none",
+    "label_policy": "conditional"
+  },
+  {
+    "id": "life_album",
+    "category": "memory",
+    "name": "人生数字纪念册",
+    "version": "1.0.0",
+    "fields": [
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "maxLength": 48
+      },
+      {
+        "name": "subtitle",
+        "type": "text",
+        "required": false,
+        "maxLength": 160
+      },
+      {
+        "name": "event_date",
+        "type": "date",
+        "required": false
+      },
+      {
+        "name": "display_name",
+        "type": "text",
+        "required": false,
+        "maxLength": 32
+      }
+    ],
+    "image_slots": 12,
+    "sizes": [
+      "3:4",
+      "9:16"
+    ],
+    "ai_mode": "composite",
+    "label_policy": "ai_required"
+  }
+]

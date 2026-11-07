@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IndependentEvidence",
+  "type": "object",
+  "required": [
+    "execution_id",
+    "level",
+    "commit_sha",
+    "environment_digest",
+    "contract_revision",
+    "status",
+    "artifact_sha256",
+    "timestamp"
+  ],
+  "properties": {
+    "execution_id": {
+      "type": "string"
+    },
+    "level": {
+      "enum": [
+        "E0",
+        "E1",
+        "E2",
+        "E3",
+        "E4",
+        "E5"
+      ]
+    },
+    "commit_sha": {
+      "type": "string"
+    },
+    "environment_digest": {
+      "type": "string"
+    },
+    "contract_revision": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        "BLOCKED",
+        "SKIPPED"
+      ]
+    },
+    "artifact_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}
