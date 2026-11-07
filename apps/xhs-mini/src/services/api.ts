@@ -4,6 +4,8 @@ import {
   type HttpTransportRequest,
 } from '@ailifetime/sdk-ts';
 import type {
+  AgeBandPromptRecipe,
+  AspectRatio,
   CheckoutSession,
   ConsentReceipt,
   FutureSelfMessage,
@@ -11,7 +13,9 @@ import type {
   GuestSession,
   MiniProgramSession,
   Order,
+  PortraitTemplateSpec,
   Project,
+  ProjectRequest,
   RightsCase,
   Share,
   UploadSession,
@@ -30,6 +34,22 @@ const sandboxOrders = new Map<string, Order>();
 let currentAccessToken: string | null = null;
 let latestShareId = 'shr_xhs_latest';
 let latestOrderId = 'ord_xhs_latest';
+let preferredTemplateId = 'tpl_xhs_silver_halide_0_100';
+
+interface SandboxProjectContext {
+  project: Project;
+  request: ProjectRequest;
+}
+
+const sandboxProjectRegistry = new Map<string, SandboxProjectContext>();
+
+export function setPreferredTemplateId(templateId: string): void {
+  preferredTemplateId = templateId;
+}
+
+export function getPreferredTemplateId(): string {
+  return preferredTemplateId;
+}
 
 export function registerEphemeralPreviewUrl(url: string): void {
   ephemeralPreviewRegistry.add(url);
@@ -71,12 +91,454 @@ export function getCurrentPlatformChannel(): 'mp-xhs' | 'mp-weixin' | 'h5' {
   // #endif
 }
 
+const ANTI_PLASTIC_NEGATIVE_CONSTRAINTS = [
+  'plastic over-smoothed skin',
+  'wax figure complexion',
+  'airbrushed beauty filter',
+  'uncanny valley facial proportions',
+  'identity drift or swapped bone structure',
+  'asymmetric irises or strabismus artifacts',
+  'deformed hands or extra fingers',
+  'distorted teeth or unnatural dental arch',
+  'fake glued-on beard or Halloween wig',
+  'harsh flat flash overexposure',
+  'cartoonish 3D CGI render',
+];
+
+function buildAgeBandRecipes(wardrobeTheme: string, backdropTheme: string): AgeBandPromptRecipe[] {
+  return [
+    {
+      band_key: 'childhood_0_8',
+      min_age: 0,
+      max_age: 8,
+      stage_label: '童年纯真',
+      craniofacial_and_skin_cue:
+        'authentic childhood craniofacial neoteny, higher forehead-to-jaw ratio, soft buccal fullness, translucent natural skin texture with zero adult makeup, preserving exact interpupillary distance and canthal tilt',
+      hair_and_grooming_cue: 'fine soft natural childhood hair strands, clean natural hairline',
+      wardrobe_and_styling_cue: `age-appropriate childhood soft cotton/knit collar (${wardrobeTheme})`,
+      pose_and_gaze_cue: 'curious clear eye contact, relaxed natural head tilt, bright catchlights',
+      backdrop_and_atmosphere_cue: `warm nostalgic studio ambiance (${backdropTheme})`,
+      identity_lock_strength: 0.84,
+    },
+    {
+      band_key: 'adolescence_9_16',
+      min_age: 9,
+      max_age: 16,
+      stage_label: '少年澄澈',
+      craniofacial_and_skin_cue:
+        'emerging adolescent nasal bridge and jawline definition, natural teenage skin pores, authentic facial bone landmarks locked to source identity, zero adultification',
+      hair_and_grooming_cue: 'neat school-age natural hair texture with subtle flyaway realism',
+      wardrobe_and_styling_cue: `clean youth casual shirt/knitwear (${wardrobeTheme})`,
+      pose_and_gaze_cue: 'upright posture, sincere calm gaze toward camera',
+      backdrop_and_atmosphere_cue: `soft daylight-balanced studio backdrop (${backdropTheme})`,
+      identity_lock_strength: 0.88,
+    },
+    {
+      band_key: 'youth_17_24',
+      min_age: 17,
+      max_age: 24,
+      stage_label: '青春启航',
+      craniofacial_and_skin_cue:
+        'fully developed young-adult craniofacial structure, crisp jawline, luminous healthy dermis with visible microscopic pore texture and natural sebaceous sheen, zero plastic smoothing',
+      hair_and_grooming_cue: 'dense healthy hair volume with natural specular highlights',
+      wardrobe_and_styling_cue: `tailored young-adult minimalist collar (${wardrobeTheme})`,
+      pose_and_gaze_cue: 'confident composed three-quarter shoulder angle, direct expressive gaze',
+      backdrop_and_atmosphere_cue: `clean editorial portrait environment (${backdropTheme})`,
+      identity_lock_strength: 0.93,
+    },
+    {
+      band_key: 'prime_25_35',
+      min_age: 25,
+      max_age: 35,
+      stage_label: '当下绽放',
+      craniofacial_and_skin_cue:
+        'peak adult bone definition, exact 1:1 facial landmark fidelity to source identity anchor, natural micro-texture across zygomatic arch and philtrum, authentic eye orbicularis detail',
+      hair_and_grooming_cue: 'well-groomed natural hair styling with individual strand separation',
+      wardrobe_and_styling_cue: `contemporary textured fabric neckline (${wardrobeTheme})`,
+      pose_and_gaze_cue: 'poised natural expression, subtle micro-smile in eyes, balanced head alignment',
+      backdrop_and_atmosphere_cue: `signature studio portrait depth (${backdropTheme})`,
+      identity_lock_strength: 0.96,
+    },
+    {
+      band_key: 'maturity_36_50',
+      min_age: 36,
+      max_age: 50,
+      stage_label: '从容岁月',
+      craniofacial_and_skin_cue:
+        'composed mid-life facial maturity, subtle natural lateral canthal laugh lines and gentle nasolabial fold deepening, refined cheekbone contour, authentic mid-life skin elasticity',
+      hair_and_grooming_cue: 'mature hair density with occasional subtle temple silver threads',
+      wardrobe_and_styling_cue: `refined wool/cashmere or structured linen collar (${wardrobeTheme})`,
+      pose_and_gaze_cue: 'grounded calm presence, warm experienced gaze, relaxed shoulders',
+      backdrop_and_atmosphere_cue: `rich tonal portrait atmosphere (${backdropTheme})`,
+      identity_lock_strength: 0.92,
+    },
+    {
+      band_key: 'silver_prime_51_68',
+      min_age: 51,
+      max_age: 68,
+      stage_label: '温情银发',
+      craniofacial_and_skin_cue:
+        "graceful early-senior bone and soft-tissue evolution, natural periorbital crow's feet, authentic forehead and nasolabial expression lines, realistic dermal texture while preserving core eye and nose geometry",
+      hair_and_grooming_cue: 'natural salt-and-pepper to luminous silver hair strands with realistic texture',
+      wardrobe_and_styling_cue: `warm timeless knit or classic shawl collar (${wardrobeTheme})`,
+      pose_and_gaze_cue: 'gentle benevolent expression, warm eye catchlights, dignified posture',
+      backdrop_and_atmosphere_cue: `warm intimate studio light falloff (${backdropTheme})`,
+      identity_lock_strength: 0.89,
+    },
+    {
+      band_key: 'elder_69_84',
+      min_age: 69,
+      max_age: 84,
+      stage_label: '岁月沉淀',
+      craniofacial_and_skin_cue:
+        "dignified elder facial anatomy, natural subcutaneous volume softening along mandible, authentic multi-layered skin creases, unmistakably the same person's orbital socket and gaze character",
+      hair_and_grooming_cue: 'soft silver-white hair with natural thinning and fine halo wisping',
+      wardrobe_and_styling_cue: `classic soft-textured cardigan or heritage collar (${wardrobeTheme})`,
+      pose_and_gaze_cue: 'serene reflective gaze, warm lived-in smile lines, composed head posture',
+      backdrop_and_atmosphere_cue: `classic fine-art portrait shadow depth (${backdropTheme})`,
+      identity_lock_strength: 0.86,
+    },
+    {
+      band_key: 'centenarian_85_100',
+      min_age: 85,
+      max_age: 120,
+      stage_label: '世纪回眸',
+      craniofacial_and_skin_cue:
+        'reverent centenarian artistic portrait, delicate parchment-like dermal micro-topography, deeply etched harmonious life lines, preserved ocular spacing and signature gaze spirit',
+      hair_and_grooming_cue: 'pure gossamer silver-white hair illuminated by gentle rim light',
+      wardrobe_and_styling_cue: `timeless dignified high-neck wool or silk wrap (${wardrobeTheme})`,
+      pose_and_gaze_cue: 'peaceful luminous eyes, quiet dignity, timeless frontal-three-quarter framing',
+      backdrop_and_atmosphere_cue: `museum-grade chiaroscuro portrait ambiance (${backdropTheme})`,
+      identity_lock_strength: 0.83,
+    },
+  ];
+}
+
+export const BUILTIN_PORTRAIT_TEMPLATES: PortraitTemplateSpec[] = [
+  {
+    template_id: 'tpl_xhs_silver_halide_0_100',
+    version: '2.1.0',
+    name: '经典银盐胶片·人生时间轴',
+    subtitle: '85mm 大光圈人像定焦 · 伦勃朗柔光 · 真实肌理零塑料感',
+    category: 'solo-portrait',
+    badge: '小红书爆款主推',
+    status: 'active',
+    max_participants: 1,
+    min_age: 0,
+    max_age: 100,
+    recommended_ages: [6, 18, 28, 45, 65, 85],
+    supported_aspect_ratios: ['3:4', '4:5', '1:1', '9:16'],
+    default_aspect_ratio: '3:4',
+    required_consents: ['age-transformation'],
+    provider_capabilities: ['face-id-lock', 'controlnet-depth', 'high-res-skin-detail'],
+    cost_tier: 'pro-studio',
+    allowed_channels: ['mp-xhs', 'mp-weixin', 'consumer-web', 'mobile', 'studio'],
+    competitive_highlights: [
+      '85mm f/1.8 黄金人像焦段，锁定同一视平线与焦平面，6 张拼图如同一位摄影师跨越半世纪跟拍',
+      '真实皮肤微孔与皮下散射（SSS）质感，严禁廉价磨皮与假胡子贴图',
+      '以用户当前真实年龄为骨相锚点向两端自然推演，支持童年回溯创作标注',
+    ],
+    optics_and_lighting: {
+      focal_length_mm: 85,
+      aperture: 'f/1.8',
+      framing: 'medium close-up chest-up portrait, consistent eye-line at upper third',
+      lighting_setup: '45° 伦勃朗八角柔光箱主光 + 暖调发丝轮廓光 (3:1 光比)',
+      color_science: 'Kodak Portra 400 暖调肤色曲线 + 银盐高光柔化过渡',
+      skin_texture_policy: '保留微距毛孔、绒毛与真实岁月纹路，拒绝塑料磨皮感',
+      film_grain_profile: '35mm 细腻有机银盐颗粒 (ISO 200)',
+    },
+    identity_preservation: {
+      identity_adapter: 'instantid-pulid-hybrid-v2',
+      craniofacial_anchor_weight: 0.92,
+      eye_geometry_lock: 0.95,
+      skin_undertone_lock: 0.9,
+      expression_naturalness_weight: 0.88,
+    },
+    quality_thresholds: {
+      min_identity_similarity: 0.82,
+      max_facial_drift: 0.16,
+      min_age_plausibility: 0.85,
+      min_pose_background_coherence: 0.86,
+      min_artifact_free_score: 0.9,
+      min_sharpness_score: 0.84,
+      min_aesthetic_score: 0.86,
+      max_auto_retries: 2,
+    },
+    negative_constraints: ANTI_PLASTIC_NEGATIVE_CONSTRAINTS,
+    age_band_recipes: buildAgeBandRecipes(
+      'timeless monochrome textured knit & linen',
+      'charcoal-warm-grey hand-brushed studio canvas with soft vignette'
+    ),
+  },
+  {
+    template_id: 'tpl_xhs_oriental_aesthetics_portrait',
+    version: '2.1.0',
+    name: '东方光影新中式·岁月肖像',
+    subtitle: '90mm 微距人像 · 宣纸窗光 · 温润东方骨相美学',
+    category: 'editorial',
+    badge: '新中式高赞',
+    status: 'active',
+    max_participants: 1,
+    min_age: 0,
+    max_age: 100,
+    recommended_ages: [6, 18, 28, 45, 65, 85],
+    supported_aspect_ratios: ['3:4', '4:5', '9:16'],
+    default_aspect_ratio: '3:4',
+    required_consents: ['age-transformation'],
+    provider_capabilities: ['face-id-lock', 'editorial-lighting', 'high-res-skin-detail'],
+    cost_tier: 'pro-studio',
+    allowed_channels: ['mp-xhs', 'mp-weixin', 'consumer-web', 'studio'],
+    competitive_highlights: [
+      '针对亚洲面部骨相与折叠度专门调校的柔和侧逆光，避免欧美模型常见的深眼窝异化',
+      '桑蚕丝、苎麻与羊绒领口质感随年龄阶段自然演进，极具小红书高赞清冷故事感',
+      '水墨灰阶留白背景，突出人物眼神流转与岁月从容气韵',
+    ],
+    optics_and_lighting: {
+      focal_length_mm: 90,
+      aperture: 'f/2.0',
+      framing: 'vertical editorial bust portrait with balanced negative space',
+      lighting_setup: '漫反射宣纸窗光侧逆主光 + 丝绸反光板柔补',
+      color_science: '东方温润玉质肤色校准 + 低饱和水墨灰阶暗部',
+      skin_texture_policy: '自然哑光瓷感肌理与真实细纹并存，禁止假白过曝',
+      film_grain_profile: '中画幅 Fujifilm Pro 400H 细腻色调颗粒',
+    },
+    identity_preservation: {
+      identity_adapter: 'east-asian-craniofacial-lock-v2',
+      craniofacial_anchor_weight: 0.94,
+      eye_geometry_lock: 0.96,
+      skin_undertone_lock: 0.93,
+      expression_naturalness_weight: 0.9,
+    },
+    quality_thresholds: {
+      min_identity_similarity: 0.84,
+      max_facial_drift: 0.14,
+      min_age_plausibility: 0.85,
+      min_pose_background_coherence: 0.88,
+      min_artifact_free_score: 0.91,
+      min_sharpness_score: 0.85,
+      min_aesthetic_score: 0.88,
+      max_auto_retries: 2,
+    },
+    negative_constraints: [
+      ...ANTI_PLASTIC_NEGATIVE_CONSTRAINTS,
+      'westernized deep-set brow bone distortion',
+      'garish neon oversaturation',
+    ],
+    age_band_recipes: buildAgeBandRecipes(
+      'minimalist Oriental mulberry silk, ramie linen, and cashmere stand-collar',
+      'serene warm rice-paper & ink-wash gradient studio backdrop'
+    ),
+  },
+  {
+    template_id: 'tpl_xhs_era_chronicle_documentary',
+    version: '2.1.0',
+    name: '时代纪实记忆·年代光影胶片',
+    subtitle: '50mm 纪实人文镜头 · 跨年代生活光影 · 家庭相册真迹感',
+    category: 'documentary',
+    badge: '情感共鸣王牌',
+    status: 'active',
+    max_participants: 1,
+    min_age: 0,
+    max_age: 100,
+    recommended_ages: [6, 18, 28, 45, 65, 85],
+    supported_aspect_ratios: ['3:4', '1:1', '4:5'],
+    default_aspect_ratio: '3:4',
+    required_consents: ['age-transformation'],
+    provider_capabilities: ['face-id-lock', 'scene-depth-lock'],
+    cost_tier: 'standard',
+    allowed_channels: ['mp-xhs', 'mp-weixin', 'consumer-web', 'mobile'],
+    competitive_highlights: [
+      '50mm f/1.4 经典人文视角，呈现真实生活环境光（阳光书房、老院子、暖光窗边）',
+      '像翻开一本跨越百年的私人家庭纪实相册，极具真实感与情绪感染力',
+      '严格锁定视线高度与中心构图，非常适合制作滑动对比或宫格卡点笔记',
+    ],
+    optics_and_lighting: {
+      focal_length_mm: 50,
+      aperture: 'f/1.4',
+      framing: 'environmental documentary medium portrait, centered eye-level composition',
+      lighting_setup: '黄金时刻自然斜射窗光 + 室内漫反射环境光',
+      color_science: 'Leica M 经典人文色彩科学 + 丰富中间调微反差',
+      skin_texture_policy: '纪实级无修饰真实肤质，保留自然阳光肌理与笑纹',
+      film_grain_profile: 'Kodak ColorPlus 200 经典胶片颗粒',
+    },
+    identity_preservation: {
+      identity_adapter: 'instantid-pulid-hybrid-v2',
+      craniofacial_anchor_weight: 0.91,
+      eye_geometry_lock: 0.94,
+      skin_undertone_lock: 0.88,
+      expression_naturalness_weight: 0.92,
+    },
+    quality_thresholds: {
+      min_identity_similarity: 0.81,
+      max_facial_drift: 0.17,
+      min_age_plausibility: 0.84,
+      min_pose_background_coherence: 0.84,
+      min_artifact_free_score: 0.89,
+      min_sharpness_score: 0.82,
+      min_aesthetic_score: 0.85,
+      max_auto_retries: 2,
+    },
+    negative_constraints: ANTI_PLASTIC_NEGATIVE_CONSTRAINTS,
+    age_band_recipes: buildAgeBandRecipes(
+      'authentic era-appropriate everyday woven shirt, trench, and soft sweater',
+      'softly defocused warm sunlit study room and courtyard foliage bokeh'
+    ),
+  },
+  {
+    template_id: 'tpl_xhs_warm_family_co_aging',
+    version: '2.1.0',
+    name: '温情伴侣/家人共老·时光合拍',
+    subtitle: '双人/多人同框授权 · 统一主光与焦平面 · 跨越半世纪的陪伴',
+    category: 'family-co-aging',
+    badge: '家庭/伴侣必拍',
+    status: 'active',
+    max_participants: 3,
+    min_age: 0,
+    max_age: 100,
+    recommended_ages: [18, 28, 45, 65, 85],
+    supported_aspect_ratios: ['3:4', '4:5', '1:1'],
+    default_aspect_ratio: '3:4',
+    required_consents: ['age-transformation', 'family-co-aging'],
+    provider_capabilities: ['multi-subject-face-lock', 'dual-focal-plane-control', 'high-res-skin-detail'],
+    cost_tier: 'pro-studio',
+    allowed_channels: ['mp-xhs', 'mp-weixin', 'consumer-web', 'studio'],
+    competitive_highlights: [
+      '支持 1—3 人逐人独立授权合拍，自动对齐多人面部光照方向与 f/2.8 景深平面',
+      '解决多人合成常见的“各看各的、光影割裂、头身比失调”痛点',
+      '内置未成年人保护策略：含未成年人出镜时默认私密并禁止公开挂载',
+    ],
+    optics_and_lighting: {
+      focal_length_mm: 50,
+      aperture: 'f/2.8',
+      framing: 'intimate dual/group half-body portrait, unified focal plane across all faces',
+      lighting_setup: '150cm 巨型深口抛物线柔光伞主光 + 暖调环绕补光',
+      color_science: '暖琥珀家庭肖像色彩科学，平衡多人肤色明度',
+      skin_texture_policy: '多人独立面部特征锚定，严禁人脸特征串色或融合伪影',
+      film_grain_profile: '柔和中画幅肖像颗粒',
+    },
+    identity_preservation: {
+      identity_adapter: 'multi-slot-region-pulid-v2',
+      craniofacial_anchor_weight: 0.93,
+      eye_geometry_lock: 0.95,
+      skin_undertone_lock: 0.91,
+      expression_naturalness_weight: 0.91,
+    },
+    quality_thresholds: {
+      min_identity_similarity: 0.8,
+      max_facial_drift: 0.18,
+      min_age_plausibility: 0.83,
+      min_pose_background_coherence: 0.85,
+      min_artifact_free_score: 0.9,
+      min_sharpness_score: 0.83,
+      min_aesthetic_score: 0.85,
+      max_auto_retries: 3,
+    },
+    negative_constraints: [
+      ...ANTI_PLASTIC_NEGATIVE_CONSTRAINTS,
+      'cross-participant face blending or identity swap',
+      'inconsistent lighting direction between subjects',
+    ],
+    age_band_recipes: buildAgeBandRecipes(
+      'coordinated warm neutral family knitwear and linen tones',
+      'warm heirloom studio portrait backdrop with gentle golden halo'
+    ),
+  },
+  {
+    template_id: 'tpl_xhs_master_fine_art_photobook',
+    version: '2.1.0',
+    name: '典藏画册高定棚拍·实体印刷版',
+    subtitle: '中画幅 4:5 印刷画幅 · 300DPI 色彩预检 · 专供精装时光相册',
+    category: 'fine-art-print',
+    badge: '实物相册专享',
+    status: 'active',
+    max_participants: 2,
+    min_age: 0,
+    max_age: 100,
+    recommended_ages: [6, 18, 28, 45, 65, 85],
+    supported_aspect_ratios: ['4:5', '3:4', '1:1'],
+    default_aspect_ratio: '4:5',
+    required_consents: ['age-transformation', 'physical-print'],
+    provider_capabilities: ['face-id-lock', 'print-300dpi-upscale', 'cmyk-gamut-safe'],
+    cost_tier: 'master-print',
+    allowed_channels: ['mp-xhs', 'mp-weixin', 'consumer-web', 'studio', 'kiosk'],
+    competitive_highlights: [
+      '按商业影楼中画幅（Hasselblad 80mm）棚拍标准设计，暗部层次针对实体相册纸张油墨优化',
+      '预留 3mm 印刷出血位安全构图，直连 99 元典藏精装时光相册（PHOTO_BOOK_HARDCOVER_0_100）',
+      '最高的身份相似度（>=0.85）与审美门控阈值，确保实物印刷零瑕疵',
+    ],
+    optics_and_lighting: {
+      focal_length_mm: 80,
+      aperture: 'f/2.8',
+      framing: 'medium-format 4:5 fine-art portrait with 3mm print-bleed safe margins',
+      lighting_setup: '经典影楼雷达罩蝴蝶光 + 双侧条形轮廓光 + 负补光增强立体感',
+      color_science: '16-bit AdobeRGB / CMYK 印刷安全色域曲线，丝绒级暗部层次',
+      skin_texture_policy: '300DPI 超高清微距肤质纹理，适配艺术铜版纸实体印刷',
+      film_grain_profile: '艺术微喷纯棉画布纸微肌理',
+    },
+    identity_preservation: {
+      identity_adapter: 'instantid-pulid-master-print-v2',
+      craniofacial_anchor_weight: 0.95,
+      eye_geometry_lock: 0.97,
+      skin_undertone_lock: 0.93,
+      expression_naturalness_weight: 0.9,
+    },
+    quality_thresholds: {
+      min_identity_similarity: 0.85,
+      max_facial_drift: 0.13,
+      min_age_plausibility: 0.87,
+      min_pose_background_coherence: 0.88,
+      min_artifact_free_score: 0.93,
+      min_sharpness_score: 0.88,
+      min_aesthetic_score: 0.89,
+      max_auto_retries: 3,
+    },
+    negative_constraints: [
+      ...ANTI_PLASTIC_NEGATIVE_CONSTRAINTS,
+      'clipped shadows or blown highlights outside CMYK print gamut',
+      'edge cropping near print bleed zone',
+    ],
+    age_band_recipes: buildAgeBandRecipes(
+      'bespoke fine-art studio velvet, tailored wool, and timeless silk',
+      'museum-grade hand-painted Oliphant canvas backdrop'
+    ),
+  },
+];
+
+function findTemplateSpec(templateId?: string): PortraitTemplateSpec {
+  const normalized =
+    templateId === 'tpl_xhs_0_100_timeline' || !templateId
+      ? 'tpl_xhs_silver_halide_0_100'
+      : templateId;
+  return (
+    BUILTIN_PORTRAIT_TEMPLATES.find((t) => t.template_id === normalized) ||
+    BUILTIN_PORTRAIT_TEMPLATES[0]
+  );
+}
+
+function resolveAgeBandRecipe(tpl: PortraitTemplateSpec, age: number): AgeBandPromptRecipe {
+  for (const r of tpl.age_band_recipes) {
+    if (age >= r.min_age && age <= r.max_age) {
+      return r;
+    }
+  }
+  return tpl.age_band_recipes[tpl.age_band_recipes.length - 1];
+}
+
 /**
  * Deterministic local sandbox responder when running offline in Xiaohongshu DevTools
  */
 function resolveSandboxResponse<T>(req: HttpTransportRequest): T {
   const now = new Date();
   const inOneHour = new Date(now.getTime() + 3600 * 1000).toISOString();
+
+  if (req.path.endsWith('/v1/templates') && req.method === 'GET') {
+    return BUILTIN_PORTRAIT_TEMPLATES as unknown as T;
+  }
+
+  if (req.path.includes('/v1/templates/') && req.method === 'GET') {
+    const tplId = decodeURIComponent(req.path.split('/').pop() || '');
+    return findTemplateSpec(tplId) as unknown as T;
+  }
 
   if (req.path.endsWith('/v1/guest-sessions') && req.method === 'POST') {
     const res: GuestSession = {
@@ -151,38 +613,94 @@ function resolveSandboxResponse<T>(req: HttpTransportRequest): T {
   }
 
   if (req.path.endsWith('/v1/projects') && req.method === 'POST') {
+    const body = (req.body || {}) as ProjectRequest;
+    const tpl = findTemplateSpec(body.template_id);
+    const chosenRatio: AspectRatio = body.aspect_ratio || tpl.default_aspect_ratio;
+    const anchorAge = typeof body.current_age === 'number' ? body.current_age : 28;
+    const projId = `proj_${Date.now()}`;
     const res: Project = {
-      id: `proj_${Date.now()}`,
+      id: projId,
       state: 'ready',
       version: 1,
+      template_id: tpl.template_id,
+      template_version: tpl.version,
+      current_age_anchor: anchorAge,
+      aspect_ratio: chosenRatio,
       policy_summary: {
         ai_label_enforced: true,
         consent_verified: true,
+        template_name: tpl.name,
+        quality_gate_min_identity: tpl.quality_thresholds.min_identity_similarity,
       },
     };
+    sandboxProjectRegistry.set(projId, { project: res, request: body });
     return res as unknown as T;
   }
 
   if (req.path.endsWith('/v1/generation-jobs') && req.method === 'POST') {
+    const body = (req.body || {}) as { project_id?: string };
+    const ctx = body.project_id ? sandboxProjectRegistry.get(body.project_id) : undefined;
+    const tpl = findTemplateSpec(ctx?.project.template_id);
+    const ages =
+      ctx?.request.timeline_ages && ctx.request.timeline_ages.length > 0
+        ? [...ctx.request.timeline_ages].sort((a, b) => a - b)
+        : [6, 18, 28, 45, 65, 85];
+    const anchorAge = ctx?.project.current_age_anchor ?? 28;
+    const chosenRatio = ctx?.project.aspect_ratio ?? tpl.default_aspect_ratio;
+
     const jobId = `job_${Date.now()}`;
-    const frames = [6, 18, 28, 45, 65, 85].map((age) => {
-      const signedUrl = `https://cdn.sandbox.ailifetime.local/preview/${jobId}/age-${age}.webp?sig=shortlived`;
+    const frames = ages.map((age) => {
+      const recipe = resolveAgeBandRecipe(tpl, age);
+      const isRetroactive = age < anchorAge;
+      const ageDelta = age - anchorAge;
+      const distancePenalty = Math.min(0.08, Math.abs(ageDelta) * 0.001);
+      const identityScore = Number(
+        Math.max(0.84, Math.min(0.98, recipe.identity_lock_strength - distancePenalty)).toFixed(2)
+      );
+      const aestheticScore = Number(
+        Math.max(tpl.quality_thresholds.min_aesthetic_score + 0.04, 0.91).toFixed(2)
+      );
+      const optics = tpl.optics_and_lighting;
+      const opticsSummary = `${optics.focal_length_mm}mm ${optics.aperture} · ${optics.lighting_setup.split('+')[0].trim()} · ${chosenRatio}`;
+      const compiledPrompt = [
+        `[${tpl.name} v${tpl.version}]`,
+        `Anchor=${anchorAge}yo -> Target=${age}yo (${recipe.stage_label}, IdentityLock=${identityScore})`,
+        `Anatomy/Skin: ${recipe.craniofacial_and_skin_cue}`,
+        `Hair: ${recipe.hair_and_grooming_cue}`,
+        `Wardrobe: ${recipe.wardrobe_and_styling_cue}`,
+        `Optics: ${optics.focal_length_mm}mm ${optics.aperture}, ${optics.lighting_setup}, ${optics.color_science}`,
+      ].join(' | ');
+
+      const signedUrl = `https://cdn.sandbox.ailifetime.local/preview/${jobId}/${tpl.template_id}-age-${age}.webp?sig=shortlived`;
       registerEphemeralPreviewUrl(signedUrl);
+
       return {
         age,
-        label: `${age}岁 · AI艺术化时光示意`,
+        label: `${age}岁 · ${recipe.stage_label}`,
         signed_preview_url: signedUrl,
         expires_at: inOneHour,
         ai_watermark_text: 'AI生成 · 艺术化示意非真实预测',
+        template_id: tpl.template_id,
+        stage_label: recipe.stage_label,
+        is_retroactive_simulation: isRetroactive,
+        retroactive_disclosure: isRetroactive
+          ? `基于 ${anchorAge} 岁骨相锚点的童年/过往回溯艺术创作示意`
+          : null,
+        optics_summary: opticsSummary,
+        compiled_prompt: compiledPrompt,
+        negative_prompt: tpl.negative_constraints.join(', '),
+        identity_score: identityScore,
+        aesthetic_score: aestheticScore,
       };
     });
+
     const res: GenerationJob = {
       id: jobId,
       state: 'ready',
       progress: {
         stage: 'completed',
-        completed_units: 6,
-        total_units: 6,
+        completed_units: frames.length,
+        total_units: frames.length,
       },
       result_manifest_url: `https://cdn.sandbox.ailifetime.local/manifests/${jobId}.json`,
       frames,
@@ -287,7 +805,8 @@ function resolveSandboxResponse<T>(req: HttpTransportRequest): T {
     const userText = body.message || '';
     const res: FutureSelfMessage = {
       message_id: `msg_${Date.now()}`,
-      role_disclosure: '【AI虚拟形象提示】我是基于艺术化想象构建的“未来自我”对话伙伴，不具备现实预测、医疗、心理或理财建议能力。',
+      role_disclosure:
+        '【AI虚拟形象提示】我是基于艺术化想象构建的“未来自我”对话伙伴，不具备现实预测、医疗、心理或理财建议能力。',
       content: `收到你写给未来的心声：“${userText.slice(0, 60)}”。无论岁月如何流转，愿你珍惜当下与家人的每一刻温暖陪伴。`,
       safety_state: 'normal',
       resources: [],

@@ -10,7 +10,7 @@
     <view class="card hero-card">
       <view class="hero-header">
         <text class="hero-title">看见 0—100 岁的自己与家人</text>
-        <text class="hero-subtitle">小红书专属时光机的温暖记忆 · 逐人授权 · 随时可撤回</text>
+        <text class="hero-subtitle">5 大内置商业级人像光影模板 · 真实肌理零塑料感 · 逐人授权</text>
       </view>
 
       <view class="age-pillars">
@@ -25,18 +25,29 @@
         <button class="btn-outline" size="mini" @click="handleInitSession">刷新安全会话</button>
       </view>
 
-      <button class="btn-primary" @click="goToStudio">立即进入时光工坊（需逐人授权）</button>
+      <button class="btn-primary" @click="goToStudio()">立即进入时光工坊（需逐人授权）</button>
     </view>
 
-    <!-- 小红书种草灵感与家庭仪式场景 -->
+    <!-- 内置 5 大商业级高定摄影模板展示 (B08 / B14 / B15) -->
     <view class="card">
-      <view class="section-title">小红书热门时光仪式</view>
-      <view v-for="scene in xhsScenes" :key="scene.id" class="scene-item" @click="goToStudio">
+      <view class="section-title">内置高定人像模板库（点击直达同款）</view>
+      <view
+        v-for="tpl in builtinTemplates"
+        :key="tpl.template_id"
+        class="scene-item"
+        @click="goToStudio(tpl.template_id)"
+      >
         <view class="scene-main">
-          <text class="scene-name">{{ scene.title }}</text>
-          <text class="scene-summary">{{ scene.desc }}</text>
+          <text class="scene-name">{{ tpl.name }}</text>
+          <text class="scene-summary">{{ tpl.subtitle }}</text>
+          <text class="scene-optics">
+            {{ tpl.optics_and_lighting.focal_length_mm }}mm {{ tpl.optics_and_lighting.aperture }} ·
+            {{ tpl.optics_and_lighting.color_science.split('+')[0].trim() }} · 身份锁≥{{
+              tpl.quality_thresholds.min_identity_similarity
+            }}
+          </text>
         </view>
-        <text class="scene-tag">{{ scene.badge }}</text>
+        <text class="scene-tag">{{ tpl.badge }}</text>
       </view>
     </view>
 
@@ -53,8 +64,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { AI_SIMULATION_DISCLOSURE } from '@ailifetime/contracts';
-import { apiClient } from '../../services/api';
+import { AI_SIMULATION_DISCLOSURE, type PortraitTemplateSpec } from '@ailifetime/contracts';
+import {
+  apiClient,
+  BUILTIN_PORTRAIT_TEMPLATES,
+  setPreferredTemplateId,
+} from '../../services/api';
 import { performPlatformLogin } from '../../utils/xhs-platform';
 
 const disclosureText = ref(AI_SIMULATION_DISCLOSURE);
@@ -69,26 +84,7 @@ const ageMilestones = [
   { age: 85, tag: '世纪回眸' },
 ];
 
-const xhsScenes = [
-  {
-    id: 'solo-timeline',
-    title: '0—100岁人生胶片时间轴',
-    desc: '一张照片生成 6 个年龄阶段的高身份一致性艺术写真',
-    badge: '笔记爆款',
-  },
-  {
-    id: 'family-co-aging',
-    title: '和父母/伴侣一起慢慢变老',
-    desc: '双人或家庭逐人独立授权，定格跨越半个世纪的陪伴',
-    badge: '家庭合拍',
-  },
-  {
-    id: 'memorial-book',
-    title: '典藏精装时光照片书定制',
-    desc: '连接影楼与纪念礼品供应链，把数字记忆变成实物相册',
-    badge: '实物履约',
-  },
-];
+const builtinTemplates = ref<PortraitTemplateSpec[]>(BUILTIN_PORTRAIT_TEMPLATES);
 
 async function handleInitSession() {
   try {
@@ -106,7 +102,10 @@ async function handleInitSession() {
   }
 }
 
-function goToStudio() {
+function goToStudio(templateId?: string) {
+  if (templateId) {
+    setPreferredTemplateId(templateId);
+  }
   uni.switchTab({
     url: '/pages/studio/index',
   });
@@ -244,6 +243,12 @@ onMounted(() => {
 .scene-summary {
   font-size: 24rpx;
   color: #666666;
+}
+
+.scene-optics {
+  font-size: 21rpx;
+  color: #1f4f99;
+  font-weight: 500;
 }
 
 .scene-tag {
