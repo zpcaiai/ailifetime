@@ -10,7 +10,7 @@
     <view class="card hero-card">
       <view class="hero-header">
         <text class="hero-title">看见 0—100 岁的自己与家人</text>
-        <text class="hero-subtitle">5 大内置商业级人像光影模板 · 真实肌理零塑料感 · 逐人授权</text>
+        <text class="hero-subtitle">9 大高定人像模板 (v2.3.0) · 每套 10 张多景别分镜 · 4 阶物理级皮肤光影 · 20 页蝴蝶对裱有声相册</text>
       </view>
 
       <view class="age-pillars">
@@ -42,7 +42,7 @@
           <text class="scene-summary">{{ tpl.subtitle }}</text>
           <text class="scene-optics">
             {{ tpl.optics_and_lighting.focal_length_mm }}mm {{ tpl.optics_and_lighting.aperture }} ·
-            {{ tpl.optics_and_lighting.color_science.split('+')[0].trim() }} · 身份锁≥{{
+            内置{{ tpl.curated_gallery_shots.length }}张精选分镜(≥{{ tpl.min_curated_shots }}张成片) · 身份锁≥{{
               tpl.quality_thresholds.min_identity_similarity
             }}
           </text>
@@ -131,11 +131,15 @@ const disclosureText = ref(AI_SIMULATION_DISCLOSURE);
 const sessionStatus = ref('初始化中...');
 
 const ageMilestones = [
-  { age: 6, tag: '童年纯真' },
+  { age: 3, tag: '稚气初萌' },
+  { age: 6, tag: '清澈童眸' },
+  { age: 12, tag: '少年澄澈' },
   { age: 18, tag: '青春启航' },
-  { age: 28, tag: '当下绽放' },
-  { age: 45, tag: '从容岁月' },
-  { age: 65, tag: '温情银发' },
+  { age: 25, tag: '黄金骨相' },
+  { age: 32, tag: '光影笃定' },
+  { age: 45, tag: '紧致从容' },
+  { age: 58, tag: '微银知命' },
+  { age: 72, tag: '银丝温厚' },
   { age: 85, tag: '世纪回眸' },
 ];
 

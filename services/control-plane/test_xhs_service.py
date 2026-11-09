@@ -157,13 +157,17 @@ class XhsControlPlaneTests(unittest.TestCase):
 
     def test_b08_builtin_portrait_templates_catalog_and_draft_optimistic_locking(self) -> None:
         templates = self.svc.list_portrait_templates(channel="mp-xhs")
-        self.assertEqual(len(templates), 5)
+        self.assertEqual(len(templates), 9)
         template_ids = [t.template_id for t in templates]
         self.assertIn("tpl_xhs_silver_halide_0_100", template_ids)
         self.assertIn("tpl_xhs_oriental_aesthetics_portrait", template_ids)
         self.assertIn("tpl_xhs_era_chronicle_documentary", template_ids)
         self.assertIn("tpl_xhs_warm_family_co_aging", template_ids)
         self.assertIn("tpl_xhs_master_fine_art_photobook", template_ids)
+        self.assertIn("tpl_xhs_cinematic_wong_kar_wai", template_ids)
+        self.assertIn("tpl_xhs_three_generations_heirloom", template_ids)
+        self.assertIn("tpl_xhs_vogue_editorial_bw", template_ids)
+        self.assertIn("tpl_xhs_24_solar_terms_poetic", template_ids)
 
         # Legacy template ID alias compatibility
         legacy_resolved = self.svc.get_portrait_template("tpl_xhs_0_100_timeline")
@@ -392,6 +396,237 @@ class XhsControlPlaneTests(unittest.TestCase):
         self.assertTrue(webp_export["ai_label_verification"]["verified"])
         self.assertTrue(webp_export["ai_label_verification"]["has_explicit_label"])
         self.assertEqual(webp_export["output_format"], "webp")
+
+    def test_v22_every_template_has_at_least_9_curated_shots_and_physiological_era_matrix(self) -> None:
+        templates = self.svc.list_portrait_templates(channel="mp-xhs")
+        self.assertEqual(len(templates), 9)
+        for tpl in templates:
+            self.assertEqual(tpl.version, "2.3.0")
+            self.assertGreaterEqual(tpl.min_curated_shots, 9)
+            self.assertGreaterEqual(len(tpl.recommended_ages), 9)
+            self.assertEqual(len(tpl.recommended_ages), 10)
+            self.assertGreaterEqual(len(tpl.curated_gallery_shots), 9)
+            self.assertEqual(len(tpl.curated_gallery_shots), 10)
+            default_selected_shots = [s for s in tpl.curated_gallery_shots if s.default_selected]
+            self.assertEqual(len(default_selected_shots), 9)
+            # Verify multi-crop storyboard rhythm across the 10 curated shots
+            scales = {s.shot_scale for s in tpl.curated_gallery_shots}
+            self.assertEqual(
+                scales,
+                {"extreme_closeup_eyes", "medium_bust", "three_quarter_profile", "half_body_hands"},
+            )
+            center_heroes = [s for s in tpl.curated_gallery_shots if s.nine_grid_position == "center_hero"]
+            self.assertEqual(len(center_heroes), 1)
+            self.assertEqual(center_heroes[0].shot_index, 5)
+
+        # Compile era chronicle plan with explicit birth_year=1992 across all 10 recommended ages
+        era_plan = self.svc.compile_project_timeline_plan(
+            project_id="proj_era_1992",
+            template_id="tpl_xhs_era_chronicle_documentary",
+            current_age_anchor=32,
+            birth_year=1992,
+        )
+        self.assertEqual(era_plan.birth_year, 1992)
+        self.assertEqual(len(era_plan.nodes), 10)
+
+        by_age = {n.target_age: n for n in era_plan.nodes}
+        # 6岁 (1998年): high craniofacial neoteny (0.90) & crystal-clear catchlights (0.98)
+        node_6 = by_age[6]
+        self.assertEqual(node_6.era_context.calendar_year, 1998)
+        self.assertIn("1990年代", node_6.era_context.decade_label)
+        self.assertAlmostEqual(node_6.physiological_weights.craniofacial_neoteny_weight, 0.90, places=2)
+        self.assertAlmostEqual(node_6.physiological_weights.eye_catchlight_clarity, 0.98, places=2)
+
+        # 45岁 (2037年): taut mandibular contour (collagen=0.78) & capped nasolabial depth (<=0.28)
+        node_45 = by_age[45]
+        self.assertEqual(node_45.era_context.calendar_year, 2037)
+        self.assertAlmostEqual(node_45.physiological_weights.dermal_collagen_elasticity, 0.78, places=2)
+        self.assertLessEqual(node_45.physiological_weights.nasolabial_fold_depth_limit, 0.28)
+
+        # 72岁 & 85岁: natural silver hair strand ratio & gentle nasolabial progression
+        node_72 = by_age[72]
+        node_85 = by_age[85]
+        self.assertGreater(node_72.physiological_weights.silver_strand_ratio, 0.70)
+        self.assertGreater(node_85.physiological_weights.silver_strand_ratio, node_72.physiological_weights.silver_strand_ratio)
+        self.assertGreater(node_85.physiological_weights.age_spot_micro_density, 0.40)
+
+        # Master photobook template compiles 3mm print bleed and CMYK ICC profile
+        print_plan = self.svc.compile_project_timeline_plan(
+            project_id="proj_print_01",
+            template_id="tpl_xhs_master_fine_art_photobook",
+            current_age_anchor=28,
+            birth_year=1998,
+        )
+        self.assertEqual(print_plan.nodes[0].provider_payload.print_bleed_mm, 3)
+        self.assertEqual(print_plan.nodes[0].provider_payload.cmyk_profile, "ISOcoated_v2_300_eci.icc")
+
+    def test_v22_multi_provider_curated_gallery_generation_auto_healing_and_selection_lock(self) -> None:
+        # Inject an initial low-quality frame at age 45 to verify B15 auto-retry healing in gallery run
+        gallery_run = self.svc.generate_curated_gallery_candidates(
+            project_id="proj_gal_001",
+            template_id="tpl_xhs_oriental_aesthetics_portrait",
+            current_age_anchor=28,
+            birth_year=1998,
+            injected_initial_metrics_by_age={
+                45: {
+                    "identity_similarity": 0.71,
+                    "age_plausibility": 0.88,
+                    "facial_drift": 0.22,
+                    "pose_background_coherence": 0.90,
+                    "artifact_free_score": 0.92,
+                    "sharpness_score": 0.89,
+                    "aesthetic_score": 0.90,
+                }
+            },
+        )
+        self.assertEqual(gallery_run.total_candidates, 10)
+        self.assertEqual(gallery_run.passed_candidates, 10)
+        self.assertTrue(gallery_run.ready_for_curation)
+        self.assertEqual(len(gallery_run.default_selected_shot_ids), 9)
+
+        cand_45 = [c for c in gallery_run.candidates if c.target_age == 45][0]
+        self.assertEqual(cand_45.attempts_used, 2)
+        self.assertTrue(cand_45.quality_passed)
+
+        # Reject selection with fewer than 9 shots
+        with self.assertRaises(ControlPlaneError) as small_ctx:
+            self.svc.save_curated_gallery_selection(
+                selection_id="sel_001",
+                gallery_id=gallery_run.gallery_id,
+                actor_id="act_01",
+                selected_shot_ids=gallery_run.default_selected_shot_ids[:6],
+                export_mode="xhs_9_grid",
+            )
+        self.assertEqual(small_ctx.exception.code, "CURATED_SELECTION_TOO_SMALL")
+
+        # Save 9-shot selection for Xiaohongshu 9-grid
+        sel_v1 = self.svc.save_curated_gallery_selection(
+            selection_id="sel_001",
+            gallery_id=gallery_run.gallery_id,
+            actor_id="act_01",
+            selected_shot_ids=gallery_run.default_selected_shot_ids,
+            export_mode="xhs_9_grid",
+        )
+        self.assertEqual(sel_v1.selected_count, 9)
+        self.assertEqual(sel_v1.version, 1)
+
+        # Update to all 10 shots for 99 RMB hardcover photobook with optimistic lock
+        all_10_ids = [c.shot_id for c in gallery_run.candidates]
+        sel_v2 = self.svc.save_curated_gallery_selection(
+            selection_id="sel_001",
+            gallery_id=gallery_run.gallery_id,
+            actor_id="act_01",
+            selected_shot_ids=all_10_ids,
+            export_mode="photobook_hardcover",
+            expected_version=1,
+        )
+        self.assertEqual(sel_v2.selected_count, 10)
+        self.assertEqual(sel_v2.photobook_sku, "PHOTO_BOOK_HARDCOVER_0_100")
+        self.assertEqual(sel_v2.version, 2)
+
+    def test_v23_pillars_1_2_3_nine_templates_multi_anchor_4stage_quality_and_20page_photobook_preflight(self) -> None:
+        # Pillar I & III: Compile Wong Kar-Wai cinema template with 45-deg side profile + childhood dual anchor
+        wkw_gal = self.svc.generate_curated_gallery_candidates(
+            project_id="proj_wkw_2046",
+            template_id="tpl_xhs_cinematic_wong_kar_wai",
+            current_age_anchor=28,
+            birth_year=1998,
+            source_asset_ids=["asset_adult_frontal_01"],
+            side_profile_asset_id="asset_side_profile_45deg",
+            childhood_reference_asset_id="asset_childhood_6yo_photo",
+            childhood_reference_age=6,
+        )
+        self.assertEqual(wkw_gal.total_candidates, 10)
+        self.assertEqual(wkw_gal.passed_candidates, 10)
+
+        cand_6 = [c for c in wkw_gal.candidates if c.target_age == 6][0]
+        cand_25 = [c for c in wkw_gal.candidates if c.target_age == 25][0]
+        # Verify childhood dual anchor boosts childhood node (childhood_anchor_weight=0.72) and 3D profile boost (0.22)
+        anchor_6 = cand_6.image_enhancement_pipeline["multi_photo_anchor"]
+        self.assertTrue(anchor_6["dual_anchor_active"])
+        self.assertAlmostEqual(anchor_6["childhood_anchor_weight"], 0.72, places=2)
+        self.assertAlmostEqual(anchor_6["profile_3d_depth_boost"], 0.22, places=2)
+
+        # Verify 4-stage physical pipeline on Wong Kar-Wai 25yo hero shot
+        pipe_25 = cand_25.image_enhancement_pipeline
+        self.assertEqual(cand_25.nine_grid_position, "center_hero")
+        self.assertEqual(pipe_25["relighting_pass"]["color_temp_kelvin"], 3200)
+        self.assertIn("vellus_facial_fuzz", pipe_25["frequency_separated_skin_pass"]["micro_features_injected"])
+        self.assertGreater(pipe_25["optical_post_process"]["halation_strength"], 0.30)
+
+        # Verify Three Generations Heirloom template supports up to 4 participants
+        heirloom_plan = self.svc.compile_project_timeline_plan(
+            project_id="proj_3gen_01",
+            template_id="tpl_xhs_three_generations_heirloom",
+            participant_count=4,
+            current_age_anchor=32,
+            birth_year=1994,
+        )
+        self.assertEqual(heirloom_plan.participant_count, 4)
+        self.assertEqual(heirloom_plan.nodes[0].provider_payload.print_bleed_mm, 3)
+
+        # Pillar II: Save 10-shot selection and compile 20-page (10 layflat spreads) hardcover photobook
+        sel = self.svc.save_curated_gallery_selection(
+            selection_id="sel_photobook_20p",
+            gallery_id=wkw_gal.gallery_id,
+            actor_id="act_01",
+            selected_shot_ids=[c.shot_id for c in wkw_gal.candidates],
+            export_mode="photobook_hardcover",
+        )
+        manifest_v1 = self.svc.compile_photobook_layout_manifest(
+            manifest_id="pb_manifest_001",
+            selection_id=sel.selection_id,
+            gallery_id=wkw_gal.gallery_id,
+            actor_id="act_01",
+            title="《流金岁月 · 0–100岁典藏画册》",
+        )
+        self.assertEqual(manifest_v1.page_count, 20)
+        self.assertEqual(manifest_v1.spread_count, 10)
+        self.assertEqual(len(manifest_v1.spreads), 10)
+        self.assertTrue(manifest_v1.vellum_frontispiece_enabled)
+        self.assertTrue(manifest_v1.gold_foil_emboss_enabled)
+        self.assertEqual(manifest_v1.spreads[0].layout_archetype, "vellum_gold_foil_frontispiece")
+        self.assertEqual(manifest_v1.spreads[3].layout_archetype, "gatefold_childhood_vs_prime_comparison")
+        self.assertEqual(manifest_v1.spreads[9].layout_archetype, "acoustic_voiceprint_colophon_spread")
+        self.assertEqual(len(manifest_v1.acoustic_colophon.voiceprint_bars), 32)
+        self.assertTrue(manifest_v1.acoustic_colophon.qr_whitelisted)
+        self.assertTrue(manifest_v1.preflight_report.preflight_passed)
+        self.assertLessEqual(manifest_v1.preflight_report.max_cmyk_tac_percent, 300.0)
+        self.assertAlmostEqual(manifest_v1.preflight_report.shadow_gamma_lift, 1.135, places=3)
+        self.assertEqual(manifest_v1.preflight_report.gutter_face_collisions, 0)
+
+        # Negative test 1: Reject face bounding box crossing center spine gutter [198.0, 222.0] mm
+        with self.assertRaises(ControlPlaneError) as gutter_ctx:
+            self.svc.compile_photobook_layout_manifest(
+                manifest_id="pb_manifest_bad_gutter",
+                selection_id=sel.selection_id,
+                gallery_id=wkw_gal.gallery_id,
+                actor_id="act_01",
+                custom_face_bbox_override_mm=(190.0, 215.0),
+            )
+        self.assertEqual(gutter_ctx.exception.code, "GUTTER_FACE_COLLISION_FORBIDDEN")
+
+        # Negative test 2: Reject CMYK Total Area Coverage > 300%
+        with self.assertRaises(ControlPlaneError) as tac_ctx:
+            self.svc.compile_photobook_layout_manifest(
+                manifest_id="pb_manifest_bad_tac",
+                selection_id=sel.selection_id,
+                gallery_id=wkw_gal.gallery_id,
+                actor_id="act_01",
+                custom_cmyk_tac_override=318.0,
+            )
+        self.assertEqual(tac_ctx.exception.code, "CMYK_TAC_LIMIT_EXCEEDED")
+
+        # Negative test 3: Reject non-whitelisted QR code domain
+        with self.assertRaises(ControlPlaneError) as qr_ctx:
+            self.svc.compile_photobook_layout_manifest(
+                manifest_id="pb_manifest_bad_qr",
+                selection_id=sel.selection_id,
+                gallery_id=wkw_gal.gallery_id,
+                actor_id="act_01",
+                voice_qr_url="https://phishing.example.com/audio",
+            )
+        self.assertEqual(qr_ctx.exception.code, "UNSAFE_VOICE_QR_DOMAIN")
 
 
 if __name__ == "__main__":

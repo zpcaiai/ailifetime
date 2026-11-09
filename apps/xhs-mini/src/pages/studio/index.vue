@@ -23,10 +23,10 @@
       </view>
 
       <view class="form-row">
-        <text class="form-label">出镜人数声明（受所选模板上限约束）：</text>
+        <text class="form-label">出镜人数声明（受所选模板上限约束，三代同堂支持最多4人）：</text>
         <view class="pill-group">
           <text
-            v-for="cnt in [1, 2, 3]"
+            v-for="cnt in [1, 2, 3, 4]"
             :key="cnt"
             class="choice-pill"
             :class="{
@@ -35,7 +35,7 @@
             }"
             @click="handleSelectParticipantCount(cnt)"
           >
-            {{ cnt }} 人{{ cnt > currentTemplate.max_participants ? ' (需选多人合拍模板)' : '' }}
+            {{ cnt }} 人{{ cnt > currentTemplate.max_participants ? ' (自动切合拍模板)' : '' }}
           </text>
         </view>
       </view>
@@ -77,6 +77,7 @@
             <text class="tpl-chip">
               {{ tpl.optics_and_lighting.focal_length_mm }}mm {{ tpl.optics_and_lighting.aperture }}
             </text>
+            <text class="tpl-chip">内置 {{ tpl.curated_gallery_shots.length }} 张精修分镜 (精选≥{{ tpl.min_curated_shots }}张)</text>
             <text class="tpl-chip">最多 {{ tpl.max_participants }} 人</text>
             <text class="tpl-chip">身份锁定 ≥ {{ tpl.quality_thresholds.min_identity_similarity }}</text>
           </view>
@@ -121,7 +122,7 @@
 
       <view class="upload-box" @click="handlePickPhoto">
         <text v-if="!uploadSession" class="upload-placeholder">
-          + 点击选择本地原图并创建加密隔离上传会话
+          + 点击选择本地成年正脸主锚点原图并创建加密隔离上传会话
         </text>
         <view v-else class="upload-ready">
           <text class="upload-ok">已创建加密上传会话：{{ uploadSession.asset_id }}</text>
@@ -129,7 +130,30 @@
         </view>
       </view>
 
-      <!-- 当前年龄连续性锚点 (B08-R01 / B14-R01) -->
+      <!-- Pillar III: 3D 多角度骨相锚点 + 童年老照片双锚点融合开关 -->
+      <view class="form-row">
+        <text class="form-label">
+          3D 骨相与童年双锚点加强（解决侧脸鼻梁塌陷与童年回溯不像本人问题）：
+        </text>
+        <view class="pill-group">
+          <text
+            class="choice-pill"
+            :class="{ active: enableSideProfileAnchor }"
+            @click="enableSideProfileAnchor = !enableSideProfileAnchor"
+          >
+            {{ enableSideProfileAnchor ? '✓ 已附 45° 侧脸骨相照 (+0.22 立体纵深)' : '+ 附加 45° 侧脸骨相照' }}
+          </text>
+          <text
+            class="choice-pill"
+            :class="{ active: enableChildhoodAnchor }"
+            @click="enableChildhoodAnchor = !enableChildhoodAnchor"
+          >
+            {{ enableChildhoodAnchor ? '✓ 已附童年老照片双锚点 (3-8岁权重 0.72)' : '+ 附加真实童年老照片参考' }}
+          </text>
+        </view>
+      </view>
+
+      <!-- 当前年龄连续性锚点与出生年份年代推演引擎 (B08-R01 / B14-R01) -->
       <view class="form-row">
         <text class="form-label">
           当前真实年龄锚点（作为骨相基准向两端推演，小于此年龄自动标记为童年回溯创作）：
@@ -140,9 +164,26 @@
             :key="anchor"
             class="choice-pill"
             :class="{ active: currentAgeAnchor === anchor }"
-            @click="currentAgeAnchor = anchor"
+            @click="handleSelectAnchorAge(anchor)"
           >
             当前 {{ anchor }} 岁
+          </text>
+        </view>
+      </view>
+
+      <view class="form-row">
+        <text class="form-label">
+          出生年份（自动计算「出生年份 + 目标年龄 = 对应年代场景/领口材质/自然窗光」）：
+        </text>
+        <view class="pill-group">
+          <text
+            v-for="by in birthYearOptions"
+            :key="by"
+            class="choice-pill"
+            :class="{ active: birthYear === by }"
+            @click="birthYear = by"
+          >
+            {{ by }}年出生
           </text>
         </view>
       </view>
@@ -163,7 +204,43 @@
         </view>
       </view>
 
-      <view class="age-selector-label">目标生成年龄节点（支持 0—100 岁全周期多选）：</view>
+      <!-- 内置 10 张大师精修分镜预览与快捷编排 (>=9张供精选) -->
+      <view class="form-row">
+        <view class="step-header">
+          <text class="form-label">
+            内置 {{ currentTemplate.curated_gallery_shots.length }} 张精修分镜脚本（满 {{ currentTemplate.min_curated_shots }} 张可精选成片）：
+          </text>
+          <text class="shot-toggle-link" @click="showCuratedShotPresets = !showCuratedShotPresets">
+            {{ showCuratedShotPresets ? '收起分镜表 ▲' : '展开10镜脚本 ▼' }}
+          </text>
+        </view>
+        <view class="pill-group" style="margin-bottom: 12rpx">
+          <text class="choice-pill active" @click="applyRecommendedAges(10)">
+            生成全套 10 张大师分镜（推荐，便于10选9）
+          </text>
+          <text class="choice-pill" @click="applyRecommendedAges(9)">
+            仅生成默认 9 宫格分镜 (9张)
+          </text>
+        </view>
+        <view v-if="showCuratedShotPresets" class="shot-preset-list">
+          <view
+            v-for="shot in currentTemplate.curated_gallery_shots"
+            :key="shot.shot_id"
+            class="shot-preset-item"
+          >
+            <view class="shot-preset-head">
+              <text class="shot-preset-title">{{ shot.title }}</text>
+              <text class="shot-preset-era">{{ birthYear + shot.target_age }}年</text>
+            </view>
+            <text class="shot-preset-detail">骨相/肌理：{{ shot.craniofacial_and_dermal_focus }}</text>
+            <text class="shot-preset-detail">领口/布景：{{ shot.wardrobe_fabric_cue }} · {{ shot.backdrop_prop_cue }}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="age-selector-label">
+        目标生成年龄节点（已选 {{ selectedAges.length }} 张，建议 ≥ 9 张以供九宫格/相册精选）：
+      </view>
       <view class="pill-group">
         <text
           v-for="age in availableAges"
@@ -172,7 +249,7 @@
           :class="{ active: selectedAges.includes(age) }"
           @click="toggleAge(age)"
         >
-          {{ age }}岁
+          {{ age }}岁 ({{ birthYear + age }}年)
         </text>
       </view>
 
@@ -269,31 +346,71 @@
       </view>
     </view>
 
-    <!-- 步骤 3: 生成进度、B15 质量门控分、光学 Prompt 检视、小红书分享与相册下单 -->
+    <!-- 步骤 3: 生成进度、B15 质量门控分、>=9张成片精选、小红书分享与相册下单 -->
     <view v-if="activeJob" class="card">
       <view class="step-header">
-        <text class="step-title">3. 时光画廊与 B15 质量门控报告</text>
+        <text class="step-title">3. 时光画廊精选 (满9张成片) 与 B15 门控</text>
         <text class="ai-badge">状态: {{ activeJob.state }}</text>
+      </view>
+
+      <view class="curation-summary-bar">
+        <text class="curation-summary-title">
+          已精选 {{ curatedShotIds.length }} / {{ activeJob.frames?.length || 0 }} 张成片（至少精选 9 张可导出小红书九宫格或印制 99 元精装相册）
+        </text>
+        <view class="pill-group" style="margin-top: 10rpx">
+          <text class="choice-pill active" @click="selectDefaultNineShots">一键勾选推荐 9 宫格</text>
+          <text class="choice-pill" @click="selectAllGeneratedShots">全选全部成片 ({{ activeJob.frames?.length || 0 }}张)</text>
+        </view>
       </view>
 
       <view class="prompt-toggle-bar" @click="showCompiledPrompts = !showCompiledPrompts">
         <text class="prompt-toggle-text">
-          {{ showCompiledPrompts ? '收起底层结构化摄影 Prompt 配方 ▲' : '展开查看每帧底层摄影 Prompt 与反塑料感约束 ▼' }}
+          {{ showCompiledPrompts ? '收起骨相演进权重、多供应商参数与底层 Prompt ▲' : '展开查看每帧骨相演进矩阵、多供应商参数与反塑料感 Prompt ▼' }}
         </text>
       </view>
 
       <view class="frames-grid">
-        <view v-for="frame in activeJob.frames" :key="frame.age" class="frame-card">
+        <view
+          v-for="frame in activeJob.frames"
+          :key="frame.shot_id || frame.age"
+          class="frame-card"
+          :class="{ curated: isFrameCurated(frame.shot_id || String(frame.age)) }"
+          @click="toggleCuratedFrame(frame.shot_id || String(frame.age))"
+        >
           <view class="frame-top-row">
-            <text class="frame-Age">{{ frame.label }}</text>
+            <text class="frame-Age">{{ frame.shot_title || frame.label }}</text>
+            <text
+              class="curation-tag"
+              :class="{ selected: isFrameCurated(frame.shot_id || String(frame.age)) }"
+            >
+              {{ isFrameCurated(frame.shot_id || String(frame.age)) ? '✓ 已精选' : '+ 待精选' }}
+            </text>
+          </view>
+
+          <view class="frame-era-row">
+            <text v-if="frame.calendar_year" class="era-pill">
+              {{ frame.calendar_year }}年 · {{ frame.decade_label }}
+            </text>
+            <text v-if="frame.shot_scale" class="era-pill">
+              {{ formatShotScaleLabel(frame.shot_scale) }}
+            </text>
+            <text v-if="frame.nine_grid_position" class="era-pill">
+              {{ formatGridPositionLabel(frame.nine_grid_position) }}
+            </text>
             <text v-if="frame.is_retroactive_simulation" class="retro-tag">回溯创作</text>
           </view>
 
           <view class="frame-optics">{{ frame.optics_summary }}</view>
+          <view v-if="frame.collar_material_cue" class="frame-wardrobe">
+            领口与环境：{{ frame.collar_material_cue }} · {{ frame.era_scene_cue }}
+          </view>
 
           <view class="score-row">
             <text class="score-pill">身份一致: {{ frame.identity_score }}</text>
             <text class="score-pill">审美可用: {{ frame.aesthetic_score }}</text>
+            <text v-if="frame.physiological_weights" class="score-pill">
+              SSS皮下散射: {{ frame.physiological_weights.subsurface_scattering_strength }}
+            </text>
           </view>
 
           <view v-if="frame.retroactive_disclosure" class="retro-note">
@@ -304,6 +421,15 @@
           <view class="frame-url">短期签名预览 (切后台自动清理)</view>
 
           <view v-if="showCompiledPrompts" class="prompt-detail-box">
+            <text v-if="frame.physiological_weights" class="prompt-detail-line">
+              生理演进权重：幼态={{ frame.physiological_weights.craniofacial_neoteny_weight }} | 胶原紧致={{ frame.physiological_weights.dermal_collagen_elasticity }} | 法令纹上限≤{{ frame.physiological_weights.nasolabial_fold_depth_limit }} | 银丝占比={{ frame.physiological_weights.silver_strand_ratio }} | 眼神光={{ frame.physiological_weights.eye_catchlight_clarity }}
+            </text>
+            <text v-if="frame.provider_payload" class="prompt-detail-line">
+              多供应商管线：{{ frame.provider_payload.provider_id }} ({{ frame.provider_payload.identity_adapter }}, InstantID={{ frame.provider_payload.instantid_weight }}, PuLID={{ frame.provider_payload.pulid_weight }}, 出血位={{ frame.provider_payload.print_bleed_mm }}mm, {{ frame.provider_payload.cmyk_profile }})
+            </text>
+            <text v-if="frame.image_enhancement_pipeline" class="prompt-detail-line">
+              4阶段物理画质管线：正侧双锚点={{ frame.image_enhancement_pipeline.multi_photo_anchor.dual_anchor_active ? '已激活' : '单锚点' }} (成年={{ frame.image_enhancement_pipeline.multi_photo_anchor.adult_anchor_weight }}/童年={{ frame.image_enhancement_pipeline.multi_photo_anchor.childhood_anchor_weight }}/3D侧颜加成=+{{ frame.image_enhancement_pipeline.multi_photo_anchor.profile_3d_depth_boost }}) | 重打光={{ frame.image_enhancement_pipeline.relighting_pass.normal_map_estimator }} ({{ frame.image_enhancement_pipeline.relighting_pass.fill_bounce_ratio }}) | 分频超分={{ frame.image_enhancement_pipeline.frequency_separated_skin_pass.tile_controlnet_weight }} (微特征={{ frame.image_enhancement_pipeline.frequency_separated_skin_pass.micro_features_injected.join('/') }}) | 银盐辉光={{ frame.image_enhancement_pipeline.optical_post_process.halation_strength }}
+            </text>
             <text class="prompt-detail-line">正向配方：{{ frame.compiled_prompt }}</text>
             <text class="prompt-detail-neg">反塑料感负向约束：{{ frame.negative_prompt }}</text>
           </view>
@@ -311,12 +437,40 @@
       </view>
 
       <view class="action-row">
+        <button class="btn-secondary" @click="handleConfirmCuratedNineGrid">
+          确认精选成片生成小红书九宫格 (已选{{ curatedShotIds.length }}张，需≥9张)
+        </button>
+        <button class="btn-secondary" @click="handlePreviewPhotobookLayout">
+          生成 20 页蝴蝶对裱有声相册排版与印前工业预检
+        </button>
         <button class="btn-secondary" @click="handleCreateShare">
           生成可撤销小红书分享短链
         </button>
         <button class="btn-primary" @click="handleOrderPhotoBook">
-          定制精装时光相册 (¥99.00)
+          以已精选 {{ curatedShotIds.length }} 张定制精装时光相册 (¥99.00)
         </button>
+      </view>
+
+      <view v-if="photobookManifest" class="share-status-box">
+        <text class="share-info" style="font-weight: 600">
+          20页蝴蝶对裱跨页有声相册排版清单 ({{ photobookManifest.manifest_id }} · {{ photobookManifest.page_count }}页 / {{ photobookManifest.spread_count }}跨页)
+        </text>
+        <text class="share-info">
+          装帧与色彩：{{ photobookManifest.binding_type }} · {{ photobookManifest.preflight_report.cmyk_icc_profile }} · 暗部+{{ ((photobookManifest.preflight_report.shadow_gamma_lift - 1) * 100).toFixed(1) }}% Gamma 补偿 · TAC {{ photobookManifest.preflight_report.max_cmyk_tac_percent }}% ≤ {{ photobookManifest.preflight_report.tac_limit_percent }}%
+        </text>
+        <text class="share-info">
+          印前工业预检：{{ photobookManifest.preflight_report.preflight_passed ? '✓ PASSED (300 DPI + 3mm出血 + 中缝±12mm零人脸折痕碰撞)' : '✗ FAILED' }} · 有声时光胶囊白名单二维码：{{ photobookManifest.acoustic_colophon.voice_qr_url }}
+        </text>
+      </view>
+
+      <view v-if="curatedSelectionReceipt" class="share-status-box">
+        <text class="share-info">
+          精选回执 ({{ curatedSelectionReceipt.selection_id }}): 已锁定 {{ curatedSelectionReceipt.selected_count }} 张成片 ({{ curatedSelectionReceipt.selected_ages.join('岁 / ') }}岁)
+        </text>
+        <text class="share-info">
+          导出模式: {{ curatedSelectionReceipt.export_mode }}
+          {{ curatedSelectionReceipt.photobook_sku ? `· 关联 SKU: ${curatedSelectionReceipt.photobook_sku}` : '' }}
+        </text>
       </view>
 
       <view v-if="activeShare && consentReceipt">
@@ -352,10 +506,14 @@ import type {
   AspectRatio,
   CheckoutSession,
   ConsentReceipt,
+  CuratedGallerySelectionReceipt,
   GenerationJob,
   GrantorCapacity,
+  NineGridPosition,
+  PhotobookLayoutManifest,
   PortraitTemplateSpec,
   Share,
+  ShotScale,
   UploadSession,
 } from '@ailifetime/contracts';
 import {
@@ -363,12 +521,14 @@ import {
   BUILTIN_PORTRAIT_TEMPLATES,
   TIMECAPSULE_STYLES,
   TIMECAPSULE_TEMPLATES,
+  compilePhotobookLayoutManifest,
   getCurrentPlatformChannel,
   getPreferredTemplateId,
   getPreferredTimeCapsuleSelection,
   getTrackedShare,
   purgeEphemeralMediaCache,
   renderAndExportTimeCapsuleCard,
+  saveCuratedGallerySelection,
   setPreferredTemplateId,
   setPreferredTimeCapsuleSelection,
   type TimeCapsuleCardRenderResult,
@@ -435,15 +595,24 @@ const participantCount = ref(1);
 const agreedToPolicy = ref(false);
 const consentReceipt = ref<ConsentReceipt | null>(null);
 const uploadSession = ref<UploadSession | null>(null);
+const enableSideProfileAnchor = ref(true);
+const enableChildhoodAnchor = ref(true);
 
-const anchorAgeOptions = [18, 25, 28, 35, 45, 55];
+const anchorAgeOptions = [18, 25, 28, 32, 38, 45, 55];
+const birthYearOptions = [1971, 1981, 1988, 1994, 1998, 2001, 2008];
 const currentAgeAnchor = ref<number>(28);
+const birthYear = ref<number>(1998);
 const selectedAspectRatio = ref<AspectRatio>('3:4');
+const showCuratedShotPresets = ref(true);
 
-const availableAges = [0, 6, 12, 18, 25, 28, 35, 45, 55, 65, 75, 85, 100];
-const selectedAges = ref<number[]>([6, 18, 28, 45, 65, 85]);
+const availableAges = [3, 6, 12, 18, 22, 25, 28, 32, 35, 42, 45, 50, 58, 66, 72, 75, 85, 100];
+const selectedAges = ref<number[]>([...BUILTIN_PORTRAIT_TEMPLATES[0].recommended_ages]);
 const isGenerating = ref(false);
 const activeJob = ref<GenerationJob | null>(null);
+const activeProjectId = ref<string>('');
+const curatedShotIds = ref<string[]>([]);
+const curatedSelectionReceipt = ref<CuratedGallerySelectionReceipt | null>(null);
+const photobookManifest = ref<PhotobookLayoutManifest | null>(null);
 const activeShare = ref<Share | null>(null);
 const checkoutResult = ref<CheckoutSession | null>(null);
 const showCompiledPrompts = ref(false);
@@ -456,6 +625,60 @@ function formatRatioLabel(ratio: AspectRatio): string {
     '9:16': '9:16 全屏故事版',
   };
   return labels[ratio] || ratio;
+}
+
+function formatShotScaleLabel(scale?: ShotScale): string {
+  const labels: Record<ShotScale, string> = {
+    extreme_closeup_eyes: '眼部微距特写',
+    medium_bust: '标准胸像',
+    three_quarter_profile: '45°侧颜轮廓',
+    half_body_hands: '半身环境含手部',
+  };
+  return scale ? labels[scale] || scale : '标准胸像';
+}
+
+function formatGridPositionLabel(pos?: NineGridPosition): string {
+  const labels: Record<NineGridPosition, string> = {
+    center_hero: '九宫格C位主图',
+    corner_framing: '九宫格四角压阵',
+    edge_rhythm: '九宫格十字呼吸位',
+    bonus_alternate: '第十张典藏替补',
+  };
+  return pos ? labels[pos] || pos : '九宫格节奏位';
+}
+
+function handleSelectAnchorAge(anchor: number) {
+  currentAgeAnchor.value = anchor;
+  birthYear.value = 2026 - anchor;
+}
+
+function applyRecommendedAges(limitCount: number) {
+  selectedAges.value = currentTemplate.value.recommended_ages.slice(0, limitCount);
+}
+
+function isFrameCurated(shotId: string): boolean {
+  return curatedShotIds.value.includes(shotId);
+}
+
+function toggleCuratedFrame(shotId: string) {
+  if (curatedShotIds.value.includes(shotId)) {
+    curatedShotIds.value = curatedShotIds.value.filter((id) => id !== shotId);
+  } else {
+    curatedShotIds.value = [...curatedShotIds.value, shotId];
+  }
+}
+
+function selectDefaultNineShots() {
+  const frames = activeJob.value?.frames || [];
+  curatedShotIds.value = frames
+    .filter((f) => f.default_selected !== false)
+    .slice(0, 9)
+    .map((f) => f.shot_id || String(f.age));
+}
+
+function selectAllGeneratedShots() {
+  const frames = activeJob.value?.frames || [];
+  curatedShotIds.value = frames.map((f) => f.shot_id || String(f.age));
 }
 
 function handleSelectTemplate(tpl: PortraitTemplateSpec) {
@@ -472,13 +695,17 @@ function handleSelectTemplate(tpl: PortraitTemplateSpec) {
 
 function handleSelectParticipantCount(cnt: number) {
   if (cnt > currentTemplate.value.max_participants) {
+    const targetId =
+      cnt >= 4
+        ? 'tpl_xhs_three_generations_heirloom'
+        : 'tpl_xhs_warm_family_co_aging';
+    const targetName =
+      cnt >= 4 ? '三代同堂/隔代亲情·跨时空同框' : '温情伴侣/家人共老';
     uni.showToast({
-      title: `当前模板最多支持 ${currentTemplate.value.max_participants} 人，已为您切换至「温情伴侣/家人共老」合拍模板`,
+      title: `当前模板最多支持 ${currentTemplate.value.max_participants} 人，已为您切换至「${targetName}」模板`,
       icon: 'none',
     });
-    const familyTpl = templates.value.find(
-      (t) => t.template_id === 'tpl_xhs_warm_family_co_aging'
-    );
+    const familyTpl = templates.value.find((t) => t.template_id === targetId);
     if (familyTpl) {
       handleSelectTemplate(familyTpl);
     }
@@ -589,8 +816,13 @@ async function handleStartGeneration() {
       timeline_ages: selectedAges.value,
       visibility: 'private',
       current_age: currentAgeAnchor.value,
+      birth_year: birthYear.value,
       aspect_ratio: selectedAspectRatio.value,
+      side_profile_asset_id: enableSideProfileAnchor.value ? `${assetId}_side45` : undefined,
+      childhood_reference_asset_id: enableChildhoodAnchor.value ? `${assetId}_child6` : undefined,
+      childhood_reference_age: 6,
     });
+    activeProjectId.value = project.id;
 
     const job = await apiClient.startGenerationJob({
       project_id: project.id,
@@ -598,9 +830,58 @@ async function handleStartGeneration() {
       entitlement_id: `ent_xhs_${Date.now()}`,
     });
     activeJob.value = job;
-    uni.showToast({ title: '高定光影影像生成完成', icon: 'success' });
+    selectDefaultNineShots();
+    curatedSelectionReceipt.value = null;
+    photobookManifest.value = null;
+    uni.showToast({ title: `已生成 ${job.frames?.length || 10} 张精修底片，请精选 ≥9 张`, icon: 'success' });
   } finally {
     isGenerating.value = false;
+  }
+}
+
+function handleConfirmCuratedNineGrid() {
+  if (!activeJob.value) return;
+  try {
+    const frames = activeJob.value.frames || [];
+    const selectedAgesList = frames
+      .filter((f) => curatedShotIds.value.includes(f.shot_id || String(f.age)))
+      .map((f) => f.age);
+    curatedSelectionReceipt.value = saveCuratedGallerySelection({
+      project_id: activeProjectId.value || activeJob.value.id,
+      template_id: currentTemplate.value.template_id,
+      selected_shot_ids: curatedShotIds.value,
+      selected_ages: selectedAgesList,
+      export_mode: 'xhs_9_grid',
+    });
+    uni.showToast({ title: '已锁定 9 宫格精选成片', icon: 'success' });
+  } catch (err) {
+    uni.showToast({
+      title: err instanceof Error ? err.message : '请至少选择 9 张成片',
+      icon: 'none',
+    });
+  }
+}
+
+function handlePreviewPhotobookLayout() {
+  if (!activeJob.value) return;
+  try {
+    const frames = activeJob.value.frames || [];
+    const selectedAgesList = frames
+      .filter((f) => curatedShotIds.value.includes(f.shot_id || String(f.age)))
+      .map((f) => f.age);
+    photobookManifest.value = compilePhotobookLayoutManifest({
+      project_id: activeProjectId.value || activeJob.value.id,
+      template_id: currentTemplate.value.template_id,
+      selected_shot_ids: curatedShotIds.value,
+      selected_ages: selectedAgesList,
+      birth_year: birthYear.value,
+    });
+    uni.showToast({ title: '20页蝴蝶对裱相册印前预检通过', icon: 'success' });
+  } catch (err) {
+    uni.showToast({
+      title: err instanceof Error ? err.message : '请至少精选 9 张成片后再预览相册排版',
+      icon: 'none',
+    });
   }
 }
 
@@ -619,6 +900,32 @@ async function handleCreateShare() {
 
 async function handleOrderPhotoBook() {
   if (!activeJob.value) return;
+  try {
+    const frames = activeJob.value.frames || [];
+    const selectedAgesList = frames
+      .filter((f) => curatedShotIds.value.includes(f.shot_id || String(f.age)))
+      .map((f) => f.age);
+    curatedSelectionReceipt.value = saveCuratedGallerySelection({
+      project_id: activeProjectId.value || activeJob.value.id,
+      template_id: currentTemplate.value.template_id,
+      selected_shot_ids: curatedShotIds.value,
+      selected_ages: selectedAgesList,
+      export_mode: 'photobook_hardcover',
+    });
+    photobookManifest.value = compilePhotobookLayoutManifest({
+      project_id: activeProjectId.value || activeJob.value.id,
+      template_id: currentTemplate.value.template_id,
+      selected_shot_ids: curatedShotIds.value,
+      selected_ages: selectedAgesList,
+      birth_year: birthYear.value,
+    });
+  } catch (err) {
+    uni.showToast({
+      title: err instanceof Error ? err.message : '印制精装相册请至少精选 9 张成片',
+      icon: 'none',
+    });
+    return;
+  }
   const channel = getCurrentPlatformChannel();
   const schemePrefix = channel === 'mp-weixin' ? 'weixin' : channel === 'mp-xhs' ? 'xhs' : 'https';
   const session = await apiClient.createCheckoutSession({
@@ -1027,6 +1334,113 @@ onUnload(() => {
   font-size: 18rpx;
   color: #a12622;
   word-break: break-all;
+}
+
+.shot-toggle-link {
+  font-size: 22rpx;
+  color: #ff2442;
+  font-weight: 600;
+}
+
+.shot-preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+  background-color: #f8f8fb;
+  padding: 16rpx;
+  border-radius: 14rpx;
+  border: 1rpx solid #e8e8f0;
+}
+
+.shot-preset-item {
+  padding: 12rpx;
+  background-color: #ffffff;
+  border-radius: 10rpx;
+  border: 1rpx solid #efeff5;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.shot-preset-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.shot-preset-title {
+  font-size: 23rpx;
+  font-weight: 700;
+  color: #1f1f24;
+}
+
+.shot-preset-era {
+  font-size: 20rpx;
+  color: #1f4f99;
+  background-color: #eef4ff;
+  padding: 2rpx 10rpx;
+  border-radius: 999rpx;
+}
+
+.shot-preset-detail {
+  font-size: 20rpx;
+  color: #555555;
+}
+
+.curation-summary-bar {
+  background-color: #fff6f8;
+  border: 1rpx solid #ffd6df;
+  border-radius: 14rpx;
+  padding: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.curation-summary-title {
+  font-size: 23rpx;
+  font-weight: 600;
+  color: #b0122a;
+  display: block;
+}
+
+.frame-card.curated {
+  border: 2rpx solid #ff2442;
+  background-color: #fffafb;
+}
+
+.curation-tag {
+  font-size: 19rpx;
+  padding: 2rpx 12rpx;
+  border-radius: 999rpx;
+  background-color: #ebebf0;
+  color: #555555;
+}
+
+.curation-tag.selected {
+  background-color: #ff2442;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.frame-era-row {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin-top: 6rpx;
+  flex-wrap: wrap;
+}
+
+.era-pill {
+  font-size: 18rpx;
+  color: #1f4f99;
+  background-color: #eaf2ff;
+  padding: 2rpx 10rpx;
+  border-radius: 6rpx;
+}
+
+.frame-wardrobe {
+  font-size: 19rpx;
+  color: #555566;
+  margin-top: 4rpx;
 }
 
 .action-row {

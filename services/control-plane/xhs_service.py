@@ -33,8 +33,15 @@ for _extra_dir in (REPO_ROOT_DIR, MEDIA_WORKER_DIR):
     if str(_extra_dir) not in sys.path:
         sys.path.insert(0, str(_extra_dir))
 
+from photobook_layout_engine import (  # noqa: E402
+    PhotobookEngineError,
+    PhotobookLayoutEngine,
+    PhotobookLayoutManifest,
+)
 from portrait_template_engine import (  # noqa: E402
     CompositionDraftRecord,
+    CuratedGalleryRunRecord,
+    CuratedGallerySelectionRecord,
     PortraitTemplateEngine,
     PortraitTemplateSpec,
     QualityEvaluationReport,
@@ -124,6 +131,7 @@ class XhsControlPlaneService:
         self._conn.row_factory = sqlite3.Row
         self._init_schema()
         self._template_engine = PortraitTemplateEngine(db_path=db_path)
+        self._photobook_engine = PhotobookLayoutEngine(conn=self._conn)
         self._timecapsule_app = TimeCapsuleApplication(db_path=db_path)
 
     def _init_schema(self) -> None:
@@ -328,12 +336,16 @@ class XhsControlPlaneService:
         tenant_id: str = "tenant_cn_b2c",
         project_id: str,
         template_id: str,
-        timeline_ages: list[int],
+        timeline_ages: list[int] | None = None,
         current_age_anchor: int = 28,
+        birth_year: int | None = None,
         aspect_ratio: str | None = None,
         participant_count: int = 1,
         contains_minor: bool = False,
         source_asset_ids: list[str] | None = None,
+        side_profile_asset_id: str | None = None,
+        childhood_reference_asset_id: str | None = None,
+        childhood_reference_age: int | None = 6,
         custom_notes: str = "",
     ) -> TimelineGenerationPlan:
         """B14-R01..R04: Compile a deterministic timeline prompt plan for a project."""
@@ -344,13 +356,151 @@ class XhsControlPlaneService:
                 template_id=template_id,
                 timeline_ages=timeline_ages,
                 current_age_anchor=current_age_anchor,
+                birth_year=birth_year,
                 aspect_ratio=aspect_ratio,
                 participant_count=participant_count,
                 contains_minor=contains_minor,
                 source_asset_ids=source_asset_ids,
+                side_profile_asset_id=side_profile_asset_id,
+                childhood_reference_asset_id=childhood_reference_asset_id,
+                childhood_reference_age=childhood_reference_age,
                 custom_notes=custom_notes,
             )
         except TemplateEngineError as exc:
+            raise ControlPlaneError(exc.code, exc.message, exc.status_code) from exc
+
+    def generate_curated_gallery_candidates(
+        self,
+        *,
+        tenant_id: str = "tenant_cn_b2c",
+        project_id: str,
+        template_id: str,
+        current_age_anchor: int = 28,
+        birth_year: int | None = None,
+        timeline_ages: list[int] | None = None,
+        aspect_ratio: str | None = None,
+        participant_count: int = 1,
+        contains_minor: bool = False,
+        source_asset_ids: list[str] | None = None,
+        side_profile_asset_id: str | None = None,
+        childhood_reference_asset_id: str | None = None,
+        childhood_reference_age: int | None = 6,
+        injected_initial_metrics_by_age: dict[int, dict[str, float]] | None = None,
+    ) -> CuratedGalleryRunRecord:
+        """B08/B14/B15: Generate >=9 curated gallery candidates with B15 quality gate & auto-healing."""
+        try:
+            return self._template_engine.generate_curated_gallery_candidates(
+                tenant_id=tenant_id,
+                project_id=project_id,
+                template_id=template_id,
+                current_age_anchor=current_age_anchor,
+                birth_year=birth_year,
+                timeline_ages=timeline_ages,
+                aspect_ratio=aspect_ratio,
+                participant_count=participant_count,
+                contains_minor=contains_minor,
+                source_asset_ids=source_asset_ids,
+                side_profile_asset_id=side_profile_asset_id,
+                childhood_reference_asset_id=childhood_reference_asset_id,
+                childhood_reference_age=childhood_reference_age,
+                injected_initial_metrics_by_age=injected_initial_metrics_by_age,
+            )
+        except TemplateEngineError as exc:
+            raise ControlPlaneError(exc.code, exc.message, exc.status_code) from exc
+
+    def save_curated_gallery_selection(
+        self,
+        *,
+        selection_id: str,
+        gallery_id: str,
+        tenant_id: str = "tenant_cn_b2c",
+        actor_id: str,
+        selected_shot_ids: list[str],
+        export_mode: str = "xhs_9_grid",
+        photobook_sku: str | None = None,
+        min_required_shots: int = 9,
+        expected_version: int | None = None,
+    ) -> CuratedGallerySelectionRecord:
+        """Persist user's >=9 curated shot selection for 9-grid or 99 RMB hardcover photobook."""
+        try:
+            return self._template_engine.save_curated_gallery_selection(
+                selection_id=selection_id,
+                gallery_id=gallery_id,
+                tenant_id=tenant_id,
+                actor_id=actor_id,
+                selected_shot_ids=selected_shot_ids,
+                export_mode=export_mode,
+                photobook_sku=photobook_sku,
+                min_required_shots=min_required_shots,
+                expected_version=expected_version,
+            )
+        except TemplateEngineError as exc:
+            raise ControlPlaneError(exc.code, exc.message, exc.status_code) from exc
+
+    def compile_photobook_layout_manifest(
+        self,
+        *,
+        manifest_id: str,
+        selection_id: str,
+        gallery_id: str,
+        tenant_id: str = "tenant_cn_b2c",
+        actor_id: str,
+        title: str = "《时光典藏 · 0–100岁人生摄影集》",
+        subtitle: str = "180° 蝴蝶对裱精装珍藏版 · 170g 德国哑光艺术纸",
+        voice_qr_url: str | None = None,
+        audio_duration_seconds: float = 42.0,
+        custom_face_bbox_override_mm: tuple[float, float] | None = None,
+        custom_cmyk_tac_override: float | None = None,
+        expected_version: int | None = None,
+    ) -> PhotobookLayoutManifest:
+        """
+        Pillar II: Compile a 20-page (10 layflat spreads) butterfly-bound hardcover photobook
+        manifest from a saved gallery selection, enforcing pre-press preflight gates.
+        """
+        gal_row = self._template_engine._conn.execute(
+            "SELECT tenant_id, project_id, template_id, run_json FROM curated_gallery_runs WHERE gallery_id = ?",
+            (gallery_id,),
+        ).fetchone()
+        if gal_row is None:
+            raise ControlPlaneError("GALLERY_NOT_FOUND", f"Unknown gallery_id: {gallery_id}", 404)
+        if gal_row["tenant_id"] != tenant_id:
+            raise ControlPlaneError("CROSS_TENANT_FORBIDDEN", "Gallery belongs to another tenant", 403)
+
+        sel_row = self._template_engine._conn.execute(
+            "SELECT tenant_id, selected_shot_ids_json, photobook_sku FROM curated_gallery_selections WHERE selection_id = ? AND gallery_id = ?",
+            (selection_id, gallery_id),
+        ).fetchone()
+        if sel_row is None:
+            raise ControlPlaneError("SELECTION_NOT_FOUND", f"Unknown selection_id: {selection_id}", 404)
+        if sel_row["tenant_id"] != tenant_id:
+            raise ControlPlaneError("CROSS_TENANT_FORBIDDEN", "Selection belongs to another tenant", 403)
+
+        selected_shot_ids = set(json.loads(sel_row["selected_shot_ids_json"]))
+        run_data = json.loads(gal_row["run_json"])
+        selected_candidates = [
+            c for c in run_data["candidates"] if c["shot_id"] in selected_shot_ids and c.get("quality_passed", False)
+        ]
+
+        try:
+            return self._photobook_engine.compile_photobook_layout_manifest(
+                manifest_id=manifest_id,
+                tenant_id=tenant_id,
+                actor_id=actor_id,
+                project_id=gal_row["project_id"],
+                gallery_id=gallery_id,
+                selection_id=selection_id,
+                template_id=gal_row["template_id"],
+                selected_candidates=selected_candidates,
+                title=title,
+                subtitle=subtitle,
+                sku_code=sel_row["photobook_sku"] or "PHOTO_BOOK_HARDCOVER_0_100",
+                voice_qr_url=voice_qr_url,
+                audio_duration_seconds=audio_duration_seconds,
+                custom_face_bbox_override_mm=custom_face_bbox_override_mm,
+                custom_cmyk_tac_override=custom_cmyk_tac_override,
+                expected_version=expected_version,
+            )
+        except PhotobookEngineError as exc:
             raise ControlPlaneError(exc.code, exc.message, exc.status_code) from exc
 
     def evaluate_frame_quality(
