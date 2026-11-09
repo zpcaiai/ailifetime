@@ -9,8 +9,8 @@
     <!-- 英雄主视觉卡片 -->
     <view class="card hero-card">
       <view class="hero-header">
-        <text class="hero-title">看见 0—100 岁的自己与家人</text>
-        <text class="hero-subtitle">9 大高定人像模板 (v2.3.0) · 每套 10 张多景别分镜 · 4 阶物理级皮肤光影 · 20 页蝴蝶对裱有声相册</text>
+        <text class="hero-title">看见 0—100 岁的自己与世界名胜旅拍</text>
+        <text class="hero-subtitle">10 大高定系列 (v2.4.0) · 独立「世界名胜古迹 50 张」实景合成 · 4 阶物理级光影 · 20 页蝴蝶对裱有声相册</text>
       </view>
 
       <view class="age-pillars">
@@ -48,6 +48,46 @@
           </text>
         </view>
         <text class="scene-tag">{{ tpl.badge }}</text>
+      </view>
+    </view>
+
+    <!-- 独立分类：世界名胜古迹 · 100 张环球奇观实景合成模板库 -->
+    <view class="card">
+      <view class="section-title">
+        世界名胜古迹 · 100 张环球旅拍实景模板库（上传本人照片合成 · 透视与阳光自动匹配）
+      </view>
+      <view class="pill-wrap">
+        <text
+          class="filter-pill"
+          :class="{ active: selectedLandmarkRegion === 'all' }"
+          @click="selectedLandmarkRegion = 'all'"
+        >
+          全部名胜 (100张)
+        </text>
+        <text
+          v-for="reg in landmarkRegions"
+          :key="reg.region_id"
+          class="filter-pill"
+          :class="{ active: selectedLandmarkRegion === reg.region_id }"
+          @click="selectedLandmarkRegion = reg.region_id"
+        >
+          {{ reg.badge }} · {{ reg.name.split('与')[0] }}
+        </text>
+      </view>
+      <view
+        v-for="lmk in filteredLandmarks"
+        :key="lmk.landmark_id"
+        class="scene-item"
+        @click="goToStudio('tpl_xhs_world_landmarks_50_global')"
+      >
+        <view class="scene-main">
+          <text class="scene-name">#{{ String(lmk.index_number).padStart(3, '0') }} {{ lmk.name }}</text>
+          <text class="scene-summary">{{ lmk.country_and_city }} · {{ lmk.subtitle }}</text>
+          <text class="scene-optics">
+            {{ lmk.focal_length_mm }}mm {{ lmk.aperture }} · 视平线Y={{ lmk.horizon_y_ratio }} · 太阳高度角{{ lmk.solar_elevation_deg }}° ({{ lmk.sky_color_temp_kelvin }}K) · 足底阴影={{ lmk.ground_contact_shadow_opacity }}
+          </text>
+        </view>
+        <text class="scene-tag">{{ lmk.unesco_code }}</text>
       </view>
     </view>
 
@@ -115,13 +155,19 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { AI_SIMULATION_DISCLOSURE, type PortraitTemplateSpec } from '@ailifetime/contracts';
+import {
+  AI_SIMULATION_DISCLOSURE,
+  type PortraitTemplateSpec,
+  type WorldLandmarkRegionId,
+} from '@ailifetime/contracts';
 import {
   apiClient,
   BUILTIN_PORTRAIT_TEMPLATES,
   TIMECAPSULE_CATEGORIES,
   TIMECAPSULE_STYLES,
   TIMECAPSULE_TEMPLATES,
+  WORLD_LANDMARK_50_TEMPLATES,
+  WORLD_LANDMARK_REGIONS,
   setPreferredTemplateId,
   setPreferredTimeCapsuleSelection,
 } from '../../services/api';
@@ -144,6 +190,17 @@ const ageMilestones = [
 ];
 
 const builtinTemplates = ref<PortraitTemplateSpec[]>(BUILTIN_PORTRAIT_TEMPLATES);
+const landmarkRegions = ref(WORLD_LANDMARK_REGIONS);
+const selectedLandmarkRegion = ref<WorldLandmarkRegionId | 'all'>('all');
+const filteredLandmarks = computed(() => {
+  if (selectedLandmarkRegion.value === 'all') {
+    return WORLD_LANDMARK_50_TEMPLATES;
+  }
+  return WORLD_LANDMARK_50_TEMPLATES.filter(
+    (item) => item.region_id === selectedLandmarkRegion.value
+  );
+});
+
 const tcCategories = ref(TIMECAPSULE_CATEGORIES);
 const tcStyles = ref(TIMECAPSULE_STYLES);
 const tcTemplates = ref(TIMECAPSULE_TEMPLATES);

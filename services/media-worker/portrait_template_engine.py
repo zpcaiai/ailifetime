@@ -2099,11 +2099,217 @@ def build_builtin_portrait_templates() -> list[PortraitTemplateSpec]:
                 backdrop_theme="natural golden-hour botanical bokeh evolving from spring sprouts to winter snow",
             ),
         ),
+        # 10. 世界名胜古迹·100大环球奇观实景旅拍（独立「世界名胜古迹」分类 · 支持上传本人照片合成100张著名景点）
+        PortraitTemplateSpec(
+            template_id="tpl_xhs_world_landmarks_50_global",
+            version="2.4.0",
+            name="世界名胜古迹·100大环球奇观实景旅拍",
+            subtitle="35mm/50mm 透视地平线对齐 · 环境 HDR IBL 物理重打光 · 足底接触阴影与大气景深",
+            category="world-landmarks",
+            badge="环球旅拍 · 100大名胜",
+            status="active",
+            max_participants=4,
+            min_age=1,
+            max_age=100,
+            min_curated_shots=MIN_CURATED_SHOTS_PER_TEMPLATE,
+            recommended_ages=[6, 12, 18, 22, 28, 35, 45, 58, 72, 85],
+            curated_gallery_shots=[
+                CuratedShotSpec(
+                    shot_id="lnd_shot_01_06y_forbidden_city",
+                    shot_index=1,
+                    target_age=6,
+                    title="镜头01 · 故宫太和殿丹陛红墙（北京）",
+                    framing_and_angle="50mm f/2.8 视平线Y=0.46 汉白玉望柱旁微侧身回眸",
+                    lighting_key_ratio="IC-Light 紫禁城晨光 IBL (4800K, 太阳高度角28°) + 朱红宫墙漫反射柔补",
+                    lens_dof_cue="前中后景呈现宫墙与琉璃飞檐自然光学散景，消除抠图贴纸感",
+                    craniofacial_and_dermal_focus="锁定面部骨相与真实皮肤透光质感，匹配户外晨曦色温",
+                    wardrobe_fabric_cue="新中式立领桑蚕丝外套，色彩与朱红宫墙冷暖呼应",
+                    backdrop_prop_cue="故宫太和殿重檐庑殿顶鎏金琉璃瓦与汉白玉雕栏实景",
+                    micro_expression_cue="纯真好奇的清澈眼神与自然微笑",
+                    default_selected=True,
+                ),
+                CuratedShotSpec(
+                    shot_id="lnd_shot_02_12y_great_wall",
+                    shot_index=2,
+                    target_age=12,
+                    title="镜头02 · 万里长城慕田峪云海敌楼（北京）",
+                    framing_and_angle="35mm f/2.8 视平线Y=0.38 手扶青砖垛口远眺层峦",
+                    lighting_key_ratio="金色山脊侧逆光 (4500K, 太阳高度角22°) + 云海漫反射环境光",
+                    lens_dof_cue="蜿蜒长城马道向远山晨雾自然景深递减，大气透视空气雾度0.22",
+                    craniofacial_and_dermal_focus="侧逆光勾勒立体鼻梁与少年发丝金边",
+                    wardrobe_fabric_cue="户外机能风衣配暖色围巾，随山风自然微扬",
+                    backdrop_prop_cue="慕田峪长城明代敌楼、青砖垛口与晨雾群山",
+                    micro_expression_cue="迎向山风的蓬勃朝气与自信神采",
+                    default_selected=True,
+                ),
+                CuratedShotSpec(
+                    shot_id="lnd_shot_03_18y_eiffel_tower",
+                    shot_index=3,
+                    target_age=18,
+                    title="镜头03 · 巴黎埃菲尔铁塔夏乐宫晨光（法国）",
+                    framing_and_angle="50mm f/2.0 视平线Y=0.48 夏乐宫大理石露台黄金分割位",
+                    lighting_key_ratio="巴黎塞纳河柔和晨光 IBL (4600K) + 奶油色石材地面漫反射补光",
+                    lens_dof_cue="f/2.0 大光圈将铁塔镂空钢结构化作细腻奶油焦外而保持高辨识度",
+                    craniofacial_and_dermal_focus="清透细腻的青年胶原肌理与明亮眼神光",
+                    wardrobe_fabric_cue="法式经典卡其色风衣配丝质方巾",
+                    backdrop_prop_cue="埃菲尔铁塔全貌、塞纳河岸树影与奥斯曼建筑天际线",
+                    micro_expression_cue="法式电影般的松弛浪漫微笑",
+                    default_selected=True,
+                ),
+                CuratedShotSpec(
+                    shot_id="lnd_shot_04_22y_santorini_oia",
+                    shot_index=4,
+                    target_age=22,
+                    title="镜头04 · 圣托里尼伊亚蓝顶教堂爱琴海（希腊）",
+                    framing_and_angle="35mm f/2.4 视平线Y=0.42 纯白露台俯瞰火山口蔚蓝海湾",
+                    lighting_key_ratio="爱琴海澄澈晴空光 (5200K) + 纯白洞穴屋360度天然漫反射柔光",
+                    lens_dof_cue="近处九重葛花簇微虚，中景人物锐利，远景蓝顶教堂与海面通透",
+                    craniofacial_and_dermal_focus="阳光下真实的健康肤色光泽与清晰睫毛投影",
+                    wardrobe_fabric_cue="海岛度假风纯白亚麻衬衫，随爱琴海微风轻扬",
+                    backdrop_prop_cue="圣托里尼三座钴蓝圆顶教堂、纯白阶梯与深蓝爱琴海",
+                    micro_expression_cue="灿烂舒展的度假笑意",
+                    default_selected=True,
+                ),
+                CuratedShotSpec(
+                    shot_id="lnd_shot_05_28y_giza_pyramids",
+                    shot_index=5,
+                    target_age=28,
+                    title="镜头05 · 吉萨胡夫大金字塔与狮身人面像（埃及）",
+                    framing_and_angle="50mm f/2.8 视平线Y=0.45 吉萨高原砂岩台地C位主图",
+                    lighting_key_ratio="尼罗河西岸黄金时刻斜阳 (4000K, 太阳高度角22°) + 金色沙地暖调反射",
+                    lens_dof_cue="真实足底接触阴影(0.90)与大漠热浪空气透视，三大金字塔恢弘列阵",
+                    craniofacial_and_dermal_focus="1:1 黄金锚点最高身份锁定，立体受光骨相与微距皮肤纹理",
+                    wardrobe_fabric_cue="亚麻猎装夹克配复古宽檐遮阳帽",
+                    backdrop_prop_cue="胡夫大金字塔巨石阵列、斯芬克斯巨像与金色大漠夕照",
+                    micro_expression_cue="跨越四千五百年古文明的深邃平视目光",
+                    default_selected=True,
+                ),
+                CuratedShotSpec(
+                    shot_id="lnd_shot_06_35y_kyoto_fuji",
+                    shot_index=6,
+                    target_age=35,
+                    title="镜头06 · 京都五重塔春樱与富士山冠雪（日本）",
+                    framing_and_angle="85mm f/1.8 视平线Y=0.45 染井吉野樱花枝下微侧身",
+                    lighting_key_ratio="春日晴空柔光 (5000K) + 粉白樱花花瓣漫反射眼神光",
+                    lens_dof_cue="85mm 中长焦空间压缩感让冠雪富士山与五重塔同框，前景樱花柔焦",
+                    craniofacial_and_dermal_focus="成熟温润的面部折叠度与自然眼尾卧蚕",
+                    wardrobe_fabric_cue="日系极简浅米色羊绒风衣或传统手工羽织",
+                    backdrop_prop_cue="五重塔朱红飞檐、漫天春樱与富士山白雪峰顶",
+                    micro_expression_cue="沉静内敛的东方温和笑意",
+                    default_selected=True,
+                ),
+                CuratedShotSpec(
+                    shot_id="lnd_shot_07_45y_machu_picchu",
+                    shot_index=7,
+                    target_age=45,
+                    title="镜头07 · 马丘比丘安第斯云端印加遗址（秘鲁）",
+                    framing_and_angle="35mm f/2.8 视平线Y=0.40 守护者小屋石阶俯瞰云海古城",
+                    lighting_key_ratio="海拔2430米云林破晓天光 (5200K) + 花岗岩湿润漫反射",
+                    lens_dof_cue="印加干砌石墙纹理清晰，远方瓦伊纳比丘峰环绕流动云雾",
+                    craniofacial_and_dermal_focus="紧致下颌线与45岁阅历沉淀的笃定神态",
+                    wardrobe_fabric_cue="秘鲁羊驼毛（Alpaca）几何织纹披肩配徒步外套",
+                    backdrop_prop_cue="马丘比丘花岗岩神庙、翠绿梯田与瓦伊纳比丘奇峰",
+                    micro_expression_cue="历经山河后的开阔与从容",
+                    default_selected=True,
+                ),
+                CuratedShotSpec(
+                    shot_id="lnd_shot_08_58y_rome_colosseum",
+                    shot_index=8,
+                    target_age=58,
+                    title="镜头08 · 罗马斗兽场帝国古拱廊夕照（意大利）",
+                    framing_and_angle="50mm f/2.2 视平线Y=0.47 鹅卵石古道45度侧颜回眸",
+                    lighting_key_ratio="永恒之城落日琥珀金光 (4100K) 穿过三层科林斯石拱",
+                    lens_dof_cue="石板路接触阴影自然延伸，古罗马石灰华石拱与伞松柔和虚化",
+                    craniofacial_and_dermal_focus="儒雅鬓角微霜与富有故事感的眼周纹理",
+                    wardrobe_fabric_cue="意式高定亚麻西装外套配真丝口袋巾",
+                    backdrop_prop_cue="罗马斗兽场三层古拱门、鹅卵石御道与落日金晖",
+                    micro_expression_cue="儒雅睿智的微笑",
+                    default_selected=True,
+                ),
+                CuratedShotSpec(
+                    shot_id="lnd_shot_09_72y_swiss_jungfrau",
+                    shot_index=9,
+                    target_age=72,
+                    title="镜头09 · 瑞士少女峰阿尔卑斯雪山列车（瑞士）",
+                    framing_and_angle="50mm f/2.8 视平线Y=0.44 温根木屋露台手捧热咖啡特写",
+                    lighting_key_ratio="阿尔卑斯万年冰川雪面反射柔光 (5700K) 提亮银发与眼神光",
+                    lens_dof_cue="雪山反射光带来极佳通透感，背后红色齿轮列车与雪峰层次分明",
+                    craniofacial_and_dermal_focus="蓬松真实的银白发丝质感与慈祥舒展的放射状笑纹",
+                    wardrobe_fabric_cue="高定羊绒雪山度假毛衣配格纹围巾",
+                    backdrop_prop_cue="少女峰与艾格峰皑皑白雪、红色登山齿轮列车与草甸木屋",
+                    micro_expression_cue="幸福安宁的慈祥笑意",
+                    default_selected=True,
+                ),
+                CuratedShotSpec(
+                    shot_id="lnd_shot_10_85y_iceland_aurora",
+                    shot_index=10,
+                    target_age=85,
+                    title="镜头10 · 冰岛杰古沙龙冰河湖极光黑沙滩（冰岛 · 第十张典藏）",
+                    framing_and_angle="35mm f/1.8 视平线Y=0.45 钻石黑沙滩千年蓝冰旁仰望极光",
+                    lighting_key_ratio="夜空祖母绿极光漫射 + 晶莹浮冰环境折射光 (4600K)",
+                    lens_dof_cue="f/1.8 大光圈收录漫天舞动的欧若拉绿带与黑沙滩冰晶反光",
+                    craniofacial_and_dermal_focus="通透银发与澄澈双眸映照出极光星河",
+                    wardrobe_fabric_cue="冰岛传统几何提花羊毛衣（Lopapeysa）配防寒派克大衣",
+                    backdrop_prop_cue="杰古沙龙冰河湖千年蓝冰、火山黑沙滩与绿色北极光",
+                    micro_expression_cue="看遍世界奇观后的豁达与超然",
+                    default_selected=False,
+                ),
+            ],
+            supported_aspect_ratios=["3:4", "4:5", "1:1", "9:16"],
+            default_aspect_ratio="3:4",
+            required_consents=["age-transformation", "portrait-generation"],
+            provider_capabilities=["instantid-v2", "pulid-flux-pro", "ic-light-ibl-v2", "horizon-perspective-align"],
+            cost_tier="premium-landmark-50",
+            allowed_channels=["mp-xhs", "mp-weixin", "consumer-web", "mobile", "studio"],
+            competitive_highlights=[
+                "内置完整 100 张世界各地名胜古迹实景照片底板（涵盖华夏古建、欧洲古典、亚太奇观、中东非古文明、美洲与极地各 20 张）",
+                "透视地平线对齐（Horizon Vanishing-Point Alignment）+ 足底真实接触阴影，彻底告别生硬抠图与脚底悬空贴纸感",
+                "IC-Light 环境 HDR IBL 物理重打光：自动提取景点太阳方位角、高度角与天空色温，将真实阳光/夕阳/极光反射到人物脸部与衣领",
+            ],
+            optics_and_lighting=OpticsAndLightingSpec(
+                focal_length_mm=35,
+                aperture="f/2.2",
+                framing="environmental travel portrait with matched horizon vanishing point and natural landmark bokeh",
+                lighting_setup="IC-Light environment HDR IBL solar azimuth/elevation relighting + ground bounce fill",
+                color_science="Kodak Portra 400 & Ektar 100 Global Travel Color Science with atmospheric haze integration",
+                skin_texture_policy="outdoor natural sunlight subsurface scattering with real pores and matched ambient color temperature",
+                film_grain_profile="fine 35mm travel documentary silver-halide grain",
+            ),
+            identity_preservation=IdentityPreservationSpec(
+                identity_adapter="multi-photo-3d-landmark-lock-v2",
+                craniofacial_anchor_weight=0.94,
+                eye_geometry_lock=0.95,
+                skin_undertone_lock=0.93,
+                expression_naturalness_weight=0.94,
+            ),
+            quality_thresholds=QualityGateThresholdSpec(
+                min_identity_similarity=0.84,
+                max_facial_drift=0.14,
+                min_age_plausibility=0.86,
+                min_pose_background_coherence=0.89,
+                min_artifact_free_score=0.92,
+                min_sharpness_score=0.86,
+                min_aesthetic_score=0.89,
+                max_auto_retries=2,
+            ),
+            negative_constraints=[
+                *ANTI_PLASTIC_NEGATIVE_CONSTRAINTS,
+                "flat cardboard cutout paste effect",
+                "mismatched horizon vanishing point",
+                "floating feet without ground contact shadow",
+                "inconsistent sunlight direction between face and landmark",
+            ],
+            age_band_recipes=_build_standard_age_band_recipes(
+                wardrobe_theme="culturally and climatically matched travel outfits (silk, trench coat, linen safari, cashmere)",
+                backdrop_theme="50 world-famous UNESCO landmarks with matched perspective horizon, HDR IBL sunlight, and contact shadows",
+            ),
+        ),
     ]
 
 
 LEGACY_TEMPLATE_ALIASES: dict[str, str] = {
     "tpl_xhs_0_100_timeline": "tpl_xhs_silver_halide_0_100",
+    "tpl_xhs_world_landmarks_100_global": "tpl_xhs_world_landmarks_50_global",
 }
 
 
@@ -2600,6 +2806,15 @@ class PortraitTemplateEngine:
             cfg_scale = 5.2
             print_bleed_mm = 0
             cmyk_profile = "Display_P3_sRGB_Safe"
+        elif tpl.template_id == "tpl_xhs_world_landmarks_50_global":
+            provider_id = "flux-landmark-ibl-compositor-v2"
+            fallback_provider_id = "flux-pro-pulid-studio-v2"
+            model_id = "flux-1-pro-world-landmark-ibl-50"
+            sampler = "dpmpp_2m_sde_karras"
+            steps = 36
+            cfg_scale = 5.4
+            print_bleed_mm = 3
+            cmyk_profile = "ISOcoated_v2_300_eci.icc"
         else:
             provider_id = "flux-pro-pulid-studio-v2"
             fallback_provider_id = "instantid-sdxl-rembrandt-v2"
@@ -3449,10 +3664,10 @@ class PortraitTemplateEngine:
                 f"Template {tpl.template_id} does not support aspect ratio {aspect_ratio}; supported: {tpl.supported_aspect_ratios}",
                 400,
             )
-        if not timeline_ages or len(timeline_ages) > 21:
+        if not timeline_ages or len(timeline_ages) > 50:
             raise TemplateEngineError(
                 "INVALID_TIMELINE_AGES",
-                "timeline_ages must contain between 1 and 21 age nodes",
+                "timeline_ages must contain between 1 and 50 age nodes",
                 400,
             )
         for age in timeline_ages:

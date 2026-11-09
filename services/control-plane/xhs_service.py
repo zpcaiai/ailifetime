@@ -48,6 +48,12 @@ from portrait_template_engine import (  # noqa: E402
     TemplateEngineError,
     TimelineGenerationPlan,
 )
+from world_landmark_engine import (  # noqa: E402
+    LandmarkEngineError,
+    LandmarkSynthesisRunRecord,
+    WorldLandmarkCompositorEngine,
+    WorldLandmarkPhotoSpec,
+)
 from services.timecapsule.db_and_identity import TimeCapsuleError  # noqa: E402
 from services.timecapsule.http_server import TimeCapsuleApplication  # noqa: E402
 
@@ -132,6 +138,7 @@ class XhsControlPlaneService:
         self._init_schema()
         self._template_engine = PortraitTemplateEngine(db_path=db_path)
         self._photobook_engine = PhotobookLayoutEngine(conn=self._conn)
+        self._landmark_engine = WorldLandmarkCompositorEngine(db_path=db_path)
         self._timecapsule_app = TimeCapsuleApplication(db_path=db_path)
 
     def _init_schema(self) -> None:
@@ -501,6 +508,62 @@ class XhsControlPlaneService:
                 expected_version=expected_version,
             )
         except PhotobookEngineError as exc:
+            raise ControlPlaneError(exc.code, exc.message, exc.status_code) from exc
+
+    @property
+    def landmark_engine(self) -> WorldLandmarkCompositorEngine:
+        return self._landmark_engine
+
+    def list_world_landmark_regions(self) -> list[dict[str, str]]:
+        """List the 5 global geographic regions for the 50 World Landmark templates."""
+        return self._landmark_engine.list_regions()
+
+    def list_world_landmarks(self, *, region_id: str | None = None) -> list[WorldLandmarkPhotoSpec]:
+        """List all 50 world landmark photo templates (or 10 for a specific region)."""
+        return self._landmark_engine.list_landmarks(region_id=region_id)
+
+    def get_world_landmark(self, landmark_id: str) -> WorldLandmarkPhotoSpec:
+        """Retrieve a single world landmark photo template specification."""
+        try:
+            return self._landmark_engine.get_landmark(landmark_id)
+        except LandmarkEngineError as exc:
+            raise ControlPlaneError(exc.code, exc.message, exc.status_code) from exc
+
+    def synthesize_user_at_world_landmarks(
+        self,
+        *,
+        tenant_id: str = "tenant_cn_b2c",
+        project_id: str,
+        actor_id: str = "act_01",
+        source_asset_ids: list[str],
+        landmark_ids: list[str] | None = None,
+        region_id: str | None = None,
+        side_profile_asset_id: str | None = None,
+        target_age: int = 28,
+        aspect_ratio: str = "3:4",
+        participant_count: int = 1,
+        custom_wardrobe_note: str = "",
+    ) -> LandmarkSynthesisRunRecord:
+        """
+        Composite user's uploaded photo(s) into 1..50 world-famous landmark scenes
+        with perspective horizon alignment, IC-Light environment HDR IBL relighting,
+        and ground contact shadow integration.
+        """
+        try:
+            return self._landmark_engine.synthesize_user_at_landmarks(
+                tenant_id=tenant_id,
+                project_id=project_id,
+                actor_id=actor_id,
+                source_asset_ids=source_asset_ids,
+                landmark_ids=landmark_ids,
+                region_id=region_id,
+                side_profile_asset_id=side_profile_asset_id,
+                target_age=target_age,
+                aspect_ratio=aspect_ratio,
+                participant_count=participant_count,
+                custom_wardrobe_note=custom_wardrobe_note,
+            )
+        except LandmarkEngineError as exc:
             raise ControlPlaneError(exc.code, exc.message, exc.status_code) from exc
 
     def evaluate_frame_quality(

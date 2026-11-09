@@ -262,6 +262,103 @@
       </button>
     </view>
 
+    <!-- 独立分类工作台：世界名胜古迹 100 张实景旅拍合成 (上传本人照片合成全球著名景点) -->
+    <view class="card">
+      <view class="step-header">
+        <text class="step-title">世界名胜古迹 · 100 张实景合成工作台 (独立分类)</text>
+        <text class="step-sub">透视地平线对齐 + IC-Light 太阳重打光 + 足底阴影</text>
+      </view>
+
+      <view class="form-row">
+        <text class="form-label">1. 按全球五大洲/文化区筛选名胜古迹模板：</text>
+        <view class="pill-group">
+          <text
+            class="choice-pill"
+            :class="{ active: selectedLandmarkRegion === 'all' }"
+            @click="selectedLandmarkRegion = 'all'"
+          >
+            全球 100 张名胜
+          </text>
+          <text
+            v-for="reg in landmarkRegions"
+            :key="reg.region_id"
+            class="choice-pill"
+            :class="{ active: selectedLandmarkRegion === reg.region_id }"
+            @click="selectedLandmarkRegion = reg.region_id"
+          >
+            {{ reg.badge }}
+          </text>
+        </view>
+      </view>
+
+      <view class="form-row">
+        <text class="form-label">2. 快捷选择合成景点组合（已勾选 {{ selectedLandmarkIds.length }} / 100 张）：</text>
+        <view class="pill-group">
+          <text class="choice-pill active" @click="selectDefaultTenLandmarks">
+            推荐全球10大代表名胜 (10选9九宫格)
+          </text>
+          <text class="choice-pill" @click="selectCurrentRegionLandmarks">
+            勾选当前分区全部 ({{ filteredStudioLandmarks.length }}张)
+          </text>
+          <text class="choice-pill" @click="selectAllFiftyLandmarks">
+            一键全选全球 100 张名胜古迹
+          </text>
+        </view>
+      </view>
+
+      <view class="form-row">
+        <view class="pill-group">
+          <text
+            v-for="lmk in filteredStudioLandmarks"
+            :key="lmk.landmark_id"
+            class="choice-pill"
+            :class="{ active: selectedLandmarkIds.includes(lmk.landmark_id) }"
+            @click="toggleLandmarkSelection(lmk.landmark_id)"
+          >
+            #{{ String(lmk.index_number).padStart(3, '0') }} {{ lmk.name.split('·')[0] }} ({{ lmk.country_and_city.split(' · ')[0] }})
+          </text>
+        </view>
+      </view>
+
+      <button class="btn-primary" @click="handleSynthesizeWorldLandmarks">
+        上传照片合成我的世界名胜实景大片 (已选 {{ selectedLandmarkIds.length }} 张景点)
+      </button>
+
+      <view v-if="landmarkSynthesisRun" style="margin-top: 20rpx">
+        <view class="curation-summary-bar">
+          <text class="curation-summary-title">
+            实景旅拍合成完成 ({{ landmarkSynthesisRun.synthesis_run_id }}): 已生成 {{ landmarkSynthesisRun.passed_landmarks }} / {{ landmarkSynthesisRun.total_landmarks }} 张世界名胜实景大片（全部通过透视地平线与足底阴影校验）
+          </text>
+        </view>
+        <view class="frames-grid">
+          <view
+            v-for="item in landmarkSynthesisRun.items"
+            :key="item.synthesis_item_id"
+            class="frame-card curated"
+          >
+            <view class="frame-top-row">
+              <text class="frame-Age">#{{ String(item.landmark_index).padStart(3, '0') }} {{ item.landmark_name }}</text>
+              <text class="curation-tag selected">{{ item.unesco_code }}</text>
+            </view>
+            <view class="frame-era-row">
+              <text class="era-pill">{{ item.country_and_city }} · {{ item.region_label }}</text>
+              <text class="era-pill">{{ formatShotScaleLabel(item.shot_scale) }}</text>
+              <text class="era-pill">{{ formatGridPositionLabel(item.nine_grid_position) }}</text>
+            </view>
+            <view class="frame-optics">透视与镜头：{{ item.camera_optics_summary }}</view>
+            <view class="frame-wardrobe">环境太阳重打光：{{ item.relighting_ibl_summary }}</view>
+            <view class="frame-wardrobe">接触阴影与空气透视：{{ item.ground_shadow_and_haze_summary }}</view>
+            <view class="score-row">
+              <text class="score-pill">身份一致: {{ item.identity_similarity }}</text>
+              <text class="score-pill">透视融合: {{ item.pose_background_coherence }}</text>
+              <text class="score-pill">审美可用: {{ item.aesthetic_score }}</text>
+            </view>
+            <view class="frame-watermark">{{ item.ai_watermark_text }}</view>
+          </view>
+        </view>
+      </view>
+    </view>
+
     <!-- 一生拾忆时光机 P04/P08: 20 首发模板 × 5 风格确定性排版与 GB 45438 双标识导出 -->
     <view class="card">
       <view class="step-header">
@@ -509,28 +606,34 @@ import type {
   CuratedGallerySelectionReceipt,
   GenerationJob,
   GrantorCapacity,
+  LandmarkSynthesisRunRecord,
   NineGridPosition,
   PhotobookLayoutManifest,
   PortraitTemplateSpec,
   Share,
   ShotScale,
   UploadSession,
+  WorldLandmarkRegionId,
 } from '@ailifetime/contracts';
 import {
   apiClient,
   BUILTIN_PORTRAIT_TEMPLATES,
   TIMECAPSULE_STYLES,
   TIMECAPSULE_TEMPLATES,
+  WORLD_LANDMARK_50_TEMPLATES,
+  WORLD_LANDMARK_REGIONS,
   compilePhotobookLayoutManifest,
   getCurrentPlatformChannel,
   getPreferredTemplateId,
   getPreferredTimeCapsuleSelection,
   getTrackedShare,
+  listWorldLandmarks,
   purgeEphemeralMediaCache,
   renderAndExportTimeCapsuleCard,
   saveCuratedGallerySelection,
   setPreferredTemplateId,
   setPreferredTimeCapsuleSelection,
+  synthesizeUserAtWorldLandmarks,
   type TimeCapsuleCardRenderResult,
 } from '../../services/api';
 import {
@@ -616,6 +719,80 @@ const photobookManifest = ref<PhotobookLayoutManifest | null>(null);
 const activeShare = ref<Share | null>(null);
 const checkoutResult = ref<CheckoutSession | null>(null);
 const showCompiledPrompts = ref(false);
+
+const landmarkRegions = ref(WORLD_LANDMARK_REGIONS);
+const selectedLandmarkRegion = ref<WorldLandmarkRegionId | 'all'>('all');
+const filteredStudioLandmarks = computed(() =>
+  listWorldLandmarks(selectedLandmarkRegion.value)
+);
+const DEFAULT_TEN_LANDMARK_IDS = [
+  'lmk_001_forbidden_city_taihedian',
+  'lmk_002_great_wall_mutianyu',
+  'lmk_011_paris_eiffel_trocadero',
+  'lmk_014_santorini_oia_blue_domes',
+  'lmk_031_egypt_giza_pyramids_sphinx',
+  'lmk_021_japan_kyoto_fuji_sakura',
+  'lmk_041_peru_machu_picchu_andes',
+  'lmk_012_rome_colosseum_golden_hour',
+  'lmk_018_swiss_jungfrau_alps',
+  'lmk_049_iceland_jokulsarlon_aurora',
+];
+const selectedLandmarkIds = ref<string[]>([...DEFAULT_TEN_LANDMARK_IDS]);
+const landmarkSynthesisRun = ref<LandmarkSynthesisRunRecord | null>(null);
+
+function toggleLandmarkSelection(landmarkId: string) {
+  if (selectedLandmarkIds.value.includes(landmarkId)) {
+    if (selectedLandmarkIds.value.length > 1) {
+      selectedLandmarkIds.value = selectedLandmarkIds.value.filter(
+        (id) => id !== landmarkId
+      );
+    }
+  } else {
+    selectedLandmarkIds.value = [...selectedLandmarkIds.value, landmarkId];
+  }
+}
+
+function selectDefaultTenLandmarks() {
+  selectedLandmarkIds.value = [...DEFAULT_TEN_LANDMARK_IDS];
+}
+
+function selectCurrentRegionLandmarks() {
+  selectedLandmarkIds.value = filteredStudioLandmarks.value.map(
+    (item) => item.landmark_id
+  );
+}
+
+function selectAllFiftyLandmarks() {
+  selectedLandmarkIds.value = WORLD_LANDMARK_50_TEMPLATES.map(
+    (item) => item.landmark_id
+  );
+}
+
+function handleSynthesizeWorldLandmarks() {
+  if (!consentReceipt.value || !uploadSession.value) {
+    uni.showToast({
+      title: '请先完成第 1 步逐人授权与第 2 步上传本人照片',
+      icon: 'none',
+    });
+    return;
+  }
+  const assetId = uploadSession.value.asset_id;
+  landmarkSynthesisRun.value = synthesizeUserAtWorldLandmarks({
+    project_id: activeProjectId.value || `proj_lmk_${Date.now()}`,
+    source_asset_ids: [assetId],
+    side_profile_asset_id: enableSideProfileAnchor.value
+      ? `${assetId}_side45`
+      : null,
+    landmark_ids: selectedLandmarkIds.value,
+    target_age: currentAgeAnchor.value,
+    aspect_ratio: selectedAspectRatio.value,
+    participant_count: participantCount.value,
+  });
+  uni.showToast({
+    title: `已合成 ${landmarkSynthesisRun.value.total_landmarks} 张世界名胜大片`,
+    icon: 'success',
+  });
+}
 
 function formatRatioLabel(ratio: AspectRatio): string {
   const labels: Record<AspectRatio, string> = {

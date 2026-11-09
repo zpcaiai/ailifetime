@@ -157,7 +157,7 @@ class XhsControlPlaneTests(unittest.TestCase):
 
     def test_b08_builtin_portrait_templates_catalog_and_draft_optimistic_locking(self) -> None:
         templates = self.svc.list_portrait_templates(channel="mp-xhs")
-        self.assertEqual(len(templates), 9)
+        self.assertEqual(len(templates), 10)
         template_ids = [t.template_id for t in templates]
         self.assertIn("tpl_xhs_silver_halide_0_100", template_ids)
         self.assertIn("tpl_xhs_oriental_aesthetics_portrait", template_ids)
@@ -168,6 +168,7 @@ class XhsControlPlaneTests(unittest.TestCase):
         self.assertIn("tpl_xhs_three_generations_heirloom", template_ids)
         self.assertIn("tpl_xhs_vogue_editorial_bw", template_ids)
         self.assertIn("tpl_xhs_24_solar_terms_poetic", template_ids)
+        self.assertIn("tpl_xhs_world_landmarks_50_global", template_ids)
 
         # Legacy template ID alias compatibility
         legacy_resolved = self.svc.get_portrait_template("tpl_xhs_0_100_timeline")
@@ -399,9 +400,9 @@ class XhsControlPlaneTests(unittest.TestCase):
 
     def test_v22_every_template_has_at_least_9_curated_shots_and_physiological_era_matrix(self) -> None:
         templates = self.svc.list_portrait_templates(channel="mp-xhs")
-        self.assertEqual(len(templates), 9)
+        self.assertEqual(len(templates), 10)
         for tpl in templates:
-            self.assertEqual(tpl.version, "2.3.0")
+            self.assertIn(tpl.version, ("2.3.0", "2.4.0"))
             self.assertGreaterEqual(tpl.min_curated_shots, 9)
             self.assertGreaterEqual(len(tpl.recommended_ages), 9)
             self.assertEqual(len(tpl.recommended_ages), 10)
@@ -627,6 +628,73 @@ class XhsControlPlaneTests(unittest.TestCase):
                 voice_qr_url="https://phishing.example.com/audio",
             )
         self.assertEqual(qr_ctx.exception.code, "UNSAFE_VOICE_QR_DOMAIN")
+
+    def test_v24_world_landmarks_50_catalog_and_user_photo_synthesis(self) -> None:
+        # 1. Verify 5 global geographic regions and 100 distinct world landmark templates (20 per region)
+        regions = self.svc.list_world_landmark_regions()
+        self.assertEqual(len(regions), 5)
+        all_landmarks = self.svc.list_world_landmarks()
+        self.assertEqual(len(all_landmarks), 100)
+
+        for r in regions:
+            reg_landmarks = self.svc.list_world_landmarks(region_id=r["region_id"])
+            self.assertEqual(len(reg_landmarks), 20)
+            for lmk in reg_landmarks:
+                self.assertTrue(lmk.reference_photo_uri.startswith("https://cdn.ailifetime.cn/landmarks/100/"))
+                self.assertGreater(lmk.ground_contact_shadow_opacity, 0.70)
+                self.assertTrue(lmk.unesco_code.startswith("UNESCO-"))
+
+        # 2. Verify dedicated world-landmarks category in PortraitTemplateEngine
+        landmark_tpl = self.svc.get_portrait_template("tpl_xhs_world_landmarks_50_global")
+        self.assertEqual(landmark_tpl.category, "world-landmarks")
+        self.assertEqual(landmark_tpl.version, "2.4.0")
+        self.assertEqual(len(landmark_tpl.curated_gallery_shots), 10)
+
+        # 3. Synthesize user's uploaded photo across all 100 world landmarks with 45-deg side profile 3D anchor
+        run_100 = self.svc.synthesize_user_at_world_landmarks(
+            project_id="proj_world_100_tour",
+            actor_id="act_traveler_01",
+            source_asset_ids=["asset_user_frontal_selfie_01"],
+            side_profile_asset_id="asset_user_side_45deg_01",
+            target_age=28,
+            aspect_ratio="3:4",
+            participant_count=2,
+            custom_wardrobe_note="情侣浅色亚麻旅拍穿搭",
+        )
+        self.assertEqual(run_100.total_landmarks, 100)
+        self.assertEqual(run_100.passed_landmarks, 100)
+        self.assertEqual(len(run_100.items), 100)
+
+        first_item = run_100.items[0]
+        mid_item = run_100.items[50]
+        last_item = run_100.items[99]
+        self.assertEqual(first_item.landmark_id, "lmk_001_forbidden_city_taihedian")
+        self.assertEqual(mid_item.landmark_id, "lmk_051_jiuzhaigou_five_flower_lake")
+        self.assertEqual(last_item.landmark_id, "lmk_100_svalbard_arctic_blue_glacier")
+        self.assertIn("IC-Light IBL", first_item.relighting_ibl_summary)
+        self.assertIn("足底接触阴影", first_item.ground_shadow_and_haze_summary)
+        self.assertIn("AI合成每刻·世界名胜实景旅拍艺术示意", first_item.ai_watermark_text)
+        self.assertGreaterEqual(first_item.identity_similarity, 0.93)
+
+        # 4. Synthesize specific region (20 landmarks) or custom 9-grid landmark selection
+        china_run = self.svc.synthesize_user_at_world_landmarks(
+            project_id="proj_china_20",
+            source_asset_ids=["asset_user_frontal_selfie_01"],
+            region_id="china_oriental_heritage",
+        )
+        self.assertEqual(china_run.total_landmarks, 20)
+
+        # 5. Negative guard: missing source photo or invalid landmark ID
+        with self.assertRaises(ControlPlaneError) as missing_ctx:
+            self.svc.synthesize_user_at_world_landmarks(
+                project_id="proj_bad_photo",
+                source_asset_ids=[],
+            )
+        self.assertEqual(missing_ctx.exception.code, "MISSING_SOURCE_PHOTO")
+
+        with self.assertRaises(ControlPlaneError) as not_found_ctx:
+            self.svc.get_world_landmark("lmk_999_atlantis")
+        self.assertEqual(not_found_ctx.exception.code, "LANDMARK_NOT_FOUND")
 
 
 if __name__ == "__main__":

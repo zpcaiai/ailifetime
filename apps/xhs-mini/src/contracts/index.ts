@@ -9,7 +9,7 @@ export const AI_SIMULATION_DISCLOSURE =
 export const DEFAULT_TIMELINE_AGES = [0, 5, 10, 18, 25, 35, 45, 55, 65, 75, 85, 100] as const;
 
 export type AspectRatio = '3:4' | '4:5' | '1:1' | '9:16';
-export type TemplateCostTier = 'standard' | 'pro-studio' | 'master-print';
+export type TemplateCostTier = 'standard' | 'pro-studio' | 'master-print' | 'premium-landmark-50';
 
 export interface OpticsAndLightingSpec {
   focal_length_mm: number;
@@ -235,7 +235,100 @@ export type TemplateCategory =
   | 'cinematic-film'
   | 'family-heirloom'
   | 'bw-editorial'
-  | 'outdoor-poetic';
+  | 'outdoor-poetic'
+  | 'world-landmarks';
+
+export type WorldLandmarkRegionId =
+  | 'china_oriental_heritage'
+  | 'europe_classical_monuments'
+  | 'asia_pacific_wonders'
+  | 'middle_east_africa_ancient'
+  | 'americas_polar_marvels';
+
+export interface WorldLandmarkRegionSpec {
+  region_id: WorldLandmarkRegionId;
+  name: string;
+  badge: string;
+  description: string;
+}
+
+export interface WorldLandmarkPhotoSpec {
+  landmark_id: string;
+  index_number: number;
+  name: string;
+  subtitle: string;
+  region_id: WorldLandmarkRegionId;
+  region_label: string;
+  country_and_city: string;
+  latitude: number;
+  longitude: number;
+  unesco_code: string;
+  reference_photo_uri: string;
+  focal_length_mm: number;
+  aperture: string;
+  horizon_y_ratio: number;
+  camera_elevation_deg: number;
+  subject_distance_m: number;
+  solar_azimuth_deg: number;
+  solar_elevation_deg: number;
+  sky_color_temp_kelvin: number;
+  env_hdr_ibl_map: string;
+  ground_contact_shadow_opacity: number;
+  atmospheric_haze_density: number;
+  wardrobe_cue: string;
+  pose_and_framing_cue: string;
+  backdrop_architecture_cue: string;
+  color_lut: string;
+  default_shot_scale: ShotScale;
+  nine_grid_position: NineGridPosition;
+}
+
+export interface LandmarkSynthesisItem {
+  synthesis_item_id: string;
+  landmark_id: string;
+  landmark_index: number;
+  landmark_name: string;
+  region_id: WorldLandmarkRegionId;
+  region_label: string;
+  country_and_city: string;
+  unesco_code: string;
+  shot_scale: ShotScale;
+  nine_grid_position: NineGridPosition;
+  target_age: number;
+  aspect_ratio: AspectRatio;
+  reference_photo_uri: string;
+  synthesized_uri: string;
+  identity_lock_weight: number;
+  perspective_horizon_y_ratio: number;
+  camera_optics_summary: string;
+  relighting_ibl_summary: string;
+  ground_shadow_and_haze_summary: string;
+  compiled_prompt: string;
+  negative_prompt: string;
+  quality_passed: boolean;
+  identity_similarity: number;
+  pose_background_coherence: number;
+  aesthetic_score: number;
+  ai_watermark_text: string;
+  deterministic_seed: number;
+}
+
+export interface LandmarkSynthesisRunRecord {
+  synthesis_run_id: string;
+  tenant_id: string;
+  project_id: string;
+  actor_id: string;
+  source_asset_ids: string[];
+  side_profile_asset_id: string | null;
+  target_age: number;
+  aspect_ratio: AspectRatio;
+  participant_count: number;
+  total_landmarks: number;
+  passed_landmarks: number;
+  items: LandmarkSynthesisItem[];
+  version: number;
+  created_at: string;
+}
 
 export interface PortraitTemplateSpec {
   template_id: string;
