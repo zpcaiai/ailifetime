@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {readFileSync}from'node:fs';
+import {accessSync, copyFileSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync}from'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {runInNewContext}from'node:vm';
 const discoveryModule = { exports: {} };
 runInNewContext(readFileSync(new URL('../miniprogram/services/wardrobe-catalog.js', import.meta.url), 'utf8'), { module: discoveryModule });
 import {WARDROBE_STYLES,WARDROBE_SERIES,wardrobeStylesForCatalog,wardrobeSeriesForCatalog}from'../../../packages/capabilities/dist/wardrobe-plan.js';
+const hashModule = { exports: {} };
+runInNewContext(readFileSync(new URL('../miniprogram/services/sha256.js', import.meta.url), 'utf8'), { module: hashModule, Uint8Array });
 function context(couple=false,age=37,legacy=false){return{sourceAssetId:'source',sourceRootCommandId:'root',sourceCommandId:'root',targetAge:age,policyVersion:'wardrobe-edit-consent-v1',catalogVersion:legacy?'lifetime-wardrobe.v1':'lifetime-wardrobe.v3',series:legacy?undefined:WARDROBE_SERIES,sourceNode:{status:'ready',targetAge:age,asset:{sha256:'a'.repeat(64)},downloadPath:`/v1/timelines/root/nodes/${age}/image`},participants:(couple?['user','partner']:['user']).map((participantId,i)=>({participantId,position:couple?(i?'right':'left'):'single',authorized:false})),styles:(legacy?WARDROBE_STYLES.slice(0,34):WARDROBE_STYLES).map(s=>({...s,description:s.description??s.label,seriesId:s.seriesId??'legacy',seriesLabel:s.seriesLabel??'原有基础款',minAge:s.minAge??0,maxAge:s.maxAge??100,minPeople:s.minPeople??1,available:age>=(s.minAge??0)&&age<=(s.maxAge??100)&&(couple?2:1)>=(s.minPeople??1),unavailableReason:'适用范围',legacy:!s.seriesId}))};}
 function result(age=37,status='ready',couple=false){return{commandId:'outfit',creationKind:'wardrobe',wardrobeSource:{sourceRootCommandId:'root',targetAge:age,selections:(couple?['user','partner']:['user']).map(participantId=>({participantId,styleId:'daily-white-v1'}))},expectedCount:1,nodes:[{targetAge:age,status,canRetry:status==='failed',attempts:0,asset:{sha256:'b'.repeat(64)},downloadPath:`/v1/timelines/outfit/nodes/${age}/image`}]};}
 function seriesResult(age=37,seriesId='daily',statuses=[]) {
@@ -12,12 +16,14 @@ function seriesResult(age=37,seriesId='daily',statuses=[]) {
  const items=styles.map((style,i)=>({itemId:style.id,title:style.label,targetAge:age,commandId:'series-job-'+i,status:statuses[i]||'ready',attempts:0,canRetry:statuses[i]==='failed',asset:{sha256:String(i+2).padStart(64,'0')},downloadPath:`/v1/timelines/series-job-${i}/nodes/${age}/image`}));
  return{purchaseId:'photo-suite',sku:'wardrobe-series',catalogVersion:'lifetime-wardrobe.v3',sourceRootCommandId:'root',seriesId,seriesTitle:styles[0]?.seriesLabel,expectedCount:styles.length,amountMinor:990,currency:'CNY',readyCount:items.filter(item=>item.status==='ready').length,paymentState:'paid',items};
 }
-function page(request,mediaOverrides={}){
+function page(request,mediaOverrides={},platform={}){
  let p,n=0;const timers=new Map(),removed=[],saves=[],calls=[],scrolls=[];
  const media={download:async node=>'private-'+node.asset.sha256,remove:async path=>removed.push(path),save:async node=>saves.push(node),...mediaOverrides};
  runInNewContext(readFileSync(new URL('../miniprogram/pages/wardrobe/index.js',import.meta.url),'utf8'),{Page:x=>p=x,require:name=>{
   if(name.endsWith('/api'))return{idempotencyKey:prefix=>prefix+'-'+(++n),requestForPurpose:async(path,purpose,options)=>{calls.push({path,purpose,options});return request(path.split('?')[0],options,purpose);}};
-  if(name.endsWith('/session'))return{get:()=>({actorId:'user'}),requireSession:()=>({actorId:'user'})};
+  if(name.endsWith('/session')){ const actor=platform.actor ?? (()=>({actorId:'user'})); return{get:actor,requireSession:actor}; }
+  if(name.endsWith('/privacy'))return{requireAuthorization:platform.authorize};
+  if(name.endsWith('/sha256'))return hashModule.exports;
   if(name.endsWith('/photo-purchases')) {
     const call=async(path,options)=>{calls.push({path,purpose:'age_transformation',options});return(await request(path,options,'age_transformation')).data;};
     return{PRICES:{'wardrobe-series':1990},money:minor=>`¥${(minor/100).toFixed(2)}`,errorText:error=>error.message,
@@ -26,7 +32,7 @@ function page(request,mediaOverrides={}){
   }
   if(name.endsWith('/wardrobe-catalog'))return discoveryModule.exports;
   if(name.endsWith('/timeline-media'))return media;if(name.endsWith('/wardrobe'))return{version:'wardrobe-edit-consent-v1'};throw Error(name);
- },wx:{navigateTo(){},switchTab(){},pageScrollTo:options=>scrolls.push(options.selector)},setTimeout:fn=>{const id=++n;timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id),console});
+ },wx:{navigateTo(){},switchTab(){},pageScrollTo:options=>scrolls.push(options.selector),...platform.wx},Uint8Array,setTimeout:fn=>{const id=++n;timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id),console});
  p.setData=(data, rendered)=>{Object.assign(p.data,data);rendered?.();};return{p,calls,removed,saves,timers,scrolls};
 }
 test('royal catalog renders the nine exact templates, previews detail and opens a version-bound quote',async()=>{
@@ -62,6 +68,94 @@ test('royal catalog renders the nine exact templates, previews detail and opens 
  await reopenedResult.p.onLoad({rootId:'root',age:'37',commandId:'outfit'});
  assert.ok(reopenedResult.p.data.resultPath);
  assert.equal(reopenedResult.p.data.people[0].styleId,items[8].itemId);
+});
+
+test('custom reference is restored only for its owner, replaced and deleted on disk without a purchase request', async t => {
+  const folder = mkdtempSync(join(tmpdir(), 'wardrobe-reference-'));
+  t.after(() => rmSync(folder, {recursive: true, force: true}));
+  const invite = new URL('../miniprogram/assets/wardrobe-invite.png', import.meta.url);
+  const source = join(folder, 'selected.png');
+  copyFileSync(invite, source);
+  let tenantId = 'tenant-a', mode = 'select', authorizationDenied = false, renameDenied = false;
+  let pickerCalls = 0;
+  let notifyPickerOpened;
+  const pickerOpened = new Promise(resolve => { notifyPickerOpened = resolve; });
+  const filesystem = {accessSync, copyFileSync, unlinkSync, renameSync(from, to) {
+    if (renameDenied) throw new Error('storage failure');
+    renameSync(from, to);
+  }};
+  const platform = {
+    actor: () => ({actorId: 'user', tenantId}),
+    authorize: async () => { if (authorizationDenied) throw new Error('PRIVACY_AUTHORIZATION_DENIED'); },
+    wx: {
+      env: {USER_DATA_PATH: folder}, getFileSystemManager: () => filesystem,
+      chooseMedia(options) {
+        pickerCalls++;
+        assert.equal(options.sourceType[0], 'album');
+        if (mode === 'cancel') options.fail({errMsg: 'chooseMedia:fail cancel'});
+        else if (mode === 'pending') notifyPickerOpened(options);
+        else options.success({tempFiles: [{tempFilePath: source, size: statSync(source).size}]});
+      },
+      getImageInfo(options) { options.success({type: mode === 'invalid' ? 'gif' : 'png', width: 600, height: 800}); },
+    },
+  };
+  const f = page(async () => ({data: context()}), {}, platform);
+  await f.p.onLoad({rootId: 'root', age: '37'});
+  authorizationDenied = true;
+  await f.p.chooseCustomTemplate();
+  assert.equal(pickerCalls, 0);
+  assert.match(f.p.data.templateError, /相册授权/);
+  authorizationDenied = false;
+  await f.p.chooseCustomTemplate();
+  const saved = f.p.data.customTemplatePath;
+  assert.deepEqual(readFileSync(saved), readFileSync(invite));
+  await f.p.onHide();
+  assert.equal(f.p.data.customTemplatePath, '');
+  const reopened = page(async () => ({data: context()}), {}, platform);
+  await reopened.p.onLoad({rootId: 'root', age: '37'});
+  assert.equal(reopened.p.data.customTemplatePath, saved);
+  tenantId = 'tenant-b';
+  await reopened.p.refresh();
+  assert.equal(reopened.p.data.customTemplatePath, '');
+  reopened.p.deleteCustomTemplate();
+  assert.doesNotThrow(() => accessSync(saved));
+  tenantId = 'tenant-a';
+  await reopened.p.refresh();
+  mode = 'cancel';
+  await reopened.p.chooseCustomTemplate();
+  assert.equal(reopened.p.data.customTemplatePath, saved);
+  assert.equal(reopened.p.data.templateError, '');
+  mode = 'invalid';
+  await reopened.p.chooseCustomTemplate();
+  assert.match(reopened.p.data.templateError, /JPEG 或 PNG/);
+  mode = 'select';
+  const replacement = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aP1sAAAAASUVORK5CYII=', 'base64');
+  writeFileSync(source, replacement);
+  renameDenied = true;
+  await reopened.p.chooseCustomTemplate();
+  assert.deepEqual(readFileSync(saved), readFileSync(invite));
+  assert.deepEqual(readdirSync(folder).sort(), ['selected.png', saved.split('/').at(-1)].sort());
+  renameDenied = false;
+  await reopened.p.chooseCustomTemplate();
+  assert.equal(reopened.p.data.customTemplatePath, saved);
+  assert.deepEqual(readFileSync(saved), replacement);
+  assert.equal(reopened.p.data.templateError, '');
+  reopened.p.deleteCustomTemplate();
+  assert.equal(reopened.p.data.customTemplatePath, '');
+  assert.throws(() => accessSync(saved), {code: 'ENOENT'});
+  mode = 'pending';
+  const selection = reopened.p.chooseCustomTemplate();
+  const pendingPick = await pickerOpened;
+  await reopened.p.onHide();
+  pendingPick.success({tempFiles: [{tempFilePath: source, size: statSync(source).size}]});
+  await selection;
+  assert.equal(reopened.p.data.customTemplatePath, '');
+  assert.throws(() => accessSync(saved), {code: 'ENOENT'});
+  assert.ok([...f.calls, ...reopened.calls].every(call => call.options.method === 'GET'));
+  const view = readFileSync(new URL('../miniprogram/pages/wardrobe/index.wxml', import.meta.url), 'utf8');
+  assert.match(view, /src="\{\{customTemplatePath\}\}".*自定义服装参考图/u);
+  assert.match(view, /bindtap="chooseCustomTemplate"/u);
+  assert.match(view, /bindtap="deleteCustomTemplate"/u);
 });
 test('reopened9.90 wardrobe quote displays its stored price while new series remain19.90',async()=>{
  const current=seriesResult(),quote={...current,amountMinor:990,catalogVersion:'lifetime-wardrobe.v2',expectedCount:4,readyCount:4,items:current.items.slice(0,4)};const f=page(async path=>({data:path.endsWith('/wardrobe')?context():quote}));

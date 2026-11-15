@@ -4,6 +4,8 @@ const media = require("../../services/timeline-media");
 const consentPolicy = require("../../policies/wardrobe");
 const purchases = require("../../services/photo-purchases");
 const discovery = require("../../services/wardrobe-catalog");
+const privacy = require("../../services/privacy");
+const { createSha256 } = require("../../services/sha256");
 const LEGACY_CATALOG = "lifetime-wardrobe.v3";
 const ROYAL_CATALOG = discovery.ROYAL_CATALOG;
 const validId = value => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
@@ -13,10 +15,27 @@ const dressPerson = (person, styles, seriesId) => {
   const selected = styles.find(s => s.id === person.styleId);
   return { ...person, seriesId: seriesId || selected.seriesId, selectedLabel: selected.label, options: styles.filter(s => s.seriesId === (seriesId || selected.seriesId)) };
 };
+const templateLimit = 8 * 1024 * 1024;
+
+function localTemplatePath(actor) {
+  if (!actor?.tenantId || !actor.actorId || !wx.env?.USER_DATA_PATH) return "";
+  const owner = JSON.stringify([actor.tenantId, actor.actorId]);
+  const hash = createSha256();
+  hash.update(Uint8Array.from(owner, character => character.charCodeAt(0)));
+  return `${wx.env.USER_DATA_PATH}/wardrobe-template-${hash.digestHex()}.image`;
+}
+
+function selectTemplatePhoto() {
+  return new Promise((resolve, reject) => wx.chooseMedia({
+    count: 1, mediaType: ["image"], sourceType: ["album"], sizeType: ["compressed"],
+    success: result => resolve(result.tempFiles?.[0]),
+    fail: error => /\bcancel\b/i.test(error?.errMsg || "") ? resolve(null) : reject(error),
+  }));
+}
 
 Page({
   data: { rootId: "", targetAge: 0, context: null, people: [], styles: [], series: [], visibleSeries: [], categories: [], categoryId: "all", seriesQuery: "", onlyAvailable: false, styleCount: 0, availableSeriesCount: 0, selectedSeries: null, templateStyles: [], focusedTemplate: null, templatePosition: 0, sourcePath: "", resultPath: "", commandId: "", result: null, accepted: false, busy: false, albumPermissionDenied: false, error: "", message: "", selectedSeriesId: "daily", bundleStyles: [], bundleCount: 0, purchaseId: "", seriesPurchase: null, seriesItems: [], retailPriceSeries: purchases.money(purchases.PRICES["wardrobe-series"]), priceSeries: purchases.money(purchases.PRICES["wardrobe-series"]), seriesSaved: 0 },
-  active: false, epoch: 0, timer: null, intent: null,
+  active: false, epoch: 0, timer: null, intent: null, templateSelection: null,
   async onLoad(options) {
     const openingEpoch = ++this.epoch;
     this.seriesSavedKeys = new Set();
@@ -54,6 +73,8 @@ Page({
     const paths = [this.data.sourcePath, this.data.resultPath, ...this.data.seriesItems.map(item => item.localPath)];
     this.loadedCommandId = "";
     this.catalogGroups = [];
+    this.templateSelection = null;
+    this.setData({ customTemplatePath: "", choosingTemplate: false, templateError: "" });
     this.setData({ context: null, people: [], styles: [], series: [], visibleSeries: [], categories: [], styleCount: 0, availableSeriesCount: 0, selectedSeries: null, templateStyles: [], focusedTemplate: null, templatePosition: 0, sourcePath: "", resultPath: "", result: null, seriesPurchase: null, seriesItems: [], bundleStyles: [], bundleCount: 0, accepted: false, busy: false, albumPermissionDenied: false });
     await Promise.all(paths.filter(Boolean).map(path => media.remove(path)));
   },
@@ -92,6 +113,7 @@ Page({
       if (epoch !== this.epoch) return;
       this.catalogGroups = groups;
       this.setData({ context, people, styles: context.styles, selectedSeriesId, sourcePath: sameSource ? this.data.sourcePath : "" });
+      this.loadCustomTemplate(active);
       this.updateBundle();
       if (!this.data.sourcePath && context.sourceNode.downloadPath) {
         const path = await media.download(context.sourceNode);
@@ -102,6 +124,70 @@ Page({
       else if (this.data.commandId) await this.loadResult(epoch, view);
     } catch (error) { if (epoch === this.epoch && this.active) await this.showError(error); }
     finally { if (epoch === this.epoch && this.active) this.setData({ busy: false }); }
+  },
+  loadCustomTemplate(actor) {
+    const path = localTemplatePath(actor);
+    if (path) {
+      try {
+        wx.getFileSystemManager().accessSync(path);
+        this.setData({ customTemplatePath: path });
+        return;
+      } catch {}
+    }
+    this.setData({ customTemplatePath: "" });
+  },
+  async chooseCustomTemplate() {
+    if (!this.active || !this.data.context || this.data.busy || this.templateSelection) return;
+    const destination = localTemplatePath(session.get());
+    if (!destination) return;
+    const selection = {};
+    this.templateSelection = selection;
+    const isCurrent = () => this.active && this.templateSelection === selection && localTemplatePath(session.get()) === destination;
+    this.setData({ choosingTemplate: true, templateError: "" });
+    try {
+      await privacy.requireAuthorization();
+      if (!isCurrent()) return;
+      const file = await selectTemplatePhoto();
+      if (!file || !isCurrent()) return;
+      if (typeof file.tempFilePath !== "string" || !file.tempFilePath ||
+          !Number.isSafeInteger(file.size) || file.size < 1 || file.size > templateLimit) throw new Error("WARDROBE_TEMPLATE_INVALID");
+      const info = await new Promise((resolve, reject) => wx.getImageInfo({ src: file.tempFilePath, success: resolve, fail: reject }));
+      if (!isCurrent()) return;
+      if (!["jpeg", "jpg", "png"].includes(String(info.type).toLowerCase()) ||
+          !Number.isSafeInteger(info.width) || info.width < 1 || !Number.isSafeInteger(info.height) || info.height < 1) throw new Error("WARDROBE_TEMPLATE_INVALID");
+
+      // Stage a complete copy before replacing the prior reference.
+      const fs = wx.getFileSystemManager();
+      const staged = `${destination}.${api.idempotencyKey("preview")}.tmp`;
+      try {
+        fs.copyFileSync(file.tempFilePath, staged);
+        fs.renameSync(staged, destination);
+      } catch (error) {
+        try { fs.unlinkSync(staged); } catch {}
+        throw error;
+      }
+      this.setData({ customTemplatePath: "" }, () => {
+        if (this.active && localTemplatePath(session.get()) === destination) this.loadCustomTemplate(session.get());
+      });
+    } catch (error) {
+      if (isCurrent()) this.setData({ templateError: error?.message === "WARDROBE_TEMPLATE_INVALID" ? "请选择 8 MiB 以内的 JPEG 或 PNG 图片。" : "未能保存参考图，请确认相册授权或设备存储空间后重试。" });
+    } finally {
+      if (this.templateSelection === selection) {
+        this.templateSelection = null;
+        this.setData({ choosingTemplate: false });
+      }
+    }
+  },
+  deleteCustomTemplate() {
+    if (!this.active || this.data.busy || this.templateSelection) return;
+    const path = localTemplatePath(session.get());
+    if (!path || this.data.customTemplatePath !== path) return;
+    try {
+      wx.getFileSystemManager().unlinkSync(path);
+      this.setData({ customTemplatePath: "", templateError: "" });
+    } catch {
+      this.setData({ templateError: "未能删除参考图，请重试。" });
+    }
   },
   updateBundle(onRendered, preferredStyleIds = []) {
     const selected = this.data.selectedSeriesId;
