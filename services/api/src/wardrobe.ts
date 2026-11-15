@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { DomainError, type ActorContext, type JsonObject, type JsonValue, type LifeTimeMachineRuntimePort } from "@ltm/core";
-import { parseWardrobeEdit, WARDROBE_STYLES, WARDROBE_SERIES, WARDROBE_CATALOG_VERSION, type CapabilityRegistry } from "@ltm/capabilities";
+import { parseWardrobeEdit, wardrobeStylesForCatalog, wardrobeSeriesForCatalog, WARDROBE_CATALOG_VERSION, type CapabilityRegistry } from "@ltm/capabilities";
 import { TimelineDeliveryService } from "./timeline-delivery.js";
 import type { TimelineArtifactReader } from "./timeline-artifacts.js";
 
@@ -45,8 +45,9 @@ export function wardrobeCommandId(actor: ActorContext, rootId: string, age: numb
 
 export class WardrobeService {
   constructor(private readonly runtime: LifeTimeMachineRuntimePort, private readonly registry: CapabilityRegistry, private readonly artifacts?: TimelineArtifactReader) {}
-  async context(actor: ActorContext, rootId: string, age: number) {
+  async context(actor: ActorContext, rootId: string, age: number, catalogVersion: unknown = "lifetime-wardrobe.v3") {
     if (!Number.isInteger(age) || age < 0 || age > 100) throw new DomainError("VALIDATION_FAILED", "wardrobe age invalid");
+    if (catalogVersion !== "lifetime-wardrobe.v3" && catalogVersion !== WARDROBE_CATALOG_VERSION) throw new DomainError("VALIDATION_FAILED", "unknown wardrobe discovery catalog");
     const view = await new TimelineDeliveryService(this.runtime).get(actor, rootId);
     const root = await this.runtime.getRecord(actor, "generation.timeline-commands", rootId);
     if (root.data.wardrobeEdit !== undefined) throw new DomainError("VALIDATION_FAILED", "choose the original age photo for another wardrobe edit");
@@ -62,9 +63,9 @@ export class WardrobeService {
     }));
     return { sourceAssetId: view.sourceAssetId as string, sourceRootCommandId: rootId, sourceCommandId: node.commandId, targetAge: age,
       sourceNode: { ...node, downloadPath: this.artifacts ? `/v1/timelines/${rootId}/nodes/${age}/image` : null }, participants,
-      catalogVersion: WARDROBE_CATALOG_VERSION,
-      series: WARDROBE_SERIES,
-      styles: WARDROBE_STYLES.map(style => {
+      catalogVersion,
+      series: wardrobeSeriesForCatalog(catalogVersion),
+      styles: wardrobeStylesForCatalog(catalogVersion).map(style => {
         const minAge = style.minAge ?? 0, maxAge = style.maxAge ?? 100, minPeople = style.minPeople ?? 1;
         const unavailableReason = ids.length < minPeople ? "需双人照片" : age < minAge || age > maxAge ? `适用 ${minAge}–${maxAge} 岁` : "";
         return { id: style.id, label: style.label, description: style.description ?? classicDescriptions[style.id] ?? style.label, seriesId: style.seriesId ?? "legacy", seriesLabel: style.seriesLabel ?? "原有基础款", minAge, maxAge, minPeople,

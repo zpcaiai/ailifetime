@@ -241,9 +241,13 @@ paths:
         schema: { type: integer, minimum: 0, maximum: 100 }
     get:
       operationId: getWardrobeContext
-      description: Owned, accepted generated age photo only. Returns ordered people, current separate wardrobe consent flags and an age-appropriate closed catalog. This is not model execution.
+      description: Owned, accepted generated age photo only. Returns ordered people, wardrobe consent flags and the requested age-appropriate catalog. Use v4 for royal costume sets and v3 to read earlier styles.
       security:
         - bearerAuth: []
+      parameters:
+        - name: catalogVersion
+          in: query
+          schema: { $ref: "#/components/schemas/WardrobeDiscoveryVersion" }
       responses:
         "200":
           description: Context for a separate wardrobe-edit copy.
@@ -1013,8 +1017,14 @@ components:
                   status: { enum: [failed, review] }
                   errorCode: { enum: [PROVIDER_TRANSIENT, QUALITY_REJECTED, POLICY_BLOCKED, CANCELLED] }
     WardrobeStyleId:
-      description: Immutable catalog v1 IDs. The three legacy IDs retain their original instructions; new IDs enforce target-age and participant-count eligibility on the server.
-      enum: [casual, formal, traditional, east-pankou-v1, east-song-v1, east-qipao-v1, east-hanfu-v1, retro-eighties-v1, retro-hongkong-v1, retro-denim-v1, retro-white-v1, together-knit-v1, together-white-v1, together-trench-v1, together-silver-v1, daily-white-v1, daily-cream-v1, daily-linen-v1, daily-suit-v1, wedding-simple-v1, wedding-vintage-v1, wedding-chinese-v1, wedding-anniversary-v1, milestone-graduation-v1, milestone-career-v1, milestone-birthday-v1, milestone-retirement-v1, winter-wool-v1, winter-scarf-v1, winter-knit-v1, winter-puffer-v1, newyear-chinese-v1, newyear-red-v1, newyear-pair-v1]
+      description: Select an exact ID from the catalog. The server rejects unregistered IDs and enforces target age and participant count.
+      anyOf:
+        - enum: [casual, formal, traditional, east-pankou-v1, east-song-v1, east-qipao-v1, east-hanfu-v1, retro-eighties-v1, retro-hongkong-v1, retro-denim-v1, retro-white-v1, together-knit-v1, together-white-v1, together-trench-v1, together-silver-v1, daily-white-v1, daily-cream-v1, daily-linen-v1, daily-suit-v1, wedding-simple-v1, wedding-vintage-v1, wedding-chinese-v1, wedding-anniversary-v1, milestone-graduation-v1, milestone-career-v1, milestone-birthday-v1, milestone-retirement-v1, winter-wool-v1, winter-scarf-v1, winter-knit-v1, winter-puffer-v1, newyear-chinese-v1, newyear-red-v1, newyear-pair-v1]
+        - { type: string, maxLength: 128, pattern: '^[a-z][a-z0-9]*(?:-[a-z0-9]+)+-v1$' }
+    WardrobeDiscoveryVersion:
+      type: string
+      enum: [lifetime-wardrobe.v3, lifetime-wardrobe.v4]
+      default: lifetime-wardrobe.v3
     WardrobeContextResponse:
       type: object
       additionalProperties: false
@@ -1024,14 +1034,24 @@ components:
         data:
           type: object
           additionalProperties: false
-          required: [sourceAssetId, sourceRootCommandId, sourceCommandId, targetAge, sourceNode, participants, styles, policyVersion, catalogVersion]
+          required: [sourceAssetId, sourceRootCommandId, sourceCommandId, targetAge, sourceNode, participants, styles, series, policyVersion, catalogVersion]
+          if:
+            properties: { catalogVersion: { const: lifetime-wardrobe.v4 } }
+          then:
+            properties:
+              styles: { minItems: 237, maxItems: 237 }
+              series: { minItems: 26, maxItems: 26 }
+          else:
+            properties:
+              styles: { minItems: 219, maxItems: 219 }
+              series: { minItems: 24, maxItems: 24 }
           properties:
             sourceAssetId: { type: string }
             sourceRootCommandId: { type: string }
             sourceCommandId: { type: string }
             targetAge: { type: integer, minimum: 0, maximum: 100 }
             policyVersion: { const: wardrobe-edit-consent-v1 }
-            catalogVersion: { const: lifetime-wardrobe.v1 }
+            catalogVersion: { $ref: "#/components/schemas/WardrobeDiscoveryVersion" }
             sourceNode:
               type: object
               additionalProperties: false
@@ -1058,21 +1078,37 @@ components:
                   participantId: { type: string }
                   position: { enum: [single, left, right] }
                   authorized: { type: boolean }
-            styles:
+            series:
               type: array
-              minItems: 34
-              maxItems: 34
               items:
                 type: object
                 additionalProperties: false
-                required: [id, label, seriesId, seriesLabel, minAge, maxAge, minPeople, available, unavailableReason, legacy]
+                required: [id, label, category, categoryLabel, tagline, palette]
+                properties:
+                  id: { type: string }
+                  label: { type: string }
+                  category: { type: string }
+                  categoryLabel: { type: string }
+                  tagline: { type: string }
+                  palette:
+                    type: array
+                    minItems: 3
+                    maxItems: 3
+                    items: { type: string, pattern: '^#[A-Fa-f0-9]{6}$' }
+            styles:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [id, label, description, seriesId, seriesLabel, minAge, maxAge, minPeople, available, unavailableReason, legacy]
                 properties:
                   id: { $ref: "#/components/schemas/WardrobeStyleId" }
                   label: { type: string }
-                  seriesId: { enum: [east, retro, together, daily, wedding, milestone, winter, newyear, legacy] }
+                  description: { type: string }
+                  seriesId: { type: string }
                   seriesLabel: { type: string }
                   minAge: { type: integer, minimum: 0, maximum: 100 }
-                  maxAge: { const: 100 }
+                  maxAge: { type: integer, minimum: 0, maximum: 100 }
                   minPeople: { enum: [1, 2] }
                   available: { type: boolean }
                   unavailableReason: { type: string }

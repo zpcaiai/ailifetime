@@ -2,10 +2,11 @@ import { createHash } from "node:crypto";
 import { bindTimelineResultManifest, DomainError, parseTimelineImageAsset, type ActorContext, type LifeTimeMachineRuntimePort } from "@ltm/core";
 import type { JsonObject, JsonValue } from "./registry.js";
 import { buildAgeGenerationPlan } from "./age-generation-plan.js";
-import { ADDITIONAL_WARDROBE_STYLES } from "./wardrobe-collection.js";
+import { ADDITIONAL_WARDROBE_STYLES, WARDROBE_SERIES } from "./wardrobe-collection.js";
 import { NINE_WARDROBE_STYLES, NINE_CATALOG_VERSION } from "./wardrobe-nine.js";
-export { WARDROBE_SERIES } from "./wardrobe-collection.js";
-export { NINE_CATALOG_VERSION as WARDROBE_CATALOG_VERSION } from "./wardrobe-nine.js";
+import { ROYAL_CATALOG_VERSION, ROYAL_WARDROBE_SERIES, ROYAL_WARDROBE_STYLES } from "./wardrobe-royal.js";
+export { WARDROBE_SERIES };
+export { ROYAL_CATALOG_VERSION as WARDROBE_CATALOG_VERSION };
 
 type WardrobeStyle = Readonly<{ id: string; label: string; description?: string; instruction: string; seriesId?: string; seriesLabel?: string; minAge?: number; maxAge?: number; minPeople?: number }>;
 // IDs and instructions are immutable: signed jobs and recovery bind these exact IDs.
@@ -68,11 +69,20 @@ export const WARDROBE_STYLES: readonly WardrobeStyle[] = Object.freeze([
   ...NINE_WARDROBE_STYLES,
 ]);
 /** Historical memberships are immutable because purchases bind exact style IDs. */
-export function wardrobeStylesForCatalog(version: unknown = NINE_CATALOG_VERSION): readonly WardrobeStyle[] {
+const royalCatalog = Object.freeze([...WARDROBE_STYLES.slice(0, 3), ...ROYAL_WARDROBE_STYLES]);
+const styleById = new Map([...WARDROBE_STYLES, ...ROYAL_WARDROBE_STYLES].map(style => [style.id, style]));
+
+export function wardrobeStylesForCatalog(version: unknown = ROYAL_CATALOG_VERSION): readonly WardrobeStyle[] {
   if (version === "lifetime-wardrobe.v1") return WARDROBE_STYLES.slice(0,34);
   if (version === "lifetime-wardrobe.v2") return WARDROBE_STYLES.slice(0,98);
   if (version === NINE_CATALOG_VERSION) return WARDROBE_STYLES;
+  if (version === ROYAL_CATALOG_VERSION) return royalCatalog;
   throw new DomainError("VALIDATION_FAILED", "unknown wardrobe catalog version");
+}
+export function wardrobeSeriesForCatalog(version: unknown) {
+  wardrobeStylesForCatalog(version);
+  if (version === ROYAL_CATALOG_VERSION) return ROYAL_WARDROBE_SERIES;
+  return version === "lifetime-wardrobe.v1" ? WARDROBE_SERIES.slice(0, 8) : WARDROBE_SERIES;
 }
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const invalid = (message: string): never => { throw new DomainError("VALIDATION_FAILED", message); };
@@ -87,7 +97,7 @@ export function parseWardrobeEdit(value: JsonValue | undefined): JsonObject {
       !Array.isArray(edit.selections) || edit.selections.length < 1 || edit.selections.length > 2) return invalid("wardrobe version, age or selection count invalid");
   const selections = edit.selections.map(entry => {
     const selection = object(entry, ["participantId", "styleId"], "wardrobe selection");
-    const style = WARDROBE_STYLES.find(style => style.id === selection.styleId);
+    const style = typeof selection.styleId === "string" ? styleById.get(selection.styleId) : undefined;
     if (!style) return invalid("unknown wardrobe style");
     if ((edit.targetAge as number) < (style.minAge ?? 0) || (edit.targetAge as number) > (style.maxAge ?? 100) || (edit.selections as JsonValue[]).length < (style.minPeople ?? 1)) return invalid("wardrobe style incompatible with target age or participant count");
     return { participantId: identifier(selection.participantId), styleId: selection.styleId! };
@@ -118,7 +128,7 @@ export function buildWardrobePlan(input: { sourceAssetId: string; participantIds
   const node = (plan.nodes as JsonObject[])[0]!;
   return { ...plan, profile: "wardrobe-edit-v1", operation: "wardrobe-edit", editSource: edit.sourceImage!, wardrobeBinding: binding,
     wardrobePolicy: { version: "wardrobe-only.v1", editableRegion: "clothing_only", instruction: "Change only the selected clothing. Preserve every person's identity, exact displayed age, face, hair, body shape, pose, background, lighting and person-to-position mapping. No nudity, sexualization, body reshaping or adult styling of children. Use infant/child sizing and coverage for young ages.",
-      selections: selections.map(s => ({ ...s, instruction: WARDROBE_STYLES.find(style => style.id === s.styleId)!.instruction })) },
+      selections: selections.map(s => ({ ...s, instruction: styleById.get(String(s.styleId))!.instruction })) },
     nodes: [{ ...node, ageInstruction: `Keep the existing age ${age}; do not perform an age transformation.`,
       seed: createHash("sha256").update(JSON.stringify([node.seed, binding])).digest("hex"),
       requiredQualityDimensions: [...node.requiredQualityDimensions as JsonValue[], "garmentMatch", "regionPreservation"] }] };

@@ -4,6 +4,8 @@ const media = require("../../services/timeline-media");
 const consentPolicy = require("../../policies/wardrobe");
 const purchases = require("../../services/photo-purchases");
 const discovery = require("../../services/wardrobe-catalog");
+const LEGACY_CATALOG = "lifetime-wardrobe.v3";
+const ROYAL_CATALOG = discovery.ROYAL_CATALOG;
 const validId = value => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
 const codeOf = error => error && typeof error.message === "string" ? error.message : "";
 const authorizationFailure = error => /CONSENT|AUTH|PRIVACY|TIMELINE_DOWNLOAD_HTTP_(401|403|409)/.test(codeOf(error));
@@ -29,6 +31,7 @@ Page({
         if (!current || current.actorId !== owner.actorId || current.tenantId !== owner.tenantId) throw new Error("PHOTO_ACCOUNT_CHANGED");
         if (purchase.sku !== "wardrobe-series") throw new Error("PHOTO_PURCHASE_INVALID");
         options = { ...options, rootId: purchase.sourceRootCommandId, age: String(purchase.items[0].targetAge) };
+        this.purchaseCatalog = purchase.catalogVersion === ROYAL_CATALOG ? ROYAL_CATALOG : LEGACY_CATALOG;
         this.setData({purchaseId: purchase.purchaseId, selectedSeriesId: purchase.seriesId});
       } catch (error) { if (openingEpoch === this.epoch) await this.showError(error); return; }
     }
@@ -59,24 +62,36 @@ Page({
     this.stop(); const epoch = ++this.epoch;
     this.setData({ busy: true, error: "" });
     try {
-      const response = await api.requestForPurpose(`/v1/timelines/${encodeURIComponent(this.data.rootId)}/nodes/${this.data.targetAge}/wardrobe`, "age_transformation", { method: "GET" });
+      let view;
+      let requestedCatalog = this.purchaseCatalog || ROYAL_CATALOG;
+      if (this.data.commandId && !this.data.purchaseId) {
+        const result = await api.requestForPurpose(`/v1/timelines/${encodeURIComponent(this.data.commandId)}`, "age_transformation", { method: "GET" });
+        if (!this.active || epoch !== this.epoch) return;
+        view = result?.data;
+        const selections = view?.wardrobeSource?.selections;
+        requestedCatalog = Array.isArray(selections) && selections.some(s => typeof s?.styleId === "string" && s.styleId.startsWith("royal-")) ? ROYAL_CATALOG : LEGACY_CATALOG;
+      }
+      const response = await api.requestForPurpose(`/v1/timelines/${encodeURIComponent(this.data.rootId)}/nodes/${this.data.targetAge}/wardrobe?catalogVersion=${requestedCatalog}`, "age_transformation", { method: "GET" });
       if (!this.active || epoch !== this.epoch) return;
       const context = response && response.data;
       if (!context || context.sourceRootCommandId !== this.data.rootId || context.targetAge !== this.data.targetAge || context.policyVersion !== consentPolicy.version ||
           !validId(context.sourceAssetId) || !Array.isArray(context.participants) || context.participants.length < 1 || context.participants.length > 2 || new Set(context.participants.map(p => p.participantId)).size !== context.participants.length ||
           context.participants.some(p => !validId(p.participantId)) || context.sourceNode?.status !== "ready" || context.sourceNode.targetAge !== this.data.targetAge) throw new Error("WARDROBE_CONTEXT_INVALID");
       const groups = discovery.catalog(context);
+      const royal = context.catalogVersion === ROYAL_CATALOG;
+      const selectedSeriesId = groups.some(group => group.id === this.data.selectedSeriesId) ? this.data.selectedSeriesId : groups[0].id;
+      const defaultStyle = royal ? context.styles.find(style => style.seriesId === selectedSeriesId).id : "daily-white-v1";
       const active = session.requireSession(), previous = this.data.people.length ? this.data.people : this.intent?.selections || [];
       const people = context.participants.map(p => {
-        const old = previous.find(old => old.participantId === p.participantId), styleId = old?.styleId || "daily-white-v1";
-        if (!context.styles.some(s => s.id === styleId && s.available)) throw new Error("WARDROBE_CONTEXT_INVALID");
+        const old = previous.find(old => old.participantId === p.participantId && context.styles.some(s => s.id === old.styleId && s.available));
+        const styleId = old?.styleId || defaultStyle;
         return dressPerson({ ...p, self: p.participantId === active.actorId, label: p.position === "single" ? "照片里的人" : p.position === "left" ? "左侧人物" : "右侧人物", styleId }, context.styles, old?.seriesId);
       });
       const sameSource = this.data.context?.sourceNode.asset.sha256 === context.sourceNode.asset.sha256;
       if (!sameSource && this.data.sourcePath) await media.remove(this.data.sourcePath);
       if (epoch !== this.epoch) return;
       this.catalogGroups = groups;
-      this.setData({ context, people, styles: context.styles, sourcePath: sameSource ? this.data.sourcePath : "" });
+      this.setData({ context, people, styles: context.styles, selectedSeriesId, sourcePath: sameSource ? this.data.sourcePath : "" });
       this.updateBundle();
       if (!this.data.sourcePath && context.sourceNode.downloadPath) {
         const path = await media.download(context.sourceNode);
@@ -84,7 +99,7 @@ Page({
         this.setData({ sourcePath: path });
       }
       if (this.data.purchaseId) await this.loadSeries(epoch);
-      else if (this.data.commandId) await this.loadResult(epoch);
+      else if (this.data.commandId) await this.loadResult(epoch, view);
     } catch (error) { if (epoch === this.epoch && this.active) await this.showError(error); }
     finally { if (epoch === this.epoch && this.active) this.setData({ busy: false }); }
   },
@@ -162,7 +177,7 @@ Page({
     const allowed = this.data.styles.filter(style => style.seriesId === purchase.seriesId && style.available);
     const oldCatalog = purchase.catalogVersion === undefined || ["lifetime-wardrobe.v1","lifetime-wardrobe.v2"].includes(purchase.catalogVersion);
     if (purchase.sku !== "wardrobe-series" || purchase.sourceRootCommandId !== this.data.rootId ||
-        (oldCatalog ? purchase.expectedCount < 1 || purchase.expectedCount > 4 : purchase.catalogVersion !== "lifetime-wardrobe.v3" || purchase.expectedCount !== allowed.length) || purchase.items.length !== purchase.expectedCount ||
+        (oldCatalog ? purchase.expectedCount < 1 || purchase.expectedCount > 4 : purchase.catalogVersion !== this.data.context.catalogVersion || purchase.expectedCount !== allowed.length) || purchase.items.length !== purchase.expectedCount ||
         purchase.items.some(item => item.targetAge !== this.data.targetAge || !allowed.some(style => style.id === item.itemId)) || new Set(purchase.items.map(item => item.itemId)).size !== purchase.expectedCount) throw new Error("PHOTO_PURCHASE_INVALID");
     const previous = this.data.seriesItems, items = [], created = [];
     try {
@@ -179,11 +194,9 @@ Page({
     this.setData({seriesPurchase: purchase,priceSeries:purchases.money(purchase.amountMinor),seriesItems: items,selectedSeriesId: purchase.seriesId,seriesSaved: items.filter(item => this.seriesSavedKeys?.has(`${purchase.purchaseId}:${item.itemId}:${item.asset?.sha256}`)).length});this.updateBundle();
     if (items.some(item => ["pending","retrying"].includes(item.status))) this.timer = setTimeout(() => this.refresh(), 3000);
   },
-  async loadResult(epoch) {
+  async loadResult(epoch, view) {
     const commandId = this.data.commandId;
-    const response = await api.requestForPurpose(`/v1/timelines/${encodeURIComponent(commandId)}`, "age_transformation", { method: "GET" });
     if (epoch !== this.epoch || !this.active) return;
-    const view = response && response.data;
     if (!view || view.commandId !== commandId || view.creationKind !== "wardrobe" || view.wardrobeSource?.sourceRootCommandId !== this.data.rootId || view.wardrobeSource.targetAge !== this.data.targetAge || view.expectedCount !== 1 || !Array.isArray(view.nodes) || view.nodes.length !== 1 || view.nodes[0].targetAge !== this.data.targetAge) throw new Error("WARDROBE_RESULT_INVALID");
     const selections = view.wardrobeSource.selections;
     if (!Array.isArray(selections) || selections.length !== this.data.people.length || selections.some((s, i) => s.participantId !== this.data.people[i].participantId || !this.data.styles.some(style => style.id === s.styleId && style.available))) throw new Error("WARDROBE_RESULT_INVALID");
@@ -234,8 +247,11 @@ Page({
       } }, headers: { "Idempotency-Key": intent.consentKey } });
       if (epoch !== this.epoch || !this.active) return;
       intent.uncertain = true;
-      const purchase = intent.purchaseId ? await purchases.get(intent.purchaseId) : await purchases.create({sku: "wardrobe-series",sourceRootCommandId: this.data.rootId,targetAge: this.data.targetAge,seriesId: this.data.selectedSeriesId},intent.key);
+      const version = this.data.context.catalogVersion;
+      const purchase = intent.purchaseId ? await purchases.get(intent.purchaseId) : await purchases.create({sku: "wardrobe-series",sourceRootCommandId: this.data.rootId,targetAge: this.data.targetAge,seriesId: this.data.selectedSeriesId,
+        ...(version === ROYAL_CATALOG ? {catalogVersion: version} : {})},intent.key);
       intent.purchaseId = purchase.purchaseId;
+      this.purchaseCatalog = version === ROYAL_CATALOG ? ROYAL_CATALOG : LEGACY_CATALOG;
       if (epoch !== this.epoch || !this.active) return;
       this.setData({purchaseId: purchase.purchaseId,commandId: ""});
       await purchases.execute(purchase,{isCurrent: () => this.active && epoch === this.epoch});

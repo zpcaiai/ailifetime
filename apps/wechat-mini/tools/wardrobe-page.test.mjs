@@ -4,7 +4,7 @@ import {readFileSync}from'node:fs';
 import {runInNewContext}from'node:vm';
 const discoveryModule = { exports: {} };
 runInNewContext(readFileSync(new URL('../miniprogram/services/wardrobe-catalog.js', import.meta.url), 'utf8'), { module: discoveryModule });
-import {WARDROBE_STYLES,WARDROBE_SERIES}from'../../../packages/capabilities/dist/wardrobe-plan.js';
+import {WARDROBE_STYLES,WARDROBE_SERIES,wardrobeStylesForCatalog,wardrobeSeriesForCatalog}from'../../../packages/capabilities/dist/wardrobe-plan.js';
 function context(couple=false,age=37,legacy=false){return{sourceAssetId:'source',sourceRootCommandId:'root',sourceCommandId:'root',targetAge:age,policyVersion:'wardrobe-edit-consent-v1',catalogVersion:legacy?'lifetime-wardrobe.v1':'lifetime-wardrobe.v3',series:legacy?undefined:WARDROBE_SERIES,sourceNode:{status:'ready',targetAge:age,asset:{sha256:'a'.repeat(64)},downloadPath:`/v1/timelines/root/nodes/${age}/image`},participants:(couple?['user','partner']:['user']).map((participantId,i)=>({participantId,position:couple?(i?'right':'left'):'single',authorized:false})),styles:(legacy?WARDROBE_STYLES.slice(0,34):WARDROBE_STYLES).map(s=>({...s,description:s.description??s.label,seriesId:s.seriesId??'legacy',seriesLabel:s.seriesLabel??'原有基础款',minAge:s.minAge??0,maxAge:s.maxAge??100,minPeople:s.minPeople??1,available:age>=(s.minAge??0)&&age<=(s.maxAge??100)&&(couple?2:1)>=(s.minPeople??1),unavailableReason:'适用范围',legacy:!s.seriesId}))};}
 function result(age=37,status='ready',couple=false){return{commandId:'outfit',creationKind:'wardrobe',wardrobeSource:{sourceRootCommandId:'root',targetAge:age,selections:(couple?['user','partner']:['user']).map(participantId=>({participantId,styleId:'daily-white-v1'}))},expectedCount:1,nodes:[{targetAge:age,status,canRetry:status==='failed',attempts:0,asset:{sha256:'b'.repeat(64)},downloadPath:`/v1/timelines/outfit/nodes/${age}/image`}]};}
 function seriesResult(age=37,seriesId='daily',statuses=[]) {
@@ -16,7 +16,7 @@ function page(request,mediaOverrides={}){
  let p,n=0;const timers=new Map(),removed=[],saves=[],calls=[],scrolls=[];
  const media={download:async node=>'private-'+node.asset.sha256,remove:async path=>removed.push(path),save:async node=>saves.push(node),...mediaOverrides};
  runInNewContext(readFileSync(new URL('../miniprogram/pages/wardrobe/index.js',import.meta.url),'utf8'),{Page:x=>p=x,require:name=>{
-  if(name.endsWith('/api'))return{idempotencyKey:prefix=>prefix+'-'+(++n),requestForPurpose:async(path,purpose,options)=>{calls.push({path,purpose,options});return request(path,options,purpose);}};
+  if(name.endsWith('/api'))return{idempotencyKey:prefix=>prefix+'-'+(++n),requestForPurpose:async(path,purpose,options)=>{calls.push({path,purpose,options});return request(path.split('?')[0],options,purpose);}};
   if(name.endsWith('/session'))return{get:()=>({actorId:'user'}),requireSession:()=>({actorId:'user'})};
   if(name.endsWith('/photo-purchases')) {
     const call=async(path,options)=>{calls.push({path,purpose:'age_transformation',options});return(await request(path,options,'age_transformation')).data;};
@@ -29,6 +29,40 @@ function page(request,mediaOverrides={}){
  },wx:{navigateTo(){},switchTab(){},pageScrollTo:options=>scrolls.push(options.selector)},setTimeout:fn=>{const id=++n;timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id),console});
  p.setData=(data, rendered)=>{Object.assign(p.data,data);rendered?.();};return{p,calls,removed,saves,timers,scrolls};
 }
+test('royal catalog renders the nine exact templates, previews detail and opens a version-bound quote',async()=>{
+ const version='lifetime-wardrobe.v4', styles=wardrobeStylesForCatalog(version), series=wardrobeSeriesForCatalog(version);
+ const ctx={...context(),catalogVersion:version,series,styles:styles.map(s=>({...s,description:s.description??s.label,seriesId:s.seriesId??'legacy',
+  seriesLabel:s.seriesLabel??'原有基础款',minAge:s.minAge??0,maxAge:s.maxAge??100,minPeople:s.minPeople??1,available:true,unavailableReason:'',legacy:!s.seriesId}))};
+ const [group]=series.filter(s=>s.category==='prince');
+ const items=styles.filter(s=>s.seriesId===group.id).map(s=>({itemId:s.id,targetAge:37,status:'awaiting_payment'}));
+ const quote={purchaseId:'photo-royal-test',catalogVersion:version,sku:'wardrobe-series',seriesId:group.id,sourceRootCommandId:'root',amountMinor:1990,expectedCount:9,items};
+ const f=page(async path=>({data:path.endsWith('/wardrobe')?ctx:quote}));
+ await f.p.onLoad({rootId:'root',age:'37'});
+ assert.ok(f.calls[0].path.endsWith('/wardrobe?catalogVersion='+version));
+ assert.equal(f.p.data.series.length,26);assert.equal(f.p.data.styleCount,234);
+ assert.equal(f.p.data.bundleCount,9);assert.equal(f.p.data.priceSeries,'¥19.90');
+ assert.ok(f.p.data.selectedSeries.id.endsWith('-princess'));
+ f.p.filterCategory({currentTarget:{dataset:{category:'prince'}}});
+ assert.equal(f.p.data.visibleSeries.length,13);
+ await f.p.selectBundle({currentTarget:{dataset:{series:group.id}}});
+ assert.deepEqual(Array.from(f.p.data.templateStyles,s=>s.id),items.map(s=>s.itemId));
+ f.p.previewOutfit({currentTarget:{dataset:{style:items[8].itemId}}});
+ assert.equal(f.p.data.focusedTemplate.previewSrc,'/pages/wardrobe/assets/'+items[8].itemId+'.webp');
+ assert.equal(f.p.data.templatePosition,9);assert.equal(f.scrolls.at(-1),'#wardrobe-template-detail');
+ f.p.data.accepted=true;
+ await f.p.submit();
+ const body=f.calls.find(call=>call.path==='/v1/photo-purchases').options.data;
+ assert.equal(body.catalogVersion,version);assert.equal(body.seriesId,group.id);assert.equal(f.p.data.seriesItems.length,9);
+ const reopened=page(async path=>({data:path.endsWith('/wardrobe')?ctx:quote}));
+ await reopened.p.onLoad({purchaseId:quote.purchaseId});
+ assert.equal(reopened.p.data.seriesPurchase.catalogVersion,version);
+ assert.equal(reopened.p.data.templateStyles.length,9);
+ const view=result();view.wardrobeSource.selections[0].styleId=items[8].itemId;
+ const reopenedResult=page(async path=>({data:path.endsWith('/wardrobe')?ctx:view}));
+ await reopenedResult.p.onLoad({rootId:'root',age:'37',commandId:'outfit'});
+ assert.ok(reopenedResult.p.data.resultPath);
+ assert.equal(reopenedResult.p.data.people[0].styleId,items[8].itemId);
+});
 test('reopened9.90 wardrobe quote displays its stored price while new series remain19.90',async()=>{
  const current=seriesResult(),quote={...current,amountMinor:990,catalogVersion:'lifetime-wardrobe.v2',expectedCount:4,readyCount:4,items:current.items.slice(0,4)};const f=page(async path=>({data:path.endsWith('/wardrobe')?context():quote}));
  await f.p.onLoad({purchaseId:'photo-suite'});assert.equal(f.p.data.priceSeries,'¥9.90');assert.equal(f.p.data.retailPriceSeries,'¥19.90');assert.equal(f.p.data.templateStyles.length,4);assert.equal(f.p.data.bundleCount,4);

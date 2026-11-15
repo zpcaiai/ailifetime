@@ -9,7 +9,7 @@ import { PhotoPurchaseService,PHOTO_PURCHASE_COLLECTION,PHOTO_COMMAND_BINDING_CO
 import { FileTimelineArtifactStore } from '../dist/timeline-artifacts.js';
 import { timelineFixture,syntheticPng } from './timeline-fixtures.mjs';
 import { wardrobeFixture } from './wardrobe-fixtures.mjs';
-import { WARDROBE_SERIES, WARDROBE_STYLES } from '../../../packages/capabilities/dist/wardrobe-plan.js';
+import { WARDROBE_SERIES, WARDROBE_STYLES, wardrobeSeriesForCatalog, wardrobeStylesForCatalog } from '../../../packages/capabilities/dist/wardrobe-plan.js';
 
 // Only the external payment boundary is synthetic. Actual SQL, consent,
 // generation commands and signed image/quality callback reducers execute.
@@ -87,6 +87,36 @@ test('all24 series persist1990 quotes and fulfill all216 exact wardrobe plans ac
   }finally{runtime.close();}
  }assert.equal(total,216);console.log(JSON.stringify({proof:'WARDROBE_24_SERIES_216_REAL_SQL_COMMANDS',total,rowHashes}));
  }finally{await rm(dir,{recursive:true,force:true});}
+});
+test('all26 royal series quote1990 and bind all234 exact generation plans',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'wardrobe234-sql-'));
+ const store=new FileTimelineArtifactStore(join(dir,'images'));
+ const f=await wardrobeFixture({couple:true,age:50,databasePath:join(dir,'runtime.sqlite'),store});
+ try{
+  await f.grantWardrobe();
+  const version='lifetime-wardrobe.v4', groups=wardrobeSeriesForCatalog(version), catalog=wardrobeStylesForCatalog(version);
+  const service=new PhotoPurchaseService(f.runtime,f.registry,store,paymentBoundary());
+  let total=0;
+  for(const group of groups){
+   const input={sku:'wardrobe-series',sourceRootCommandId:'root',targetAge:50,seriesId:group.id,catalogVersion:version};
+   const styles=catalog.filter(style=>style.seriesId===group.id);
+   const purchase=await service.create(f.actor,input,group.id);
+   assert.equal(purchase.amountMinor,1990);assert.equal(purchase.catalogVersion,version);assert.equal(purchase.expectedCount,9);
+   assert.deepEqual(purchase.items.map(item=>item.itemId),styles.map(style=>style.id));
+   assert.equal((await service.checkout(f.actor,purchase.purchaseId)).checkout.amountMinor,1990);
+   const started=await service.fulfill(f.actor,purchase.purchaseId);
+   for(const [i,item] of started.items.entries()){
+    const row=f.runtime.getRecord(f.actor,'generation.timeline-commands',item.commandId);
+    assert.ok(row.data.generationPlan.wardrobePolicy.selections.every(selection=>selection.styleId===styles[i].id&&selection.instruction===styles[i].instruction));
+    total++;
+   }
+   assert.equal((await service.create(f.actor,input,group.id)).scopeSha256,purchase.scopeSha256);
+  }
+  assert.equal(groups.length,26);assert.equal(total,234);
+  const input={sku:'wardrobe-series',sourceRootCommandId:'root',targetAge:50,seriesId:groups[0].id};
+  await assert.rejects(service.create(f.actor,input,'unversioned-royal'),{code:'VALIDATION_FAILED'});
+  await assert.rejects(service.create(f.actor,{...input,catalogVersion:'lifetime-wardrobe.v5'},'unknown-version'),{code:'VALIDATION_FAILED'});
+ }finally{f.runtime.close();await rm(dir,{recursive:true,force:true});}
 });
 test('authoritative 590/4990 age purchases bind exact scope and refuse overposted money',async()=>{
   const f=await timelineFixture();try{

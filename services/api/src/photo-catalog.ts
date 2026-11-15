@@ -1,5 +1,5 @@
 import { DomainError } from "@ltm/core";
-import { wardrobeStylesForCatalog, WARDROBE_CATALOG_VERSION } from "@ltm/capabilities";
+import { wardrobeStylesForCatalog } from "@ltm/capabilities";
 
 export const PHOTO_PRICE_VERSION = "photo-retail-cny.v4";
 const PHOTO_TIER_PRICE_VERSION = "photo-retail-cny.v3";
@@ -45,7 +45,7 @@ export function agePhotoProduct(profile: unknown, ages: unknown, imageQuality: u
   return { ...photoProduct(sku), targetAges: [...ages] as number[] };
 }
 
-export function wardrobeSeriesProduct(seriesId: unknown, targetAge: unknown, people: unknown, catalogVersion: unknown = WARDROBE_CATALOG_VERSION) {
+export function wardrobeSeriesProduct(seriesId: unknown, targetAge: unknown, people: unknown, catalogVersion: unknown = "lifetime-wardrobe.v3") {
   if (typeof seriesId !== "string" || !Number.isInteger(targetAge) || Number(targetAge) < 0 || Number(targetAge) > 100 || (people !== 1 && people !== 2)) {
     throw new DomainError("VALIDATION_FAILED", "wardrobe series requires a valid age and one or two participants");
   }

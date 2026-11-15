@@ -25,7 +25,12 @@ function validPrice(value) {
 const active = new Set();
 const validId = value => typeof value === "string" && /^photo-[a-f0-9]{64}$/.test(value);
 const money = value => `¥${(value / 100).toFixed(2)}`;
-const wardrobeLimit = value => value.catalogVersion === "lifetime-wardrobe.v3" ? (value.priceVersion === "photo-retail-cny.v4" ? 9 : 0) : value.catalogVersion === undefined || value.catalogVersion === "lifetime-wardrobe.v1" || value.catalogVersion === "lifetime-wardrobe.v2" ? 4 : 0;
+function wardrobeLimit(value) {
+  if (value.catalogVersion === "lifetime-wardrobe.v3" || value.catalogVersion === wardrobe.ROYAL_CATALOG) {
+    return value.priceVersion === "photo-retail-cny.v4" ? 9 : 0;
+  }
+  return value.catalogVersion === undefined || value.catalogVersion === "lifetime-wardrobe.v1" || value.catalogVersion === "lifetime-wardrobe.v2" ? 4 : 0;
+}
 
 function validate(value, expected) {
   if (!value || value.schemaVersion !== "ltm.photo-purchase.v1" || !validId(value.purchaseId) || !validPrice(value) ||

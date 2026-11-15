@@ -30,11 +30,14 @@ export class PhotoPurchaseService {
   async create(actor: ActorContext, input: Record<string, unknown>, key: string) {
     let scope: JsonObject, request: JsonObject;
     if (input.sku === "wardrobe-series") {
-      closed(input, ["sku", "sourceRootCommandId", "targetAge", "seriesId"]);
+      closed(input, ["sku", "sourceRootCommandId", "targetAge", "seriesId"], ["catalogVersion"]);
+      const catalogVersion = input.catalogVersion === undefined ? "lifetime-wardrobe.v3" : input.catalogVersion;
+      if (catalogVersion !== "lifetime-wardrobe.v3" && catalogVersion !== "lifetime-wardrobe.v4")
+        throw new DomainError("VALIDATION_FAILED", "unsupported wardrobe purchase catalog version");
       if (!identifier(input.sourceRootCommandId)) throw new DomainError("VALIDATION_FAILED", "invalid source timeline");
       const source = await new WardrobeService(this.runtime, this.registry, this.artifacts).context(actor, input.sourceRootCommandId, input.targetAge as number);
       if (source.participants.some(p => !p.authorized)) throw new DomainError("CONSENT_REQUIRED", "every participant must authorize the whole wardrobe series");
-      scope = json(wardrobeSeriesProduct(input.seriesId, input.targetAge, source.participants.length));
+      scope = json(wardrobeSeriesProduct(input.seriesId, input.targetAge, source.participants.length, catalogVersion));
       request = json({ sourceRootCommandId: input.sourceRootCommandId, targetAge: input.targetAge, sourceSha256: source.sourceNode.asset!.sha256, participantIds: source.participants.map(p => p.participantId) });
     } else {
       closed(input, ["sku", "generation"]);
