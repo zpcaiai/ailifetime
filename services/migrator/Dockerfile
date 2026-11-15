@@ -10,7 +10,7 @@ COPY . .
 RUN pnpm install --frozen-lockfile \
     && pnpm --filter @ltm/migrator deploy --prod --legacy /runtime/migrator
 
-FROM gcr.io/distroless/nodejs26-debian13:nonroot@sha256:9b945e92c1b5463a4b75f11e8417515e4bea7355f6adfd79ec220fbbe905dda8 AS runtime
+FROM gcr.io/distroless/nodejs26-debian13:nonroot@sha256:1d736cf8b5716c07a245301f92717143215d248fd55771ee1936ef4b3302e531 AS runtime
 
 ENV APP_ENV=production
 WORKDIR /workspace
