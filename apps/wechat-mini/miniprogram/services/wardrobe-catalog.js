@@ -54,9 +54,17 @@ function discover(styles, groups, {category = "all", query = "", onlyAvailable =
   const series = groups.map(group => {
     const looks = styles.filter(s => !s.legacy && s.seriesId === group.id), eligible = looks.filter(s => s.available);
     const palette = group.palette;
+    const matches = search ? looks.filter(style => [style.label, style.description || ""].some(value => value.toLowerCase().includes(search))) : [];
+    const eligibleMatch = matches.find(style => style.available);
+    const lead = eligibleMatch || matches[0];
+    const sample = [looks[0], looks[Math.floor(looks.length / 2)], looks[looks.length - 1]];
+    const cover = lead ? [lead, ...sample.filter(style => style.id !== lead.id)].slice(0, 3) : sample;
+    const listed = lead ? [lead, ...matches.filter(style => style.id !== lead.id)] : looks;
+    const names = listed.slice(0, 3).map(style => style.label).join(" / ") + (listed.length > 3 ? ` 等${listed.length}款` : "");
     return {...group, name:group.label.split(" · ")[0], count:eligible.length, totalCount:looks.length,
-      lookNames:looks.slice(0,3).map(s => s.label).join(" / ") + (looks.length > 3 ? ` 等${looks.length}款` : ""),
-      coverLooks:[0,Math.floor(looks.length/2),looks.length-1].map((i)=>presentStyle(looks[i],i,palette)),
+      lookNames:lead ? `匹配 · ${names}${eligibleMatch ? "" : "（当前不适用）"}` : names,
+      matchedStyleIds:matches.map(style => style.id),
+      coverLooks:cover.map(style => presentStyle(style, looks.indexOf(style), palette)),
       availability:eligible.length ? `本照片可用 ${eligible.length} 款` : looks[0]?.unavailableReason || "当前照片不适用",
       coverStyle:`background:linear-gradient(135deg,${palette[0]} 0%,${palette[1]} 100%);`,
       garmentStyle:`background:${palette[2]};`,
@@ -64,7 +72,7 @@ function discover(styles, groups, {category = "all", query = "", onlyAvailable =
   });
   const categories = [{id:"all",label:"全部风格"}, ...Array.from(new Map(groups.map(g => [g.category,{id:g.category,label:g.categoryLabel}])).values())];
   const visibleSeries = series.filter(group => (category === "all" || group.category === category) && (!onlyAvailable || group.count > 0) &&
-    (!search || [group.label,group.tagline,group.categoryLabel,...styles.filter(s => s.seriesId === group.id).flatMap(s => [s.label,s.description || ""])].join(" ").toLowerCase().includes(search)));
+    (!search || group.matchedStyleIds.length > 0 || [group.label, group.tagline, group.categoryLabel].some(value => value.toLowerCase().includes(search))));
   return {series, visibleSeries, categories, styleCount:styles.filter(s => !s.legacy).length, availableSeriesCount:series.filter(g => g.count > 0).length};
 }
 module.exports = {catalog, discover, isSeriesId, presentStyle};

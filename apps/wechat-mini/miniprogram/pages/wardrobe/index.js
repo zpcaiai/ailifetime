@@ -88,7 +88,7 @@ Page({
     } catch (error) { if (epoch === this.epoch && this.active) await this.showError(error); }
     finally { if (epoch === this.epoch && this.active) this.setData({ busy: false }); }
   },
-  updateBundle(onRendered) {
+  updateBundle(onRendered, preferredStyleIds = []) {
     const selected = this.data.selectedSeriesId;
     const view = discovery.discover(this.data.styles, this.catalogGroups || [], {category:this.data.categoryId,query:this.data.seriesQuery,onlyAvailable:this.data.onlyAvailable});
     const selectedSeries = view.series.find(group => group.id === selected) || null;
@@ -96,8 +96,10 @@ Page({
     const selectedStyles = this.data.styles.filter(style => style.seriesId === selected && (!quote || quote.items.some(item=>item.itemId===style.id)));
     const templateStyles = selectedSeries ? selectedStyles.map((style,index)=>discovery.presentStyle(style,index,selectedSeries.palette)) : [];
     const bundleStyles = templateStyles.filter(style => style.available);
-    const focusedTemplate = templateStyles.find(style=>style.id===this.data.focusedTemplate?.id && style.available) || bundleStyles[0] || templateStyles[0] || null;
-    this.setData({ ...view, selectedSeries, templateStyles, focusedTemplate, bundleStyles, bundleCount: bundleStyles.length }, onRendered);
+    const matchedTemplate = bundleStyles.find(style => preferredStyleIds.includes(style.id));
+    const focusedTemplate = matchedTemplate || templateStyles.find(style => style.id === this.data.focusedTemplate?.id && style.available) || bundleStyles[0] || templateStyles[0] || null;
+    this.setData({ ...view, selectedSeries, templateStyles, focusedTemplate, bundleStyles, bundleCount: bundleStyles.length },
+      onRendered && (() => onRendered(focusedTemplate, matchedTemplate)));
   },
   previewOutfit(event) {
     const style = this.data.templateStyles.find(item => item.id === event.currentTarget.dataset.style);
@@ -120,17 +122,25 @@ Page({
   clearDiscovery() { this.setData({seriesQuery:"",categoryId:"all",onlyAvailable:false});this.updateBundle(); },
   async selectBundle(event) {
     const id = event.currentTarget.dataset.series;
-    if (this.data.busy || !this.data.series.some(group => group.id === id && group.count > 0)) return;
+    const group = this.data.series.find(item => item.id === id && item.count > 0);
+    if (!this.active || this.data.busy || !group) return;
     if (this.intent?.uncertain && id !== this.data.selectedSeriesId) { this.setData({error: "上次订单尚待核对，请先恢复原选择并继续，避免重复付款。"}); return; }
+    const epoch = this.epoch;
+    const query = this.data.seriesQuery;
+    const showSelection = (focused, matched) => {
+      if (!this.active || this.epoch !== epoch || this.data.selectedSeriesId !== id || this.data.seriesQuery !== query ||
+          this.data.focusedTemplate?.id !== focused?.id) return;
+      if (matched) wx.pageScrollTo({ selector: "#wardrobe-template-detail", duration: 240 });
+      else this.showTemplateGrid();
+    };
     if (id !== this.data.selectedSeriesId) {
       const paths = this.data.seriesItems.map(item => item.localPath).filter(Boolean);
-      const epoch = this.epoch;
       this.intent = null;
       this.setData({ selectedSeriesId: id, priceSeries: this.data.retailPriceSeries, purchaseId: "", seriesPurchase: null, seriesItems: [], seriesSaved: 0 });
-      this.updateBundle(() => {
-        if (this.epoch === epoch && this.data.selectedSeriesId === id) this.showTemplateGrid();
-      });
+      this.updateBundle(showSelection, group.matchedStyleIds);
       await Promise.all(paths.map(path => media.remove(path)));
+    } else if (group.matchedStyleIds.length) {
+      this.updateBundle(showSelection, group.matchedStyleIds);
     } else {
       this.showTemplateGrid();
     }

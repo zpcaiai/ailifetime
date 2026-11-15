@@ -33,6 +33,12 @@ test('reopened9.90 wardrobe quote displays its stored price while new series rem
  const current=seriesResult(),quote={...current,amountMinor:990,catalogVersion:'lifetime-wardrobe.v2',expectedCount:4,readyCount:4,items:current.items.slice(0,4)};const f=page(async path=>({data:path.endsWith('/wardrobe')?context():quote}));
  await f.p.onLoad({purchaseId:'photo-suite'});assert.equal(f.p.data.priceSeries,'¥9.90');assert.equal(f.p.data.retailPriceSeries,'¥19.90');assert.equal(f.p.data.templateStyles.length,4);assert.equal(f.p.data.bundleCount,4);
  f.p.searchSeries({detail:{value:'法式'}});assert.equal(f.p.data.priceSeries,'¥9.90');assert.equal(f.p.data.seriesPurchase.amountMinor,990);
+ f.p.searchSeries({detail:{value:'雾蓝牛津棉'}});
+ await f.p.selectBundle({currentTarget:{dataset:{series:'daily'}}});
+ assert.equal(f.p.data.templateStyles.length,4);assert.equal(f.p.data.priceSeries,'¥9.90');
+ assert.equal(f.p.data.focusedTemplate.id,'daily-white-v1');
+ assert.equal(f.scrolls.at(-1),'#wardrobe-template-grid');
+ assert.equal(f.calls.some(call=>call.path==='/v1/photo-purchases'),false);
  await f.p.selectBundle({currentTarget:{dataset:{series:'french'}}});assert.equal(f.p.data.priceSeries,'¥19.90');assert.equal(f.p.data.purchaseId,'');assert.equal(f.p.data.seriesPurchase,null);
 });
 test('nine-grid focus shows distinct style details without changing the bundle, payment or age gates',async()=>{
@@ -73,6 +79,15 @@ test('discovery filters and style search preserve the selected quote, previews a
  assert.equal(f.p.data.visibleSeries.length,24);assert.equal(f.p.data.styleCount,216);assert.equal(f.p.data.selectedSeries.id,'daily');
  f.p.searchSeries({detail:{value:'奶油软呢'}});assert.deepEqual(Array.from(f.p.data.visibleSeries.map(s=>s.id)),['french']);
  await f.p.selectBundle({currentTarget:{dataset:{series:'french'}}});assert.equal(f.p.data.bundleCount,9);assert.match(f.p.data.bundleStyles[1].description,/软呢/);
+ assert.equal(f.p.data.focusedTemplate.id,'french-tweed-v1');
+ assert.equal(f.scrolls.at(-1),'#wardrobe-template-detail');
+ assert.equal(f.calls.some(call=>call.path==='/v1/photo-purchases'),false);
+ f.p.searchSeries({detail:{value:'毕业纪念'}});
+ await f.p.selectBundle({currentTarget:{dataset:{series:'milestone'}}});
+ assert.equal(f.p.data.focusedTemplate.id,'milestone-birthday-v1');
+ assert.equal(f.scrolls.at(-1),'#wardrobe-template-grid');
+ f.p.searchSeries({detail:{value:'奶油软呢'}});
+ await f.p.selectBundle({currentTarget:{dataset:{series:'french'}}});
  f.p.intent={uncertain:true,fingerprint:'keep'};const original=f.p.data.sourcePath;
  f.p.searchSeries({detail:{value:''}});f.p.filterCategory({currentTarget:{dataset:{category:'family'}}});f.p.filterAvailable({detail:{value:true}});
  assert.deepEqual(Array.from(f.p.data.visibleSeries.map(s=>s.id)),['storybook','baby']);assert.equal(f.p.data.selectedSeriesId,'french');assert.equal(f.p.intent.fingerprint,'keep');assert.equal(f.p.data.sourcePath,original);
