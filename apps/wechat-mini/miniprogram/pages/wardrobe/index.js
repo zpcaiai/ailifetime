@@ -88,7 +88,7 @@ Page({
     } catch (error) { if (epoch === this.epoch && this.active) await this.showError(error); }
     finally { if (epoch === this.epoch && this.active) this.setData({ busy: false }); }
   },
-  updateBundle() {
+  updateBundle(onRendered) {
     const selected = this.data.selectedSeriesId;
     const view = discovery.discover(this.data.styles, this.catalogGroups || [], {category:this.data.categoryId,query:this.data.seriesQuery,onlyAvailable:this.data.onlyAvailable});
     const selectedSeries = view.series.find(group => group.id === selected) || null;
@@ -97,9 +97,23 @@ Page({
     const templateStyles = selectedSeries ? selectedStyles.map((style,index)=>discovery.presentStyle(style,index,selectedSeries.palette)) : [];
     const bundleStyles = templateStyles.filter(style => style.available);
     const focusedTemplate = templateStyles.find(style=>style.id===this.data.focusedTemplate?.id && style.available) || bundleStyles[0] || templateStyles[0] || null;
-    this.setData({ ...view, selectedSeries, templateStyles, focusedTemplate, bundleStyles, bundleCount: bundleStyles.length });
+    this.setData({ ...view, selectedSeries, templateStyles, focusedTemplate, bundleStyles, bundleCount: bundleStyles.length }, onRendered);
   },
-  previewOutfit(event) { const style=this.data.templateStyles.find(item=>item.id===event.currentTarget.dataset.style);if (this.data.busy || !style?.available) return;this.setData({focusedTemplate:style}); },
+  previewOutfit(event) {
+    const style = this.data.templateStyles.find(item => item.id === event.currentTarget.dataset.style);
+    if (!this.active || this.data.busy || !style?.available) return;
+    const epoch = this.epoch;
+    this.setData({ focusedTemplate: style }, () => {
+      if (this.active && this.epoch === epoch && this.data.focusedTemplate?.id === style.id) {
+        wx.pageScrollTo({ selector: "#wardrobe-template-detail", duration: 240 });
+      }
+    });
+  },
+  showTemplateGrid() {
+    if (this.active && this.data.selectedSeries) {
+      wx.pageScrollTo({ selector: "#wardrobe-template-grid", duration: 240 });
+    }
+  },
   searchSeries(event) { this.setData({seriesQuery:String(event.detail.value || "").slice(0,40)});this.updateBundle(); },
   filterCategory(event) { const id=event.currentTarget.dataset.category;if (!this.data.categories.some(group=>group.id===id)) return;this.setData({categoryId:id});this.updateBundle(); },
   filterAvailable(event) { this.setData({onlyAvailable:event.detail.value === true});this.updateBundle(); },
@@ -110,8 +124,15 @@ Page({
     if (this.intent?.uncertain && id !== this.data.selectedSeriesId) { this.setData({error: "上次订单尚待核对，请先恢复原选择并继续，避免重复付款。"}); return; }
     if (id !== this.data.selectedSeriesId) {
       const paths = this.data.seriesItems.map(item => item.localPath).filter(Boolean);
-      this.intent = null;this.setData({selectedSeriesId: id,priceSeries:this.data.retailPriceSeries,purchaseId: "",seriesPurchase: null,seriesItems: [],seriesSaved: 0});this.updateBundle();
+      const epoch = this.epoch;
+      this.intent = null;
+      this.setData({ selectedSeriesId: id, priceSeries: this.data.retailPriceSeries, purchaseId: "", seriesPurchase: null, seriesItems: [], seriesSaved: 0 });
+      this.updateBundle(() => {
+        if (this.epoch === epoch && this.data.selectedSeriesId === id) this.showTemplateGrid();
+      });
       await Promise.all(paths.map(path => media.remove(path)));
+    } else {
+      this.showTemplateGrid();
     }
   },
   async loadSeries(epoch) {

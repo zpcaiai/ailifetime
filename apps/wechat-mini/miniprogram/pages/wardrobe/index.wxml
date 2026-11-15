@@ -12,23 +12,32 @@
     <view class="wardrobe-filter"><text>只看这张照片能用的系列</text><switch checked="{{onlyAvailable}}" bindchange="filterAvailable" color="#805B72" aria-label="只看当前照片可用系列" /></view>
     <view class="series-options">
       <button wx:for="{{visibleSeries}}" wx:for-item="seriesItem" wx:key="id" class="series-option {{selectedSeriesId === seriesItem.id ? 'active' : ''}}" data-series="{{seriesItem.id}}" bindtap="selectBundle" disabled="{{busy || !seriesItem.count}}" aria-label="{{seriesItem.label}}，{{seriesItem.availability}}，{{selectedSeriesId === seriesItem.id ? '已选中' : '选择此系列'}}">
-        <view class="series-cover" style="{{seriesItem.coverStyle}}" aria-hidden="true"><text class="series-category">{{seriesItem.categoryLabel}}</text><view class="series-triptych"><image class="series-preview-photo" wx:for="{{seriesItem.coverLooks}}" wx:for-item="look" wx:key="id" src="{{look.previewSrc}}" mode="aspectFill" lazy-load="{{true}}" webp="{{true}}" /></view><text class="series-size">{{seriesItem.totalCount}} 款衣着</text><text class="series-selected" wx:if="{{selectedSeriesId === seriesItem.id}}">已选</text><view class="series-swatches"><view wx:for="{{seriesItem.swatches}}" wx:for-item="swatch" wx:key="id" style="{{swatch.style}}"></view></view></view>
-        <view class="series-copy"><view class="series-name">{{seriesItem.label}}</view><view class="series-tagline">{{seriesItem.tagline}}</view><view class="series-looks">{{seriesItem.lookNames}}</view><view class="series-availability">{{seriesItem.availability}}<text wx:if="{{seriesItem.count}}"> · {{retailPriceSeries}}</text></view></view>
+        <view class="series-cover" style="{{seriesItem.coverStyle}}" aria-hidden="true">
+          <view class="series-lead wardrobe-image"><image src="{{seriesItem.coverLooks[0].previewSrc}}" mode="aspectFit" lazy-load="{{true}}" webp="{{true}}" /></view>
+          <view class="series-companions">
+            <block wx:for="{{seriesItem.coverLooks}}" wx:for-item="look" wx:key="id">
+              <view class="wardrobe-image" wx:if="{{index > 0}}"><image src="{{look.previewSrc}}" mode="aspectFit" lazy-load="{{true}}" webp="{{true}}" /></view>
+            </block>
+          </view>
+          <text class="series-selected" wx:if="{{selectedSeriesId === seriesItem.id}}">已选</text>
+        </view>
+        <view class="series-copy"><view class="series-category">{{seriesItem.categoryLabel}} · {{seriesItem.totalCount}} 款</view><view class="series-name">{{seriesItem.label}}</view><view class="series-tagline">{{seriesItem.tagline}}</view><view class="series-looks">{{seriesItem.lookNames}}</view><view class="series-availability">{{seriesItem.availability}}<text wx:if="{{seriesItem.count}}"> · {{retailPriceSeries}}</text></view></view>
       </button>
     </view>
     <view class="discovery-empty" wx:if="{{!visibleSeries.length}}"><view>暂时没有匹配的系列</view><text>试试「针织」「国风」，或查看全部风格。</text><button class="button secondary" bindtap="clearDiscovery">查看全部系列</button></view>
     <view class="palette-caption">AI 衣着预览 · 点击款式查看面料与剪裁</view>
-    <view class="selected-series" wx:if="{{selectedSeries}}"><view class="section-title">已选 · {{selectedSeries.label}}</view><view class="muted">{{selectedSeries.tagline}}</view><view class="outfit-selection">这一套包含 {{bundleCount}} 款衣着，总价 {{priceSeries}}，不逐款计费。</view></view>
-    <view class="template-hero" wx:if="{{focusedTemplate}}">
-      <image class="template-art template-photo" src="{{focusedTemplate.previewSrc}}" mode="aspectFit" webp="{{true}}" aria-label="{{focusedTemplate.label}}，AI 衣着预览图" />
-      <view class="template-hero-copy"><view class="template-title">{{focusedTemplate.label}}</view><view class="template-features"><text wx:for="{{focusedTemplate.features}}" wx:for-item="feature" wx:key="*this">{{feature}}</text></view><view class="template-keep">只换衣着 · 保留这一岁的你与原有构图</view></view>
-    </view>
+    <view id="wardrobe-template-grid" class="selected-series" wx:if="{{selectedSeries}}"><view class="section-title">已选 · {{selectedSeries.label}}</view><view class="muted">{{selectedSeries.tagline}}</view><view class="outfit-selection">这一套包含 {{bundleCount}} 款衣着，总价 {{priceSeries}}，不逐款计费。</view></view>
     <view class="template-grid-heading"><text>{{seriesPurchase ? '这笔订单的款式' : '这一套的九款衣着'}}</text><text>{{bundleCount}} 款适用 · 整套 {{priceSeries}}</text></view>
     <view class="template-grid">
       <button class="template-tile {{focusedTemplate.id === item.id ? 'focused' : ''}} {{item.available ? '' : 'unavailable'}}" wx:for="{{templateStyles}}" wx:key="id" data-style="{{item.id}}" bindtap="previewOutfit" disabled="{{busy || !item.available}}" aria-label="{{item.ordinal}} {{item.label}}，{{item.available ? '查看衣着细节' : item.unavailableReason}}，{{focusedTemplate.id === item.id ? '当前预览' : ''}}">
-        <image class="template-tile-art template-photo" src="{{item.previewSrc}}" mode="aspectFill" lazy-load="{{true}}" webp="{{true}}" aria-hidden="true" />
-        <view class="template-tile-name">{{item.label}}</view><view class="template-tile-status">{{!item.available ? item.unavailableReason : focusedTemplate.id === item.id ? '正在预览' : '查看细节'}}</view>
+        <view class="template-tile-art wardrobe-image"><image src="{{item.previewSrc}}" mode="aspectFit" lazy-load="{{true}}" webp="{{true}}" aria-hidden="true" /></view>
+        <view class="template-tile-name">{{item.label}}</view><view class="template-tile-status">{{!item.available ? item.unavailableReason : focusedTemplate.id === item.id ? '当前款式' : '查看细节'}}</view>
       </button>
+    </view>
+    <view id="wardrobe-template-detail" class="template-hero" wx:if="{{focusedTemplate}}">
+      <view class="template-hero-copy"><view class="template-title">{{focusedTemplate.label}}</view><view class="template-features"><text wx:for="{{focusedTemplate.features}}" wx:for-item="feature" wx:key="*this">{{feature}}</text></view></view>
+      <view class="template-art wardrobe-image"><image src="{{focusedTemplate.previewSrc}}" mode="aspectFit" webp="{{true}}" aria-label="{{focusedTemplate.label}}，AI 衣着预览图" /></view>
+      <view class="template-hero-copy"><button class="button secondary" bindtap="showTemplateGrid">返回款式列表</button></view>
     </view>
     <view class="template-scope-note" wx:if="{{!seriesPurchase && bundleCount < templateStyles.length}}">本系列共 {{templateStyles.length}} 款；按当前年龄与人数可生成 {{bundleCount}} 款，不适用款式不会提交。</view>
     <view class="template-scope-note" wx:if="{{seriesPurchase}}">本笔订单保留购买时的 {{seriesPurchase.expectedCount}} 款与原报价，不因目录扩充重复收费。</view>
