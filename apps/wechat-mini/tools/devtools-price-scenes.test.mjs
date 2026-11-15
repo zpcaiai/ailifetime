@@ -25,7 +25,7 @@ test("native price views use actual authenticated HTTP/SQLite scopes and create 
     const before = fixture.runtime.listRecords(fixture.actor, { collection: "generation.timeline-commands", limit: 200 });
     await assert.rejects(preparePriceViews({ base, headers: {} }), /401/);
     const views = await preparePriceViews({ base, headers: { authorization: "Bearer " + token, "x-purpose": "age_transformation" } });
-    assert.equal(views.context.participants[0].authorized, true); assert.equal(views.series.expectedCount, 4);
+    assert.equal(views.context.participants[0].authorized, true); assert.equal(views.series.expectedCount, 9);
     assert.deepEqual(views.lifespan.items.map(item => item.targetAge), Array.from({ length: 21 }, (_, i) => i * 5));
     assert.equal(views.age.items[0].targetAge, 37);
     assert.equal(views.lifespan.amountMinor,4990);assert.equal(views.lifespan.priceVersion,'photo-retail-cny.v3');

@@ -1,7 +1,8 @@
 const api = require("./api");
 const session = require("./session");
 const commerce = require("./commerce");
-const PRICES = Object.freeze({ "lifespan-11-standard":1990,"lifespan-21-standard":2990,"lifespan-11-hd":2990,"lifespan-21": 4990, "selected-age": 590, "wardrobe-series": 990 });
+const wardrobe = require("./wardrobe-catalog");
+const PRICES = Object.freeze({ "lifespan-11-standard":1990,"lifespan-21-standard":2990,"lifespan-11-hd":2990,"lifespan-21": 4990, "selected-age": 590, "wardrobe-series": 1990 });
 const ALBUMS = Object.freeze({"lifespan-11-standard":Object.freeze({count:11,quality:"standard",size:1536}),"lifespan-21-standard":Object.freeze({count:21,quality:"standard",size:1536}),"lifespan-11-hd":Object.freeze({count:11,quality:"hd",size:2048}),"lifespan-21":Object.freeze({count:21,quality:"hd",size:2048})});
 function album(count,quality) {
   if ((count !== 11 && count !== 21) || (quality !== "standard" && quality !== "hd")) throw new Error("PHOTO_PURCHASE_INVALID");
@@ -11,7 +12,8 @@ function album(count,quality) {
 const PRICE_VERSIONS = Object.freeze({
   "photo-retail-cny.v1": Object.freeze({ "lifespan-21": 990, "selected-age": 590, "wardrobe-series": 990 }),
   "photo-retail-cny.v2": Object.freeze({ "lifespan-21": 4990, "selected-age": 590, "wardrobe-series": 990 }),
-  "photo-retail-cny.v3": PRICES,
+  "photo-retail-cny.v3": Object.freeze({ ...PRICES, "wardrobe-series": 990 }),
+  "photo-retail-cny.v4": Object.freeze({ "wardrobe-series": PRICES["wardrobe-series"] }),
 });
 function validPrice(value) {
   const prices = value && Object.prototype.hasOwnProperty.call(PRICE_VERSIONS, value.priceVersion) && PRICE_VERSIONS[value.priceVersion];
@@ -23,17 +25,18 @@ function validPrice(value) {
 const active = new Set();
 const validId = value => typeof value === "string" && /^photo-[a-f0-9]{64}$/.test(value);
 const money = value => `¥${(value / 100).toFixed(2)}`;
+const wardrobeLimit = value => value.catalogVersion === "lifetime-wardrobe.v3" ? (value.priceVersion === "photo-retail-cny.v4" ? 9 : 0) : value.catalogVersion === undefined || value.catalogVersion === "lifetime-wardrobe.v1" || value.catalogVersion === "lifetime-wardrobe.v2" ? 4 : 0;
 
 function validate(value, expected) {
   if (!value || value.schemaVersion !== "ltm.photo-purchase.v1" || !validId(value.purchaseId) || !validPrice(value) ||
-      !/^[a-f0-9]{64}$/.test(value.scopeSha256) || !Number.isInteger(value.expectedCount) || value.expectedCount < 1 || (value.sku === "wardrobe-series" ? value.expectedCount > 4 || !["east","retro","together","daily","wedding","milestone","winter","newyear"].includes(value.seriesId) : value.expectedCount !== (ALBUMS[value.sku] ? ALBUMS[value.sku].count : 1)) ||
+      !/^[a-f0-9]{64}$/.test(value.scopeSha256) || !Number.isInteger(value.expectedCount) || value.expectedCount < 1 || (value.sku === "wardrobe-series" ? value.expectedCount > wardrobeLimit(value) || !wardrobe.isSeriesId(value.seriesId) || value.seriesId === "legacy" : value.expectedCount !== (ALBUMS[value.sku] ? ALBUMS[value.sku].count : 1)) ||
       !["pending","paid","closed","refunded","failed"].includes(value.paymentState) || !["awaiting_payment","processing","partial","ready","blocked","closed","refunded","failed"].includes(value.state) || !Array.isArray(value.items) || value.items.length !== value.expectedCount || new Set(value.items.map(i => i.itemId)).size !== value.items.length ||
       value.items.some(i => typeof i.itemId !== "string" || !Number.isInteger(i.targetAge) || i.targetAge < 0 || i.targetAge > 100 || !["awaiting_payment","unsubmitted","pending","retrying","ready","failed","review","reconciliation_required"].includes(i.status)) ||
       value.readyCount !== value.items.filter(i => i.status === "ready").length || (value.state === "ready" && value.readyCount !== value.expectedCount)) throw new Error("PHOTO_PURCHASE_INVALID");
   if (ALBUMS[value.sku] && value.items.some((i,n) => i.targetAge !== n*(ALBUMS[value.sku].count===11?10:5))) throw new Error("PHOTO_PURCHASE_SCOPE_CHANGED");
   if (value.sku === "wardrobe-series" && value.items.some(i => !i.itemId.startsWith(value.seriesId + "-") || i.targetAge !== value.items[0].targetAge)) throw new Error("PHOTO_PURCHASE_SCOPE_CHANGED");
   if (value.checkout && (value.checkout.checkoutId !== value.purchaseId || value.checkout.amountMinor !== value.amountMinor || value.checkout.currency !== value.currency || value.checkout.scopeSha256 !== value.scopeSha256)) throw new Error("PHOTO_CHECKOUT_CHANGED");
-  if (expected && ["purchaseId","sku","amountMinor","currency","priceVersion","expectedCount","scopeSha256","seriesId","imageQuality","imageWidth","imageHeight","retentionDays"].some(key => value[key] !== expected[key])) throw new Error("PHOTO_PURCHASE_SCOPE_CHANGED");
+  if (expected && ["purchaseId","sku","amountMinor","currency","priceVersion","catalogVersion","expectedCount","scopeSha256","seriesId","imageQuality","imageWidth","imageHeight","retentionDays"].some(key => value[key] !== expected[key])) throw new Error("PHOTO_PURCHASE_SCOPE_CHANGED");
   return value;
 }
 async function call(path, data, key) {

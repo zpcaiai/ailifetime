@@ -65,7 +65,7 @@ for(const couple of [false,true])for(const lifespan of [false,true])test(`paid c
 
 test('HTTP retail pricing cannot be changed, forged, or bypassed by a free B14 call',async()=>{
   const f=await timelineFixture(),s=await serverFor(f);try{
-    const catalog=await s.request('/v1/photo-products');assert.equal(catalog.body.data.priceVersion,'photo-retail-cny.v3');assert.deepEqual(catalog.body.data.products.map(p=>p.amountMinor),[1990,2990,2990,4990,590,990]);
+    const catalog=await s.request('/v1/photo-products');assert.equal(catalog.body.data.priceVersion,'photo-retail-cny.v4');assert.deepEqual(catalog.body.data.products.map(p=>p.amountMinor),[1990,2990,2990,4990,590,1990]);
     assert.equal((await s.request('/v1/photo-purchases',{...single,amountMinor:1})).status,422);
     const created=await s.request('/v1/photo-purchases',single);assert.equal(created.status,201);const p=created.body.data,prefix='/v1/photo-purchases/'+p.purchaseId;assert.equal(p.amountMinor,590);
     assert.equal((await s.request(prefix,undefined,'photo-attacker-token')).status,403);
@@ -84,14 +84,14 @@ test('HTTP retail pricing cannot be changed, forged, or bypassed by a free B14 c
     const orders=await s.request('/v1/photo-purchases');assert.equal(orders.body.data.items.length,1);assert.equal(orders.body.data.items[0].purchaseId,p.purchaseId);assert.equal(orders.body.data.items[0].request,undefined);
   }finally{await s.close();f.runtime.close();}
 });
-test('HTTP whole wardrobe series submits every eligible style for one 990 total and rejects the old single-style paid bypass',async()=>{
+test('HTTP whole wardrobe series submits every eligible style for one 1990 total and rejects the old single-style paid bypass',async()=>{
   const dir=await mkdtemp(join(tmpdir(),'photo-http-series-')),store=new FileTimelineArtifactStore(join(dir,'images')),f=await wardrobeFixture({age:37,store});await f.grantWardrobe();const s=await serverFor(f,store);
   try{
     const input={sku:'wardrobe-series',sourceRootCommandId:'root',targetAge:37,seriesId:'east'};
     assert.equal((await s.request('/v1/photo-purchases',{...input,styleIds:['east-pankou-v1']})).status,422);
-    const p=(await s.request('/v1/photo-purchases',input)).body.data,prefix='/v1/photo-purchases/'+p.purchaseId;assert.equal(p.amountMinor,990);assert.equal(p.expectedCount,4);assert.equal(p.sourceRootCommandId,'root');
+    const p=(await s.request('/v1/photo-purchases',input)).body.data,prefix='/v1/photo-purchases/'+p.purchaseId;assert.equal(p.amountMinor,1990);assert.equal(p.expectedCount,9);assert.equal(p.sourceRootCommandId,'root');
     assert.equal((await s.request('/v1/timelines/root/nodes/37/wardrobe',{selections:[{participantId:'user',styleId:'east-pankou-v1'}]})).status,403);
-    await s.request(prefix+'/checkout',{});s.payment.state='paid';const result=await s.request(prefix+'/fulfill',{});assert.equal(result.status,200);assert.equal(result.body.data.items.length,4);assert.equal(new Set(result.body.data.items.map(i=>i.commandId)).size,4);assert.equal(result.body.data.amountMinor,990);
+    await s.request(prefix+'/checkout',{});s.payment.state='paid';const result=await s.request(prefix+'/fulfill',{});assert.equal(result.status,200);assert.equal(result.body.data.items.length,9);assert.equal(new Set(result.body.data.items.map(i=>i.commandId)).size,9);assert.equal(result.body.data.amountMinor,1990);
   }finally{await s.close();f.runtime.close();await rm(dir,{recursive:true,force:true});}
 });
 

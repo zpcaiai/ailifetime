@@ -3,6 +3,7 @@ const session = require("../../services/session");
 const media = require("../../services/timeline-media");
 const consentPolicy = require("../../policies/wardrobe");
 const purchases = require("../../services/photo-purchases");
+const discovery = require("../../services/wardrobe-catalog");
 const validId = value => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
 const codeOf = error => error && typeof error.message === "string" ? error.message : "";
 const authorizationFailure = error => /CONSENT|AUTH|PRIVACY|TIMELINE_DOWNLOAD_HTTP_(401|403|409)/.test(codeOf(error));
@@ -12,7 +13,7 @@ const dressPerson = (person, styles, seriesId) => {
 };
 
 Page({
-  data: { rootId: "", targetAge: 0, context: null, people: [], styles: [], series: [], sourcePath: "", resultPath: "", commandId: "", result: null, accepted: false, busy: false, albumPermissionDenied: false, error: "", message: "", selectedSeriesId: "daily", bundleStyles: [], bundleCount: 0, purchaseId: "", seriesPurchase: null, seriesItems: [], priceSeries: purchases.money(purchases.PRICES["wardrobe-series"]), seriesSaved: 0 },
+  data: { rootId: "", targetAge: 0, context: null, people: [], styles: [], series: [], visibleSeries: [], categories: [], categoryId: "all", seriesQuery: "", onlyAvailable: false, styleCount: 0, availableSeriesCount: 0, selectedSeries: null, templateStyles: [], focusedTemplate: null, sourcePath: "", resultPath: "", commandId: "", result: null, accepted: false, busy: false, albumPermissionDenied: false, error: "", message: "", selectedSeriesId: "daily", bundleStyles: [], bundleCount: 0, purchaseId: "", seriesPurchase: null, seriesItems: [], retailPriceSeries: purchases.money(purchases.PRICES["wardrobe-series"]), priceSeries: purchases.money(purchases.PRICES["wardrobe-series"]), seriesSaved: 0 },
   active: false, epoch: 0, timer: null, intent: null,
   async onLoad(options) {
     const openingEpoch = ++this.epoch;
@@ -49,7 +50,8 @@ Page({
   async clearViews() {
     const paths = [this.data.sourcePath, this.data.resultPath, ...this.data.seriesItems.map(item => item.localPath)];
     this.loadedCommandId = "";
-    this.setData({ context: null, people: [], styles: [], series: [], sourcePath: "", resultPath: "", result: null, seriesPurchase: null, seriesItems: [], bundleStyles: [], bundleCount: 0, accepted: false, busy: false, albumPermissionDenied: false });
+    this.catalogGroups = [];
+    this.setData({ context: null, people: [], styles: [], series: [], visibleSeries: [], categories: [], styleCount: 0, availableSeriesCount: 0, selectedSeries: null, templateStyles: [], focusedTemplate: null, sourcePath: "", resultPath: "", result: null, seriesPurchase: null, seriesItems: [], bundleStyles: [], bundleCount: 0, accepted: false, busy: false, albumPermissionDenied: false });
     await Promise.all(paths.filter(Boolean).map(path => media.remove(path)));
   },
   async refresh() {
@@ -62,20 +64,19 @@ Page({
       const context = response && response.data;
       if (!context || context.sourceRootCommandId !== this.data.rootId || context.targetAge !== this.data.targetAge || context.policyVersion !== consentPolicy.version ||
           !validId(context.sourceAssetId) || !Array.isArray(context.participants) || context.participants.length < 1 || context.participants.length > 2 || new Set(context.participants.map(p => p.participantId)).size !== context.participants.length ||
-          context.participants.some(p => !validId(p.participantId)) || context.catalogVersion !== "lifetime-wardrobe.v1" || !Array.isArray(context.styles) || context.styles.length !== 34 || new Set(context.styles.map(s => s.id)).size !== 34 ||
-          context.styles.some(s => !validId(s.id) || typeof s.label !== "string" || !s.label || !["east","retro","together","daily","wedding","milestone","winter","newyear","legacy"].includes(s.seriesId) || typeof s.seriesLabel !== "string" || typeof s.legacy !== "boolean" || s.legacy !== (s.seriesId === "legacy") || !Number.isInteger(s.minAge) || s.minAge < 0 || s.minAge > 100 || s.maxAge !== 100 || ![1,2].includes(s.minPeople) || typeof s.unavailableReason !== "string" || s.available !== (context.targetAge >= s.minAge && context.participants.length >= s.minPeople)) ||
-          context.styles.filter(s => !s.legacy).length !== 31 || new Set(context.styles.filter(s => !s.legacy).map(s => s.seriesId)).size !== 8 || !context.styles.some(s => s.id === "daily-white-v1" && s.available) || context.sourceNode?.status !== "ready" || context.sourceNode.targetAge !== this.data.targetAge) throw new Error("WARDROBE_CONTEXT_INVALID");
+          context.participants.some(p => !validId(p.participantId)) || context.sourceNode?.status !== "ready" || context.sourceNode.targetAge !== this.data.targetAge) throw new Error("WARDROBE_CONTEXT_INVALID");
+      const groups = discovery.catalog(context);
       const active = session.requireSession(), previous = this.data.people.length ? this.data.people : this.intent?.selections || [];
       const people = context.participants.map(p => {
         const old = previous.find(old => old.participantId === p.participantId), styleId = old?.styleId || "daily-white-v1";
         if (!context.styles.some(s => s.id === styleId && s.available)) throw new Error("WARDROBE_CONTEXT_INVALID");
         return dressPerson({ ...p, self: p.participantId === active.actorId, label: p.position === "single" ? "照片里的人" : p.position === "left" ? "左侧人物" : "右侧人物", styleId }, context.styles, old?.seriesId);
       });
-      const series = [...new Map(context.styles.filter(s => !s.legacy).map(s => [s.seriesId, { id: s.seriesId, label: s.seriesLabel.split(" · ")[0] }])).values()];
       const sameSource = this.data.context?.sourceNode.asset.sha256 === context.sourceNode.asset.sha256;
       if (!sameSource && this.data.sourcePath) await media.remove(this.data.sourcePath);
       if (epoch !== this.epoch) return;
-      this.setData({ context, people, styles: context.styles, series, sourcePath: sameSource ? this.data.sourcePath : "" });
+      this.catalogGroups = groups;
+      this.setData({ context, people, styles: context.styles, sourcePath: sameSource ? this.data.sourcePath : "" });
       this.updateBundle();
       if (!this.data.sourcePath && context.sourceNode.downloadPath) {
         const path = await media.download(context.sourceNode);
@@ -89,17 +90,27 @@ Page({
   },
   updateBundle() {
     const selected = this.data.selectedSeriesId;
-    const bundleStyles = this.data.styles.filter(style => style.seriesId === selected && style.available);
-    const series = this.data.series.map(group => ({ ...group, count: this.data.styles.filter(style => style.seriesId === group.id && style.available).length }));
-    this.setData({ bundleStyles, bundleCount: bundleStyles.length, series });
+    const view = discovery.discover(this.data.styles, this.catalogGroups || [], {category:this.data.categoryId,query:this.data.seriesQuery,onlyAvailable:this.data.onlyAvailable});
+    const selectedSeries = view.series.find(group => group.id === selected) || null;
+    const quote = this.data.seriesPurchase?.seriesId === selected ? this.data.seriesPurchase : null;
+    const selectedStyles = this.data.styles.filter(style => style.seriesId === selected && (!quote || quote.items.some(item=>item.itemId===style.id)));
+    const templateStyles = selectedSeries ? selectedStyles.map((style,index)=>discovery.presentStyle(style,index,selectedSeries.palette)) : [];
+    const bundleStyles = templateStyles.filter(style => style.available);
+    const focusedTemplate = templateStyles.find(style=>style.id===this.data.focusedTemplate?.id && style.available) || bundleStyles[0] || templateStyles[0] || null;
+    this.setData({ ...view, selectedSeries, templateStyles, focusedTemplate, bundleStyles, bundleCount: bundleStyles.length });
   },
+  previewOutfit(event) { const style=this.data.templateStyles.find(item=>item.id===event.currentTarget.dataset.style);if (this.data.busy || !style?.available) return;this.setData({focusedTemplate:style}); },
+  searchSeries(event) { this.setData({seriesQuery:String(event.detail.value || "").slice(0,40)});this.updateBundle(); },
+  filterCategory(event) { const id=event.currentTarget.dataset.category;if (!this.data.categories.some(group=>group.id===id)) return;this.setData({categoryId:id});this.updateBundle(); },
+  filterAvailable(event) { this.setData({onlyAvailable:event.detail.value === true});this.updateBundle(); },
+  clearDiscovery() { this.setData({seriesQuery:"",categoryId:"all",onlyAvailable:false});this.updateBundle(); },
   async selectBundle(event) {
     const id = event.currentTarget.dataset.series;
     if (this.data.busy || !this.data.series.some(group => group.id === id && group.count > 0)) return;
     if (this.intent?.uncertain && id !== this.data.selectedSeriesId) { this.setData({error: "上次订单尚待核对，请先恢复原选择并继续，避免重复付款。"}); return; }
     if (id !== this.data.selectedSeriesId) {
       const paths = this.data.seriesItems.map(item => item.localPath).filter(Boolean);
-      this.intent = null;this.setData({selectedSeriesId: id,purchaseId: "",seriesPurchase: null,seriesItems: [],seriesSaved: 0});this.updateBundle();
+      this.intent = null;this.setData({selectedSeriesId: id,priceSeries:this.data.retailPriceSeries,purchaseId: "",seriesPurchase: null,seriesItems: [],seriesSaved: 0});this.updateBundle();
       await Promise.all(paths.map(path => media.remove(path)));
     }
   },
@@ -107,8 +118,10 @@ Page({
     const purchase = await purchases.get(this.data.purchaseId);
     if (epoch !== this.epoch || !this.active) return;
     const allowed = this.data.styles.filter(style => style.seriesId === purchase.seriesId && style.available);
-    if (purchase.sku !== "wardrobe-series" || purchase.sourceRootCommandId !== this.data.rootId || purchase.expectedCount !== allowed.length ||
-        purchase.items.some(item => item.targetAge !== this.data.targetAge || !allowed.some(style => style.id === item.itemId)) || new Set(purchase.items.map(item => item.itemId)).size !== allowed.length) throw new Error("PHOTO_PURCHASE_INVALID");
+    const oldCatalog = purchase.catalogVersion === undefined || ["lifetime-wardrobe.v1","lifetime-wardrobe.v2"].includes(purchase.catalogVersion);
+    if (purchase.sku !== "wardrobe-series" || purchase.sourceRootCommandId !== this.data.rootId ||
+        (oldCatalog ? purchase.expectedCount < 1 || purchase.expectedCount > 4 : purchase.catalogVersion !== "lifetime-wardrobe.v3" || purchase.expectedCount !== allowed.length) || purchase.items.length !== purchase.expectedCount ||
+        purchase.items.some(item => item.targetAge !== this.data.targetAge || !allowed.some(style => style.id === item.itemId)) || new Set(purchase.items.map(item => item.itemId)).size !== purchase.expectedCount) throw new Error("PHOTO_PURCHASE_INVALID");
     const previous = this.data.seriesItems, items = [], created = [];
     try {
       for (const item of purchase.items) {
@@ -121,7 +134,7 @@ Page({
     } catch (error) { await Promise.all(created.map(path => media.remove(path))); throw error; }
     await Promise.all(previous.filter(item => item.localPath && !items.some(next => next.localPath === item.localPath)).map(item => media.remove(item.localPath)));
     if (epoch !== this.epoch || !this.active) { await Promise.all(created.map(path => media.remove(path))); return; }
-    this.setData({seriesPurchase: purchase,seriesItems: items,selectedSeriesId: purchase.seriesId,seriesSaved: items.filter(item => this.seriesSavedKeys?.has(`${purchase.purchaseId}:${item.itemId}:${item.asset?.sha256}`)).length});this.updateBundle();
+    this.setData({seriesPurchase: purchase,priceSeries:purchases.money(purchase.amountMinor),seriesItems: items,selectedSeriesId: purchase.seriesId,seriesSaved: items.filter(item => this.seriesSavedKeys?.has(`${purchase.purchaseId}:${item.itemId}:${item.asset?.sha256}`)).length});this.updateBundle();
     if (items.some(item => ["pending","retrying"].includes(item.status))) this.timer = setTimeout(() => this.refresh(), 3000);
   },
   async loadResult(epoch) {

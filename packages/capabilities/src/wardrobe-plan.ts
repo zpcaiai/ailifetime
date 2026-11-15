@@ -2,8 +2,12 @@ import { createHash } from "node:crypto";
 import { bindTimelineResultManifest, DomainError, parseTimelineImageAsset, type ActorContext, type LifeTimeMachineRuntimePort } from "@ltm/core";
 import type { JsonObject, JsonValue } from "./registry.js";
 import { buildAgeGenerationPlan } from "./age-generation-plan.js";
+import { ADDITIONAL_WARDROBE_STYLES } from "./wardrobe-collection.js";
+import { NINE_WARDROBE_STYLES, NINE_CATALOG_VERSION } from "./wardrobe-nine.js";
+export { WARDROBE_SERIES } from "./wardrobe-collection.js";
+export { NINE_CATALOG_VERSION as WARDROBE_CATALOG_VERSION } from "./wardrobe-nine.js";
 
-type WardrobeStyle = Readonly<{ id: string; label: string; instruction: string; seriesId?: string; seriesLabel?: string; minAge?: number; maxAge?: number; minPeople?: number }>;
+type WardrobeStyle = Readonly<{ id: string; label: string; description?: string; instruction: string; seriesId?: string; seriesLabel?: string; minAge?: number; maxAge?: number; minPeople?: number }>;
 // IDs and instructions are immutable: signed jobs and recovery bind these exact IDs.
 const series = (id: string, label: string, looks: Array<[string, string, string, number?, number?]>): WardrobeStyle[] => looks.map(([key, name, instruction, minAge = 0, minPeople = 1]) => Object.freeze({
   id: `${id}-${key}-v1`, label: name, seriesId: id, seriesLabel: label, minAge, maxAge: 100, minPeople,
@@ -60,7 +64,16 @@ export const WARDROBE_STYLES: readonly WardrobeStyle[] = Object.freeze([
     ["red", "红色针织", "Warm festive red knit sweater, natural yarn and modest neckline"],
     ["pair", "情侣对服", "Coordinated adult couple festive red outfits with complementary cuts and restrained details", 18, 2],
   ]),
+  ...ADDITIONAL_WARDROBE_STYLES,
+  ...NINE_WARDROBE_STYLES,
 ]);
+/** Historical memberships are immutable because purchases bind exact style IDs. */
+export function wardrobeStylesForCatalog(version: unknown = NINE_CATALOG_VERSION): readonly WardrobeStyle[] {
+  if (version === "lifetime-wardrobe.v1") return WARDROBE_STYLES.slice(0,34);
+  if (version === "lifetime-wardrobe.v2") return WARDROBE_STYLES.slice(0,98);
+  if (version === NINE_CATALOG_VERSION) return WARDROBE_STYLES;
+  throw new DomainError("VALIDATION_FAILED", "unknown wardrobe catalog version");
+}
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const invalid = (message: string): never => { throw new DomainError("VALIDATION_FAILED", message); };
 function object(value: JsonValue | undefined, keys: string[], label: string): JsonObject {

@@ -9,6 +9,7 @@ import { PhotoPurchaseService,PHOTO_PURCHASE_COLLECTION,PHOTO_COMMAND_BINDING_CO
 import { FileTimelineArtifactStore } from '../dist/timeline-artifacts.js';
 import { timelineFixture,syntheticPng } from './timeline-fixtures.mjs';
 import { wardrobeFixture } from './wardrobe-fixtures.mjs';
+import { WARDROBE_SERIES, WARDROBE_STYLES } from '../../../packages/capabilities/dist/wardrobe-plan.js';
 
 // Only the external payment boundary is synthetic. Actual SQL, consent,
 // generation commands and signed image/quality callback reducers execute.
@@ -40,6 +41,52 @@ test('persisted historical v1 lifespan quote remains990 on read and merchant che
     const current=await service.create(f.actor,ageInput(false,true),'new-order-v2');assert.equal(current.amountMinor,4990);assert.equal(current.priceVersion,'photo-retail-cny.v3');
     assert.equal((await service.get(f.actor,row.id)).amountMinor,990);
   }finally{f.runtime.close();}
+});
+test('old3/4-look wardrobe scopes retain exact membership and price through replay, SQL reopen and fulfillment',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'old-wardrobe-scopes-')),store=new FileTimelineArtifactStore(join(dir,'images')),f=await wardrobeFixture({couple:true,age:50,databasePath:join(dir,'runtime.sqlite'),store});let runtime=f.runtime;
+ try{
+  await f.grantWardrobe();const pay=paymentBoundary();let service=new PhotoPurchaseService(runtime,f.registry,store,pay);
+  for(const [seriesId,count] of [['east',4],['newyear',3]])for(const amountMinor of [990,1990]){
+   const input={sku:'wardrobe-series',sourceRootCommandId:'root',targetAge:50,seriesId},key='old-'+seriesId+'-'+amountMinor;
+   const p=await service.create(f.actor,input,key),row=runtime.getRecord(f.actor,PHOTO_PURCHASE_COLLECTION,p.purchaseId);
+   const scope={...row.data.scope,amountMinor,priceVersion:amountMinor===990?'photo-retail-cny.v3':'photo-retail-cny.v4',imageCount:count,styleIds:row.data.scope.styleIds.slice(0,count),styles:row.data.scope.styles.slice(0,count)};delete scope.catalogVersion;
+   const scopeSha256=createHash('sha256').update(canonicalJson([scope,row.data.request])).digest('hex');
+   runtime.updateRecord(f.actor,{collection:PHOTO_PURCHASE_COLLECTION,id:row.id,expectedVersion:row.version,data:{...row.data,scope,scopeSha256},idempotencyKey:'seed-'+key});
+   const replay=await service.create(f.actor,input,key);assert.equal(replay.expectedCount,count);assert.equal(replay.amountMinor,amountMinor);assert.equal(replay.scopeSha256,scopeSha256);assert.equal(replay.catalogVersion,'lifetime-wardrobe.v2');
+   assert.equal((await service.checkout(f.actor,p.purchaseId)).checkout.amountMinor,amountMinor);
+   const started=await service.fulfill(f.actor,p.purchaseId);assert.equal(started.items.length,count);assert.deepEqual(started.items.map(i=>i.itemId),scope.styleIds);
+   const digest=createHash('sha256').update(canonicalJson(runtime.getRecord(f.actor,PHOTO_PURCHASE_COLLECTION,p.purchaseId).data)).digest('hex');
+   runtime.close();runtime=new LifeTimeMachineRuntime(f.runtimeOptions);service=new PhotoPurchaseService(runtime,f.registry,store,pay);
+   assert.equal(createHash('sha256').update(canonicalJson(runtime.getRecord(f.actor,PHOTO_PURCHASE_COLLECTION,p.purchaseId).data)).digest('hex'),digest);
+   assert.equal((await service.create(f.actor,input,key)).expectedCount,count);assert.deepEqual((await service.fulfill(f.actor,p.purchaseId)).items.map(i=>i.commandId),started.items.map(i=>i.commandId));
+  }
+ }finally{runtime.close();await rm(dir,{recursive:true,force:true});}
+});
+test('all24 series persist1990 quotes and fulfill all216 exact wardrobe plans across SQLite reopen',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'wardrobe216-sql-'));const rowHashes=[];let total=0;
+ try{for(const group of WARDROBE_SERIES){
+  const age=['baby','storybook'].includes(group.id)?6:50,store=new FileTimelineArtifactStore(join(dir,group.id,'images'));
+  const f=await wardrobeFixture({couple:true,age,databasePath:join(dir,group.id+'.sqlite'),store});let runtime=f.runtime;
+  try{
+   await f.grantWardrobe();const pay=paymentBoundary();let service=new PhotoPurchaseService(runtime,f.registry,store,pay);
+   const input={sku:'wardrobe-series',sourceRootCommandId:'root',targetAge:age,seriesId:group.id},key='suite-'+group.id;
+   const p=await service.create(f.actor,input,key),styles=WARDROBE_STYLES.filter(s=>s.seriesId===group.id);
+   assert.equal(p.amountMinor,1990);assert.equal(p.priceVersion,'photo-retail-cny.v4');assert.equal(p.expectedCount,styles.length);
+   assert.equal((await service.checkout(f.actor,p.purchaseId)).checkout.amountMinor,1990);
+   const started=await service.fulfill(f.actor,p.purchaseId);assert.equal(started.items.length,styles.length);
+   for(const item of started.items){
+    const style=styles.find(s=>s.id===item.itemId);assert.ok(style);const row=runtime.getRecord(f.actor,'generation.timeline-commands',item.commandId);
+    assert.equal(row.data.generationPlan.operation,'wardrobe-edit');assert.equal(row.data.generationPlan.nodes[0].targetAge,age);
+    assert.ok(row.data.generationPlan.wardrobePolicy.selections.every(s=>s.styleId===style.id&&s.instruction===style.instruction));total++;
+   }
+   const row=runtime.getRecord(f.actor,PHOTO_PURCHASE_COLLECTION,p.purchaseId),digest=createHash('sha256').update(canonicalJson(row.data)).digest('hex');rowHashes.push([group.id,digest]);
+   runtime.close();runtime=new LifeTimeMachineRuntime(f.runtimeOptions);service=new PhotoPurchaseService(runtime,f.registry,store,pay);
+   assert.equal(createHash('sha256').update(canonicalJson(runtime.getRecord(f.actor,PHOTO_PURCHASE_COLLECTION,p.purchaseId).data)).digest('hex'),digest);
+   assert.equal((await service.create(f.actor,input,key)).purchaseId,p.purchaseId);assert.equal((await service.get(f.actor,p.purchaseId)).amountMinor,1990);
+   assert.deepEqual((await service.fulfill(f.actor,p.purchaseId)).items.map(i=>i.commandId),started.items.map(i=>i.commandId));assert.equal(pay.prepares,1);
+  }finally{runtime.close();}
+ }assert.equal(total,216);console.log(JSON.stringify({proof:'WARDROBE_24_SERIES_216_REAL_SQL_COMMANDS',total,rowHashes}));
+ }finally{await rm(dir,{recursive:true,force:true});}
 });
 test('authoritative 590/4990 age purchases bind exact scope and refuse overposted money',async()=>{
   const f=await timelineFixture();try{
@@ -103,17 +150,17 @@ test('purchase and item bindings survive a real SQLite restart without a second 
     console.log(JSON.stringify({proof:'SQLITE_REOPEN_PURCHASE_ROW_SHA256',rowHash}));
   }finally{runtime.close();await rm(dir,{recursive:true,force:true});}
 });
-test('990 whole-series creates four separate same-age styles and reports partial/complete signed delivery truthfully',async()=>{
+test('1990 whole-series creates nine separate same-age styles and reports partial/complete signed delivery truthfully',async()=>{
   const dir=await mkdtemp(join(tmpdir(),'photo-series-')),store=new FileTimelineArtifactStore(join(dir,'images')),f=await wardrobeFixture({age:37,store});
   try{
     await f.grantWardrobe();const pay=paymentBoundary(),service=new PhotoPurchaseService(f.runtime,f.registry,store,pay);
-    const p=await service.create(f.actor,{sku:'wardrobe-series',sourceRootCommandId:'root',targetAge:37,seriesId:'east'},'whole-east');assert.equal(p.amountMinor,990);assert.equal(p.expectedCount,4);
-    await service.checkout(f.actor,p.purchaseId);const started=await service.fulfill(f.actor,p.purchaseId);assert.equal(new Set(started.items.map(i=>i.commandId)).size,4);assert.ok(started.items.every(i=>i.targetAge===37));
+    const p=await service.create(f.actor,{sku:'wardrobe-series',sourceRootCommandId:'root',targetAge:37,seriesId:'east'},'whole-east');assert.equal(p.amountMinor,1990);assert.equal(p.expectedCount,9);
+    await service.checkout(f.actor,p.purchaseId);const started=await service.fulfill(f.actor,p.purchaseId);assert.equal(new Set(started.items.map(i=>i.commandId)).size,9);assert.ok(started.items.every(i=>i.targetAge===37));
     for(const item of started.items)assert.equal(f.runtime.getRecord(f.actor,PHOTO_COMMAND_BINDING_COLLECTION,item.commandId).data.purchaseId,p.purchaseId);
     for(let i=0;i<started.items.length;i++){
       const item=started.items[i],record=f.runtime.getRecord(f.actor,'generation.timeline-commands',item.commandId);assert.equal(record.data.wardrobeEdit.selections[0].styleId,item.itemId);
       const asset=await store.put('series-output-'+i,syntheticPng(i+5),'image/png'),node=await f.readyWardrobe(asset,item.commandId);f.runtime.applyExternalBusinessEvent(f.service,f.callback(item.commandId,'succeeded',f.manifest([node])));
-      const current=await service.get(f.actor,p.purchaseId);assert.equal(current.readyCount,i+1);assert.equal(current.state,i===3?'ready':'partial');assert.equal(current.expectedCount,4);
+      const current=await service.get(f.actor,p.purchaseId);assert.equal(current.readyCount,i+1);assert.equal(current.state,i===8?'ready':'partial');assert.equal(current.expectedCount,9);
     }
     const final=await service.get(f.actor,p.purchaseId);assert.equal(final.sourceRootCommandId,'root');assert.ok(final.items.every(i=>i.downloadPath && i.asset.sha256));
     assert.deepEqual((await service.fulfill(f.actor,p.purchaseId)).items.map(i=>i.commandId),started.items.map(i=>i.commandId));
@@ -136,7 +183,7 @@ test('failed wardrobe item retries within the same paid series and preserves oth
     assert.equal((await service.get(f.actor,p.purchaseId)).items[2].canRetry,true);
     const retry=await service.retry(f.actor,p.purchaseId,item.itemId,1);assert.equal((await service.retry(f.actor,p.purchaseId,item.itemId,1)).commandId,retry.commandId);
     const asset=await store.put('recovered-series',syntheticPng(12),'image/png'),node=await f.readyWardrobe(asset,retry.commandId);f.runtime.applyExternalBusinessEvent(f.service,f.callback(retry.commandId,'succeeded',f.manifest([node])));
-    const view=await service.get(f.actor,p.purchaseId);assert.equal(view.amountMinor,990);assert.equal(view.expectedCount,4);assert.equal(view.readyCount,1);assert.equal(view.state,'partial');assert.equal(view.items[2].attempts,1);assert.equal(view.items[2].asset.sha256,asset.sha256);assert.equal(pay.prepares,1);
+    const view=await service.get(f.actor,p.purchaseId);assert.equal(view.amountMinor,1990);assert.equal(view.expectedCount,9);assert.equal(view.readyCount,1);assert.equal(view.state,'partial');assert.equal(view.items[2].attempts,1);assert.equal(view.items[2].asset.sha256,asset.sha256);assert.equal(pay.prepares,1);
     assert.deepEqual(view.items.map(i=>i.commandId),started.items.map(i=>i.commandId));
     await assert.rejects(service.retry(f.actor,p.purchaseId,'not-purchased-style',1));
   }finally{f.runtime.close();await rm(dir,{recursive:true,force:true});}

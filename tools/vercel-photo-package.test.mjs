@@ -21,7 +21,7 @@ test('isolated bundled API imports and serves real HTTP without shipping private
   await symlink(fileURLToPath(new URL('../services/api/node_modules',import.meta.url)),join(output,'node_modules'));
   const {default:handler}=await import(pathToFileURL(join(output,'api/index.mjs')).href);
   server=createServer((req,res)=>void handler(req,res));server.listen(0,'127.0.0.1');await once(server,'listening');const base='http://127.0.0.1:'+server.address().port;
-  assert.equal((await fetch(base+'/health/live')).status,200);const catalog=await(await fetch(base+'/v1/photo-products')).json();assert.equal(catalog.data.priceVersion,'photo-retail-cny.v3');assert.deepEqual(catalog.data.products.map(p=>p.amountMinor),[1990,2990,2990,4990,590,990]);
+  assert.equal((await fetch(base+'/health/live')).status,200);const catalog=await(await fetch(base+'/v1/photo-products')).json();assert.equal(catalog.data.priceVersion,'photo-retail-cny.v4');assert.deepEqual(catalog.data.products.map(p=>p.amountMinor),[1990,2990,2990,4990,590,1990]);
   assert.equal((await fetch(base+'/health/ready')).status,503);assert.equal((await fetch(base+'/internal/media-cleanup')).status,401);
   await assert.rejects(packageVercelApi(output),/EEXIST/);
  }finally{if(server)await new Promise(r=>server.close(r));await rm(dir,{recursive:true,force:true});}
