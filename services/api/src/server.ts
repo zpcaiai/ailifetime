@@ -569,7 +569,7 @@ async function handleRequest(
       if (String(age) !== wardrobeMatch[2]) throw new DomainError("VALIDATION_FAILED", "wardrobe age path must be canonical");
       if (method === "POST") requireOperatorGeneration(actor);
       const wardrobe = new WardrobeService(options.runtime, options.capabilityRegistry, options.timelineArtifacts);
-      const data = method === "GET" ? await wardrobe.context(actor, rootId, age) : await wardrobe.create(operationContext(actor, "wardrobe.create", requireIdempotencyKey(request)), rootId, age, object(await readJsonBody(request, bodyLimit), "wardrobe request"), requireIdempotencyKey(request));
+      const data = method === "GET" ? await wardrobe.context(actor, rootId, age, url.searchParams.get("catalogVersion") ?? undefined) : await wardrobe.create(operationContext(actor, "wardrobe.create", requireIdempotencyKey(request)), rootId, age, object(await readJsonBody(request, bodyLimit), "wardrobe request"), requireIdempotencyKey(request));
       sendJson(response, 200, {data, requestId}); return;
     }
     if(method==="GET"&&path==="/v1/quality/reviews"){

@@ -9,9 +9,9 @@
     "pages/account/index",
     "pages/commerce/index",
     "pages/service/index",
-    "pages/privacy/index",
-    "pages/wardrobe/index"
+    "pages/privacy/index"
   ],
+  "subpackages": [{ "root": "pages/wardrobe", "pages": ["index"] }],
   "resizable": true,
   "window": {
     "pageOrientation": "auto",

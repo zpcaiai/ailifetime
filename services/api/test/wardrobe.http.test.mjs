@@ -38,6 +38,15 @@ for(const couple of [false,true])test(`actual operator wardrobe HTTP ${couple?'c
     assert.equal(context.styles.find(s=>s.id==='baby-milk-v1').available,false);assert.equal(context.styles.find(s=>s.id==='storybook-forest-v1').available,false);
     assert.equal(context.styles.find(s=>s.id==='french-tweed-v1').available,true);assert.match(context.styles.find(s=>s.id==='french-tweed-v1').description,/软呢/);
     for(const s of context.styles)assert.equal(s.available,37>=s.minAge&&37<=s.maxAge&&(couple?2:1)>=s.minPeople);
+    const royalResponse = await fetch(base+path+'?catalogVersion=lifetime-wardrobe.v4',{headers});
+    assert.equal(royalResponse.status,200);
+    const royal = (await royalResponse.json()).data;
+    assert.equal(royal.catalogVersion,'lifetime-wardrobe.v4');
+    assert.equal(royal.series.length,26);
+    assert.equal(royal.styles.filter(style=>!style.legacy).length,234);
+    assert.equal(new Set(royal.series.map(group=>group.category)).size,2);
+    assert.ok(royal.styles.filter(style=>!style.legacy).every(style=>style.id.startsWith('royal-')&&style.available));
+    assert.equal((await fetch(base+path+'?catalogVersion=future',{headers})).status,422);
     assert.equal((await request(base,{selections:f.edit.selections})).status,409);
     for(const participantId of f.participantIds){
       const data={command:'consent.grant',input:{id:'wardrobe-self-'+participantId,participantId,grantorCapacity:'self',purpose:'age_transformation',scope:{resource:'media.asset:source',actions:['wardrobe']},policyVersion:'wardrobe-edit-consent-v1'}};

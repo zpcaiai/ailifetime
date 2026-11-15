@@ -5,9 +5,9 @@
     <view class="wardrobe-frame" wx:if="{{commandId}}"><image wx:if="{{resultPath}}" class="wardrobe-photo" src="{{resultPath}}" mode="aspectFit" aria-label="{{targetAge}}岁换装结果，AI生成照片" /><view class="wardrobe-photo waiting-photo" wx:else><view>{{result.status === 'failed' ? '换装未完成' : result.status === 'review' ? '照片需要复核' : result.status === 'reconciliation_required' ? '结果待核对' : '正在换装'}}</view><text>原片不会被覆盖</text></view><view class="frame-caption">换装照片 · {{targetAge}} 岁</view></view>
   </view>
   <view class="card" wx:if="{{context}}">
-    <view class="section-title">这一岁，想穿什么</view><view class="muted wardrobe-tip">只更换衣着，保留人物、年龄与构图。幼年使用适龄款式；纪念系列会标明适用范围。</view>
+    <view class="section-title">{{context.catalogVersion === 'lifetime-wardrobe.v4' ? '选一套奇幻英雄服' : '这一岁，想穿什么'}}</view><view class="muted wardrobe-tip">{{context.catalogVersion === 'lifetime-wardrobe.v4' ? '公主和王子共享同阵营纹样，每套有九种造型。换装保留人物、年龄与构图。' : '只更换衣着，保留人物、年龄与构图。幼年使用适龄款式；纪念系列会标明适用范围。'}}</view>
     <view class="wardrobe-discovery-count">{{series.length}} 个系列 · {{styleCount}} 款衣着<text>本照片可选 {{availableSeriesCount}} 个系列</text></view>
-    <view class="wardrobe-search"><input value="{{seriesQuery}}" bindinput="searchSeries" maxlength="40" placeholder="搜系列、款式或面料，如「软呢」" aria-label="搜索衣橱系列、款式或面料" confirm-type="search" /></view>
+    <view class="wardrobe-search"><input value="{{seriesQuery}}" bindinput="searchSeries" maxlength="40" placeholder="{{context.catalogVersion === 'lifetime-wardrobe.v4' ? '搜王国、职业或款式，如「骑士」' : '搜系列、款式或面料，如「软呢」'}}" aria-label="搜索衣橱系列、款式或面料" confirm-type="search" /></view>
     <scroll-view class="category-scroll" scroll-x="{{true}}"><view class="category-options"><button wx:for="{{categories}}" wx:key="id" class="category-option {{categoryId === item.id ? 'active' : ''}}" data-category="{{item.id}}" bindtap="filterCategory" aria-label="{{item.label}}分类">{{item.label}}</button></view></scroll-view>
     <view class="wardrobe-filter"><text>只看这张照片能用的系列</text><switch checked="{{onlyAvailable}}" bindchange="filterAvailable" color="#805B72" aria-label="只看当前照片可用系列" /></view>
     <view class="series-options {{visibleSeries.length === 1 ? 'single-result' : ''}}">
@@ -24,7 +24,7 @@
         <view class="series-copy"><view class="series-category">{{seriesItem.categoryLabel}} · {{seriesItem.totalCount}} 款</view><view class="series-name">{{seriesItem.label}}</view><view class="series-tagline">{{seriesItem.tagline}}</view><view class="series-looks">{{seriesItem.lookNames}}</view><view class="series-availability">{{seriesItem.availability}}<text wx:if="{{seriesItem.count}}"> · {{retailPriceSeries}}</text></view></view>
       </button>
     </view>
-    <view class="discovery-empty" wx:if="{{!visibleSeries.length}}"><view>暂时没有匹配的系列</view><text>试试「针织」「国风」，或查看全部风格。</text><button class="button secondary" bindtap="clearDiscovery">查看全部系列</button></view>
+    <view class="discovery-empty" wx:if="{{!visibleSeries.length}}"><view>暂时没有匹配的系列</view><button class="button secondary" bindtap="clearDiscovery">查看全部系列</button></view>
     <view class="palette-caption">AI 衣着预览 · 点击款式查看面料与剪裁</view>
     <view id="wardrobe-template-grid" class="selected-series" wx:if="{{selectedSeries}}"><view class="section-title">已选 · {{selectedSeries.label}}</view><view class="muted">{{selectedSeries.tagline}}</view><view class="outfit-selection">这一套包含 {{bundleCount}} 款衣着，总价 {{priceSeries}}，不逐款计费。</view></view>
     <view class="template-grid-heading"><text>{{seriesPurchase ? '这笔订单的款式' : '这一套的九款衣着'}}</text><text>{{bundleCount}} 款适用 · 整套 {{priceSeries}}</text></view>

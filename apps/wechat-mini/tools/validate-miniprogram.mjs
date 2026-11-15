@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -32,16 +32,41 @@ export function validateMiniProgram(root = DEFAULT_ROOT, options = {}) {
     fail("PRIVATE_INFO_DECLARATION_INVALID", "requiredPrivateInfos accepts only supported address/location interfaces");
   }
   if (!Array.isArray(app.pages) || app.pages.length < 4) fail("PAGES_INVALID", "app.json must declare product pages");
+  const subpackages = app.subpackages ?? [];
+  if (!Array.isArray(subpackages)) fail("SUBPACKAGES_INVALID", "expected an array");
+  const roots = new Set();
+  const pages = [...app.pages];
+  for (const subpackage of subpackages) {
+    const root = subpackage?.root;
+    if (typeof root !== "string" || !/^[\w-]+(?:\/[\w-]+)*$/.test(root) ||
+        [...roots].some(prior => prior === root || prior.startsWith(root + "/") || root.startsWith(prior + "/")) ||
+        app.pages.some(page => typeof page === "string" && page.startsWith(root + "/")) ||
+        !Array.isArray(subpackage.pages) || !subpackage.pages.length) fail("SUBPACKAGES_INVALID", "invalid or overlapping subpackage root");
+    roots.add(root);
+    for (const page of subpackage.pages) pages.push(root + "/" + string(page, "subpackage page"));
+  }
+  if (new Set(pages).size !== pages.length) fail("PAGES_INVALID", "each route must be declared once");
   const pageFiles = [];
-  for (const page of app.pages) {
+  for (const page of pages) {
     const pagePath = string(page, "app.json page");
-    if (pagePath.includes("..") || pagePath.startsWith("/")) fail("PAGE_PATH_INVALID", pagePath);
+    if (!/^[\w-]+(?:\/[\w-]+)*$/.test(pagePath)) fail("PAGE_PATH_INVALID", pagePath);
     for (const extension of PAGE_EXTENSIONS) {
       const relative = `${pagePath}${extension}`;
       required(programRoot, relative);
       pageFiles.push(relative);
     }
   }
+  const packages = Object.fromEntries(["main", ...roots].map(name => [name, 0]));
+  for (const file of readdirSync(programRoot, {recursive: true, withFileTypes: true})) {
+    if (!file.isFile()) continue;
+    const path = join(file.parentPath, file.name);
+    const name = [...roots].find(root => path.startsWith(join(programRoot, root) + "/")) ?? "main";
+    packages[name] += statSync(path).size;
+  }
+  for (const [name, bytes] of Object.entries(packages)) {
+    if (bytes > 2_000_000) fail("PACKAGE_SIZE_EXCEEDED", `${name} is ${bytes} bytes`);
+  }
+  if (Object.values(packages).reduce((sum, bytes) => sum + bytes, 0) > 20_000_000) fail("PACKAGE_SIZE_EXCEEDED", "all packages exceed 20 MB");
   required(programRoot, "services/api.js");
   required(programRoot, "services/session.js");
   required(programRoot, "services/sha256.js");
@@ -126,7 +151,7 @@ export function validateMiniProgram(root = DEFAULT_ROOT, options = {}) {
   if (release && (!/^wx[0-9a-f]{16}$/.test(configuredAppId) || configuredAppId === "wx0000000000000000")) {
     fail("PRODUCTION_APP_ID_REQUIRED", "set LTM_WECHAT_APP_ID to the enrolled production mini-program app id");
   }
-  return Object.freeze({ pages: app.pages.length, files: pageFiles.length + 15, release, appIdMode: release ? "production" : "development" });
+  return Object.freeze({ pages: pages.length, files: pageFiles.length + 15, packages: Object.freeze(packages), release, appIdMode: release ? "production" : "development" });
 }
 
 function json(root, relative) {

@@ -111,7 +111,9 @@ test("OpenAPI exposes separate wardrobe consent, closed clothing choices and imm
   assert.match(specification,/operationId: getWardrobeContext/);assert.match(specification,/operationId: createWardrobeEdit/);
   assert.match(specification,/wardrobe-edit-consent-v1/);assert.match(specification,/required: \[selections\]/);
   assert.match(specification,/styleId: \{ \$ref: "#\/components\/schemas\/WardrobeStyleId" \}/);
-  assert.match(specification,/catalogVersion: \{ const: lifetime-wardrobe.v1 \}/);
+  assert.match(specification,/name: catalogVersion[\s\S]*?in: query/);
+  assert.match(specification,/WardrobeDiscoveryVersion:[\s\S]*?enum: \[lifetime-wardrobe.v3, lifetime-wardrobe.v4\]/);
+  assert.match(specification,/WardrobeContextResponse:[\s\S]*?styles: \{ minItems: 237, maxItems: 237 \}/);
   const ids=specification.match(/    WardrobeStyleId:[\s\S]*?enum: \[([^\]]+)\]/)[1].split(', ');
   assert.equal(ids.length,34);assert.equal(new Set(ids).size,34);
   assert.deepEqual(ids.slice(0,3),['casual','formal','traditional']);

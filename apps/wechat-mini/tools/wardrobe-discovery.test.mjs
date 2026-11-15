@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
-import { readdirSync, statSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import {readFileSync} from 'node:fs';
 import {runInThisContext} from 'node:vm';
-import {WARDROBE_STYLES,WARDROBE_SERIES} from '../../../packages/capabilities/dist/wardrobe-plan.js';
+import {WARDROBE_STYLES,WARDROBE_SERIES,wardrobeStylesForCatalog,wardrobeSeriesForCatalog} from '../../../packages/capabilities/dist/wardrobe-plan.js';
+import { validateMiniProgram } from './validate-miniprogram.mjs';
 const loaded={exports:{}};runInThisContext('(function(module){'+readFileSync(new URL('../miniprogram/services/wardrobe-catalog.js',import.meta.url),'utf8')+'\n})')(loaded);
 const {catalog,discover,isSeriesId,presentStyle}=loaded.exports;
 export function context(age=37,count=1){return {catalogVersion:'lifetime-wardrobe.v3',targetAge:age,participants:Array.from({length:count},(_,i)=>({participantId:'person-'+i})),series:WARDROBE_SERIES,
@@ -130,8 +131,30 @@ test('all 216 catalog looks have a distinct bundled photo used by the grid and d
  }
  assert.equal(assets.size, 0);
  assert.equal(hashes.size, 216);
- const packageBytes = readdirSync(program, { recursive: true })
-  .map(path => statSync(new URL(path, program)))
-  .reduce((total, stat) => total + (stat.isFile() ? stat.size : 0), 0);
- assert.ok(packageBytes <= 2_000_000, `Mini Program package is ${packageBytes} bytes`);
+ const {main}=validateMiniProgram().packages;
+ assert.ok(main <= 2_000_000, `Mini Program main package is ${main} bytes`);
+});
+test('all 234 royal costume previews match the active catalog and fit their native subpackage',()=>{
+ const program=new URL('../miniprogram/',import.meta.url), first=context(), version='lifetime-wardrobe.v4';
+ const catalogStyles=wardrobeStylesForCatalog(version);
+ const c={...first,catalogVersion:version,series:wardrobeSeriesForCatalog(version),styles:catalogStyles.map(s=>({...s,
+  description:s.description??s.label,seriesId:s.seriesId??'legacy',seriesLabel:s.seriesLabel??'原有基础款',minAge:s.minAge??0,maxAge:s.maxAge??100,minPeople:s.minPeople??1,
+  available:true,unavailableReason:'',legacy:!s.seriesId}))};
+ const groups=catalog(c), view=discover(c.styles,groups);
+ assert.equal(view.styleCount,234);assert.equal(view.series.length,26);
+ for(const category of ['princess','prince'])assert.equal(discover(c.styles,groups,{category}).visibleSeries.length,13);
+ const files=new Set(readdirSync(new URL('pages/wardrobe/assets/', program))), hashes=new Set();
+ for(const group of view.series) {
+  const looks=c.styles.filter(s=>s.seriesId===group.id);
+  assert.equal(looks.length,9);assert.equal(group.coverLooks.length,3);
+  for(const [index,s] of looks.entries()){
+   const {previewSrc}=presentStyle(s,index,group.palette);
+   assert.equal(previewSrc,`/pages/wardrobe/assets/${s.id}.webp`);assert.ok(files.delete(`${s.id}.webp`));
+   const bytes=readFileSync(new URL(previewSrc.slice(1),program));
+   assert.equal(bytes.toString('ascii',0,4),'RIFF');assert.equal(bytes.toString('ascii',8,12),'WEBP');
+   hashes.add(createHash('sha256').update(bytes).digest('hex'));
+  }
+ }
+ assert.equal(files.size,0);assert.equal(hashes.size,234);
+ assert.ok(validateMiniProgram().packages['pages/wardrobe']<=2_000_000);
 });

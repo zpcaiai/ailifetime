@@ -25,7 +25,7 @@ test('every look enforces all integer ages and one/two people, binds exact templ
  const unknown={...WARDROBE_STYLES[3],id:'east-pankou-v2'};assert.throws(()=>parseWardrobeEdit(edit(unknown,37,1)),/unknown/);
 });
 test('curated24 series contain216 distinct executable looks with bounded accurate discovery metadata',()=>{
- assert.equal(WARDROBE_CATALOG_VERSION,'lifetime-wardrobe.v3');assert.equal(WARDROBE_SERIES.length,24);
+ assert.equal(WARDROBE_CATALOG_VERSION,'lifetime-wardrobe.v4');assert.equal(WARDROBE_SERIES.length,24);
  assert.equal(new Set(WARDROBE_SERIES.map(s=>s.id)).size,24);assert.equal(new Set(WARDROBE_SERIES.map(s=>s.category)).size,6);
  assert.equal(WARDROBE_STYLES.filter(s=>s.seriesId).length,216);
  for(const group of WARDROBE_SERIES){
@@ -46,6 +46,8 @@ test('curated24 series contain216 distinct executable looks with bounded accurat
 test('original98 objects and catalog membership snapshots remain immutable',()=>{
  assert.equal(createHash('sha256').update(JSON.stringify(WARDROBE_STYLES.slice(0,98))).digest('hex'),'48e02b0a8e28a23cb6a7d5b876057fbf43beb43475c617e858d631be031ed71e');
  for(const [version,count] of [['v1',34],['v2',98],['v3',219]])assert.equal(wardrobeStylesForCatalog('lifetime-wardrobe.'+version).length,count);
- assert.equal(wardrobeStylesForCatalog().length,219);assert.throws(()=>wardrobeStylesForCatalog('future'),/catalog version/);
+ assert.equal(wardrobeStylesForCatalog().length,237);assert.throws(()=>wardrobeStylesForCatalog('future'),/catalog version/);
+ assert.equal(createHash('sha256').update(JSON.stringify(wardrobeStylesForCatalog('lifetime-wardrobe.v3'))).digest('hex'),'946ad20a787e36fdea4ed20ac1b42689970577538df12977d66c903c0f611d05');
+ assert.ok(wardrobeStylesForCatalog().filter(style=>style.seriesId).every(style=>style.seriesId.startsWith('royal-')));
  for(const group of WARDROBE_SERIES){const all=WARDROBE_STYLES.filter(s=>s.seriesId===group.id);assert.equal(new Set(all.map(s=>s.label)).size,9);}
 });
