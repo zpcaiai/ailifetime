@@ -4,6 +4,41 @@ import { parseWardrobeEdit, WARDROBE_STYLES, WARDROBE_SERIES, WARDROBE_CATALOG_V
 import { TimelineDeliveryService } from "./timeline-delivery.js";
 import type { TimelineArtifactReader } from "./timeline-artifacts.js";
 
+// Display copy lives outside the immutable catalog used by quotes and generation.
+const classicDescriptions: Readonly<Record<string, string>> = Object.freeze({
+  "east-pankou-v1": "哑光棉布 · 中式小立领 · 细盘扣",
+  "east-song-v1": "柔软织物 · 素色交领 · 内外叠穿",
+  "east-qipao-v1": "挺括衣身 · 包覆式立领 · 旗袍或长衫剪裁",
+  "east-hanfu-v1": "细纹织物 · 轻松交领 · 叠襟宽袖",
+  "retro-eighties-v1": "低饱和大地色棉布 · 复古翻领 · 日常衬衣或夹克",
+  "retro-hongkong-v1": "哑光西服面料 · 松量西装剪裁 · 素色衬衣内搭",
+  "retro-denim-v1": "靛蓝牛仔斜纹 · 短夹克剪裁 · 简洁内衫",
+  "retro-white-v1": "白色棉布 · 宽松复古衬领 · 自然褶皱",
+  "together-knit-v1": "低饱和同色毛线 · 柔软针织 · 两人各自合身",
+  "together-white-v1": "白色棉布 · 两件简洁衬衣 · 互补剪裁",
+  "together-trench-v1": "挺括风衣面料 · 经典驳领 · 两件束腰风衣",
+  "together-silver-v1": "柔软针织 · 合身外套叠搭 · 柔和同色系",
+  "daily-white-v1": "白色棉布 · 简洁衬领 · 挺爽自然褶",
+  "daily-cream-v1": "奶油色细纱 · 包覆式领口 · 柔软针目",
+  "daily-linen-v1": "中性色亚麻 · 细竹节纹 · 松身衬衣",
+  "daily-suit-v1": "素色西服衣料 · 利落驳领 · 朴素内衫",
+  "wedding-simple-v1": "包覆式礼服面料 · 简洁剪裁 · 婚纱或礼服西装",
+  "wedding-vintage-v1": "含蓄蕾丝或羊毛 · 复古礼服剪裁 · 细致织纹",
+  "wedding-chinese-v1": "红色丝织 · 中式礼服剪裁 · 细金色刺绣",
+  "wedding-anniversary-v1": "香槟色衣料 · 纪念礼服剪裁 · 含蓄绣纹",
+  "milestone-graduation-v1": "深色袍身 · 宽松肩袖 · 素衬衣叠领",
+  "milestone-career-v1": "素色通勤衣料 · 自然肩线 · 衬衣与外套",
+  "milestone-birthday-v1": "柔和礼服衣料 · 合龄包覆剪裁 · 裙装或正装",
+  "milestone-retirement-v1": "低饱和暖色 · 舒展肩袖 · 衬衣叠搭外套",
+  "winter-wool-v1": "温暖厚毛呢 · 清晰结构缝 · 柔软呢面绒",
+  "winter-scarf-v1": "保暖夹克面料 · 围巾自然垂坠 · 领口柔软叠搭",
+  "winter-knit-v1": "厚实毛线 · 立体麻花针法 · 自然合身",
+  "winter-puffer-v1": "哑光外层 · 分段绗缝 · 保暖包覆剪裁",
+  "newyear-chinese-v1": "节庆红衣料 · 中式立领与盘扣 · 低调绣纹",
+  "newyear-red-v1": "暖红毛线 · 自然针织纹 · 包覆式领口",
+  "newyear-pair-v1": "同系节庆红 · 双人互补剪裁 · 收敛衣缘细节",
+});
+
 export function wardrobeCommandId(actor: ActorContext, rootId: string, age: number, key: string): string {
   return `wardrobe-${createHash("sha256").update(JSON.stringify([actor.tenantId,actor.actorId,rootId,age,key])).digest("hex")}`;
 }
@@ -32,7 +67,7 @@ export class WardrobeService {
       styles: WARDROBE_STYLES.map(style => {
         const minAge = style.minAge ?? 0, maxAge = style.maxAge ?? 100, minPeople = style.minPeople ?? 1;
         const unavailableReason = ids.length < minPeople ? "需双人照片" : age < minAge || age > maxAge ? `适用 ${minAge}–${maxAge} 岁` : "";
-        return { id: style.id, label: style.label, description: style.description ?? style.label, seriesId: style.seriesId ?? "legacy", seriesLabel: style.seriesLabel ?? "原有基础款", minAge, maxAge, minPeople,
+        return { id: style.id, label: style.label, description: style.description ?? classicDescriptions[style.id] ?? style.label, seriesId: style.seriesId ?? "legacy", seriesLabel: style.seriesLabel ?? "原有基础款", minAge, maxAge, minPeople,
           available: unavailableReason === "", unavailableReason, legacy: !style.seriesId };
       }), policyVersion: "wardrobe-edit-consent-v1" };
   }

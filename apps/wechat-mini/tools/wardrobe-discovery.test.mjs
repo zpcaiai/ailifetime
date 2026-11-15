@@ -34,11 +34,35 @@ test('historical v1 context remains browsable with the original eight groups',()
  const c=context();c.catalogVersion='lifetime-wardrobe.v1';c.styles=c.styles.slice(0,34);delete c.series;
  const groups=catalog(c);assert.equal(groups.length,8);assert.equal(discover(c.styles,groups).styleCount,31);
 });
+test('a style search uses the matching photo and keeps general and unavailable searches accurate', () => {
+ const c = context(6);
+ const groups = catalog(c);
+ const plain = discover(c.styles, groups, {query: '法式'}).visibleSeries.find(series => series.id === 'french');
+ assert.equal(plain.coverLooks[0].id, 'french-mariniere-v1');
+ const [tweed] = discover(c.styles, groups, {query: ' 奶油软呢 '}).visibleSeries;
+ assert.equal(tweed.id, 'french');
+ assert.deepEqual(Array.from(tweed.matchedStyleIds), ['french-tweed-v1']);
+ assert.equal(tweed.coverLooks[0].id, 'french-tweed-v1');
+ assert.equal(tweed.coverLooks[0].ordinal, '02');
+ assert.equal(new Set(tweed.coverLooks.map(look => look.id)).size, 3);
+ assert.match(tweed.lookNames, /匹配 · 奶油软呢/u);
+ const graduation = c.styles.find(style => style.id === 'milestone-graduation-v1');
+ const birthday = c.styles.find(style => style.id === 'milestone-birthday-v1');
+ graduation.description = '共用剪裁词 · 深色袍身 · 素衬衣';
+ birthday.description = '共用剪裁词 · 柔和礼服衣料 · 裙装或正装';
+ const [occasion] = discover(c.styles, groups, {query: '共用剪裁词'}).visibleSeries;
+ assert.equal(occasion.coverLooks[0].id, birthday.id);
+ const [ageLimited] = discover(c.styles, groups, {query: '深色袍身'}).visibleSeries;
+ assert.equal(ageLimited.coverLooks[0].id, graduation.id);
+ assert.match(ageLimited.lookNames, /当前不适用/u);
+});
 test('mini view exposes collection controls, real descriptions and illustrative card labels',()=>{
  const view=readFileSync(new URL('../miniprogram/pages/wardrobe/index.wxml',import.meta.url),'utf8');
  for(const binding of ['searchSeries','filterCategory','filterAvailable','clearDiscovery','visibleSeries','selectedSeries.tagline','focusedTemplate.features','item.previewSrc','focusedTemplate.previewSrc','seriesItem.availability','seriesItem.coverStyle'])assert.ok(view.includes(binding),binding);
  assert.ok(view.includes('AI 衣着预览'));assert.ok(view.includes('maxlength="40"'));assert.ok(view.includes('aria-label="搜索衣橱系列'));
  const css=readFileSync(new URL('../miniprogram/pages/wardrobe/index.wxss',import.meta.url),'utf8');assert.ok(css.includes('calc(50% - 5px)'));assert.ok(css.includes('white-space: normal'));assert.ok(css.includes('min-width: 0'));
+ assert.match(view, /visibleSeries\.length === 1 \? 'single-result'/u);
+ assert.match(css, /\.series-options\.single-result \.series-option\s*\{[^}]*flex-basis:\s*100%/u);
 });
 
 test('series covers, grid thumbnails and detail preserve square photos without cropping', () => {

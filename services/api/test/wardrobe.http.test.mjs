@@ -22,6 +22,17 @@ for(const couple of [false,true])test(`actual operator wardrobe HTTP ${couple?'c
     const context=(await(await fetch(base+path,{headers})).json()).data;assert.equal(context.participants.length,couple?2:1);assert.equal(context.targetAge,37);assert.equal(context.participants.every(p=>!p.authorized),true);
     assert.equal(context.catalogVersion,'lifetime-wardrobe.v3');assert.equal(context.styles.length,219);
     assert.equal(context.styles.filter(s=>!s.legacy).length,216);assert.equal(new Set(context.styles.filter(s=>!s.legacy).map(s=>s.seriesId)).size,24);
+    const displayable = context.styles.filter(style => !style.legacy);
+    for (const style of displayable) {
+      const details = style.description.split(" · ");
+      assert.equal(details.length, 3, style.id);
+      assert.ok(details.every(detail => detail.length > 1), style.id);
+      assert.equal(new Set(details).size, 3, style.id);
+    }
+    assert.equal(new Set(displayable.slice(0, 31).map(style => style.description)).size, 31);
+    assert.equal(displayable.find(style => style.id === "east-pankou-v1").description, "哑光棉布 · 中式小立领 · 细盘扣");
+    assert.match(displayable.find(style => style.id === "winter-puffer-v1").description, /分段绗缝/u);
+    assert.ok(context.styles.filter(style => style.legacy).every(style => style.description === style.label));
     assert.equal(context.series.length,24);assert.equal(new Set(context.series.map(s=>s.category)).size,6);
     for(const group of context.series){assert.ok(group.tagline.length>8);assert.equal(group.palette.length,3);assert.ok(context.styles.some(s=>s.seriesId===group.id));}
     assert.equal(context.styles.find(s=>s.id==='baby-milk-v1').available,false);assert.equal(context.styles.find(s=>s.id==='storybook-forest-v1').available,false);
