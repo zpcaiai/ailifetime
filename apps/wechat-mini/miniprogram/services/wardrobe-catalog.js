@@ -3,6 +3,34 @@ const isSeriesId = value => typeof value === "string" && value.length <= 48 && /
 const text = (value, max) => typeof value === "string" && value.length > 0 && value.length <= max;
 const invalid = () => { throw new Error("WARDROBE_CONTEXT_INVALID"); };
 
+// Curated from the bundled photos. The first look introduces the series.
+const coverKeys = new Map(Object.entries({
+  east: ["hanfu", "yun-jin", "qipao"],
+  retro: ["campus-jacket", "hongkong", "denim"],
+  together: ["trench", "knit", "denim-pair"],
+  daily: ["stripe-knit", "linen", "gray-waistcoat"],
+  wedding: ["chinese", "pearl-vow", "navy-vow"],
+  milestone: ["graduation", "birthday", "career"],
+  winter: ["snow-quilt", "camel-duffle", "berry-cardigan"],
+  newyear: ["chinese", "jade-festival", "gold-pair"],
+  french: ["mariniere", "tweed", "rose-twill"],
+  british: ["argyle", "herringbone", "sage-quilt"],
+  film: ["burgundy", "noir", "cobalt-satin"],
+  atelier: ["emerald-silk", "lavender-tulle", "pearl"],
+  ink: ["bamboo", "lotus", "stone"],
+  dunhuang: ["cinnabar", "indigo", "turquoise"],
+  garden: ["rose", "hydrangea", "camellia"],
+  coast: ["azure", "sunrise", "sail"],
+  city: ["sand-trench", "charcoal-jacket", "rose-knit"],
+  utility: ["steel-vest", "clay-canvas", "ink-panel"],
+  outdoor: ["moss", "glacier", "sand-vest"],
+  sport: ["sky-track", "sage-polo", "sunny-block"],
+  academy: ["camel-vest", "navy", "blue-oxford"],
+  storybook: ["forest", "cloud", "candy"],
+  baby: ["cloud", "peach", "milk"],
+  heritage: ["jade", "cashmere", "rose-wool"],
+}));
+
 function catalog(context) {
   const nine = context?.catalogVersion === "lifetime-wardrobe.v3", modern = nine || context?.catalogVersion === "lifetime-wardrobe.v2", old = context?.catalogVersion === "lifetime-wardrobe.v1";
   if ((!modern && !old) || !Number.isInteger(context.targetAge) || context.targetAge < 0 || context.targetAge > 100 || !Array.isArray(context.participants) || ![1, 2].includes(context.participants.length) ||
@@ -57,9 +85,10 @@ function discover(styles, groups, {category = "all", query = "", onlyAvailable =
     const matches = search ? looks.filter(style => [style.label, style.description || ""].some(value => value.toLowerCase().includes(search))) : [];
     const eligibleMatch = matches.find(style => style.available);
     const lead = eligibleMatch || matches[0];
+    const curated = (coverKeys.get(group.id) || []).map(key => looks.find(style => style.id === `${group.id}-${key}-v1`));
     const sample = [looks[0], looks[Math.floor(looks.length / 2)], looks[looks.length - 1]];
-    const cover = lead ? [lead, ...sample.filter(style => style.id !== lead.id)].slice(0, 3) : sample;
-    const listed = lead ? [lead, ...matches.filter(style => style.id !== lead.id)] : looks;
+    const cover = Array.from(new Set([lead, ...curated, ...sample].filter(Boolean))).slice(0, 3);
+    const listed = lead ? [lead, ...matches.filter(style => style.id !== lead.id)] : cover;
     const names = listed.slice(0, 3).map(style => style.label).join(" / ") + (listed.length > 3 ? ` 等${listed.length}款` : "");
     return {...group, name:group.label.split(" · ")[0], count:eligible.length, totalCount:looks.length,
       lookNames:lead ? `匹配 · ${names}${eligibleMatch ? "" : "（当前不适用）"}` : names,

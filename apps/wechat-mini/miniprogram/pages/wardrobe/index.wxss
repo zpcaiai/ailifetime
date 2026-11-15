@@ -82,6 +82,8 @@
 .template-hero { margin-top: 17px; border: 1px solid #eadce2; border-radius: 23px; overflow: hidden; background: #fffcf9; }
 .template-art { max-width: 360px; margin: 0 auto; }
 .template-hero-copy { padding: 16px 15px 18px; }
+.template-navigation { padding: 0 15px; flex-wrap: nowrap; }
+.template-navigation .button[disabled] { background: #f8f4f1; border-color: #eee6e2; color: #8a7d82; }
 .template-title { margin-top: 7px; color: #65435b; font-family: var(--display); font-size: 23px; font-weight: 700; }
 .template-features { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
 .template-features text { padding: 4px 7px; border-radius: 7px; color: #735d6b; background: #f1e8eb; font-size: 11px; }

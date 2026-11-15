@@ -36,6 +36,11 @@
     </view>
     <view id="wardrobe-template-detail" class="template-hero" wx:if="{{focusedTemplate}}">
       <view class="template-hero-copy"><view class="template-title">{{focusedTemplate.label}}</view><view class="template-features"><text wx:for="{{focusedTemplate.features}}" wx:for-item="feature" wx:key="*this">{{feature}}</text></view></view>
+      <view class="section-head template-navigation" wx:if="{{templatePosition && bundleCount > 1}}">
+        <button class="button secondary compact" data-step="previous" bindtap="stepTemplate" disabled="{{busy || templatePosition <= 1}}">上一款</button>
+        <text class="muted" aria-label="可用款式第 {{templatePosition}} 款，共 {{bundleCount}} 款">{{templatePosition}} / {{bundleCount}}</text>
+        <button class="button secondary compact" data-step="next" bindtap="stepTemplate" disabled="{{busy || templatePosition >= bundleCount}}">下一款</button>
+      </view>
       <view class="template-art wardrobe-image"><image src="{{focusedTemplate.previewSrc}}" mode="aspectFit" webp="{{true}}" aria-label="{{focusedTemplate.label}}，AI 衣着预览图" /></view>
       <view class="template-hero-copy"><button class="button secondary" bindtap="showTemplateGrid">返回款式列表</button></view>
     </view>

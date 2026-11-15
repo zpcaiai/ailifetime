@@ -33,6 +33,11 @@ test('malformed metadata, upper-age lies, unknown series and unsafe palette styl
 test('historical v1 context remains browsable with the original eight groups',()=>{
  const c=context();c.catalogVersion='lifetime-wardrobe.v1';c.styles=c.styles.slice(0,34);delete c.series;
  const groups=catalog(c);assert.equal(groups.length,8);assert.equal(discover(c.styles,groups).styleCount,31);
+ for(const group of discover(c.styles,groups).series){
+  assert.equal(new Set(group.coverLooks.map(look=>look.id)).size,3);
+  assert.ok(group.coverLooks.every(look=>c.styles.some(style=>style.id===look.id)));
+  assert.equal(group.lookNames,group.coverLooks.map(look=>look.label).join(' / '));
+ }
 });
 test('a style search uses the matching photo and keeps general and unavailable searches accurate', () => {
  const c = context(6);
@@ -81,8 +86,27 @@ test('v2 history and nine-look presentation retain bounded readable covers and d
  const c=context();const older={...c,catalogVersion:'lifetime-wardrobe.v2',styles:c.styles.slice(0,98)};assert.equal(discover(older.styles,catalog(older)).styleCount,95);
  const groups=catalog(c),v=discover(c.styles,groups);const shapes=new Set(),textures=new Set();
  for(const group of v.series){const styles=c.styles.filter(s=>s.seriesId===group.id);assert.equal(group.totalCount,9);assert.equal(group.coverLooks.length,3);assert.ok(group.lookNames.length<65);
+  assert.equal(new Set(group.coverLooks.map(look=>look.id)).size,3);
+  assert.equal(group.lookNames,group.coverLooks.map(look=>look.label).join(' / '));
+  assert.ok(group.coverLooks.every(look=>look.seriesId===group.id));
   styles.forEach((s,i)=>{const p=presentStyle(s,i,group.palette);assert.equal(p.ordinal,String(i+1).padStart(2,'0'));assert.ok(p.features.length>=1);assert.ok(/^--garment:#[a-fA-F0-9]{6};/.test(p.illustrationStyle));shapes.add(p.silhouette);textures.add(p.texture);});
  }assert.ok(shapes.size>=8);assert.ok(textures.size>=6);
+});
+test('cover edit highlights representative silhouettes while search puts the matched photo first', () => {
+ const c = context();
+ const groups = catalog(c);
+ const covers = discover(c.styles, groups).series;
+ for (const [id, keys] of [
+  ['east', ['hanfu', 'yun-jin', 'qipao']],
+  ['wedding', ['chinese', 'pearl-vow', 'navy-vow']],
+  ['winter', ['snow-quilt', 'camel-duffle', 'berry-cardigan']],
+  ['dunhuang', ['cinnabar', 'indigo', 'turquoise']],
+ ]) {
+  const { coverLooks } = covers.find(group => group.id === id);
+  assert.deepEqual(Array.from(coverLooks, look => look.id), keys.map(key => `${id}-${key}-v1`));
+ }
+ const [match] = discover(c.styles, groups, {query: '奶油软呢'}).visibleSeries;
+ assert.deepEqual(Array.from(match.coverLooks, look => look.id), ['french-tweed-v1','french-mariniere-v1','french-rose-twill-v1']);
 });
 
 test('all 216 catalog looks have a distinct bundled photo used by the grid and detail', () => {
