@@ -61,6 +61,8 @@ test('mini view exposes collection controls, real descriptions and illustrative 
  for(const binding of ['searchSeries','filterCategory','filterAvailable','clearDiscovery','visibleSeries','selectedSeries.tagline','focusedTemplate.features','item.previewSrc','focusedTemplate.previewSrc','seriesItem.availability','seriesItem.coverStyle'])assert.ok(view.includes(binding),binding);
  assert.ok(view.includes('AI 衣着预览'));assert.ok(view.includes('maxlength="40"'));assert.ok(view.includes('aria-label="搜索衣橱系列'));
  const css=readFileSync(new URL('../miniprogram/pages/wardrobe/index.wxss',import.meta.url),'utf8');assert.ok(css.includes('calc(50% - 5px)'));assert.ok(css.includes('white-space: normal'));assert.ok(css.includes('min-width: 0'));
+ assert.match(view, /visibleSeries\.length === 1 \? 'single-result'/u);
+ assert.match(css, /\.series-options\.single-result \.series-option\s*\{[^}]*flex-basis:\s*100%/u);
 });
 
 test('series covers, grid thumbnails and detail preserve square photos without cropping', () => {

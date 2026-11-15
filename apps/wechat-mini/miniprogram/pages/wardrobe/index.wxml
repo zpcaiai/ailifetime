@@ -10,7 +10,7 @@
     <view class="wardrobe-search"><input value="{{seriesQuery}}" bindinput="searchSeries" maxlength="40" placeholder="搜系列、款式或面料，如「软呢」" aria-label="搜索衣橱系列、款式或面料" confirm-type="search" /></view>
     <scroll-view class="category-scroll" scroll-x="{{true}}"><view class="category-options"><button wx:for="{{categories}}" wx:key="id" class="category-option {{categoryId === item.id ? 'active' : ''}}" data-category="{{item.id}}" bindtap="filterCategory" aria-label="{{item.label}}分类">{{item.label}}</button></view></scroll-view>
     <view class="wardrobe-filter"><text>只看这张照片能用的系列</text><switch checked="{{onlyAvailable}}" bindchange="filterAvailable" color="#805B72" aria-label="只看当前照片可用系列" /></view>
-    <view class="series-options">
+    <view class="series-options {{visibleSeries.length === 1 ? 'single-result' : ''}}">
       <button wx:for="{{visibleSeries}}" wx:for-item="seriesItem" wx:key="id" class="series-option {{selectedSeriesId === seriesItem.id ? 'active' : ''}}" data-series="{{seriesItem.id}}" bindtap="selectBundle" disabled="{{busy || !seriesItem.count}}" aria-label="{{seriesItem.label}}，{{seriesItem.availability}}，{{selectedSeriesId === seriesItem.id ? '已选中' : '选择此系列'}}">
         <view class="series-cover" style="{{seriesItem.coverStyle}}" aria-hidden="true">
           <view class="series-lead wardrobe-image"><image src="{{seriesItem.coverLooks[0].previewSrc}}" mode="aspectFit" lazy-load="{{true}}" webp="{{true}}" /></view>
