@@ -13,7 +13,7 @@ const dressPerson = (person, styles, seriesId) => {
 };
 
 Page({
-  data: { rootId: "", targetAge: 0, context: null, people: [], styles: [], series: [], visibleSeries: [], categories: [], categoryId: "all", seriesQuery: "", onlyAvailable: false, styleCount: 0, availableSeriesCount: 0, selectedSeries: null, templateStyles: [], focusedTemplate: null, sourcePath: "", resultPath: "", commandId: "", result: null, accepted: false, busy: false, albumPermissionDenied: false, error: "", message: "", selectedSeriesId: "daily", bundleStyles: [], bundleCount: 0, purchaseId: "", seriesPurchase: null, seriesItems: [], retailPriceSeries: purchases.money(purchases.PRICES["wardrobe-series"]), priceSeries: purchases.money(purchases.PRICES["wardrobe-series"]), seriesSaved: 0 },
+  data: { rootId: "", targetAge: 0, context: null, people: [], styles: [], series: [], visibleSeries: [], categories: [], categoryId: "all", seriesQuery: "", onlyAvailable: false, styleCount: 0, availableSeriesCount: 0, selectedSeries: null, templateStyles: [], focusedTemplate: null, templatePosition: 0, sourcePath: "", resultPath: "", commandId: "", result: null, accepted: false, busy: false, albumPermissionDenied: false, error: "", message: "", selectedSeriesId: "daily", bundleStyles: [], bundleCount: 0, purchaseId: "", seriesPurchase: null, seriesItems: [], retailPriceSeries: purchases.money(purchases.PRICES["wardrobe-series"]), priceSeries: purchases.money(purchases.PRICES["wardrobe-series"]), seriesSaved: 0 },
   active: false, epoch: 0, timer: null, intent: null,
   async onLoad(options) {
     const openingEpoch = ++this.epoch;
@@ -51,7 +51,7 @@ Page({
     const paths = [this.data.sourcePath, this.data.resultPath, ...this.data.seriesItems.map(item => item.localPath)];
     this.loadedCommandId = "";
     this.catalogGroups = [];
-    this.setData({ context: null, people: [], styles: [], series: [], visibleSeries: [], categories: [], styleCount: 0, availableSeriesCount: 0, selectedSeries: null, templateStyles: [], focusedTemplate: null, sourcePath: "", resultPath: "", result: null, seriesPurchase: null, seriesItems: [], bundleStyles: [], bundleCount: 0, accepted: false, busy: false, albumPermissionDenied: false });
+    this.setData({ context: null, people: [], styles: [], series: [], visibleSeries: [], categories: [], styleCount: 0, availableSeriesCount: 0, selectedSeries: null, templateStyles: [], focusedTemplate: null, templatePosition: 0, sourcePath: "", resultPath: "", result: null, seriesPurchase: null, seriesItems: [], bundleStyles: [], bundleCount: 0, accepted: false, busy: false, albumPermissionDenied: false });
     await Promise.all(paths.filter(Boolean).map(path => media.remove(path)));
   },
   async refresh() {
@@ -98,18 +98,29 @@ Page({
     const bundleStyles = templateStyles.filter(style => style.available);
     const matchedTemplate = bundleStyles.find(style => preferredStyleIds.includes(style.id));
     const focusedTemplate = matchedTemplate || templateStyles.find(style => style.id === this.data.focusedTemplate?.id && style.available) || bundleStyles[0] || templateStyles[0] || null;
-    this.setData({ ...view, selectedSeries, templateStyles, focusedTemplate, bundleStyles, bundleCount: bundleStyles.length },
+    const templatePosition = bundleStyles.findIndex(style => style.id === focusedTemplate?.id) + 1;
+    this.setData({ ...view, selectedSeries, templateStyles, focusedTemplate, templatePosition, bundleStyles, bundleCount: bundleStyles.length },
       onRendered && (() => onRendered(focusedTemplate, matchedTemplate)));
   },
   previewOutfit(event) {
-    const style = this.data.templateStyles.find(item => item.id === event.currentTarget.dataset.style);
-    if (!this.active || this.data.busy || !style?.available) return;
+    const index = this.data.bundleStyles.findIndex(style => style.id === event.currentTarget.dataset.style);
+    this.focusTemplate(index, true);
+  },
+  stepTemplate(event) {
+    const { step } = event.currentTarget.dataset;
+    if (!this.data.templatePosition || (step !== "previous" && step !== "next")) return;
+    this.focusTemplate(this.data.templatePosition - 1 + (step === "next" ? 1 : -1));
+  },
+  focusTemplate(index, scrollToDetail = false) {
+    const style = this.data.bundleStyles[index];
+    if (!this.active || this.data.busy || !style) return;
     const epoch = this.epoch;
-    this.setData({ focusedTemplate: style }, () => {
+    const onRendered = scrollToDetail ? () => {
       if (this.active && this.epoch === epoch && this.data.focusedTemplate?.id === style.id) {
         wx.pageScrollTo({ selector: "#wardrobe-template-detail", duration: 240 });
       }
-    });
+    } : undefined;
+    this.setData({ focusedTemplate: style, templatePosition: index + 1 }, onRendered);
   },
   showTemplateGrid() {
     if (this.active && this.data.selectedSeries) {

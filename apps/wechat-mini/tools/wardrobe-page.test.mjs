@@ -38,6 +38,10 @@ test('reopened9.90 wardrobe quote displays its stored price while new series rem
  assert.equal(f.p.data.templateStyles.length,4);assert.equal(f.p.data.priceSeries,'¥9.90');
  assert.equal(f.p.data.focusedTemplate.id,'daily-white-v1');
  assert.equal(f.scrolls.at(-1),'#wardrobe-template-grid');
+ for(let i=0;i<5;i++)f.p.stepTemplate({currentTarget:{dataset:{step:'next'}}});
+ assert.equal(f.p.data.templatePosition,4);
+ assert.equal(f.p.data.focusedTemplate.id,'daily-suit-v1');
+ assert.equal(f.p.data.priceSeries,'¥9.90');
  assert.equal(f.calls.some(call=>call.path==='/v1/photo-purchases'),false);
  await f.p.selectBundle({currentTarget:{dataset:{series:'french'}}});assert.equal(f.p.data.priceSeries,'¥19.90');assert.equal(f.p.data.purchaseId,'');assert.equal(f.p.data.seriesPurchase,null);
 });
@@ -45,12 +49,47 @@ test('nine-grid focus shows distinct style details without changing the bundle, 
  const f=page(async()=>({data:context(false,6)}));await f.p.onLoad({rootId:'root',age:'6'});assert.equal(f.p.data.templateStyles.length,9);
  assert.deepEqual(f.scrolls, []);
  const last=f.p.data.templateStyles[8];f.p.previewOutfit({currentTarget:{dataset:{style:last.id}}});assert.equal(f.p.data.focusedTemplate.id,last.id);assert.equal(f.p.data.bundleCount,9);assert.equal(f.calls.filter(c=>c.path==='/v1/photo-purchases').length,0);
+ assert.equal(f.p.data.templatePosition,9);
  f.p.showTemplateGrid();
  assert.deepEqual(f.scrolls, ['#wardrobe-template-detail', '#wardrobe-template-grid']);
  await f.p.selectBundle({currentTarget:{dataset:{series:'milestone'}}});assert.equal(f.p.data.templateStyles.length,9);assert.equal(f.p.data.bundleCount,4);
  const unavailable=f.p.data.templateStyles.find(s=>!s.available),before=f.p.data.focusedTemplate.id;f.p.previewOutfit({currentTarget:{dataset:{style:unavailable.id}}});assert.equal(f.p.data.focusedTemplate.id,before);
  assert.deepEqual(f.scrolls, ['#wardrobe-template-detail', '#wardrobe-template-grid', '#wardrobe-template-grid']);
  f.p.onHide();assert.equal(f.p.data.templateStyles.length,0);assert.equal(f.p.data.focusedTemplate,null);
+});
+test('large preview steps through eligible styles in order, respects boundaries and never submits', async () => {
+ const f = page(async () => ({data: context(false, 6)}));
+ await f.p.onLoad({rootId:'root', age:'6'});
+ await f.p.selectBundle({currentTarget:{dataset:{series:'milestone'}}});
+ const expected = Array.from(f.p.data.templateStyles.filter(style => style.available), style => style.id);
+ assert.equal(expected.length, 4);
+ const step = direction => f.p.stepTemplate({currentTarget:{dataset:{step:direction}}});
+ step('previous');
+ assert.equal(f.p.data.templatePosition, 1);
+ const visited = [f.p.data.focusedTemplate.id];
+ for(let i=1;i<expected.length;i++){
+  step('next');
+  assert.equal(f.p.data.templatePosition, i+1);
+  visited.push(f.p.data.focusedTemplate.id);
+ }
+ step('next');
+ assert.equal(f.p.data.templatePosition, 4);
+ assert.deepEqual(visited, expected);
+ f.p.setData({busy:true});
+ step('previous');
+ assert.equal(f.p.data.templatePosition, 4);
+ f.p.setData({busy:false});
+ step('previous');
+ assert.equal(f.p.data.focusedTemplate.id, expected[2]);
+ assert.equal(f.p.data.templatePosition, 3);
+ assert.deepEqual(f.scrolls, ['#wardrobe-template-grid']);
+ assert.equal(f.calls.some(call => call.path==='/v1/photo-purchases'), false);
+ await f.p.onHide();
+ step('next');
+ assert.equal(f.p.data.templatePosition, 0);
+ const view = readFileSync(new URL('../miniprogram/pages/wardrobe/index.wxml', import.meta.url), 'utf8');
+ assert.match(view, /data-step="previous" bindtap="stepTemplate"/u);
+ assert.match(view, /data-step="next" bindtap="stepTemplate"/u);
 });
 test('stale template render callbacks do not move the visible viewport', async () => {
  const f = page(async () => ({data: context()}));
