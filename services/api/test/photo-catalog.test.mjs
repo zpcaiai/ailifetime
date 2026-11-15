@@ -3,7 +3,7 @@ import test from 'node:test';
 import { PHOTO_PRODUCTS, agePhotoProduct, photoProduct, wardrobeSeriesProduct } from '../dist/photo-catalog.js';
 
 test('v3 albums have four exact count/quality prices while other totals and old quotes are preserved', () => {
-  assert.deepEqual(PHOTO_PRODUCTS.map(p => [p.sku,p.amountMinor,p.currency]), [['lifespan-11-standard',1990,'CNY'],['lifespan-21-standard',2990,'CNY'],['lifespan-11-hd',2990,'CNY'],['lifespan-21',4990,'CNY'],['selected-age',590,'CNY'],['wardrobe-series',990,'CNY']]);
+  assert.deepEqual(PHOTO_PRODUCTS.map(p => [p.sku,p.amountMinor,p.currency]), [['lifespan-11-standard',1990,'CNY'],['lifespan-21-standard',2990,'CNY'],['lifespan-11-hd',2990,'CNY'],['lifespan-21',4990,'CNY'],['selected-age',590,'CNY'],['wardrobe-series',1990,'CNY']]);
   assert.equal(photoProduct('lifespan-21').priceVersion, 'photo-retail-cny.v3');
   assert.equal(photoProduct('lifespan-21').imageCount, 21);
   assert.equal(photoProduct('lifespan-21','photo-retail-cny.v1').amountMinor,990);
@@ -28,18 +28,20 @@ test('age price binds all exact 21 ages or one arbitrary integer age for either 
   for (const profile of ['single-age-v1','single-age-couple-v1']) assert.deepEqual(agePhotoProduct(profile,[37]).targetAges,[37]);
   for (const [p,a] of [['custom',ages],['lifespan-21-v1',[...ages].reverse()],['lifespan-21-v1',ages.slice(1)],['single-age-v1',[5,10]],['single-age-v1',[-1]],['single-age-v1',[101]],['single-age-v1',['30']],['single-age-v1',[3.5]]]) assert.throws(()=>agePhotoProduct(p,a));
 });
-test('990 cents buys every eligible style in one series, with no per-style multiplication', () => {
-  assert.equal(wardrobeSeriesProduct('east',30,1).amountMinor,990);
-  assert.deepEqual(wardrobeSeriesProduct('east',30,1).styleIds,['east-pankou-v1','east-song-v1','east-qipao-v1','east-hanfu-v1']);
+test('1990 cents buys every eligible style and preserves the v3 wardrobe quote', () => {
+  assert.equal(wardrobeSeriesProduct('east',30,1).amountMinor,1990);
+  assert.equal(wardrobeSeriesProduct('east',30,1).priceVersion,'photo-retail-cny.v4');
+  assert.equal(photoProduct('wardrobe-series','photo-retail-cny.v3').amountMinor,990);
+  assert.deepEqual(wardrobeSeriesProduct('east',30,1,'lifetime-wardrobe.v1').styleIds,['east-pankou-v1','east-song-v1','east-qipao-v1','east-hanfu-v1']);
   const all=['east','retro','together','daily','wedding','milestone','winter','newyear'].map(id=>wardrobeSeriesProduct(id,50,2));
-  assert.equal(all.reduce((sum,p)=>sum+p.imageCount,0),31);
-  assert.ok(all.every(p=>p.amountMinor===990 && p.imageCount===p.styles.length && p.styleIds.length===p.imageCount));
+  assert.equal(all.reduce((sum,p)=>sum+p.imageCount,0),72);
+  assert.ok(all.every(p=>p.amountMinor===1990 && p.imageCount===p.styles.length && p.styleIds.length===p.imageCount));
 });
 test('series eligibility preserves age and couple restrictions, rejects empty or legacy bundles', () => {
-  assert.equal(wardrobeSeriesProduct('newyear',0,1).imageCount,2);
-  assert.equal(wardrobeSeriesProduct('newyear',30,2).imageCount,3);
-  assert.equal(wardrobeSeriesProduct('milestone',0,1).imageCount,1);
-  assert.equal(wardrobeSeriesProduct('together',30,2).imageCount,3);
-  assert.equal(wardrobeSeriesProduct('together',50,2).imageCount,4);
+  assert.equal(wardrobeSeriesProduct('newyear',0,1).imageCount,7);
+  assert.equal(wardrobeSeriesProduct('newyear',30,2).imageCount,9);
+  assert.equal(wardrobeSeriesProduct('milestone',0,1).imageCount,4);
+  assert.equal(wardrobeSeriesProduct('together',30,2).imageCount,8);
+  assert.equal(wardrobeSeriesProduct('together',50,2).imageCount,9);
   for(const args of [['together',30,1],['together',17,2],['wedding',17,1],['legacy',30,1],['east','30',1],['east',30,3],['east',-1,1]]) assert.throws(()=>wardrobeSeriesProduct(...args));
 });

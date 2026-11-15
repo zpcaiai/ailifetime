@@ -55,10 +55,15 @@ export class PhotoPurchaseService {
       try { record = await this.load(actor,id); }
       catch (error) { if (error instanceof DomainError && error.code === "RESOURCE_NOT_FOUND") return undefined; throw error; }
       const stored = record.data.scope as JsonObject, price = photoProduct(stored.sku,stored.priceVersion);
+      let expectedScope = scope;
+      if (stored.sku === "wardrobe-series" && scope.sku === "wardrobe-series") {
+        expectedScope = json(wardrobeSeriesProduct(input.seriesId,input.targetAge,(request.participantIds as string[]).length,stored.catalogVersion ?? "lifetime-wardrobe.v2"));
+        if (stored.catalogVersion === undefined) { const {catalogVersion: _catalogVersion,...legacyScope} = expectedScope; expectedScope = legacyScope; }
+      }
       const historical = stored.priceVersion === "photo-retail-cny.v1" || stored.priceVersion === "photo-retail-cny.v2";
       const comparable = historical ? { ...stored,title:scope.title!,...(scope.imageQuality ? {imageQuality:scope.imageQuality,imageWidth:scope.imageWidth!,imageHeight:scope.imageHeight!,retentionDays:scope.retentionDays!} : {}) } : stored;
       if (stored.amountMinor !== price.amountMinor || record.data.scopeSha256 !== digest([stored,record.data.request]) ||
-          canonicalJson(record.data.request!) !== canonicalJson(request) || canonicalJson({ ...comparable,amountMinor:scope.amountMinor!,priceVersion:scope.priceVersion! }) !== canonicalJson(scope)) {
+          canonicalJson(record.data.request!) !== canonicalJson(request) || canonicalJson({ ...comparable,amountMinor:expectedScope.amountMinor!,priceVersion:expectedScope.priceVersion! }) !== canonicalJson(expectedScope)) {
         throw new DomainError("IDEMPOTENCY_CONFLICT","photo purchase idempotency key has a different scope");
       }
       await this.bindCommands(actor,record);return this.get(actor,id);
@@ -200,6 +205,7 @@ export class PhotoPurchaseService {
     return { schemaVersion: "ltm.photo-purchase.v1", purchaseId: id, sku: scope.sku, title: scope.title, priceVersion: scope.priceVersion,
       ...(scope.imageQuality ? {imageQuality:scope.imageQuality,imageWidth:scope.imageWidth,imageHeight:scope.imageHeight,retentionDays:scope.retentionDays} : {}),
       amountMinor: scope.amountMinor, currency: "CNY", expectedCount: scope.imageCount, seriesId: scope.seriesId ?? null, seriesTitle: scope.seriesTitle ?? null,
+      ...(scope.sku === "wardrobe-series" ? {catalogVersion:scope.catalogVersion ?? "lifetime-wardrobe.v2"} : {}),
       sourceRootCommandId: request.sourceRootCommandId ?? null,
       scopeSha256: record.data.scopeSha256, checkout: record.data.checkout, paymentState: record.data.paymentState, commandId: commands.age ?? null,
       state: ["closed", "refunded", "failed"].includes(record.data.paymentState as string) ? record.data.paymentState : !record.data.paymentProof ? "awaiting_payment" : readyCount === specs.length ? "ready" : readyCount > 0 ? "partial" : items.some(i => ["unsubmitted", "pending", "retrying"].includes(i.status)) ? "processing" : "blocked",

@@ -1,0 +1,182 @@
+import { WARDROBE_SERIES } from "./wardrobe-collection.js";
+export const NINE_CATALOG_VERSION = "lifetime-wardrobe.v3";
+type Look = [key: string, label: string, description: string, instruction: string, minAge?: number, minPeople?: number];
+const add = (id: string, entries: Look[], minAge = 0, maxAge = 100, minPeople = 1) => {
+  const group = WARDROBE_SERIES.find(s => s.id === id)!;
+  return entries.map(([key,label,description,instruction,age=minAge,people=minPeople]) => Object.freeze({
+    id:`${id}-${key}-v1`,label,description,seriesId:id,seriesLabel:group.label,minAge:age,maxAge,minPeople:people,
+    instruction:`${instruction}. Show the specified fabric weave, construction seams, natural garment thickness and gravity-led folds, with the intended pattern confined to clothing. Adapt the garment cut to source gender presentation and visible body without reshaping it. No logos, readable text or institutional insignia. Use opaque, modest, age-appropriate coverage, safe closures and infant/child sizing; no adult styling of children. Edit only visible clothing; preserve each person's faces, exact displayed age, hair, hands, body shape, pose, positions, background and lighting. Do not extend the crop or add hats, jewelry, handheld props, scenery or photo filters.`,
+  }));
+};
+// Append-only definitions: original IDs and instructions remain unchanged.
+export const NINE_WARDROBE_STYLES = Object.freeze([
+  ...add("east",[
+    ["yun-jin","云锦短衫","月白云锦 · 青玉盘扣 · 小立领","Moon-white cloud-pattern brocade short jacket with pale-jade knotted buttons and a modest stand collar"],
+    ["zhu-ying","竹影马甲","竹青提花 · 米白内衫 · 对襟马甲","Bamboo-green woven jacquard open-front Chinese vest over a cream opaque shirt with restrained leaf motifs"],
+    ["cha-bai","茶白斜襟","茶白苎麻 · 斜襟压线 · 素色扣","Tea-white ramie top with a neatly overlapping diagonal placket, fine tonal stitching and simple cloth buttons"],
+    ["dai-lan","黛蓝绢衣","黛蓝绢棉 · 米色滚边 · 直身长衫","Dark indigo silk-cotton straight Chinese jacket with narrow beige piping and gently weighted sleeves"],
+    ["xing-yu","杏雨绣襟","浅杏棉绸 · 小花刺绣 · 圆角衣襟","Pale-apricot cotton-sateen Chinese top with tiny tonal blossom embroidery at the rounded placket edges"],
+  ]),
+  ...add("retro",[
+    ["campus-jacket","旧日棒球衫","奶油棉布 · 酒红拼袖 · 罗纹领","Vintage cream cotton varsity-inspired jacket with burgundy sleeves and a striped ribbed collar, no lettering"],
+    ["brown-leather","棕色旧夹克","暖棕哑光皮纹 · 小翻领 · 平整门襟","Warm-brown matte leather-textured vintage jacket with a small turn-down collar and flat covered zipper"],
+    ["gingham","格子旧时光","红蓝小格 · 柔棉衬衫 · 圆弧下摆","Vintage red-and-muted-blue small-gingham cotton shirt with a softly rounded garment hem and short pointed collar"],
+    ["cream-safari","奶油工装记","奶油帆布 · 四贴袋 · 深色圆扣","Cream canvas vintage safari-inspired jacket with four shallow patch pockets and dark round buttons, no belt props"],
+    ["amber-knit","琥珀针织记","琥珀色毛线 · 细菱纹 · 奶白领边","Amber fine-wool pullover with small tonal diamond stitches and a cream ribbed neckline"],
+  ]),
+  ...add("together",[
+    ["linen-pair","海盐亚麻对服","海盐蓝亚麻 · 米白领边 · 各自合身","Coordinated adult pair sea-salt-blue linen shirts with ivory collar edges, each garment fitted independently to its wearer"],
+    ["denim-pair","靛蓝牛仔对服","靛蓝斜纹 · 暖白明线 · 轻夹克","Coordinated adult pair indigo denim jackets with warm-white topstitching and individually fitted shoulder seams"],
+    ["mocca-pair","摩卡绒对服","摩卡灯芯绒 · 细棱纹 · 奶白内搭","Coordinated adult pair mocha fine-wale corduroy jackets over opaque cream tops, distinct correctly sized cuts"],
+    ["navy-pair","深蓝礼遇对服","午夜蓝精纺 · 缎面细边 · 端正驳领","Coordinated adult pair midnight-blue fine-wool formal jackets with narrow satin edges and matching opaque inner shirts"],
+    ["sage-pair","鼠尾草开衫对服","鼠尾草绿 · 木色小扣 · 细针织","Coordinated adult pair sage-green fine-knit cardigans with wood-tone buttons and comfortable individual sleeve fit"],
+  ],18,100,2),
+  ...add("daily",[
+    ["blue-oxford","雾蓝牛津衬衫","雾蓝牛津棉 · 小方领 · 细密篮纹","Misty-blue Oxford cotton shirt with a small square collar, fine basket weave and a plain button placket"],
+    ["taupe-cardigan","燕麦细绒开衫","燕麦细绒 · 同色小扣 · 圆领开衫","Oatmeal fine brushed-knit round-neck cardigan with tonal small buttons and softly ribbed sleeve ends"],
+    ["stripe-knit","海盐条纹衫","米白与浅蓝 · 细横条 · 柔软圆领","Ivory and pale-blue narrow striped cotton knit top with a soft closed round collar"],
+    ["sage-jacket","青苔轻夹克","青苔斜纹棉 · 平贴口袋 · 哑光扣","Muted moss cotton-twill lightweight jacket with flat patch pockets and small matte buttons"],
+    ["gray-waistcoat","浅灰羊毛马甲","浅灰羊毛 · 米白内搭 · 圆弧袋口","Light-gray soft-wool tailored vest over an opaque ivory top with curved welt pocket openings"],
+  ]),
+  ...add("wedding",[
+    ["pearl-vow","珍珠誓约","珍珠白提花 · 浅金滚边 · 包覆礼服","Pearl-white opaque jacquard wedding gown bodice or wedding suit with narrow pale-gold binding matching source gender presentation"],
+    ["champagne-vow","香槟花约","香槟绉缎 · 同色花纹 · 简洁肩线","Champagne opaque crepe-satin wedding attire with subtle tonal floral jacquard and simple covered shoulder lines"],
+    ["navy-vow","午夜蓝婚礼","午夜蓝精纺 · 象牙白衬领 · 细缎边","Midnight-blue wedding formalwear with an ivory covered collar and narrow satin garment edging"],
+    ["rose-vow","玫瑰绣约","灰玫瑰厚缎 · 小花刺绣 · 高覆盖领口","Dusty-rose heavyweight satin wedding attire with tiny embroidered blossoms and a modest high-coverage neckline"],
+    ["tea-vow","茶金礼序","茶金绢棉 · 细盘扣 · 礼服直线","Muted tea-gold silk-cotton formal Chinese wedding jacket or dress with delicate knotted buttons and straight garment seams"],
+  ],18),
+  ...add("milestone",[
+    ["growth","成长纪念衫","浅蓝牛津棉 · 米白领边 · 简洁明线","Age-appropriate pale-blue Oxford cotton celebration shirt with ivory collar binding and simple fine topstitching"],
+    ["coming-age","成人礼序","象牙白提花 · 浅金暗纹 · 包覆礼服","Ivory opaque jacquard coming-of-age formalwear with pale-gold tonal geometric weave and covered neckline",18],
+    ["reunion","重逢正装","深海蓝羊毛 · 小驳领 · 柔和肩线","Deep sea-blue soft-wool reunion occasion jacket with small notched lapels and natural shoulder seams",18],
+    ["journey","旅途纪念衣","沙杏亚麻 · 细竖条 · 轻松衬领","Sand-apricot linen commemorative leisure shirt with fine vertical ivory stripes and a comfortable covered collar"],
+    ["family-table","家宴好时光","暖茶绢棉 · 细盘扣 · 低调提花","Warm tea-colored silk-cotton family-occasion top with small knotted buttons and understated woven texture"],
+  ]),
+  ...add("winter",[
+    ["camel-duffle","驼色牛角扣","驼色厚呢 · 平整扣袢 · 大贴袋","Camel thick-wool duffle-inspired coat with safe flat toggle-style closures and large soft patch pockets"],
+    ["snow-quilt","雪白绗棉","雪白棉布 · 菱格绗线 · 米色包边","Snow-white padded cotton jacket with small diamond quilting and beige fabric-bound edges"],
+    ["berry-cardigan","莓红绒开衫","莓红羊毛 · 细麻花 · 同色小扣","Muted berry-red wool cardigan with narrow cable-knit columns and tonal small flat buttons"],
+    ["pine-fleece","松绿羊羔绒","松绿短绒 · 暖白拼边 · 小立领","Pine-green short-pile fleece jacket with warm-white edge panels and a low covered stand collar"],
+    ["slate-down","岩蓝轻羽绒","岩蓝哑光布 · 窄幅绗线 · 平整拉链","Slate-blue lightweight down jacket with narrow quilted channels, matte outer cloth and a flat covered zipper"],
+  ]),
+  ...add("newyear",[
+    ["plum-red","梅红绣袄","梅红棉绸 · 米金梅绣 · 小盘扣","Plum-red padded cotton-sateen Chinese jacket with tiny muted-gold plum-blossom embroidery and small knotted buttons"],
+    ["cream-fortune","米金团圆衫","米金提花 · 朱红领边 · 圆领包覆","Cream-gold woven jacquard festive top with cinnabar-red collar binding and a covered round neckline, no written characters"],
+    ["brick-corduroy","砖红灯芯绒","砖红细绒 · 奶白明线 · 圆领夹克","Brick-red fine-wale corduroy festive jacket with cream topstitching and a softly rounded collar"],
+    ["jade-festival","玉绿迎新衣","玉绿绢棉 · 朱红小扣 · 细云暗纹","Jade-green silk-cotton festive shirt with tiny red cloth buttons and restrained tonal cloud jacquard"],
+    ["red-check","红格暖年","深红与米白 · 小格毛呢 · 平整门襟","Deep-red and ivory small-check wool festive jacket with a neat flat placket and modest opaque inner layer"],
+    ["gold-pair","金砂对服","金砂提花 · 暖红滚边 · 双人各自合身","Coordinated adult pair sand-gold jacquard festive jackets with warm-red edging, each cut fitted independently",18,2],
+  ]),
+  ...add("french",[
+    ["navy-peacoat","海军蓝短呢","海军蓝羊毛 · 双排小扣 · 经典翻领","Navy soft-wool cropped peacoat with small double-breasted buttons and clean rounded lapels"],
+    ["sage-blouse","鼠尾草衬衣","鼠尾草棉绸 · 细褶门襟 · 奶白扣","Sage cotton-sateen blouse or shirt with narrow pintucked placket and cream small buttons"],
+    ["black-knit","黑金细针织","炭黑细针织 · 哑金小扣 · 包覆圆领","Charcoal fine-gauge knit cardigan with small matte-gold buttons and a closed round neckline"],
+    ["blue-gingham","蓝白小格","蓝白细格棉 · 圆角领 · 窄幅包边","Blue-white micro-gingham cotton shirt with rounded collar points and narrow bound garment edges"],
+    ["rose-twill","烟粉轻风衣","烟粉棉斜纹 · 软驳领 · 自然肩线","Smoky-rose lightweight cotton-twill trench-style jacket with soft lapels and natural source-matched shoulder seams"],
+  ]),
+  ...add("british",[
+    ["navy-duffle","海蓝学院呢","深海蓝羊毛 · 平整扣袢 · 方形贴袋","Deep navy wool duffle-style jacket with safe flat closures and rectangular patch pockets, no school insignia"],
+    ["berry-waistcoat","莓棕格纹马甲","莓棕细格 · 米白衬衣 · 尖角前襟","Berry-brown fine-check woven waistcoat with a neat pointed garment front over a cream shirt"],
+    ["sage-quilt","鼠尾草绗缝","鼠尾草棉布 · 菱格绗缝 · 灯芯绒领","Sage quilted cotton jacket with small diamond stitches and a soft dark corduroy collar"],
+    ["ivory-cable","象牙白绞花","象牙白羊毛 · 宽窄绞花 · 高覆盖圆领","Ivory wool sweater with alternating narrow and wide cable-knit columns and a covered round collar"],
+    ["glen-check","燕麦威尔士格","燕麦灰羊毛 · 精细格纹 · 小驳领","Oatmeal-gray fine-wool jacket with small glen-check weave and restrained notched lapels"],
+  ]),
+  ...add("film",[
+    ["ivory-noir","象牙白开场","象牙白精纺 · 炭黑内搭 · 流畅驳领","Ivory fine-wool cinematic portrait jacket over an opaque charcoal top with flowing narrow lapels"],
+    ["cobalt-satin","钴蓝夜幕","钴蓝厚缎 · 斜向细褶 · 包覆领口","Deep cobalt opaque heavyweight satin top with restrained diagonal pleating and a covered neckline"],
+    ["cocoa-velvet","可可旧片","可可棕丝绒 · 同色滚边 · 软肩夹克","Cocoa-brown velvet jacket with tonal piping and soft shoulder construction, realistic directional velvet pile"],
+    ["silver-crepe","银灰片尾","银灰绉纱 · 细密褶线 · 哑光反射","Silver-gray opaque crepe top with narrow vertical pleats and soft low-gloss fabric response"],
+    ["ruby-jacquard","红宝石序曲","暗红提花 · 小花浮纹 · 深色暗扣","Deep ruby-red jacquard portrait jacket with tiny raised woven floral motifs and dark concealed buttons"],
+  ]),
+  ...add("atelier",[
+    ["ivory-sculpt","象牙立裁","象牙白厚绉 · 弧形裁线 · 包覆肩领","Ivory heavyweight crepe formal jacket or covered gown bodice with curved sculptural garment seams and opaque shoulder coverage"],
+    ["emerald-silk","祖母绿绢光","祖母绿绢缎 · 细密腰褶 · 封闭领口","Emerald opaque silk-satin formal top with narrow garment pleats and a closed neckline without body reshaping"],
+    ["copper-brocade","铜金锦绣","暗铜金织锦 · 小几何纹 · 精细包边","Muted copper-gold brocade formalwear with small geometric woven patterns and meticulously bound garment edges"],
+    ["lavender-tulle","雾紫叠纱","雾紫细纱 · 不透明衬层 · 柔和叠褶","Misty-lavender fine tulle layered over a fully opaque matching formal bodice, soft shallow pleats and modest covered neckline"],
+    ["black-pearl","黑曜珠光","黑曜提花 · 同色珠光纹 · 立体肩线","Obsidian tonal pearlescent-jacquard formal jacket with structured garment shoulder seams and restrained woven highlights, no jewelry"],
+  ],18),
+  ...add("ink",[
+    ["lotus","荷白绣衫","荷白绢棉 · 青灰荷叶绣 · 小立领","Lotus-white silk-cotton mandarin-collar top with sparse blue-gray lotus-leaf embroidery confined to the garment"],
+    ["pine","松烟长衫","松烟灰苎麻 · 素色盘扣 · 直身裁线","Pine-smoke gray ramie straight Chinese jacket with tonal knotted buttons and fine visible natural slub weave"],
+    ["stone","岩青叠袍","岩青绉棉 · 月白叠襟 · 细密包边","Rock-blue crepe-cotton robe-inspired top with moon-white overlapping placket and narrow bound edges"],
+    ["plum","梅影绢衣","灰梅紫绢棉 · 小枝刺绣 · 素色扣","Muted plum-gray silk-cotton Chinese shirt with tiny tonal branch embroidery and plain fabric buttons"],
+    ["rice","米香苎麻","米白苎麻 · 茶色领边 · 细斜纹","Rice-white ramie cross-collar garment with tea-brown collar edging and fine diagonal woven texture"],
+  ]),
+  ...add("dunhuang",[
+    ["cinnabar","朱砂锦衣","朱砂提花 · 沙金几何纹 · 包覆交领","Cinnabar opaque jacquard cross-collar garment with narrow sand-gold geometric motifs and restrained layered panels"],
+    ["turquoise","松石纹章","松石绿绢棉 · 铜金滚边 · 对称衣纹","Turquoise silk-cotton Chinese jacket with antique-copper piping and small symmetrical woven garment motifs"],
+    ["sandstone","砂岩叠襟","砂岩色棉绸 · 石绿叠襟 · 细密压线","Sandstone cotton-sateen top with mineral-green overlapping placket and fine tonal construction stitching"],
+    ["saffron","秋金云纹","柔和秋金织锦 · 赭色云纹 · 直身衣线","Soft saffron-gold brocade jacket with sparse ochre cloud-like motifs and modest straight garment seams"],
+    ["indigo","靛青织锦","靛青提花 · 暖砂边饰 · 小菱纹","Deep indigo jacquard top with warm-sand border weaving and small diamond motifs confined to fabric"],
+  ]),
+  ...add("garden",[
+    ["camellia","山茶绣衣","奶白棉绸 · 小山茶刺绣 · 圆角领","Cream cotton-sateen shirt with tiny muted camellia embroidery and soft rounded collar points"],
+    ["hydrangea","绣球雾蓝","绣球蓝绉棉 · 小花簇纹 · 细褶门襟","Hydrangea-blue opaque crepe-cotton top with small tonal flower-cluster prints and a narrow pleated placket"],
+    ["olive-leaf","橄榄叶影","浅橄榄亚麻 · 叶片暗纹 · 同色扣","Pale-olive linen shirt with restrained woven leaf silhouettes and small tonal buttons"],
+    ["apricot-knit","杏花针织","杏白细针织 · 淡粉花点 · 窄罗纹","Apricot-white fine-knit top with tiny pale-pink embroidered blossom dots and narrow ribbed cuffs"],
+    ["bluebell","风铃草格纹","灰蓝细格棉 · 米白领边 · 小褶袖口","Bluebell-gray small-check cotton shirt with ivory collar edges and finely gathered garment cuffs"],
+  ]),
+  ...add("coast",[
+    ["coral","珊瑚棉绸","浅珊瑚棉绸 · 贝白小扣 · 小立领","Pale coral cotton-sateen resort shirt with shell-white flat buttons and a small covered stand collar"],
+    ["dune","沙丘细条","沙白亚麻 · 细竖条纹 · 平整明线","Sand-white linen shirt with fine tan vertical stripes and neat flat construction stitching"],
+    ["lagoon","潟湖蓝衫","潟湖蓝棉麻 · 米白内搭 · 柔和翻领","Lagoon-blue cotton-linen open-collar outer shirt over an opaque ivory top with softly folded collar points"],
+    ["coconut","椰影轻织","椰奶白针织 · 浅绿叶绣 · 细罗纹","Coconut-white fine cotton knit top with sparse pale-green leaf embroidery and narrow ribbed edges"],
+    ["sunrise","晨曦泡泡纱","晨曦杏泡泡纱 · 白色细条 · 包覆圆领","Sunrise-apricot seersucker top with narrow white stripes, a modest bound round collar and realistic puckered cotton texture"],
+  ]),
+  ...add("city",[
+    ["ivory-vest","象牙白马甲","象牙白斜纹 · 灰色内搭 · 弧形裁线","Ivory soft-twill tailored vest over an opaque gray inner top with curved garment princess seams"],
+    ["navy-shirt","深蓝垂感衬衣","深蓝绉棉 · 隐藏门襟 · 小方领","Deep navy crepe-cotton shirt with a concealed button placket and a small squared collar"],
+    ["sand-trench","砂色轻风衣","浅砂棉斜纹 · 柔软驳领 · 平整口袋","Pale-sand lightweight cotton-twill trench jacket with soft lapels and neat flat welt pockets"],
+    ["rose-knit","灰玫瑰针织","灰玫瑰细针织 · 米色领边 · 窄袖口","Dusty-rose fine-knit pullover with beige collar binding and narrow ribbed cuffs"],
+    ["charcoal-jacket","炭灰短西装","炭灰精纺 · 小翻领 · 同色包扣","Charcoal fine-wool short blazer with small lapels and tonal fabric-covered buttons over an opaque inner layer"],
+  ]),
+  ...add("utility",[
+    ["steel-vest","钢蓝工装马甲","钢蓝棉尼龙 · 平贴袋 · 细窄包边","Steel-blue cotton-nylon utility vest with flat patch pockets and narrow fabric binding over a covered plain top"],
+    ["chalk-shell","粉岩轻壳","粉岩灰防撕裂布 · 隐藏拉链 · 平整肩线","Chalk-gray fine-ripstop shell jacket with a covered zipper and neat source-matched shoulder panels"],
+    ["clay-canvas","陶土帆布衣","陶土帆布 · 双明线 · 圆角口袋","Muted clay cotton canvas work jacket with double construction topstitching and rounded patch pockets"],
+    ["ink-panel","墨蓝拼接衣","墨蓝哑光布 · 灰绿拼片 · 弧形裁线","Ink-blue matte utility jacket with muted gray-green panel inserts and curved garment seam lines"],
+    ["taupe-ripstop","岩褐防撕裂衫","岩褐格纹尼龙 · 米色包边 · 小立领","Rock-taupe fine-grid ripstop overshirt with beige edge binding and a low covered stand collar"],
+  ]),
+  ...add("outdoor",[
+    ["cedar","雪松轻棉","雪松绿棉布 · 窄绗线 · 米白内搭","Cedar-green lightweight padded cotton jacket with narrow quilting lines over a covered ivory inner top"],
+    ["clay-fleece","陶红抓绒","陶红微抓绒 · 岩灰领边 · 平整拉链","Muted clay-red microfleece jacket with rock-gray collar edging and a flat covered zipper"],
+    ["sand-vest","砂岩绗缝马甲","砂岩棉布 · 菱格薄绗 · 深绿内搭","Sandstone lightweight quilted cotton vest with small diamond stitches over an opaque dark-green top"],
+    ["glacier","冰川蓝轻壳","冰川蓝哑光壳 · 白灰拼片 · 短立领","Glacier-blue matte outdoor shell jacket with pale-gray paneling and a low stand collar, no outdoor equipment"],
+    ["ochre","秋山灯芯绒","秋山赭黄细绒 · 棕色扣 · 软翻领","Autumn-ochre fine-wale corduroy outdoor-inspired jacket with brown flat buttons and a soft turn-down collar"],
+  ]),
+  ...add("sport",[
+    ["sky-track","晴空运动衫","晴空蓝针织 · 米白肩线 · 罗纹袖口","Sky-blue knit track top with narrow ivory shoulder stripes and soft ribbed cuffs, no team lettering"],
+    ["cocoa-sweat","可可毛圈衫","浅可可毛圈棉 · 奶白圆领 · 平整缝线","Light cocoa loopback cotton sweatshirt with a cream round neckline and flatlock garment seams"],
+    ["sage-polo","鼠尾草珠地衫","鼠尾草珠地棉 · 深绿细边 · 小纽扣","Sage-green pique cotton polo with narrow dark-green collar edges and tiny matte buttons"],
+    ["sunny-block","暖阳拼色衫","暖杏与浅灰 · 哑光运动织物 · 弧形拼片","Warm apricot and light-gray opaque sports-knit top with restrained curved color-block panels"],
+    ["plum-jacket","梅紫轻运动","梅紫运动针织 · 米色拉链边 · 柔软立领","Muted plum knit sports jacket with beige zipper binding and a low soft stand collar"],
+  ]),
+  ...add("academy",[
+    ["camel-vest","驼色书页马甲","驼色菱格针织 · 白色衬领 · 深绿V线","Camel argyle knit vest with a narrow dark-green V-neck edge over a white collared shirt, no school badge"],
+    ["berry-cardigan","莓红学院开衫","莓红细针织 · 奶白门襟 · 小圆扣","Berry-red fine-knit collegiate cardigan with cream placket edges and small round buttons, no institutional marks"],
+    ["blue-oxford","天蓝牛津衫","天蓝牛津棉 · 米色细条 · 小方领","Sky-blue Oxford cotton shirt with thin beige vertical stripes and a modest square collar"],
+    ["gray-blazer","雾灰学院西装","雾灰细格羊毛 · 米白内搭 · 圆润驳领","Misty-gray fine-check wool school-inspired blazer over a covered ivory shirt with gently rounded lapels"],
+    ["ivory-cable","奶白青春绞花","奶白绞花针织 · 深蓝领线 · 柔软袖口","Cream cable-knit sweater with a narrow navy neckline stripe and softly ribbed cuffs over a modest inner shirt"],
+  ],6),
+  ...add("storybook",[
+    ["moon","月亮小夜曲","雾紫柔棉 · 米黄月牙绣 · 包边圆领","Child-sized misty-lilac soft cotton top with tiny pale-yellow crescent embroidery and a safe bound round collar"],
+    ["fox","小狐狸来信","浅陶橘灯芯绒 · 米白领边 · 小狐纹绣","Child-sized pale-terracotta fine corduroy garment with ivory collar edges and a tiny original fox-shaped embroidery on cloth"],
+    ["rainbow","彩虹口袋诗","奶白棉织 · 柔和彩虹绣 · 平贴口袋","Child-sized cream cotton top with small muted rainbow embroidery on flat patch pockets and safe soft seams"],
+    ["berry","小莓果冒险","浅莓红毛圈棉 · 小叶纹 · 窄罗纹","Child-sized pale-berry loopback cotton sweatshirt with tiny leaf embroidery and narrow soft ribbed cuffs"],
+    ["sail","纸船小航行","雾蓝细条棉 · 小纸船绣 · 圆角领","Child-sized misty-blue narrow-striped cotton shirt with tiny original paper-boat embroidery confined to fabric and a rounded collar"],
+  ],0,12),
+  ...add("baby",[
+    ["cloud","云白小棉袄","云白绗棉 · 浅蓝包边 · 平整暗扣","Infant or young-child sized cloud-white softly quilted cotton garment with pale-blue bound edges and safe flat concealed snaps"],
+    ["sunny","奶黄小太阳","奶黄细针织 · 小太阳刺绣 · 柔软圆领","Infant or young-child sized pale-butter cotton knit top with tiny sun embroidery and a soft safe round collar"],
+    ["berry","莓莓小毛圈","浅莓粉毛圈 · 米白袖边 · 平整缝线","Infant or young-child sized pale-berry terry-cotton garment with ivory cuff binding and smooth safe flat seams"],
+    ["sky","晴空小格子","浅蓝细格棉 · 圆角领 · 软贴袋","Infant or young-child sized pale-blue micro-gingham cotton garment with rounded collar and soft flat patch pockets"],
+    ["sprout","嫩芽绗绗衣","嫩芽绿绗棉 · 米黄小叶绣 · 安全扣件","Infant or young-child sized pale-sprout quilted cotton top with tiny butter-yellow leaf embroidery and safe flat fastenings"],
+  ],0,6),
+  ...add("heritage",[
+    ["blue-knit","雾蓝羊绒衫","雾蓝羊绒 · 细密罗纹 · 舒适圆领","Refined misty-blue cashmere sweater with fine ribbed edges and an easy covered round collar, preserve existing age and hair"],
+    ["tea-vest","茶褐轻马甲","茶褐细羊毛 · 奶白内衫 · 平整衣线","Tea-brown fine-wool comfortable vest over an opaque cream shirt with neat flat garment seams"],
+    ["ivory-jacquard","象牙白绢衣","象牙白绢棉 · 小云暗纹 · 素色盘扣","Ivory silk-cotton Chinese shirt with tiny tonal cloud jacquard and restrained knotted fabric buttons"],
+    ["pine-cardigan","松绿绒开衫","深松绿细绒 · 木色小扣 · 柔和袖口","Deep pine-green fine brushed-knit cardigan with small wood-tone buttons and comfortable softly ribbed cuffs"],
+    ["rose-wool","暖玫瑰轻呢","暖灰玫瑰羊毛 · 同色滚边 · 小驳领","Warm dusty-rose lightweight wool jacket with narrow tonal piping and small soft lapels, comfortable natural fit"],
+  ],50),
+]);

@@ -3,6 +3,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { PHOTO_PRODUCTS } from '../../../services/api/dist/photo-catalog.js';
+import { WARDROBE_SERIES, WARDROBE_STYLES } from '../../../packages/capabilities/dist/wardrobe-plan.js';
 const id='photo-'+'a'.repeat(64),scope='b'.repeat(64);
 function purchase(overrides={}){return{schemaVersion:'ltm.photo-purchase.v1',purchaseId:id,sku:'selected-age',title:'停在某一岁',priceVersion:'photo-retail-cny.v1',amountMinor:590,currency:'CNY',expectedCount:1,seriesId:null,seriesTitle:null,scopeSha256:scope,checkout:null,paymentState:'pending',commandId:null,state:'awaiting_payment',readyCount:0,items:[{itemId:'age-37',targetAge:37,status:'awaiting_payment',attempts:0,canRetry:false,commandId:null,downloadPath:null}],...overrides};}
 function client({confirmStates=['paid'],modal=true,intentAmount=590,afterRequest=()=>{},active=()=>true,orderPage=null}={}){
@@ -18,7 +19,7 @@ function client({confirmStates=['paid'],modal=true,intentAmount=590,afterRequest
    return{data:purchase({checkout})};
  }};
  const session={get:()=>current,requireSession:()=>current};
- function load(name){const module={exports:{}};runInNewContext(readFileSync(new URL('../miniprogram/services/'+name+'.js',import.meta.url),'utf8'),{module,require:n=>n==='./api'?api:n==='./session'?session:n==='./commerce'?commerce:null,wx,setTimeout,clearTimeout,console});return module.exports;}
+ function load(name){const module={exports:{}};runInNewContext(readFileSync(new URL('../miniprogram/services/'+name+'.js',import.meta.url),'utf8'),{module,require:n=>n==='./api'?api:n==='./session'?session:n==='./commerce'?commerce:n==='./wardrobe-catalog'?load('wardrobe-catalog'):null,wx,setTimeout,clearTimeout,console});return module.exports;}
  const commerce=load('commerce'),p=load('photo-purchases');
  return{p,calls,get native(){return native;},options:{attempts:2,intervalMs:0,isCurrent:active},current};
 }
@@ -39,6 +40,14 @@ test('new 49.90 lifespan quotes and immutable old 9.90 quotes use exact version-
  }
  const g=client({orderPage:{items:[{...life,amountMinor:990},{...life,priceVersion:'photo-retail-cny.v2',amountMinor:4990}],nextCursor:null}});
  assert.deepEqual(Array.from((await g.p.list()).map(i=>i.amountText)),['¥9.90','¥49.90']);
+});
+test('all24 wardrobe series validate nine-look1990 quotes and refuse unsafe IDs or crossed item scopes',()=>{
+ const f=client();for(const series of WARDROBE_SERIES){
+  const styles=WARDROBE_STYLES.filter(s=>s.seriesId===series.id),quote=purchase({sku:'wardrobe-series',seriesId:series.id,catalogVersion:'lifetime-wardrobe.v3',priceVersion:'photo-retail-cny.v4',amountMinor:1990,expectedCount:styles.length,items:styles.map(s=>({itemId:s.id,targetAge:6,status:'awaiting_payment'}))});
+  assert.equal(f.p.validate(quote).expectedCount,styles.length);
+  for(const change of [{expectedCount:10},{catalogVersion:'future'},{catalogVersion:'lifetime-wardrobe.v2'},{amountMinor:990},{seriesId:'../../api'},{seriesId:'legacy'},{seriesId:'french;display:none'},{seriesId:'x'.repeat(49)}])assert.throws(()=>f.p.validate({...quote,...change}),/INVALID|SCOPE_CHANGED/);
+  assert.throws(()=>f.p.validate({...quote,items:quote.items.map(i=>({...i,itemId:'other-'+i.itemId}))}),/SCOPE_CHANGED/);
+ }
 });
 test('an already-paid merchant order resumes without another native payment',async()=>{
  const f=client();const result=await f.p.execute(purchase(),f.options);assert.equal(result.commandId,'generation-1');assert.equal(f.native,0);assert.equal(f.calls.filter(c=>c.path.endsWith('/fulfill')).length,1);

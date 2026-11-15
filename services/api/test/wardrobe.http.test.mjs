@@ -20,8 +20,12 @@ for(const couple of [false,true])test(`actual operator wardrobe HTTP ${couple?'c
   try{
     let base=await start();assert.equal((await fetch(base+path)).status,401);
     const context=(await(await fetch(base+path,{headers})).json()).data;assert.equal(context.participants.length,couple?2:1);assert.equal(context.targetAge,37);assert.equal(context.participants.every(p=>!p.authorized),true);
-    assert.equal(context.catalogVersion,'lifetime-wardrobe.v1');assert.equal(context.styles.length,34);
-    assert.equal(context.styles.filter(s=>!s.legacy).length,31);assert.equal(new Set(context.styles.filter(s=>!s.legacy).map(s=>s.seriesId)).size,8);
+    assert.equal(context.catalogVersion,'lifetime-wardrobe.v3');assert.equal(context.styles.length,219);
+    assert.equal(context.styles.filter(s=>!s.legacy).length,216);assert.equal(new Set(context.styles.filter(s=>!s.legacy).map(s=>s.seriesId)).size,24);
+    assert.equal(context.series.length,24);assert.equal(new Set(context.series.map(s=>s.category)).size,6);
+    for(const group of context.series){assert.ok(group.tagline.length>8);assert.equal(group.palette.length,3);assert.ok(context.styles.some(s=>s.seriesId===group.id));}
+    assert.equal(context.styles.find(s=>s.id==='baby-milk-v1').available,false);assert.equal(context.styles.find(s=>s.id==='storybook-forest-v1').available,false);
+    assert.equal(context.styles.find(s=>s.id==='french-tweed-v1').available,true);assert.match(context.styles.find(s=>s.id==='french-tweed-v1').description,/软呢/);
     for(const s of context.styles)assert.equal(s.available,37>=s.minAge&&37<=s.maxAge&&(couple?2:1)>=s.minPeople);
     assert.equal((await request(base,{selections:f.edit.selections})).status,409);
     for(const participantId of f.participantIds){
@@ -31,7 +35,7 @@ for(const couple of [false,true])test(`actual operator wardrobe HTTP ${couple?'c
       const stored=f.runtime.listConsents({...f.actor,actorId:participantId}).find(c=>c.scope.actions.includes('wardrobe'));assert.match(stored.policyCatalogSha256,/^[a-f0-9]{64}$/);assert.equal(stored.policyVersion,'wardrobe-edit-consent-v1');
     }
     for(const [index,body] of [{selections:f.edit.selections,sourceAssetId:'attacker'},{selections:f.edit.selections.map(s=>({...s,styleId:'unknown'}))},{selections:[]},{selections:[{participantId:'stranger',styleId:'formal'}]}].entries())assert.equal((await request(base,body,'invalid-'+index)).status,422);
-    for(const id of ['wedding-anniversary-v1','milestone-retirement-v1',...(!couple?['together-knit-v1','newyear-pair-v1']:[])])assert.equal((await request(base,{selections:f.edit.selections.map(s=>({...s,styleId:id}))},'ineligible-'+id)).status,422);
+    for(const id of ['wedding-anniversary-v1','milestone-retirement-v1','heritage-cashmere-v1','baby-milk-v1','storybook-forest-v1',...(!couple?['together-knit-v1','newyear-pair-v1']:[])])assert.equal((await request(base,{selections:f.edit.selections.map(s=>({...s,styleId:id}))},'ineligible-'+id)).status,422);
     const selections=couple?f.edit.selections:f.edit.selections.map(s=>({...s,styleId:'east-pankou-v1'}));
     let response=await request(base,{selections});assert.equal(response.status,200);const job=(await response.json()).data.commandId;
     assert.equal((await(await request(base,{selections})).json()).data.commandId,job);

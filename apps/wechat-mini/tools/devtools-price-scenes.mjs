@@ -19,8 +19,8 @@ export async function preparePriceViews({ base, headers }) {
   const series = await create({ sku: "wardrobe-series", sourceRootCommandId: "root", targetAge: 0, seriesId: "daily" });
   const response = await fetch(base + "/v1/timelines/root/nodes/0/wardrobe", { headers, signal: AbortSignal.timeout(8000) });
   assert.equal(response.status, 200); const context = (await response.json()).data;
-  assert.deepEqual([lifespan.amountMinor, age.amountMinor, series.amountMinor], [4990, 590, 990]);
-  assert.deepEqual([lifespan.expectedCount, age.expectedCount, series.expectedCount], [21, 1, 4]);
+  assert.deepEqual([lifespan.amountMinor, age.amountMinor, series.amountMinor], [4990, 590, 1990]);
+  assert.deepEqual([lifespan.expectedCount, age.expectedCount, series.expectedCount], [21, 1, 9]);
   return { lifespan, albums, age, series, context };
 }
 
@@ -45,9 +45,9 @@ export async function verifyPriceScenes({ mini, views, step, frame, project, win
     });
     assert.equal(await elements[index].attribute(attribute), value); return elements[index];
   }
-  await step("price: home advertises four album tiers,1/590 and whole-series990", async () => {
+  await step("price: home advertises four album tiers,1/590 and whole-series1990", async () => {
     const page = await navigate(mini, "switchTab", "/pages/home/index");
-    const body = await text(page); for (const label of ["¥19.90", "¥29.90", "¥49.90", "普通清晰", "高清", "1 张 ¥5.90", "整系列 ¥9.90", "全部适用款式"]) assert.ok(body.includes(label), label);
+    const body = await text(page); for (const label of ["¥19.90", "¥29.90", "¥49.90", "普通清晰", "高清", "1 张 ¥5.90", "整系列 ¥19.90", "全部适用款式"]) assert.ok(body.includes(label), label);
     await frame("prices-home");
   });
   await step("price: actual single/couple and age/lifespan mode taps keep correct totals", async () => {
@@ -62,16 +62,16 @@ export async function verifyPriceScenes({ mini, views, step, frame, project, win
     const generate = await buttonByText(page, "¥49.90 · 生成 21 张照片"); assert.ok(generate); assert.equal(await generate.property("disabled"), true);
     await frame("prices-editor-21");
   });
-  await step("price: wardrobe native series selection includes four styles for one990 total", async () => {
+  await step("price: wardrobe native series selection includes nine styles for one1990 total", async () => {
     const page = await navigate(mini, "navigateTo", "/pages/wardrobe/index?rootId=root&age=0");
     await waitForState("wardrobe initial request settled", async () => !(await page.data()).busy);
     const context = views.context, styles = context.styles;
-    const series = [...new Map(styles.filter(style => !style.legacy).map(style => [style.seriesId, { id: style.seriesId, label: style.seriesLabel.split(" · ")[0] }])).values()];
-    await project({ context, styles, series, selectedSeriesId: "daily", people: context.participants.map(person => ({ ...person, self: true, label: "照片里的人" })), error: "", busy: false });
+    const series = context.series;
+    await project({ context, styles, series, visibleSeries: series, selectedSeriesId: "daily", people: context.participants.map(person => ({ ...person, self: true, label: "照片里的人" })), error: "", busy: false });
     await withDeadline("derive actual eligible styles", () => mini.evaluate(function () { getCurrentPages().slice(-1)[0].updateBundle(); return true; }));
-    assert.equal((await page.data()).bundleCount, views.series.expectedCount); assert.equal((await page.data()).priceSeries, "¥9.90");
+    assert.equal((await page.data()).bundleCount, views.series.expectedCount); assert.equal((await page.data()).priceSeries, "¥19.90");
     await tapAndWait("whole east series selected", await control(page, ".series-option", "data-series", "east"), async () => (await page.data()).selectedSeriesId === "east");
-    assert.equal((await page.data()).bundleCount, 4); assert.ok((await text(page)).includes("不逐款计费"));
+    assert.equal((await page.data()).bundleCount, 9); assert.ok((await text(page)).includes("不逐款计费"));
     await frame("prices-wardrobe-series");
   });
   await step("price: orders render real immutable unpaid quotes without opening payment", async () => {
