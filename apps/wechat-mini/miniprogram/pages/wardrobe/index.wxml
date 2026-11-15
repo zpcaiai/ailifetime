@@ -5,6 +5,14 @@
     <view class="wardrobe-frame" wx:if="{{commandId}}"><image wx:if="{{resultPath}}" class="wardrobe-photo" src="{{resultPath}}" mode="aspectFit" aria-label="{{targetAge}}岁换装结果，AI生成照片" /><view class="wardrobe-photo waiting-photo" wx:else><view>{{result.status === 'failed' ? '换装未完成' : result.status === 'review' ? '照片需要复核' : result.status === 'reconciliation_required' ? '结果待核对' : '正在换装'}}</view><text>原片不会被覆盖</text></view><view class="frame-caption">换装照片 · {{targetAge}} 岁</view></view>
   </view>
   <view class="card" wx:if="{{context}}">
+    <view class="section-title">自定义图片模板</view>
+    <view class="muted wardrobe-tip">保存一张服装参考图，与原年龄照片对照。参考图只保存在此设备，当前仅用于预览。</view>
+    <image wx:if="{{customTemplatePath}}" class="wardrobe-photo" src="{{customTemplatePath}}" mode="aspectFit" aria-label="自定义服装参考图" />
+    <button class="button secondary" bindtap="chooseCustomTemplate" disabled="{{busy || choosingTemplate}}">{{choosingTemplate ? '正在选择图片' : customTemplatePath ? '更换参考图' : '从相册选择参考图'}}</button>
+    <button wx:if="{{customTemplatePath}}" class="button ghost" bindtap="deleteCustomTemplate" disabled="{{busy || choosingTemplate}}">删除参考图</button>
+    <view wx:if="{{templateError}}" class="status error" role="alert">{{templateError}}</view>
+  </view>
+  <view class="card" wx:if="{{context}}">
     <view class="section-title">{{context.catalogVersion === 'lifetime-wardrobe.v4' ? '选一套奇幻英雄服' : '这一岁，想穿什么'}}</view><view class="muted wardrobe-tip">{{context.catalogVersion === 'lifetime-wardrobe.v4' ? '公主和王子共享同阵营纹样，每套有九种造型。换装保留人物、年龄与构图。' : '只更换衣着，保留人物、年龄与构图。幼年使用适龄款式；纪念系列会标明适用范围。'}}</view>
     <view class="wardrobe-discovery-count">{{series.length}} 个系列 · {{styleCount}} 款衣着<text>本照片可选 {{availableSeriesCount}} 个系列</text></view>
     <view class="wardrobe-search"><input value="{{seriesQuery}}" bindinput="searchSeries" maxlength="40" placeholder="{{context.catalogVersion === 'lifetime-wardrobe.v4' ? '搜王国、职业或款式，如「骑士」' : '搜系列、款式或面料，如「软呢」'}}" aria-label="搜索衣橱系列、款式或面料" confirm-type="search" /></view>
