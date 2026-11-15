@@ -13,7 +13,7 @@ function seriesResult(age=37,seriesId='daily',statuses=[]) {
  return{purchaseId:'photo-suite',sku:'wardrobe-series',catalogVersion:'lifetime-wardrobe.v3',sourceRootCommandId:'root',seriesId,seriesTitle:styles[0]?.seriesLabel,expectedCount:styles.length,amountMinor:990,currency:'CNY',readyCount:items.filter(item=>item.status==='ready').length,paymentState:'paid',items};
 }
 function page(request,mediaOverrides={}){
- let p,n=0;const timers=new Map(),removed=[],saves=[],calls=[];
+ let p,n=0;const timers=new Map(),removed=[],saves=[],calls=[],scrolls=[];
  const media={download:async node=>'private-'+node.asset.sha256,remove:async path=>removed.push(path),save:async node=>saves.push(node),...mediaOverrides};
  runInNewContext(readFileSync(new URL('../miniprogram/pages/wardrobe/index.js',import.meta.url),'utf8'),{Page:x=>p=x,require:name=>{
   if(name.endsWith('/api'))return{idempotencyKey:prefix=>prefix+'-'+(++n),requestForPurpose:async(path,purpose,options)=>{calls.push({path,purpose,options});return request(path,options,purpose);}};
@@ -26,8 +26,8 @@ function page(request,mediaOverrides={}){
   }
   if(name.endsWith('/wardrobe-catalog'))return discoveryModule.exports;
   if(name.endsWith('/timeline-media'))return media;if(name.endsWith('/wardrobe'))return{version:'wardrobe-edit-consent-v1'};throw Error(name);
- },wx:{navigateTo(){},switchTab(){}},setTimeout:fn=>{const id=++n;timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id),console});
- p.setData=x=>Object.assign(p.data,x);return{p,calls,removed,saves,timers};
+ },wx:{navigateTo(){},switchTab(){},pageScrollTo:options=>scrolls.push(options.selector)},setTimeout:fn=>{const id=++n;timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id),console});
+ p.setData=(data, rendered)=>{Object.assign(p.data,data);rendered?.();};return{p,calls,removed,saves,timers,scrolls};
 }
 test('reopened9.90 wardrobe quote displays its stored price while new series remain19.90',async()=>{
  const current=seriesResult(),quote={...current,amountMinor:990,catalogVersion:'lifetime-wardrobe.v2',expectedCount:4,readyCount:4,items:current.items.slice(0,4)};const f=page(async path=>({data:path.endsWith('/wardrobe')?context():quote}));
@@ -37,10 +37,36 @@ test('reopened9.90 wardrobe quote displays its stored price while new series rem
 });
 test('nine-grid focus shows distinct style details without changing the bundle, payment or age gates',async()=>{
  const f=page(async()=>({data:context(false,6)}));await f.p.onLoad({rootId:'root',age:'6'});assert.equal(f.p.data.templateStyles.length,9);
+ assert.deepEqual(f.scrolls, []);
  const last=f.p.data.templateStyles[8];f.p.previewOutfit({currentTarget:{dataset:{style:last.id}}});assert.equal(f.p.data.focusedTemplate.id,last.id);assert.equal(f.p.data.bundleCount,9);assert.equal(f.calls.filter(c=>c.path==='/v1/photo-purchases').length,0);
+ f.p.showTemplateGrid();
+ assert.deepEqual(f.scrolls, ['#wardrobe-template-detail', '#wardrobe-template-grid']);
  await f.p.selectBundle({currentTarget:{dataset:{series:'milestone'}}});assert.equal(f.p.data.templateStyles.length,9);assert.equal(f.p.data.bundleCount,4);
  const unavailable=f.p.data.templateStyles.find(s=>!s.available),before=f.p.data.focusedTemplate.id;f.p.previewOutfit({currentTarget:{dataset:{style:unavailable.id}}});assert.equal(f.p.data.focusedTemplate.id,before);
+ assert.deepEqual(f.scrolls, ['#wardrobe-template-detail', '#wardrobe-template-grid', '#wardrobe-template-grid']);
  f.p.onHide();assert.equal(f.p.data.templateStyles.length,0);assert.equal(f.p.data.focusedTemplate,null);
+});
+test('stale template render callbacks do not move the visible viewport', async () => {
+ const f = page(async () => ({data: context()}));
+ await f.p.onLoad({rootId: 'root', age: '37'});
+ const callbacks = [];
+ f.p.setData = (data, rendered) => {
+  Object.assign(f.p.data, data);
+  if (rendered) callbacks.push(rendered);
+ };
+ for (const style of f.p.data.templateStyles.slice(-2)) {
+  f.p.previewOutfit({currentTarget: {dataset: {style: style.id}}});
+ }
+ assert.equal(callbacks.length, 2);
+ callbacks.shift()();
+ assert.deepEqual(f.scrolls, []);
+ callbacks.shift()();
+ assert.deepEqual(f.scrolls, ['#wardrobe-template-detail']);
+ await f.p.selectBundle({currentTarget: {dataset: {series: 'french'}}});
+ assert.equal(callbacks.length, 1);
+ f.p.onHide();
+ callbacks.shift()();
+ assert.deepEqual(f.scrolls, ['#wardrobe-template-detail']);
 });
 test('discovery filters and style search preserve the selected quote, previews and uncertain intent',async()=>{
  const f=page(async()=>({data:context(false,6)}));await f.p.onLoad({rootId:'root',age:'6'});

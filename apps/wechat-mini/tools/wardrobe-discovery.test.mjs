@@ -41,6 +41,18 @@ test('mini view exposes collection controls, real descriptions and illustrative 
  const css=readFileSync(new URL('../miniprogram/pages/wardrobe/index.wxss',import.meta.url),'utf8');assert.ok(css.includes('calc(50% - 5px)'));assert.ok(css.includes('white-space: normal'));assert.ok(css.includes('min-width: 0'));
 });
 
+test('series covers, grid thumbnails and detail preserve square photos without cropping', () => {
+ const view = readFileSync(new URL('../miniprogram/pages/wardrobe/index.wxml', import.meta.url), 'utf8');
+ const css = readFileSync(new URL('../miniprogram/pages/wardrobe/index.wxss', import.meta.url), 'utf8');
+ for (const binding of ['seriesItem.coverLooks[0].previewSrc', 'look.previewSrc', 'item.previewSrc', 'focusedTemplate.previewSrc']) {
+  const image = [...view.matchAll(/<image\s[^>]*\/>/gu)].find(([element]) => element.includes(`src="{{${binding}}}"`));
+  assert.ok(image, binding);
+  assert.match(image[0], /\bmode="aspectFit"/u, binding);
+ }
+ assert.match(css, /\.wardrobe-image::before\s*\{[^}]*padding-top:\s*100%/u);
+ assert.match(css, /\.template-tile\s*\{[^}]*33\.333%/u);
+});
+
 test('v2 history and nine-look presentation retain bounded readable covers and distinct garment designs',()=>{
  const c=context();const older={...c,catalogVersion:'lifetime-wardrobe.v2',styles:c.styles.slice(0,98)};assert.equal(discover(older.styles,catalog(older)).styleCount,95);
  const groups=catalog(c),v=discover(c.styles,groups);const shapes=new Set(),textures=new Set();
