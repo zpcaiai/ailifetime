@@ -2,7 +2,7 @@ import { lstatSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { verifyConfiguredApi } from "../tools/configure-api.mjs";
+import { probeApiReadiness, readVerifiedApiConfiguration } from "../tools/configure-api.mjs";
 
 const RELEASE_ROOT = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(RELEASE_ROOT, "..");
@@ -33,7 +33,11 @@ export async function runRelease(mode, environment = process.env, dependencies =
   const git = dependencies.git ?? ((args) => execFileSync("git", ["-C", config.projectRoot, ...args], { encoding: "utf8" }).trim());
   const commit = git(["rev-parse", "HEAD"]);
   if (!/^[0-9a-f]{40}$/.test(commit) || git(["status", "--porcelain"]) !== "") throw new Error("RELEASE_CHECKOUT_NOT_CLEAN");
-  const apiConfigurationSha256 = verifyConfiguredApi(config.projectRoot, config.appid);
+  const { apiOrigin, sha256: apiConfigurationSha256 } = readVerifiedApiConfiguration(config.projectRoot, config.appid);
+  const apiReadiness = mode === "preview" ? await probeApiReadiness(apiOrigin, dependencies.fetch) : undefined;
+  if (apiReadiness && readVerifiedApiConfiguration(config.projectRoot, config.appid).sha256 !== apiConfigurationSha256) {
+    throw new Error("RELEASE_API_CONFIGURATION_CHANGED");
+  }
   const ci = dependencies.ci ?? (await import("miniprogram-ci")).default;
   const project = new ci.Project({ appid: config.appid, type: "miniProgram", projectPath: config.projectRoot, privateKeyPath: config.privateKeyPath, ignores: ["node_modules/**/*", "dist/**/*", "release/**/*", "tools/**/*"] });
   if (mode === "preview") {
@@ -41,7 +45,7 @@ export async function runRelease(mode, environment = process.env, dependencies =
   } else {
     await ci.upload({ project, version: config.version, desc: config.description, setting: secureSetting(), robot: 1 });
   }
-  return Object.freeze({ schemaVersion: "ltm.wechat.provider-operation.v1", mode, appid: config.appid, version: config.version, commit, apiConfigurationSha256, providerOperation: `${mode}_completed`, merchantEvidence: "EVIDENCE_PENDING", deviceEvidence: "EVIDENCE_PENDING", externalCertification: "NOT_CERTIFIED" });
+  return Object.freeze({ schemaVersion: "ltm.wechat.provider-operation.v1", mode, appid: config.appid, version: config.version, commit, apiConfigurationSha256, ...(apiReadiness ? { apiReadiness } : {}), providerOperation: `${mode}_completed`, merchantEvidence: "EVIDENCE_PENDING", deviceEvidence: "EVIDENCE_PENDING", externalCertification: "NOT_CERTIFIED" });
 }
 
 function secureSetting() { return { es6: true, es7: true, minify: true, codeProtect: true, autoPrefixWXSS: true, minifyWXML: true, minifyWXSS: true, minifyJS: true }; }
