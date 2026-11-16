@@ -45,7 +45,7 @@ function isCanonicalOrigin(value) {
  try { return origin(value) === value; } catch { return false; }
 }
 
-export function verifyConfiguredApi(project, expectedAppId) {
+export function readVerifiedApiConfiguration(project, expectedAppId) {
  const config = projectConfig(project);
  if (config.appId !== expectedAppId) throw Error("RELEASE_PROJECT_APP_ID_MISMATCH");
  const result = readConfiguration(config);
@@ -54,7 +54,41 @@ export function verifyConfiguredApi(project, expectedAppId) {
      Object.keys(result.existing.ext).some(key => !["apiBaseUrl", "apiAllowedOrigins"].includes(key))) {
    throw Error("RELEASE_API_CONFIGURATION_UNEXPECTED_FIELDS");
  }
- return result.sha256;
+ return { apiOrigin: result.existing.ext.apiBaseUrl, sha256: result.sha256 };
+}
+
+export async function probeApiReadiness(apiOrigin, fetcher = globalThis.fetch) {
+ const endpoint = new URL("/health/ready", origin(apiOrigin));
+ const maxBytes = 16_384;
+ let body;
+ try {
+   const response = await fetcher(endpoint, {
+     method: "GET",
+     headers: { accept: "application/json", "cache-control": "no-cache" },
+     cache: "no-store",
+     redirect: "error",
+     signal: AbortSignal.timeout(5_000),
+   });
+   body = response.body?.getReader();
+   if (response.status !== 200 || !body ||
+       !/^application\/json(?:\s*;|$)/i.test(response.headers.get("content-type") ?? "")) {
+     throw Error("API_NOT_READY");
+   }
+   const chunks = [];
+   let bytes = 0;
+   for (let result = await body.read(); !result.done; result = await body.read()) {
+     bytes += result.value.byteLength;
+     if (bytes > maxBytes) throw Error("API_NOT_READY");
+     chunks.push(result.value);
+   }
+   const readiness = JSON.parse(Buffer.concat(chunks, bytes).toString("utf8"));
+   if (readiness?.ready !== true) throw Error("API_NOT_READY");
+   return Object.freeze({ apiOrigin: endpoint.origin, httpStatus: response.status, checkedAt: new Date().toISOString() });
+ } catch {
+   throw Error("EXPERIENCE_API_NOT_READY");
+ } finally {
+   if (body) void body.cancel().catch(() => {});
+ }
 }
 
 export function configureApi({project=DEFAULT_PROJECT,apiBaseUrl}={}){
