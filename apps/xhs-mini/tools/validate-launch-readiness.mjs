@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateMiniProgram } from "../../wechat-mini/tools/validate-miniprogram.mjs";
+import { probeApiReadiness } from "../../wechat-mini/tools/configure-api.mjs";
 
 const CURRENT_DIR = dirname(fileURLToPath(import.meta.url));
 const XHS_MINI_ROOT = resolve(CURRENT_DIR, "..");
@@ -77,6 +78,49 @@ function validateArtifactBinding(dir, platform, appId, expectedOrigin, expectedI
       binding.apiSha256 !== createHash("sha256").update(api).digest("hex")) {
     fail("PRODUCTION_XHS_ARTIFACT_CONFIG_MISMATCH", `${platform} build configuration does not match the artifact`);
   }
+  return binding.apiSha256;
+}
+
+function validateXhsReleaseArtifact(dir, project, options) {
+  const appId = options.xhsAppId ?? process.env.LTM_XHS_APP_ID;
+  if (typeof appId !== "string" || !/^[A-Za-z0-9_-]{8,128}$/.test(appId) ||
+      /placeholder|^your_|^tourist/i.test(appId)) {
+    fail("PRODUCTION_XHS_APP_ID_REQUIRED", "set LTM_XHS_APP_ID to the enrolled Xiaohongshu mini-program app id");
+  }
+  const apiOrigin = options.productionApiOrigin ?? process.env.LTM_PRODUCTION_API_ORIGIN;
+  if (!isPublicHttpsOrigin(apiOrigin)) {
+    fail("PRODUCTION_API_ORIGIN_REQUIRED", "provide a canonical public HTTPS origin");
+  }
+  if (project.appid !== appId) {
+    fail("PRODUCTION_XHS_ARTIFACT_APP_ID_MISMATCH", "the built Xiaohongshu project must embed the enrolled AppID");
+  }
+  if (project.setting?.urlCheck !== true || project.setting?.minified !== true) {
+    fail("MP_XHS_BUILD_SETTINGS_INVALID", "URL checking and minification are required");
+  }
+  const identityOrigin = options.xhsIdentityOrigin ?? process.env.LTM_XHS_IDENTITY_ORIGIN;
+  if (!isPublicHttpsOrigin(identityOrigin)) {
+    fail("PRODUCTION_XHS_IDENTITY_ORIGIN_REQUIRED", "provide the enrolled identity broker HTTPS origin");
+  }
+  const apiSha256 = validateArtifactBinding(dir, "mp-xhs", appId, apiOrigin, identityOrigin);
+  return { appId, apiOrigin, apiSha256 };
+}
+
+export async function preflightXhsExperience(options = {}, fetcher = globalThis.fetch) {
+  const dir = join(options.xhsRoot ?? XHS_MINI_ROOT, "dist/build/mp-xhs");
+  const projectPath = join(dir, "project.config.json");
+  const candidate = validateXhsReleaseArtifact(dir, readJson(projectPath), options);
+  const readiness = await probeApiReadiness(candidate.apiOrigin, fetcher);
+  const checked = validateXhsReleaseArtifact(dir, readJson(projectPath), options);
+  if (checked.apiSha256 !== candidate.apiSha256) {
+    fail("EXPERIENCE_ARTIFACT_CHANGED", "the compiled API binding changed during the readiness check");
+  }
+  return Object.freeze({
+    status: "EXPERIENCE_API_READY",
+    platformRelease: "NOT_CERTIFIED",
+    appId: candidate.appId,
+    apiSha256: candidate.apiSha256,
+    readiness,
+  });
 }
 
 export function validateDualMiniProgramLaunchReadiness(options = {}) {
@@ -176,23 +220,7 @@ export function validateDualMiniProgramLaunchReadiness(options = {}) {
 
   // 6. Release admission is stricter than local artifact validation.
   if (release) {
-    const xhsAppId = options.xhsAppId ?? process.env.LTM_XHS_APP_ID;
-    if (typeof xhsAppId !== "string" || !/^[A-Za-z0-9_-]{8,128}$/.test(xhsAppId) ||
-        /placeholder|^your_|^tourist/i.test(xhsAppId)) {
-      fail("PRODUCTION_XHS_APP_ID_REQUIRED", "set LTM_XHS_APP_ID to the enrolled Xiaohongshu mini-program app id");
-    }
-    const apiOrigin = options.productionApiOrigin ?? process.env.LTM_PRODUCTION_API_ORIGIN;
-    if (!isPublicHttpsOrigin(apiOrigin)) {
-      fail("PRODUCTION_API_ORIGIN_REQUIRED", "provide a canonical public HTTPS origin");
-    }
-    if (mpXhsProject.appid !== xhsAppId) {
-      fail("PRODUCTION_XHS_ARTIFACT_APP_ID_MISMATCH", "the built Xiaohongshu project must embed the enrolled AppID");
-    }
-    const identityOrigin = options.xhsIdentityOrigin ?? process.env.LTM_XHS_IDENTITY_ORIGIN;
-    if (!isPublicHttpsOrigin(identityOrigin)) {
-      fail("PRODUCTION_XHS_IDENTITY_ORIGIN_REQUIRED", "provide the enrolled identity broker HTTPS origin");
-    }
-    validateArtifactBinding(mpXhsDir, "mp-xhs", xhsAppId, apiOrigin, identityOrigin);
+    validateXhsReleaseArtifact(mpXhsDir, mpXhsProject, options);
     const wechatAppId = options.wechatAppId ?? process.env.LTM_WECHAT_APP_ID;
     if (!wechatAppId || readJson(join(wechatRoot, "project.config.json")).appid !== wechatAppId) {
       fail("PRODUCTION_WECHAT_ARTIFACT_APP_ID_MISMATCH", "the native WeChat project must embed the enrolled AppID");
@@ -224,7 +252,9 @@ export function validateDualMiniProgramLaunchReadiness(options = {}) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const releaseFlag = process.argv.includes("--release");
-    const report = validateDualMiniProgramLaunchReadiness({ release: releaseFlag });
+    const experienceFlag = process.argv.includes("--experience");
+    if (releaseFlag && experienceFlag) fail("VALIDATION_MODE_INVALID", "select one validation mode");
+    const report = experienceFlag ? await preflightXhsExperience() : validateDualMiniProgramLaunchReadiness({ release: releaseFlag });
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);

@@ -45,7 +45,16 @@ pnpm verify:miniprograms
 
 小红书登录使用一次性原生 code，从专用身份源取得短效会话。工作坊在用户确认本人授权后，通过小红书原生相册、文件信息及读取 API 上传 JPEG。上传支持压缩后不超过 4 MiB、至少 512×512 的照片，最低文件 API 基础库为 3.125.4。消费 API 绑定该资产与服务端核实的本人身份，再进行授权、媒体审核和报价；生成提交仅对经服务端确认付款的订单开放。
 
-正式上线仍需接通受控后端并完成官方登录、逐人授权、照片上传、生成、分享撤销与删除的真机验收。相册下单还需确认平台开通的交易能力，并验证支付、退款、对账及履约。导入开发者工具后，应按平台流程生成体验版、测试和提审。
+在小红书开发者工具生成体验码前，从仓库根目录运行以下命令。环境变量填写该产物绑定的实际 AppID、业务 HTTPS 源和身份 HTTPS 源。
+
+```sh
+LTM_XHS_APP_ID="$VITE_XHS_MINI_APPID" \
+  LTM_PRODUCTION_API_ORIGIN="$VITE_API_BASE_URL" \
+  LTM_XHS_IDENTITY_ORIGIN="$VITE_XHS_IDENTITY_ORIGIN" \
+  node apps/xhs-mini/tools/validate-launch-readiness.mjs --experience
+```
+
+收到 `EXPERIENCE_API_READY` 后，用本次核对的产物生成体验码。预检要求实际 `GET /health/ready` 返回 HTTP 200 和 JSON `ready: true`。正式上线还需完成官方登录、逐人授权、照片上传、生成、分享撤销与删除的真机验收。相册下单还需确认平台开通的交易能力，并验证支付、退款、对账及履约。
 
 ### 小红书自定义交易组件
 

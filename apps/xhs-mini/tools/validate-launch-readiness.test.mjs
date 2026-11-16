@@ -4,6 +4,8 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { createServer } from "node:http";
+import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setImmediate } from "node:timers/promises";
@@ -11,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 import {
   LaunchReadinessError,
+  preflightXhsExperience,
   validateDualMiniProgramLaunchReadiness,
 } from "./validate-launch-readiness.mjs";
 
@@ -213,13 +216,43 @@ test("configured builds embed the target AppID and HTTPS origin without simulate
     { code: "PRODUCTION_XHS_ARTIFACT_CONFIG_MISMATCH" });
   assert.throws(() => validateDualMiniProgramLaunchReadiness({ ...options, productionApiOrigin: "https://other.fixture.product.cn" }),
     { code: "PRODUCTION_XHS_ARTIFACT_CONFIG_MISMATCH" });
+  await verifyExperienceReadiness(options, origin, t);
   const apiPath = join(root, "dist", "build", "mp-xhs", "services", "api.js");
   const pristine = readFileSync(apiPath);
   await verifyCompiledIdentityRequest(join(root, "dist", "build", "mp-xhs"), identityOrigin);
   writeFileSync(apiPath, Buffer.concat([pristine, Buffer.from("\n// fixture tamper\n")]));
   assert.throws(() => validateDualMiniProgramLaunchReadiness(options), { code: "PRODUCTION_XHS_ARTIFACT_CONFIG_MISMATCH" });
+  await assert.rejects(preflightXhsExperience(options, () => assert.fail("tampered artifact must not reach the network")),
+    { code: "PRODUCTION_XHS_ARTIFACT_CONFIG_MISMATCH" });
   await verifyCompiledOrderPage(join(root, "dist", "build", "mp-xhs"), t);
 });
+
+async function verifyExperienceReadiness(options, origin, t) {
+  let ready = false;
+  const requests = [];
+  const server = createServer((request, response) => {
+    requests.push(request.url);
+    response.writeHead(ready ? 200 : 503, { "content-type": "application/json" });
+    response.end(JSON.stringify({ ready }));
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const fetcher = (url, settings) => {
+    assert.equal(url.origin, origin);
+    return fetch(`http://127.0.0.1:${server.address().port}${url.pathname}`, settings);
+  };
+  await assert.rejects(preflightXhsExperience(options, fetcher), { message: "EXPERIENCE_API_NOT_READY" });
+  ready = true;
+  const report = await preflightXhsExperience(options, fetcher);
+  assert.equal(report.status, "EXPERIENCE_API_READY");
+  assert.equal(report.platformRelease, "NOT_CERTIFIED");
+  assert.equal(report.appId, options.xhsAppId);
+  assert.match(report.apiSha256, /^[a-f0-9]{64}$/);
+  assert.equal(report.readiness.apiOrigin, origin);
+  assert.equal(report.readiness.httpStatus, 200);
+  assert.deepEqual(requests, ["/health/ready", "/health/ready"]);
+}
 
 async function verifyCompiledIdentityRequest(dir, identityOrigin) {
   const sdk = {};
