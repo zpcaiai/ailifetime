@@ -53,6 +53,12 @@ jobs:
           distribution: temurin
           java-version: "21"
       - run: pnpm install --frozen-lockfile
+      - name: Verify WeChat and Xiaohongshu mini-program artifacts
+        run: |
+          pnpm --dir apps/xhs-mini install --ignore-workspace --frozen-lockfile --registry=https://registry.npmjs.org
+          pnpm verify:miniprograms
+          node --test apps/xhs-mini/tools/real-photo-upload.test.mjs
+          pnpm test:xhs
       - name: Provision isolated WeChat identity test database
         run: |
           psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 -c "CREATE ROLE ltm_identity_test_runtime LOGIN PASSWORD 'postgres' NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE NOREPLICATION;"
