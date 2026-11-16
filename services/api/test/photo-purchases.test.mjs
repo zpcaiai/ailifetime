@@ -88,13 +88,16 @@ test('all24 series persist1990 quotes and fulfill all216 exact wardrobe plans ac
  }assert.equal(total,216);console.log(JSON.stringify({proof:'WARDROBE_24_SERIES_216_REAL_SQL_COMMANDS',total,rowHashes}));
  }finally{await rm(dir,{recursive:true,force:true});}
 });
-test('all26 royal series quote1990 and bind all234 exact generation plans',async()=>{
- const dir=await mkdtemp(join(tmpdir(),'wardrobe234-sql-'));
+for (const [version, groupCount, lookCount, collection] of [
+ ['lifetime-wardrobe.v4',26,234,'royal'],
+ ['lifetime-wardrobe.v5',12,108,'cinema'],
+]) test(`all ${groupCount} ${collection} series quote 1990 and bind all ${lookCount} generation plans`,async()=>{
+ const dir=await mkdtemp(join(tmpdir(),`wardrobe-${collection}-sql-`));
  const store=new FileTimelineArtifactStore(join(dir,'images'));
  const f=await wardrobeFixture({couple:true,age:50,databasePath:join(dir,'runtime.sqlite'),store});
  try{
   await f.grantWardrobe();
-  const version='lifetime-wardrobe.v4', groups=wardrobeSeriesForCatalog(version), catalog=wardrobeStylesForCatalog(version);
+  const groups=wardrobeSeriesForCatalog(version), catalog=wardrobeStylesForCatalog(version);
   const service=new PhotoPurchaseService(f.runtime,f.registry,store,paymentBoundary());
   let total=0;
   for(const group of groups){
@@ -112,10 +115,10 @@ test('all26 royal series quote1990 and bind all234 exact generation plans',async
    }
    assert.equal((await service.create(f.actor,input,group.id)).scopeSha256,purchase.scopeSha256);
   }
-  assert.equal(groups.length,26);assert.equal(total,234);
+  assert.equal(groups.length,groupCount);assert.equal(total,lookCount);
   const input={sku:'wardrobe-series',sourceRootCommandId:'root',targetAge:50,seriesId:groups[0].id};
-  await assert.rejects(service.create(f.actor,input,'unversioned-royal'),{code:'VALIDATION_FAILED'});
-  await assert.rejects(service.create(f.actor,{...input,catalogVersion:'lifetime-wardrobe.v5'},'unknown-version'),{code:'VALIDATION_FAILED'});
+  await assert.rejects(service.create(f.actor,input,'unversioned-series'),{code:'VALIDATION_FAILED'});
+  await assert.rejects(service.create(f.actor,{...input,catalogVersion:'lifetime-wardrobe.v6'},'unknown-version'),{code:'VALIDATION_FAILED'});
  }finally{f.runtime.close();await rm(dir,{recursive:true,force:true});}
 });
 test('authoritative 590/4990 age purchases bind exact scope and refuse overposted money',async()=>{

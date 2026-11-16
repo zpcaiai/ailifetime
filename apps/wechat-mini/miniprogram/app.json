@@ -11,7 +11,10 @@
     "pages/service/index",
     "pages/privacy/index"
   ],
-  "subpackages": [{ "root": "pages/wardrobe", "pages": ["index"] }],
+  "subpackages": [
+    { "root": "pages/wardrobe", "pages": ["index"] },
+    { "root": "pages/wardrobe-cinema", "pages": ["index"] }
+  ],
   "resizable": true,
   "window": {
     "pageOrientation": "auto",

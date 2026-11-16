@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { DomainError, type ActorContext, type JsonObject, type JsonValue, type LifeTimeMachineRuntimePort } from "@ltm/core";
-import { parseWardrobeEdit, wardrobeStylesForCatalog, wardrobeSeriesForCatalog, WARDROBE_CATALOG_VERSION, type CapabilityRegistry } from "@ltm/capabilities";
+import { parseWardrobeEdit, wardrobeStylesForCatalog, wardrobeSeriesForCatalog, isWardrobeRetailCatalog, type CapabilityRegistry } from "@ltm/capabilities";
 import { TimelineDeliveryService } from "./timeline-delivery.js";
 import type { TimelineArtifactReader } from "./timeline-artifacts.js";
 
@@ -47,7 +47,7 @@ export class WardrobeService {
   constructor(private readonly runtime: LifeTimeMachineRuntimePort, private readonly registry: CapabilityRegistry, private readonly artifacts?: TimelineArtifactReader) {}
   async context(actor: ActorContext, rootId: string, age: number, catalogVersion: unknown = "lifetime-wardrobe.v3") {
     if (!Number.isInteger(age) || age < 0 || age > 100) throw new DomainError("VALIDATION_FAILED", "wardrobe age invalid");
-    if (catalogVersion !== "lifetime-wardrobe.v3" && catalogVersion !== WARDROBE_CATALOG_VERSION) throw new DomainError("VALIDATION_FAILED", "unknown wardrobe discovery catalog");
+    if (!isWardrobeRetailCatalog(catalogVersion)) throw new DomainError("VALIDATION_FAILED", "unknown wardrobe discovery catalog");
     const view = await new TimelineDeliveryService(this.runtime).get(actor, rootId);
     const root = await this.runtime.getRecord(actor, "generation.timeline-commands", rootId);
     if (root.data.wardrobeEdit !== undefined) throw new DomainError("VALIDATION_FAILED", "choose the original age photo for another wardrobe edit");
