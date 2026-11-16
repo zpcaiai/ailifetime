@@ -1,2 +1,4 @@
 const createWardrobePage = require("../../services/wardrobe-page");
-Page(createWardrobePage());
+const reference = require("./reference");
+
+Page(createWardrobePage(undefined, reference));

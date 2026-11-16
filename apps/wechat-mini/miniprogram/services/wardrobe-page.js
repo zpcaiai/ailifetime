@@ -16,12 +16,14 @@ const dressPerson = (person, styles, seriesId) => {
   return { ...person, seriesId: seriesId || selected.seriesId, selectedLabel: selected.label, options: styles.filter(s => s.seriesId === (seriesId || selected.seriesId)) };
 };
 
-module.exports = (defaultCatalog = ROYAL_CATALOG) => ({
+module.exports = (defaultCatalog = ROYAL_CATALOG, reference) => ({
+  ...reference,
   data: { rootId: "", targetAge: 0, context: null, people: [], styles: [], series: [], visibleSeries: [], categories: [], categoryId: "all", seriesQuery: "", onlyAvailable: false, styleCount: 0, availableSeriesCount: 0, selectedSeries: null, templateStyles: [], focusedTemplate: null, templatePosition: 0, sourcePath: "", resultPath: "", commandId: "", result: null, accepted: false, busy: false, albumPermissionDenied: false, error: "", message: "", selectedSeriesId: "daily", bundleStyles: [], bundleCount: 0, purchaseId: "", seriesPurchase: null, seriesItems: [], retailPriceSeries: purchases.money(purchases.PRICES["wardrobe-series"]), priceSeries: purchases.money(purchases.PRICES["wardrobe-series"]), seriesSaved: 0 },
   active: false, epoch: 0, timer: null, intent: null,
   async onLoad(options) {
     const openingEpoch = ++this.epoch;
     this.seriesSavedKeys = new Set();
+    if (reference) this.setData({referenceEnabled: true});
     if (options.purchaseId) {
       const initial = session.get();
       if (!initial) { wx.navigateTo({url: "/pages/auth/index"}); return; }
@@ -60,6 +62,7 @@ module.exports = (defaultCatalog = ROYAL_CATALOG) => ({
     const paths = [this.data.sourcePath, this.data.resultPath, ...this.data.seriesItems.map(item => item.localPath)];
     this.loadedCommandId = "";
     this.catalogGroups = [];
+    this.clearCustomTemplate?.();
     this.setData({ context: null, people: [], styles: [], series: [], visibleSeries: [], categories: [], styleCount: 0, availableSeriesCount: 0, selectedSeries: null, templateStyles: [], focusedTemplate: null, templatePosition: 0, sourcePath: "", resultPath: "", result: null, seriesPurchase: null, seriesItems: [], bundleStyles: [], bundleCount: 0, accepted: false, busy: false, albumPermissionDenied: false });
     await Promise.all(paths.filter(Boolean).map(path => media.remove(path)));
   },
@@ -104,6 +107,7 @@ module.exports = (defaultCatalog = ROYAL_CATALOG) => ({
       if (epoch !== this.epoch) return;
       this.catalogGroups = groups;
       this.setData({ context, people, styles: context.styles, selectedSeriesId, sourcePath: sameSource ? this.data.sourcePath : "" });
+      this.loadCustomTemplate?.(active);
       this.updateBundle();
       if (!this.data.sourcePath && context.sourceNode.downloadPath) {
         const path = await media.download(context.sourceNode);

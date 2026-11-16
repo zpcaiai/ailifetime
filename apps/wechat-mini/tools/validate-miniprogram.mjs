@@ -83,7 +83,7 @@ export function validateMiniProgram(root = DEFAULT_ROOT, options = {}) {
 
   const javascript = ["app.js", ...pageFiles.filter((name) => name.endsWith(".js")),
     "services/api.js", "services/session.js", "services/sha256.js", "services/upload.js", "services/policy.js",
-    "services/commerce.js", "services/messaging.js", "services/privacy.js", "services/wardrobe-page.js"]
+    "services/commerce.js", "services/messaging.js", "services/privacy.js", "services/wardrobe-page.js", "pages/wardrobe/reference.js"]
     .map((name) => read(programRoot, name)).join("\n");
   const templates = [...pageFiles.filter((name) => name.endsWith(".wxml")), "views/wardrobe.wxml"]
     .map((name) => read(programRoot, name)).join("\n");
