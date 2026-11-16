@@ -1,13 +1,35 @@
 import assert from'node:assert/strict';import test from'node:test';
 import{mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,statSync,symlinkSync}from'node:fs';import{tmpdir}from'node:os';import{join}from'node:path';
 import{configureApi}from'./configure-api.mjs';
+import { runInNewContext } from "node:vm";
 function fixture(t){const project=mkdtempSync(join(tmpdir(),'mini-api-config-'));t.after(()=>rmSync(project,{recursive:true,force:true}));mkdirSync(join(project,'miniprogram'));writeFileSync(join(project,'project.config.json'),JSON.stringify({appid:'wx0123456789abcdef',compileType:'miniprogram',miniprogramRoot:'miniprogram/',setting:{urlCheck:true},__usePrivacyCheck__:true}));return project;}
 test('explicit HTTPS configuration produces only non-secret ext fields and repeats without rewriting',t=>{
  const project=fixture(t),first=configureApi({project,apiBaseUrl:'https://api.product.cn/'}),bytes=readFileSync(first.path);
  assert.equal(first.created,true);assert.equal(first.domainEnrollment,'NOT_VERIFIED');assert.equal(first.nativeLogin,'NOT_RUN');assert.equal(statSync(first.path).mode&0o777,0o600);
- assert.deepEqual(JSON.parse(bytes),{extEnable:true,extAppid:'wx0123456789abcdef',ext:{apiBaseUrl:'https://api.product.cn'}});
+ const config = JSON.parse(bytes);
+ const wx = {
+  getExtConfigSync: () => config.ext,
+  getAccountInfoSync: () => ({ miniProgram: { appId: config.extAppid, envVersion: "release" } }),
+ };
+ const module = { exports: {} };
+ const runtime = readFileSync(new URL("../miniprogram/services/api.js", import.meta.url), "utf8");
+ runInNewContext(runtime, { module, wx, URL, require: () => ({}) });
+ assert.deepEqual({ ...module.exports.configuration() }, {
+  baseUrl: "https://api.product.cn", appId: config.extAppid, envVersion: "release",
+ });
+ assert.deepEqual(config,{extEnable:true,extAppid:'wx0123456789abcdef',ext:{apiBaseUrl:'https://api.product.cn',apiAllowedOrigins:['https://api.product.cn']}});
  assert.equal(configureApi({project,apiBaseUrl:'https://api.product.cn'}).created,false);assert.deepEqual(readFileSync(first.path),bytes);
  assert.throws(()=>configureApi({project,apiBaseUrl:'https://other.product.cn'}),/EXT_CONFIGURATION_EXISTS/);assert.deepEqual(readFileSync(first.path),bytes);
+});
+test("legacy ext without the runtime allowlist is rejected without changing it", t => {
+ const project = fixture(t);
+ const path = join(project, "miniprogram/ext.json");
+ const original = JSON.stringify({
+  extEnable: true, extAppid: "wx0123456789abcdef", ext: { apiBaseUrl: "https://api.product.cn" },
+ });
+ writeFileSync(path, original);
+ assert.throws(() => configureApi({ project, apiBaseUrl: "https://api.product.cn" }), /EXT_CONFIGURATION_ALLOWLIST_INVALID/);
+ assert.equal(readFileSync(path, "utf8"), original);
 });
 test('unsafe origins and changed project gates cannot create development configuration',t=>{
  const project=fixture(t);

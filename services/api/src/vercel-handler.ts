@@ -7,7 +7,7 @@ import { Pool } from "pg";
 import { PostgresLifeTimeMachineRuntime } from "@ltm/core";
 import { createCapabilityRegistry,externalBusinessEventReducerRegistry } from "@ltm/capabilities";
 import { createApiServer } from "./server.js";
-import { loadApiConfiguration } from "./config.js";
+import { B127_PRODUCTION_RELEASE_AUTHORITY_ROLE, loadApiConfiguration } from "./config.js";
 import { ProductionDomainRuntime } from "./domain-runtime.js";
 import { PostgresGeneratedMedia } from "./generated-media.js";
 import { PrivateS3Images } from "./private-s3.js";
@@ -51,16 +51,83 @@ export async function materializeVercelConfiguration(environment: NodeJS.Process
     return {environment:env,close};
   } catch(error) {await close();throw error;}
 }
-/** The production API's authentication, consent, evidence and payment gates are
- * reused intact. No listener, SQLite database, local media or background loop.
- */
+const photoStorageFields = ["ENDPOINT", "REGION", "BUCKET", "ACCESS_KEY_ID", "SECRET_ACCESS_KEY"] as const;
+
+export function vercelRuntimeEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...environment, APP_ENV: "production",
+    LTM_DEPLOYMENT_PROFILE: "distributed", LTM_STATIC_DIR: "disabled" };
+  if (environment.VERCEL_ENV === "preview" && environment.LTM_VERCEL_PREVIEW_PROFILE === "staging") {
+    env.APP_ENV = "staging";
+    env.DATABASE_URL = environment.LTM_MINIAPP_PREVIEW_DATABASE_URL;
+    for (const field of photoStorageFields) {
+      env[`LTM_PHOTO_S3_${field}`] = environment[`LTM_MINIAPP_PREVIEW_PHOTO_S3_${field}`];
+    }
+  }
+  return env;
+}
+
+function verifyPreviewIsolation(env: NodeJS.ProcessEnv, configured: NodeJS.ProcessEnv): void {
+  if (env.APP_ENV !== "staging") return;
+  const database = new URL(required(env, "DATABASE_URL"));
+  const storage = new URL(required(env, "LTM_PHOTO_S3_ENDPOINT"));
+  for (const field of photoStorageFields) required(env, `LTM_PHOTO_S3_${field}`);
+  const originalDatabase = configured.DATABASE_URL ? new URL(configured.DATABASE_URL) : undefined;
+  const originalStorage = configured.LTM_PHOTO_S3_ENDPOINT ? new URL(configured.LTM_PHOTO_S3_ENDPOINT) : undefined;
+  if (database.protocol !== "postgresql:" || !database.hostname || !database.username || database.pathname.length < 2 ||
+      !database.password || database.hash || (database.port && database.port !== "5432") ||
+      database.searchParams.getAll("sslmode").join(",") !== "verify-full" ||
+      [...database.searchParams].some(([key, value]) => key !== "sslmode" &&
+        !(key === "channel_binding" && value === "require")) ||
+      (originalDatabase?.hostname === database.hostname && originalDatabase.pathname === database.pathname) ||
+      storage.protocol !== "https:" || !storage.hostname || storage.username || storage.password ||
+      storage.search || storage.hash || storage.pathname !== "/" ||
+      (originalStorage?.origin === storage.origin && configured.LTM_PHOTO_S3_BUCKET === env.LTM_PHOTO_S3_BUCKET)) {
+    throw new Error("STAGING_PREVIEW_CONFIGURATION_INVALID");
+  }
+}
+
+export function loadVercelStartupConfiguration(
+  env: NodeJS.ProcessEnv, productRoot: string, configured: NodeJS.ProcessEnv,
+) {
+  verifyPreviewIsolation(env, configured);
+  if (env.APP_ENV !== "staging") return loadApiConfiguration(env, productRoot);
+  if (env.VERCEL_ENV !== "preview" || env.LTM_VERCEL_PREVIEW_PROFILE !== "staging" ||
+      env.LTM_AUTH_MODE !== "oidc") {
+    throw new Error("STAGING_PREVIEW_CONFIGURATION_INVALID");
+  }
+  for (const name of ["LTM_WECHAT_IDENTITY_BROKER_URL", "LTM_WECHAT_PLATFORM_BROKER_URL", "LTM_UPLOAD_BROKER_URL"]) {
+    const origin = new URL(required(env, name));
+    if (origin.protocol !== "https:" || origin.username || origin.password ||
+        origin.search || origin.hash || origin.pathname !== "/" || !origin.hostname.includes(".")) {
+      throw new Error("STAGING_PREVIEW_BROKER_ORIGIN_INVALID");
+    }
+  }
+  const configuration = loadApiConfiguration(env, productRoot);
+  const runtime = configuration.postgresRuntimeOptions;
+  const integrations = configuration.clientIntegrations;
+  if (!runtime?.consentPolicyCatalog || runtime.evidenceEnvironment !== "staging" ||
+      !runtime.trustedEvidenceKeys?.length || !configuration.metricsTokenSha256 ||
+      !integrations.wechatIdentity || !integrations.wechatPlatform || !integrations.resumableUploads) {
+    throw new Error("STAGING_PREVIEW_REQUIRED_DEPENDENCY_MISSING");
+  }
+  if (runtime.trustedEvidenceKeys.some((key) => key.allowedEnvironments.length !== 1 ||
+      key.allowedEnvironments[0] !== "staging" || key.allowedScopes.some((scope) => scope.includes("*")) ||
+      key.authorityRoles?.includes(B127_PRODUCTION_RELEASE_AUTHORITY_ROLE)) ||
+      runtime.trustedConsentPolicyKeys?.some((key) => key.allowedEnvironments.length !== 1 ||
+        key.allowedEnvironments[0] !== "staging")) {
+    throw new Error("STAGING_PREVIEW_TRUST_SCOPE_INVALID");
+  }
+  return configuration;
+}
+
 export function createVercelHandler(environment: NodeJS.ProcessEnv,productRoot: string) {
-  const env={...environment,APP_ENV:"production",LTM_DEPLOYMENT_PROFILE:"distributed",LTM_STATIC_DIR:"disabled"};
+  const env=vercelRuntimeEnvironment(environment);
   let api: Promise<{server: Server;close():Promise<void>}>|undefined;
   let materialized: Awaited<ReturnType<typeof materializeVercelConfiguration>>|undefined;
   let storage: {media:PostgresGeneratedMedia;pool:Pool;objects:PrivateS3Images}|undefined;
   function media() {
     if (storage) return storage;
+    verifyPreviewIsolation(env, environment);
     const connectionString=required(env,"DATABASE_URL"),url=new URL(connectionString);
     if (url.searchParams.get("sslmode")!=="verify-full") throw new Error("CONFIGURATION_INVALID");
     const objects=new PrivateS3Images({endpoint:required(env,"LTM_PHOTO_S3_ENDPOINT"),region:required(env,"LTM_PHOTO_S3_REGION"),bucket:required(env,"LTM_PHOTO_S3_BUCKET"),accessKeyId:required(env,"LTM_PHOTO_S3_ACCESS_KEY_ID"),secretAccessKey:required(env,"LTM_PHOTO_S3_SECRET_ACCESS_KEY")});
@@ -70,19 +137,19 @@ export function createVercelHandler(environment: NodeJS.ProcessEnv,productRoot: 
   async function initialize() {
     materialized=await materializeVercelConfiguration(env);
     const effectiveEnv=materialized.environment;
-    const configuration=loadApiConfiguration(effectiveEnv,productRoot);
+    const configuration=loadVercelStartupConfiguration(effectiveEnv,productRoot,environment);
     if (!configuration.postgresRuntimeOptions) throw new Error("CONFIGURATION_INVALID");
     const runtime=await PostgresLifeTimeMachineRuntime.connect(configuration.postgresRuntimeOptions);
     let domain: ProductionDomainRuntime|undefined;
     let seedream: ReturnType<typeof configuredSeedream>;
     try {
       domain=new ProductionDomainRuntime(configuration.postgresRuntimeOptions.connectionString,{poolMax:2,applicationName:"ltm-vercel-domain"});
-      seedream=configuredSeedream(effectiveEnv,"production",runtime);
+      seedream=configuredSeedream(effectiveEnv,configuration.appEnvironment,runtime);
       const artifacts=seedream?.media ?? media().media;
-      const registry=createCapabilityRegistry(),scoring=configuredPhotoScoring(effectiveEnv,"production");
+      const registry=createCapabilityRegistry(),scoring=configuredPhotoScoring(effectiveEnv,configuration.appEnvironment);
       const photoQuality=scoring===undefined?undefined:new TimelinePhotoQualityService(runtime,registry,artifacts,scoring.scorer,scoring.policies,scoring.channel);
       const server=createApiServer({runtime,authenticator:configuration.authenticator,capabilityRegistry:registry,externalBusinessEventReducerRegistry,
-        appEnvironment:"production",clientIntegrations:configuration.clientIntegrations,timelineArtifacts:artifacts,domainRuntime:domain,staticDirectory:null,
+        appEnvironment:configuration.appEnvironment,clientIntegrations:configuration.clientIntegrations,timelineArtifacts:artifacts,domainRuntime:domain,staticDirectory:null,
         ...(photoQuality===undefined?{}:{photoQuality}),
         ...(seedream===undefined?{}:{seedream:seedream.generation,seedreamReadiness:seedream.readiness}),
         ...(configuration.metricsTokenSha256?{metricsTokenSha256:configuration.metricsTokenSha256}:{})});

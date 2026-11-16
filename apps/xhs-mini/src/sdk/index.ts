@@ -35,6 +35,7 @@ export type HttpTransport = <T>(req: HttpTransportRequest) => Promise<T>;
 
 export interface AiLifeTimeClientOptions {
   baseUrl: string;
+  sessionUrl?: string;
   getAccessToken?: () => string | null | undefined;
   transport: HttpTransport;
 }
@@ -86,10 +87,12 @@ export class AiLifeTimeClient {
     payload: MiniProgramSessionExchangeRequest,
     idempotencyKey = createIdempotencyKey('mpsess')
   ): Promise<MiniProgramSession> {
+    const headers = this.buildHeaders(idempotencyKey);
+    delete headers.Authorization;
     return this.options.transport<MiniProgramSession>({
       method: 'POST',
-      path: `${this.options.baseUrl}/v1/mini-program/sessions`,
-      headers: this.buildHeaders(idempotencyKey),
+      path: this.options.sessionUrl ?? `${this.options.baseUrl}/v1/mini-program/sessions`,
+      headers,
       body: payload,
     });
   }

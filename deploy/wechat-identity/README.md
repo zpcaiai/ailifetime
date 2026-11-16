@@ -1,4 +1,4 @@
-# WeChat identity authority
+# Mini-program identity authority
 
 Dedicated deployment: `ailifetime-wechat-identity` in the already authorized Vercel team. The authority exchanges real `wx.login` codes only with `https://api.weixin.qq.com/sns/jscode2session`, binds identities to durable PostgreSQL actor/tenant rows, and issues ES256 access JWTs accepted by the API's existing pinned JWT/JWKS verifier. It implements the API identity-broker wire contract; it does not provide an interactive OAuth authorization flow.
 
@@ -15,3 +15,11 @@ GET `/health/live` reports a running handler; authenticated `/health/ready` chec
 Build with `pnpm --filter @ltm/api build`. `node tools/vercel-identity-package.mjs ABSOLUTE_NEW_DIRECTORY` bundles only this handler and produces exactly three deployment files, using the already pinned pg/jose dependencies. No secrets, photos, source checkout or cron are uploaded. Deploy to the dedicated existing project and re-deploy after environment changes. The main business API is deployed separately; its OIDC issuer/JWKS, broker URL/workload token and remaining production dependencies must be wired and verified before real mini-program login is accepted. Keep the mini-program API origin pointing to its enrolled business API, not this internal identity service.
 
 Tests use a dedicated disposable PostgreSQL database named `ltm_identity_test`, a least-privilege `ltm_identity_test_runtime` role and a synthetic external WeChat HTTP boundary. Supply `LTM_IDENTITY_TEST_POSTGRES_ADMIN_URL` and `LTM_IDENTITY_TEST_POSTGRES_URL`; test setup refuses a different database or non-loopback host. These real HTTP/SQL/JOSE tests are not official WeChat or phone acceptance. Real code exchange, legitimate domain enrollment, main API wiring, and real-device login remain separate unfinished checks until actually run.
+
+## Xiaohongshu session exchange
+
+An opt-in `POST /v1/mini-program/sessions` accepts exactly `platform: "mp-xhs"` and `js_code` from the native login action. The same authority commits an app-scoped PostgreSQL intent before forwarding the one-use code to Xiaohongshu. Successful exchange issues a short-lived ES256 API token. Xiaohongshu's OpenID and session key are never returned to the client. The session key is discarded after verification.
+
+Use a dedicated preview environment with an approved Xiaohongshu AppID and a credential rotation process for the app-scoped RMP access token. Configure `LTM_XHS_APP_ID`, `LTM_XHS_RMP_ACCESS_TOKEN`, and `LTM_XHS_IDENTITY_CONSENT_VERSION` on the identity authority. The preview business API must trust the identity environment's issuer and JWKS. Set only the enrolled public HTTPS origin in `VITE_XHS_IDENTITY_ORIGIN` for the Xiaohongshu build. Keep the WeChat app secret and workload bearer confined to their existing server roles. Live exchange requires a fresh native login code for the registered AppID, actual platform credentials, and a reachable allowlisted identity origin.
+
+A Xiaohongshu-only Preview serves the public JWKS and health routes using its own AppID configuration. The Preview still requires its own PostgreSQL connection, issuer, audience, signing key, encryption key and workload-token digest. When both platform AppIDs are configured, shared routes retain the WeChat authority and the same configured issuer and signing key apply to both platform sessions.

@@ -22,9 +22,11 @@ import hmac
 import json
 import sqlite3
 import sys
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 REPO_ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -133,6 +135,7 @@ class XhsControlPlaneService:
     ) -> None:
         self._actor_pepper = actor_pepper.encode("utf-8")
         self._xhs_webhook_secret = xhs_webhook_secret.encode("utf-8")
+        self._payment_lock = Lock()
         self._conn = sqlite3.connect(db_path, isolation_level=None, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._init_schema()
@@ -636,6 +639,18 @@ class XhsControlPlaneService:
         if session.tenant_id != target_tenant_id:
             raise ControlPlaneError("CROSS_TENANT_FORBIDDEN", "Cross-tenant access denied", 403)
 
+    @contextmanager
+    def _payment_transaction(self):
+        with self._payment_lock:
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                yield
+                self._conn.execute("COMMIT")
+            except BaseException:
+                if self._conn.in_transaction:
+                    self._conn.execute("ROLLBACK")
+                raise
+
     def register_server_priced_order(
         self,
         *,
@@ -645,38 +660,31 @@ class XhsControlPlaneService:
         currency: str = "CNY",
     ) -> OrderRecord:
         """B71-R02: Server-authoritative order creation in ACID SQLite."""
-        if amount_minor <= 0 or currency != "CNY":
+        if type(amount_minor) is not int or not 0 < amount_minor < 2**63 or currency != "CNY":
             raise ControlPlaneError("INVALID_ORDER_AMOUNT", "Order amount must be positive CNY", 400)
-        record = OrderRecord(
-            order_id=order_id,
-            checkout_id=checkout_id,
-            amount_minor=amount_minor,
-            currency=currency,
-            state="pending",
-            version=1,
-        )
-        self._conn.execute("BEGIN IMMEDIATE")
-        try:
+        with self._payment_transaction():
             self._conn.execute(
                 """
                 INSERT INTO cp_orders (order_id, checkout_id, amount_minor, currency, state, version, xhs_trade_no)
                 VALUES (?, ?, ?, ?, ?, 1, NULL)
-                ON CONFLICT(order_id) DO UPDATE SET
-                    checkout_id = excluded.checkout_id,
-                    amount_minor = excluded.amount_minor,
-                    currency = excluded.currency,
-                    state = excluded.state,
-                    version = 1,
-                    xhs_trade_no = NULL
+                ON CONFLICT(order_id) DO NOTHING
                 """,
-                (record.order_id, record.checkout_id, record.amount_minor, record.currency, record.state),
+                (order_id, checkout_id, amount_minor, currency, "pending"),
             )
-            self._conn.execute("COMMIT")
-        except Exception:
-            if self._conn.in_transaction:
-                self._conn.execute("ROLLBACK")
-            raise
-        return record
+            record = self._read_payment_order(order_id)
+            if (record.checkout_id, record.amount_minor, record.currency) != (checkout_id, amount_minor, currency):
+                raise ControlPlaneError("ORDER_REGISTRATION_CONFLICT", "Order already has different terms", 409)
+            return record
+
+    def _read_payment_order(self, order_id: str) -> OrderRecord:
+        row = self._conn.execute(
+            "SELECT order_id, checkout_id, amount_minor, currency, state, version, xhs_trade_no "
+            "FROM cp_orders WHERE order_id = ?",
+            (order_id,),
+        ).fetchone()
+        if row is None:
+            raise ControlPlaneError("ORDER_NOT_FOUND", "Unknown order", 404)
+        return OrderRecord(**dict(row))
 
     def sign_xhs_webhook_payload(
         self,
@@ -696,162 +704,46 @@ class XhsControlPlaneService:
         ).hexdigest()
 
     def handle_xhs_payment_webhook(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """B71-R01 & B87: Verify Xiaohongshu callback signature, deduplicate, and post ledger entry."""
-        required = (
-            "event_id",
-            "out_trade_no",
-            "xhs_trade_no",
-            "amount_minor",
-            "currency",
-            "status",
-            "timestamp",
-            "nonce",
-            "signature",
-        )
-        for key in required:
-            if key not in payload:
-                raise ControlPlaneError("MISSING_WEBHOOK_FIELD", f"Missing field: {key}", 400)
+        """Apply an authenticated, normalized payment event to the local order ledger."""
+        required = ("event_id", "out_trade_no", "xhs_trade_no", "currency", "status", "timestamp", "nonce", "signature")
+        if not all(key in payload for key in (*required, "amount_minor")):
+            raise ControlPlaneError("MISSING_WEBHOOK_FIELD", "Missing payment event field", 400)
+        if any(
+            not isinstance(payload[key], str) or not payload[key] or len(payload[key]) > 256 or "|" in payload[key]
+            for key in required
+        ) or type(payload["amount_minor"]) is not int or not 0 < payload["amount_minor"] < 2**63:
+            raise ControlPlaneError("INVALID_WEBHOOK_FIELD", "Invalid payment event field", 400)
 
-        expected_sig = self.sign_xhs_webhook_payload(
-            event_id=str(payload["event_id"]),
-            out_trade_no=str(payload["out_trade_no"]),
-            xhs_trade_no=str(payload["xhs_trade_no"]),
-            amount_minor=int(payload["amount_minor"]),
-            currency=str(payload["currency"]),
-            status=str(payload["status"]),
-            timestamp=str(payload["timestamp"]),
-            nonce=str(payload["nonce"]),
-        )
-        if not hmac.compare_digest(expected_sig, str(payload["signature"])):
+        fields = {key: payload[key] for key in (*required[:-1], "amount_minor")}
+        expected_sig = self.sign_xhs_webhook_payload(**fields)
+        if not hmac.compare_digest(expected_sig.encode("ascii"), payload["signature"].encode("utf-8")):
             raise ControlPlaneError("INVALID_WEBHOOK_SIGNATURE", "Webhook signature mismatch", 401)
+        fingerprint = hashlib.sha256(json.dumps(fields, sort_keys=True).encode("utf-8")).hexdigest()
+        event_id = fields["event_id"]
+        trade_no = fields["xhs_trade_no"]
+        status = fields["status"]
+        if status not in {"PAID", "REFUNDED", "CLOSED", "CANCELLED"}:
+            raise ControlPlaneError("INVALID_PAYMENT_STATUS", "Unsupported payment event state", 400)
 
-        event_id = str(payload["event_id"])
-        existing_evt = self._conn.execute(
-            "SELECT receipt_json FROM cp_webhook_events WHERE event_id = ?",
-            (event_id,),
-        ).fetchone()
-        if existing_evt is not None:
-            cached = dict(json.loads(existing_evt["receipt_json"]))
-            cached["deduplicated"] = True
-            return cached
+        with self._payment_transaction():
+            cached = self._conn.execute(
+                "SELECT receipt_json FROM cp_webhook_events WHERE event_id = ?", (event_id,),
+            ).fetchone()
+            if cached is not None:
+                receipt = json.loads(cached["receipt_json"])
+                recorded_fingerprint = receipt.pop("payload_fingerprint", None)
+                if (receipt["order_id"] != fields["out_trade_no"] or
+                        (recorded_fingerprint is not None and recorded_fingerprint != fingerprint)):
+                    raise ControlPlaneError("PAYMENT_EVENT_CONFLICT", "Event already bound to another payload", 409)
+                return {**receipt, "deduplicated": True}
 
-        order_id = str(payload["out_trade_no"])
-        order_row = self._conn.execute(
-            "SELECT order_id, checkout_id, amount_minor, currency, state, version, xhs_trade_no FROM cp_orders WHERE order_id = ?",
-            (order_id,),
-        ).fetchone()
-        if order_row is None:
-            raise ControlPlaneError("ORDER_NOT_FOUND", f"Unknown order: {order_id}", 404)
-
-        order = OrderRecord(
-            order_id=order_row["order_id"],
-            checkout_id=order_row["checkout_id"],
-            amount_minor=int(order_row["amount_minor"]),
-            currency=order_row["currency"],
-            state=order_row["state"],
-            version=int(order_row["version"]),
-            xhs_trade_no=order_row["xhs_trade_no"],
-        )
-
-        if int(payload["amount_minor"]) != order.amount_minor or str(payload["currency"]) != order.currency:
-            raise ControlPlaneError(
-                "AMOUNT_MISMATCH",
-                "Callback amount or currency does not match server-priced order",
-                409,
-            )
-
-        status = str(payload["status"])
-        now_iso = datetime.now(timezone.utc).isoformat()
-
-        self._conn.execute("BEGIN IMMEDIATE")
-        try:
-            if status == "PAID":
-                if order.state == "refunded":
-                    receipt = {
-                        "event_id": event_id,
-                        "order_id": order.order_id,
-                        "state": order.state,
-                        "deduplicated": False,
-                        "ledger_entry_id": "noop_already_refunded",
-                    }
-                    self._conn.execute(
-                        "INSERT INTO cp_webhook_events (event_id, receipt_json, created_at) VALUES (?, ?, ?)",
-                        (event_id, json.dumps(receipt), now_iso),
-                    )
-                    self._conn.execute("COMMIT")
-                    return receipt
-
-                new_state = "paid"
-                xhs_trade_no = str(payload["xhs_trade_no"])
-                cur = self._conn.execute(
-                    "UPDATE cp_orders SET state = ?, version = version + 1, xhs_trade_no = ? WHERE order_id = ? AND version = ?",
-                    (new_state, xhs_trade_no, order.order_id, order.version),
-                )
-                if cur.rowcount == 0:
-                    self._conn.execute("ROLLBACK")
-                    raise ControlPlaneError("CONCURRENT_MODIFICATION", "Order version conflict", 409)
-
-                count_row = self._conn.execute("SELECT COUNT(*) AS cnt FROM cp_ledger_entries").fetchone()
-                next_idx = int(count_row["cnt"]) + 1
-                ledger_entry_id = f"led_{next_idx:04d}"
-                self._conn.execute(
-                    """
-                    INSERT INTO cp_ledger_entries (
-                        entry_id, event_id, order_id, debit_account, credit_account, amount_minor, currency, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        ledger_entry_id,
-                        event_id,
-                        order.order_id,
-                        "asset:xhs_clearing_cash",
-                        "liability:deferred_revenue",
-                        order.amount_minor,
-                        order.currency,
-                        now_iso,
-                    ),
-                )
-            elif status == "REFUNDED":
-                new_state = "refunded"
-                cur = self._conn.execute(
-                    "UPDATE cp_orders SET state = ?, version = version + 1 WHERE order_id = ? AND version = ?",
-                    (new_state, order.order_id, order.version),
-                )
-                if cur.rowcount == 0:
-                    self._conn.execute("ROLLBACK")
-                    raise ControlPlaneError("CONCURRENT_MODIFICATION", "Order version conflict", 409)
-
-                count_row = self._conn.execute("SELECT COUNT(*) AS cnt FROM cp_ledger_entries").fetchone()
-                next_idx = int(count_row["cnt"]) + 1
-                ledger_entry_id = f"led_{next_idx:04d}"
-                self._conn.execute(
-                    """
-                    INSERT INTO cp_ledger_entries (
-                        entry_id, event_id, order_id, debit_account, credit_account, amount_minor, currency, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        ledger_entry_id,
-                        event_id,
-                        order.order_id,
-                        "liability:deferred_revenue",
-                        "asset:xhs_clearing_cash",
-                        order.amount_minor,
-                        order.currency,
-                        now_iso,
-                    ),
-                )
-            else:
-                new_state = "cancelled"
-                cur = self._conn.execute(
-                    "UPDATE cp_orders SET state = ?, version = version + 1 WHERE order_id = ? AND version = ?",
-                    (new_state, order.order_id, order.version),
-                )
-                if cur.rowcount == 0:
-                    self._conn.execute("ROLLBACK")
-                    raise ControlPlaneError("CONCURRENT_MODIFICATION", "Order version conflict", 409)
-                ledger_entry_id = "noop_closed"
-
+            order = self._read_payment_order(fields["out_trade_no"])
+            if fields["amount_minor"] != order.amount_minor or fields["currency"] != order.currency:
+                raise ControlPlaneError("AMOUNT_MISMATCH", "Callback amount or currency does not match server-priced order", 409)
+            if order.xhs_trade_no is not None and order.xhs_trade_no != trade_no:
+                raise ControlPlaneError("PAYMENT_TRADE_CONFLICT", "Order already bound to another trade", 409)
+            now_iso = datetime.now(timezone.utc).isoformat()
+            new_state, ledger_entry_id = self._apply_payment_event(order, status, trade_no, event_id, now_iso)
             receipt = {
                 "event_id": event_id,
                 "order_id": order.order_id,
@@ -861,14 +753,55 @@ class XhsControlPlaneService:
             }
             self._conn.execute(
                 "INSERT INTO cp_webhook_events (event_id, receipt_json, created_at) VALUES (?, ?, ?)",
-                (event_id, json.dumps(receipt), now_iso),
+                (event_id, json.dumps({**receipt, "payload_fingerprint": fingerprint}), now_iso),
             )
-            self._conn.execute("COMMIT")
             return receipt
-        except Exception:
-            if self._conn.in_transaction:
-                self._conn.execute("ROLLBACK")
-            raise
+
+    def _apply_payment_event(
+        self, order: OrderRecord, status: str, trade_no: str, event_id: str, now_iso: str
+    ) -> tuple[str, str]:
+        debit = "asset:xhs_clearing_cash"
+        credit = "liability:deferred_revenue"
+        if status == "PAID":
+            if order.state in {"paid", "refunded"}:
+                return order.state, "noop_no_state_change"
+            other_order = self._conn.execute(
+                "SELECT 1 FROM cp_orders WHERE xhs_trade_no = ? AND order_id <> ?",
+                (trade_no, order.order_id),
+            ).fetchone()
+            if other_order is not None:
+                raise ControlPlaneError("PAYMENT_TRADE_CONFLICT", "Trade already bound to another order", 409)
+            state, order_trade = "paid", trade_no
+        elif status == "REFUNDED":
+            if order.state == "refunded":
+                return order.state, "noop_no_state_change"
+            if order.state != "paid":
+                raise ControlPlaneError("PAYMENT_PENDING_RECONCILIATION", "Payment must be confirmed before refund", 409)
+            state, order_trade = "refunded", order.xhs_trade_no
+            debit, credit = credit, debit
+        else:
+            if order.state != "pending":
+                return order.state, "noop_no_state_change"
+            state, order_trade = "cancelled", order.xhs_trade_no
+
+        updated = self._conn.execute(
+            "UPDATE cp_orders SET state = ?, version = version + 1, xhs_trade_no = ? WHERE order_id = ? AND version = ?",
+            (state, order_trade, order.order_id, order.version),
+        )
+        if updated.rowcount != 1:
+            raise ControlPlaneError("CONCURRENT_MODIFICATION", "Order version conflict", 409)
+        if state == "cancelled":
+            return state, "noop_closed"
+
+        ledger_entry_id = "led_" + hashlib.sha256(event_id.encode("utf-8")).hexdigest()
+        self._conn.execute(
+            "INSERT INTO cp_ledger_entries "
+            "(entry_id, event_id, order_id, debit_account, credit_account, amount_minor, currency, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (ledger_entry_id, event_id, order.order_id, debit, credit, order.amount_minor, order.currency, now_iso),
+        )
+        return state, ledger_entry_id
+
 
     def register_share_grant(self, grant: ShareGrantRecord) -> None:
         self._conn.execute("BEGIN IMMEDIATE")

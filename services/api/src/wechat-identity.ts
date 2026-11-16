@@ -16,8 +16,10 @@ function exact(v:unknown,keys:string[]):Record<string,unknown>{
 function required(env:NodeJS.ProcessEnv,key:string):string{const v=env[key];if(!v||v!==v.trim())reject('IDENTITY_NOT_CONFIGURED',503);return v;}
 function origin(v:string){const u=new URL(v);if(u.protocol!=='https:'||u.origin!==v||u.username||u.password)reject('IDENTITY_NOT_CONFIGURED',503);return v;}
 interface Settings {appId:string;issuer:string;audience:string;consent:string;workloadDigest:string;key:Uint8Array;privateJwk:JWK;database:string;}
-function settings(env:NodeJS.ProcessEnv):Settings{
- const appId=required(env,'LTM_WECHAT_APP_ID');if(!/^wx[a-f0-9]{16}$/.test(appId))reject('IDENTITY_NOT_CONFIGURED',503);
+type IdentityProvider = 'wechat' | 'xhs';
+function settings(env:NodeJS.ProcessEnv,provider:IdentityProvider):Settings{
+ const appId=required(env,provider==='xhs'?'LTM_XHS_APP_ID':'LTM_WECHAT_APP_ID');
+ if (!(provider==='xhs'?/^[A-Za-z0-9]{24}$/:/^wx[a-f0-9]{16}$/).test(appId)) reject('IDENTITY_NOT_CONFIGURED',503);
  const keyValue=required(env,'LTM_IDENTITY_ENCRYPTION_KEY'),key=Buffer.from(keyValue,'base64url');
  const workloadDigest=required(env,'LTM_IDENTITY_WORKLOAD_TOKEN_SHA256');
  const privateJwk=JSON.parse(required(env,'LTM_IDENTITY_SIGNING_JWK')) as JWK;
@@ -26,11 +28,12 @@ function settings(env:NodeJS.ProcessEnv):Settings{
  if(!['postgres:','postgresql:'].includes(u.protocol)||!u.username||u.hash||(!local&&u.searchParams.get('sslmode')!=='verify-full')||
     key.length!==32||key.toString('base64url')!==keyValue||!/^[a-f0-9]{64}$/.test(workloadDigest)||
     privateJwk.kty!=='EC'||privateJwk.crv!=='P-256'||!privateJwk.d||!privateJwk.x||!privateJwk.y)reject('IDENTITY_NOT_CONFIGURED',503);
- const audience=required(env,'LTM_IDENTITY_AUDIENCE'),consent=required(env,'LTM_IDENTITY_CONSENT_VERSION');
+ const audience=required(env,'LTM_IDENTITY_AUDIENCE'),
+  consent=required(env,provider==='xhs'?'LTM_XHS_IDENTITY_CONSENT_VERSION':'LTM_IDENTITY_CONSENT_VERSION');
  if(!identifier(audience)||!identifier(consent))reject('IDENTITY_NOT_CONFIGURED',503);
  return {appId,issuer:origin(required(env,'LTM_IDENTITY_ISSUER')),audience,consent,workloadDigest,key,privateJwk,database};
 }
-/** Separate WeChat identity authority. It never accepts caller-selected identities,
+/** Mini-program identity authority. It never accepts caller-selected identities,
  * roles, tenants or purposes. Access JWTs expire in five minutes; the existing
  * API verifies them offline, so logout prevents refresh immediately and bounds
  * remaining access at the API by that expiry (not instantaneous revocation).
@@ -50,9 +53,17 @@ export class WechatIdentityAuthority {
   if(reason)throw new IdentityError('WECHAT_APP_SECRET_FORMAT_INVALID',503,reason);
   return secret;
  }
- constructor(private readonly env:NodeJS.ProcessEnv,testEndpoint?:string){
-  this.config=settings(env);this.endpoint=new URL('https://api.weixin.qq.com/sns/jscode2session');
-  if(testEndpoint){const u=new URL(testEndpoint);if(env.APP_ENV!=='test'||u.origin!==testEndpoint||u.hostname!=='127.0.0.1'||u.protocol!=='http:')reject('IDENTITY_NOT_CONFIGURED',503);this.endpoint=new URL('/sns/jscode2session',u);}
+ private providerCredential():string {
+  if (this.provider === 'wechat') return this.appSecret();
+  const token = this.env.LTM_XHS_RMP_ACCESS_TOKEN?.trim();
+  if (!token || !/^[!-~]{16,1024}$/.test(token)) reject('XHS_APP_ACCESS_TOKEN_UNAVAILABLE',503);
+  return token;
+ }
+ constructor(private readonly env:NodeJS.ProcessEnv,testEndpoint?:string,private readonly provider:IdentityProvider='wechat'){
+  this.config=settings(env,provider);
+  const endpoint=provider==='xhs'?'https://miniapp.xiaohongshu.com/api/rmp/session':'https://api.weixin.qq.com/sns/jscode2session';
+  this.endpoint=new URL(endpoint);
+  if(testEndpoint){const u=new URL(testEndpoint);if(env.APP_ENV!=='test'||u.origin!==testEndpoint||u.hostname!=='127.0.0.1'||u.protocol!=='http:')reject('IDENTITY_NOT_CONFIGURED',503);this.endpoint=new URL(this.endpoint.pathname,u);}
   const {x,y}=this.config.privateJwk;this.publicJwk={kty:'EC',crv:'P-256',x:x!,y:y!,alg:'ES256',use:'sig'};
   this.kid=calculateJwkThumbprint(this.publicJwk);this.signing=importJWK(this.config.privateJwk,'ES256');
   this.pool=new Pool({connectionString:this.config.database,max:2,connectionTimeoutMillis:5000,idleTimeoutMillis:10000,application_name:'ltm-wechat-identity'});
@@ -102,7 +113,7 @@ export class WechatIdentityAuthority {
   const input=exact(body,['code','consentVersion','clientRequestId']);
   if(!identifier(key)||!identifier(input.clientRequestId)||typeof input.code!=='string'||input.code.length<1||input.code.length>512||/\s/.test(input.code))reject('VALIDATION_FAILED');
   if(input.consentVersion!==this.config.consent)reject('CONSENT_REQUIRED',403);
-  const secret=this.appSecret();
+  const secret=this.providerCredential();
   const fingerprint=digest(JSON.stringify([input.code,input.consentVersion,input.clientRequestId]));
   const prior=await this.transaction(async c=>{
    await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[this.config.appId]);
@@ -113,21 +124,33 @@ export class WechatIdentityAuthority {
   });if(prior)return prior;
   let identity:{openid:string;session_key:string};
   try{
-   const url=new URL(this.endpoint);url.search=new URLSearchParams({appid:this.config.appId,secret,js_code:input.code as string,grant_type:'authorization_code'}).toString();
+   const url=new URL(this.endpoint);
+   url.search=new URLSearchParams(this.provider==='xhs'
+    ? {appid:this.config.appId,access_token:secret,code:input.code as string}
+    : {appid:this.config.appId,secret,js_code:input.code as string,grant_type:'authorization_code'}).toString();
+   const rejection=this.provider==='xhs'?'XHS_LOGIN_REJECTED':'WECHAT_LOGIN_REJECTED';
    const response=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(8000)});
-   if(!response.ok){await response.body?.cancel();reject('WECHAT_LOGIN_REJECTED',502);}
+   if(!response.ok){await response.body?.cancel();reject(rejection,502);}
    const chunks:Uint8Array[]=[];let size=0;
-   if(!response.body)reject('WECHAT_LOGIN_REJECTED',502);
-   for await(const chunk of response.body!){size+=chunk.byteLength;if(size>16384){reject('WECHAT_LOGIN_REJECTED',502);}chunks.push(chunk);}
+   if(!response.body)reject(rejection,502);
+   for await(const chunk of response.body!){size+=chunk.byteLength;if(size>16384){reject(rejection,502);}chunks.push(chunk);}
    const result=JSON.parse(Buffer.concat(chunks).toString('utf8'));
-   if((result.errcode!==undefined&&result.errcode!==0)||typeof result.openid!=='string'||!/^[-_A-Za-z0-9]{10,128}$/.test(result.openid)||typeof result.session_key!=='string'||Buffer.from(result.session_key,'base64').length!==16||Buffer.from(result.session_key,'base64').toString('base64')!==result.session_key)reject('WECHAT_LOGIN_REJECTED',401);
-   identity=result;
-  }catch(error){await this.transaction(c=>c.query("UPDATE wechat_identity.requests SET state='uncertain' WHERE app_id=$1 AND operation='create' AND request_key=$2",[this.config.appId,key]));if(error instanceof IdentityError)throw error;reject('WECHAT_LOGIN_UNAVAILABLE',503);}
+   if(this.provider==='xhs'){
+    const data=result?.data;
+    if(result?.success!==true||result.code!==0||typeof data?.open_id!=='string'||
+       !/^[-_A-Za-z0-9]{10,128}$/.test(data.open_id)||typeof data.session_key!=='string'||
+       !/^[!-~]{1,512}$/.test(data.session_key))reject(rejection,401);
+    identity={openid:data.open_id,session_key:data.session_key};
+   }else{
+    if((result.errcode!==undefined&&result.errcode!==0)||typeof result.openid!=='string'||!/^[-_A-Za-z0-9]{10,128}$/.test(result.openid)||typeof result.session_key!=='string'||Buffer.from(result.session_key,'base64').length!==16||Buffer.from(result.session_key,'base64').toString('base64')!==result.session_key)reject(rejection,401);
+    identity=result;
+   }
+  }catch(error){await this.transaction(c=>c.query("UPDATE wechat_identity.requests SET state='uncertain' WHERE app_id=$1 AND operation='create' AND request_key=$2",[this.config.appId,key]));if(error instanceof IdentityError)throw error;reject(this.provider==='xhs'?'XHS_LOGIN_UNAVAILABLE':'WECHAT_LOGIN_UNAVAILABLE',503);}
   return this.transaction(async c=>{
    const hash=digest(this.config.appId+':'+identity.openid);
    await c.query('INSERT INTO wechat_identity.users(app_id,subject_hash,actor_id,tenant_id) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',[this.config.appId,hash,randomUUID(),randomUUID()]);
    const user=(await c.query('SELECT actor_id,tenant_id FROM wechat_identity.users WHERE app_id=$1 AND subject_hash=$2',[this.config.appId,hash])).rows[0];
-   const result=await this.issue(c,user,randomUUID(),identity);
+   const result=await this.issue(c,user,randomUUID(),this.provider==='wechat'?identity:undefined);
    await this.save(c,'create',key,result,result.session.expiresAt);
    await c.query('UPDATE wechat_identity.sessions SET provider_cipher=NULL WHERE app_id=$1 AND expires_at<=clock_timestamp()',[this.config.appId]);
    return result;
@@ -155,7 +178,7 @@ export class WechatIdentityAuthority {
   });
  }
  async jwks(){return {keys:[{...this.publicJwk,kid:await this.kid}]};}
- async ready(){this.appSecret();await this.signing;await this.transaction(async c=>{
+ async ready(){this.providerCredential();await this.signing;await this.transaction(async c=>{
   await c.query('SELECT session_id FROM wechat_identity.sessions LIMIT 1');await c.query('SELECT actor_id FROM wechat_identity.users LIMIT 1');await c.query('SELECT request_key FROM wechat_identity.requests LIMIT 1');
   const tables=(await c.query("SELECT relrowsecurity,relforcerowsecurity FROM pg_class WHERE relnamespace='wechat_identity'::regnamespace AND relkind='r'")).rows;
   if(tables.length!==3||tables.some(t=>!t.relrowsecurity||!t.relforcerowsecurity))reject('IDENTITY_UNAVAILABLE',503);
@@ -167,15 +190,25 @@ export class WechatIdentityAuthority {
    const url=new URL(req.url??'/','https://identity.invalid');if(url.search)reject('VALIDATION_FAILED');
    if(req.method==='GET'&&url.pathname==='/health/live'){send(200,{status:'alive'});return;}
    if(req.method==='GET'&&url.pathname==='/.well-known/jwks.json'){send(200,await this.jwks());return;}
-   if(!this.allowed(req.headers.authorization))reject('AUTH_REQUIRED',401);
+   const publicXhs=this.provider==='xhs'&&req.method==='POST'&&url.pathname==='/v1/mini-program/sessions';
+   if(!publicXhs&&!this.allowed(req.headers.authorization))reject('AUTH_REQUIRED',401);
    if(req.method==='GET'&&url.pathname==='/health/ready'){await this.ready();send(200,{ready:true});return;}
-   if(req.method!=='POST'||!['/v1/wechat/sessions','/v1/wechat/sessions/refresh','/v1/wechat/sessions/revoke'].includes(url.pathname))reject('RESOURCE_NOT_FOUND',404);
+   if(!publicXhs&&(this.provider!=='wechat'||req.method!=='POST'||!['/v1/wechat/sessions','/v1/wechat/sessions/refresh','/v1/wechat/sessions/revoke'].includes(url.pathname)))reject('RESOURCE_NOT_FOUND',404);
    if(req.headers['content-type']?.split(';')[0]!=='application/json')reject('VALIDATION_FAILED');
    if(Number(req.headers['content-length']??0)>8192)reject('BODY_TOO_LARGE',413);
    const parsed=(req as IncomingMessage&{body?:unknown}).body;let body:unknown;
    if(parsed!==undefined){const text=typeof parsed==='string'?parsed:Buffer.isBuffer(parsed)?parsed.toString('utf8'):JSON.stringify(parsed);if(Buffer.byteLength(text)>8192)reject('BODY_TOO_LARGE',413);try{body=JSON.parse(text);}catch{reject('VALIDATION_FAILED');}}
    else{let bytes=Buffer.alloc(0);for await(const chunk of req){bytes=Buffer.concat([bytes,Buffer.from(chunk)]);if(bytes.length>8192)reject('BODY_TOO_LARGE',413);}try{body=JSON.parse(bytes.toString('utf8'));}catch{reject('VALIDATION_FAILED');}}
    const key=req.headers['idempotency-key'];if(typeof key!=='string')reject('VALIDATION_FAILED');
+   if(publicXhs){
+    const input=exact(body,['platform','js_code']);
+    if(input.platform!=='mp-xhs')reject('VALIDATION_FAILED');
+    const result=await this.create({code:input.js_code,consentVersion:this.config.consent,clientRequestId:key},key) as Awaited<ReturnType<WechatIdentityAuthority['issue']>>;
+    const session=result.session;
+    send(200,{platform:'mp-xhs',session_id:'xhs-'+digest(session.accessToken).slice(0,32),
+     actor_pseudonym:session.actorId,access_token:session.accessToken,expires_at:session.expiresAt});
+    return;
+   }
    if(url.pathname==='/v1/wechat/sessions'){send(200,await this.create(body,key));return;}
    const token=req.headers['x-ltm-subject-token'];if(typeof token!=='string')reject('AUTH_REQUIRED',401);
    const op=url.pathname.endsWith('/refresh')?'refresh':'revoke';const result=await this.sessionOperation(op,body,key,token);

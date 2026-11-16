@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import sys
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from threading import Barrier
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -104,6 +107,62 @@ class XhsControlPlaneTests(unittest.TestCase):
                 "signature": tampered_sig,
             })
         self.assertEqual(ctx.exception.code, "AMOUNT_MISMATCH")
+
+    def test_payment_retries_and_out_of_order_events_preserve_the_durable_ledger(self) -> None:
+        with TemporaryDirectory() as directory:
+            db_path = str(Path(directory) / "orders.sqlite")
+            first = XhsControlPlaneService(db_path=db_path)
+            second = XhsControlPlaneService(db_path=db_path)
+            terms = {"order_id": "ord_xhs_replay", "checkout_id": "chk_xhs_replay", "amount_minor": 9900}
+            first.register_server_priced_order(**terms)
+
+            def event(event_id: str, status: str, **changes) -> dict:
+                payload = {
+                    "event_id": event_id, "out_trade_no": terms["order_id"], "xhs_trade_no": "xhs_trade_replay",
+                    "amount_minor": 9900, "currency": "CNY", "status": status,
+                    "timestamp": "1793966400", "nonce": "nonce_replay",
+                    **changes,
+                }
+                return {**payload, "signature": first.sign_xhs_webhook_payload(**payload)}
+
+            refund = event("evt_refund", "REFUNDED")
+            with self.assertRaises(ControlPlaneError) as early:
+                first.handle_xhs_payment_webhook(refund)
+            self.assertEqual(early.exception.code, "PAYMENT_PENDING_RECONCILIATION")
+
+            ready = Barrier(2)
+
+            def capture(service, event_id):
+                ready.wait(timeout=5)
+                return service.handle_xhs_payment_webhook(event(event_id, "PAID"))
+
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                callbacks = [executor.submit(capture, first, "evt_paid_a"), executor.submit(capture, second, "evt_paid_b")]
+                self.assertEqual([future.result(timeout=10)["state"] for future in callbacks], ["paid", "paid"])
+            self.assertEqual(len(second.ledger_entries), 1)
+            self.assertEqual(second.register_server_priced_order(**terms).state, "paid")
+
+            with self.assertRaises(ControlPlaneError) as changed_order:
+                second.register_server_priced_order(**{**terms, "amount_minor": 1})
+            self.assertEqual(changed_order.exception.code, "ORDER_REGISTRATION_CONFLICT")
+            with self.assertRaises(ControlPlaneError) as changed_event:
+                second.handle_xhs_payment_webhook(event("evt_paid_a", "PAID", nonce="changed"))
+            self.assertEqual(changed_event.exception.code, "PAYMENT_EVENT_CONFLICT")
+            second.register_server_priced_order(**{**terms, "order_id": "ord_other"})
+            with self.assertRaises(ControlPlaneError) as duplicate_trade:
+                second.handle_xhs_payment_webhook(event("evt_cross_order", "PAID", out_trade_no="ord_other"))
+            self.assertEqual(duplicate_trade.exception.code, "PAYMENT_TRADE_CONFLICT")
+
+            self.assertEqual(first.handle_xhs_payment_webhook(event("evt_close", "CLOSED"))["state"], "paid")
+            self.assertEqual(second.handle_xhs_payment_webhook(refund)["state"], "refunded")
+            self.assertEqual(first.handle_xhs_payment_webhook(event("evt_refund_again", "REFUNDED"))["state"], "refunded")
+            self.assertEqual(first.handle_xhs_payment_webhook(event("evt_late_capture", "PAID"))["state"], "refunded")
+            self.assertEqual(second.register_server_priced_order(**terms).state, "refunded")
+            entries = second.ledger_entries
+            self.assertEqual(len(entries), 2)
+            self.assertEqual(entries[0].amount_minor, entries[1].amount_minor)
+            self.assertEqual(entries[0].debit_account, entries[1].credit_account)
+            self.assertEqual(entries[0].credit_account, entries[1].debit_account)
 
     def test_b71_r03_xhs_note_mount_enforces_ai_watermark_and_blocks_minors_or_revoked_shares(self) -> None:
         expires = (self.now + timedelta(hours=2)).isoformat()
