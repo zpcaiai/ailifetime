@@ -22,7 +22,9 @@
 
       <view class="session-bar">
         <text class="session-label">当前伪名化会话：{{ sessionStatus }}</text>
-        <button class="btn-outline" size="mini" @click="handleInitSession">刷新安全会话</button>
+        <button class="btn-outline" size="mini" :loading="sessionPending" :disabled="sessionPending" @click="handleInitSession">
+          {{ xhsLiveLogin ? '小红书登录' : '刷新安全会话' }}
+        </button>
       </view>
 
       <button class="btn-primary" @click="goToStudio()">立即进入时光工坊（需逐人授权）</button>
@@ -162,6 +164,8 @@ import {
 } from '@ailifetime/contracts';
 import {
   apiClient,
+  getCurrentPlatformChannel,
+  IS_SANDBOX_MODE,
   BUILTIN_PORTRAIT_TEMPLATES,
   TIMECAPSULE_CATEGORIES,
   TIMECAPSULE_STYLES,
@@ -170,11 +174,14 @@ import {
   WORLD_LANDMARK_REGIONS,
   setPreferredTemplateId,
   setPreferredTimeCapsuleSelection,
+  setAccessToken,
 } from '../../services/api';
-import { performPlatformLogin } from '../../utils/xhs-platform';
+import { exchangePlatformSession } from '../../utils/xhs-platform';
 
 const disclosureText = ref(AI_SIMULATION_DISCLOSURE);
-const sessionStatus = ref('初始化中...');
+const xhsLiveLogin = !IS_SANDBOX_MODE && getCurrentPlatformChannel() === 'mp-xhs';
+const sessionStatus = ref(xhsLiveLogin ? '请主动登录' : '初始化中...');
+const sessionPending = ref(false);
 
 const ageMilestones = [
   { age: 3, tag: '稚气初萌' },
@@ -215,18 +222,22 @@ const filteredTcTemplates = computed(() => {
 });
 
 async function handleInitSession() {
+  if (sessionPending.value) return;
+  sessionPending.value = true;
+  setAccessToken(null);
   try {
-    const loginInfo = await performPlatformLogin();
-    const guest = await apiClient.createGuestSession();
-    const platformTarget = loginInfo.platform === 'mp-weixin' ? 'mp-weixin' : 'mp-xhs';
-    const mpSession = await apiClient.exchangeMiniProgramSession({
-      platform: platformTarget,
-      js_code: loginInfo.code,
-      merge_guest_session_id: guest.id,
-    });
-    sessionStatus.value = `${mpSession.platform} (${mpSession.actor_pseudonym.slice(0, 18)}...)`;
-  } catch (err) {
-    sessionStatus.value = '本地受控沙箱模式';
+    const mpSession = await exchangePlatformSession((request) => apiClient.exchangeMiniProgramSession(request));
+    if (!mpSession) {
+      await apiClient.createGuestSession();
+      sessionStatus.value = '访客会话';
+      return;
+    }
+    setAccessToken(mpSession.access_token);
+    sessionStatus.value = import.meta.env.VITE_SANDBOX_MODE === 'false' ? '已登录' : '本地沙箱会话';
+  } catch {
+    sessionStatus.value = '登录失败，请重试';
+  } finally {
+    sessionPending.value = false;
   }
 }
 
@@ -247,7 +258,7 @@ function goToTimeCapsuleCard(cardId: string) {
 }
 
 onMounted(() => {
-  handleInitSession();
+  if (!xhsLiveLogin) void handleInitSession();
 });
 </script>
 

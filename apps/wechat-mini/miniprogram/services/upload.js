@@ -44,11 +44,14 @@ async function resumableUpload(file, onProgress, signal = { cancelled: false }) 
     const length = Math.min(CHUNK_BYTES, file.size - offset);
     const bytes = await readChunk(filesystem, file.path, offset, length).catch(async error => { await checkCancelled(created.uploadId, signal); throw error; });
     await checkCancelled(created.uploadId, signal);
+    const chunkDigest = createSha256();
+    chunkDigest.update(new Uint8Array(bytes));
     const result = await api.requestForPurpose(`/v1/uploads/${encodeURIComponent(created.uploadId)}/chunks`, "age_transformation", {
-      data: wx.arrayBufferToBase64(bytes),
+      data: bytes,
       headers: {
         "Content-Type": "application/octet-stream",
         "Content-Range": `bytes ${offset}-${offset + length - 1}/${file.size}`,
+        "X-Chunk-Sha256": chunkDigest.digestHex(),
         "Idempotency-Key": `${created.uploadId}-${offset}`,
       },
       timeout: 30000,

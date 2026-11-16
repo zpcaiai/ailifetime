@@ -1,5 +1,6 @@
 <template>
-  <view class="page-container">
+  <view v-if="IS_SANDBOX_MODE" class="page-container">
+    <view class="card">工坊演示使用模拟数据，不会上传照片、生成作品或提交订单。</view>
     <!-- 步骤 1: 逐人按用途授权 (B70-R02 / Product Invariant #2) -->
     <view class="card">
       <view class="step-header">
@@ -543,9 +544,7 @@
         <button class="btn-secondary" @click="handleCreateShare">
           生成可撤销小红书分享短链
         </button>
-        <button class="btn-primary" @click="handleOrderPhotoBook">
-          以已精选 {{ curatedShotIds.length }} 张定制精装时光相册 (¥99.00)
-        </button>
+        <text class="share-info">精装相册暂未开放下单</text>
       </view>
 
       <view v-if="photobookManifest" class="share-status-box">
@@ -584,15 +583,11 @@
         />
       </view>
 
-      <view v-if="checkoutResult" class="share-status-box">
-        <text class="share-info">
-          服务端核价支付单: {{ checkoutResult.id }} (¥{{ (checkoutResult.amount_minor / 100).toFixed(2) }})
-        </text>
-        <text v-if="paymentGateReceipt" class="share-info">
-          收银台门控状态: {{ paymentGateReceipt.status }} ({{ paymentGateReceipt.platform }})
-        </text>
-      </view>
     </view>
+  </view>
+  <LivePhotoStudio v-else-if="isXhsPhotoStudio" :active="studioPageActive" />
+  <view v-else class="page-container">
+    <view class="card">照片工坊暂未开放。</view>
   </view>
 </template>
 
@@ -601,7 +596,6 @@ import { computed, ref } from 'vue';
 import { onHide, onShow, onUnload, onShareAppMessage } from '@dcloudio/uni-app';
 import type {
   AspectRatio,
-  CheckoutSession,
   ConsentReceipt,
   CuratedGallerySelectionReceipt,
   GenerationJob,
@@ -617,6 +611,7 @@ import type {
 } from '@ailifetime/contracts';
 import {
   apiClient,
+  IS_SANDBOX_MODE,
   BUILTIN_PORTRAIT_TEMPLATES,
   TIMECAPSULE_STYLES,
   TIMECAPSULE_TEMPLATES,
@@ -639,10 +634,12 @@ import {
 import {
   buildCompliantShareConfig,
   ensurePlatformPrivacyAuthorized,
-  requestNativeMiniProgramPayment,
-  type NativePaymentGateReceipt,
 } from '../../utils/xhs-platform';
 import XhsNoteMountCard from '../../components/XhsNoteMountCard.vue';
+import LivePhotoStudio from '../../components/LivePhotoStudio.vue';
+
+const isXhsPhotoStudio = getCurrentPlatformChannel() === 'mp-xhs';
+const studioPageActive = ref(true);
 
 const capacities: { label: string; value: GrantorCapacity }[] = [
   { label: '本人出镜', value: 'self' },
@@ -660,7 +657,6 @@ const selectedTcStyleId = ref<string>(initialTc.styleId);
 const selectedTcExportFormat = ref<'PNG' | 'WEBP'>('PNG');
 const isRenderingTcCard = ref(false);
 const renderedTcCard = ref<TimeCapsuleCardRenderResult | null>(null);
-const paymentGateReceipt = ref<NativePaymentGateReceipt | null>(null);
 
 const currentTcCard = computed(() => {
   return (
@@ -717,7 +713,6 @@ const curatedShotIds = ref<string[]>([]);
 const curatedSelectionReceipt = ref<CuratedGallerySelectionReceipt | null>(null);
 const photobookManifest = ref<PhotobookLayoutManifest | null>(null);
 const activeShare = ref<Share | null>(null);
-const checkoutResult = ref<CheckoutSession | null>(null);
 const showCompiledPrompts = ref(false);
 
 const landmarkRegions = ref(WORLD_LANDMARK_REGIONS);
@@ -1075,56 +1070,8 @@ async function handleCreateShare() {
   uni.showToast({ title: '可撤销分享链已生成', icon: 'success' });
 }
 
-async function handleOrderPhotoBook() {
-  if (!activeJob.value) return;
-  try {
-    const frames = activeJob.value.frames || [];
-    const selectedAgesList = frames
-      .filter((f) => curatedShotIds.value.includes(f.shot_id || String(f.age)))
-      .map((f) => f.age);
-    curatedSelectionReceipt.value = saveCuratedGallerySelection({
-      project_id: activeProjectId.value || activeJob.value.id,
-      template_id: currentTemplate.value.template_id,
-      selected_shot_ids: curatedShotIds.value,
-      selected_ages: selectedAgesList,
-      export_mode: 'photobook_hardcover',
-    });
-    photobookManifest.value = compilePhotobookLayoutManifest({
-      project_id: activeProjectId.value || activeJob.value.id,
-      template_id: currentTemplate.value.template_id,
-      selected_shot_ids: curatedShotIds.value,
-      selected_ages: selectedAgesList,
-      birth_year: birthYear.value,
-    });
-  } catch (err) {
-    uni.showToast({
-      title: err instanceof Error ? err.message : '印制精装相册请至少精选 9 张成片',
-      icon: 'none',
-    });
-    return;
-  }
-  const channel = getCurrentPlatformChannel();
-  const schemePrefix = channel === 'mp-weixin' ? 'weixin' : channel === 'mp-xhs' ? 'xhs' : 'https';
-  const session = await apiClient.createCheckoutSession({
-    items: [
-      {
-        sku: 'PHOTO_BOOK_HARDCOVER_0_100',
-        quantity: 1,
-        project_id: activeJob.value.id,
-      },
-    ],
-    currency: 'CNY',
-    return_url: `${schemePrefix}://pages/profile/index`,
-  });
-  checkoutResult.value = session;
-  paymentGateReceipt.value = await requestNativeMiniProgramPayment({
-    checkoutId: session.id,
-    paymentUrl: session.payment_url,
-  });
-  uni.showToast({ title: '服务端核价订单已创建', icon: 'success' });
-}
-
 onShow(() => {
+  studioPageActive.value = true;
   const preferred = getPreferredTemplateId();
   if (preferred && preferred !== selectedTemplateId.value) {
     const found = templates.value.find((t) => t.template_id === preferred);
@@ -1144,20 +1091,27 @@ onShow(() => {
 });
 
 onHide(() => {
+  studioPageActive.value = false;
   // B70-R03: TabBar 页面切走或切后台时立即清理短期预览媒体引用
   purgeEphemeralMediaCache();
 });
 
 onShareAppMessage(() => {
+  const share = activeShare.value;
+  if (!share || share.status !== 'active' || !share.provenance_id ||
+      !(Date.parse(share.expires_at) > Date.now())) {
+    return { title: 'AI 人生时光机', path: '/pages/index/index' };
+  }
   return buildCompliantShareConfig({
     title: `我的 0—100 岁 AI 人生胶片（${currentTemplate.value.name.split('·')[0]}）`,
     path: '/pages/index/index',
-    shareUrl: activeShare.value?.url || 'https://share.ailifetime.local/s/demo',
-    provenanceId: activeShare.value?.provenance_id || 'prov_default_ai_watermark',
+    shareUrl: share.url,
+    provenanceId: share.provenance_id,
   });
 });
 
 onUnload(() => {
+  studioPageActive.value = false;
   // B70-R03: 页面卸载时清理短期预览媒体引用
   purgeEphemeralMediaCache();
 });

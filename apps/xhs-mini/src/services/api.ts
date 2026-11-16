@@ -38,45 +38,23 @@ import type {
   XhsNoteMountCard,
   XhsNoteMountRequest,
 } from '@ailifetime/contracts';
+import type { PhotoRequest } from './real-photo-upload';
 
 const DEFAULT_API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'https://api.sandbox.ailifetime.local';
-const IS_SANDBOX_MODE = import.meta.env.VITE_SANDBOX_MODE !== 'false';
-const CONFIGURED_WEIXIN_APPID =
-  import.meta.env.VITE_WECHAT_MINI_APPID || 'YOUR_WECHAT_MINI_APPID';
-const CONFIGURED_XHS_APPID =
-  import.meta.env.VITE_XHS_MINI_APPID || 'YOUR_XHS_MINI_APPID';
-
-export interface LaunchReadinessCheckItem {
-  id: string;
-  label: string;
-  passed: boolean;
-  detail: string;
-}
-
-export interface MiniProgramLaunchReadinessReport {
-  channel: 'mp-xhs' | 'mp-weixin' | 'h5';
-  runtimeMode: 'sandbox-prelaunch' | 'production-live';
-  apiBaseUrl: string;
-  readyForDevToolsPreview: boolean;
-  readyForStoreSubmission: boolean;
-  checks: LaunchReadinessCheckItem[];
-}
+export const IS_SANDBOX_MODE = import.meta.env.VITE_SANDBOX_MODE !== 'false';
+const XHS_IDENTITY_ORIGIN = import.meta.env.VITE_XHS_IDENTITY_ORIGIN;
+const NATIVE_XHS_LIVE = !IS_SANDBOX_MODE && getCurrentPlatformChannel() === 'mp-xhs';
+const SESSION_PATH = '/v1/mini-program/sessions';
 
 export function validateProductionApiOrigin(apiBaseUrl: string, isSandbox: boolean): void {
   if (isSandbox) {
     return;
   }
-  const normalized = apiBaseUrl.trim();
-  if (
-    !normalized.startsWith('https://') ||
-    normalized.includes('.local') ||
-    normalized.includes('localhost') ||
-    normalized.includes('127.0.0.1')
-  ) {
-    throw new Error(
-      `PRODUCTION_API_ORIGIN_INVALID: 生产模式 (VITE_SANDBOX_MODE=false) 必须配置合法的备案 HTTPS 域名，当前为 ${normalized}`
-    );
+  const dnsOrigin = /^https:\/\/(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+  if (apiBaseUrl.length > 261 || apiBaseUrl !== apiBaseUrl.trim() || !dnsOrigin.test(apiBaseUrl) ||
+      /\.(?:localhost|local|test|example|invalid)$/.test(apiBaseUrl)) {
+    throw new Error('PRODUCTION_API_ORIGIN_INVALID');
   }
 }
 
@@ -2788,98 +2766,17 @@ export async function renderAndExportTimeCapsuleCard(
       body: req,
     });
   }
-  validateProductionApiOrigin(DEFAULT_API_BASE_URL, IS_SANDBOX_MODE);
-  return new Promise<TimeCapsuleCardRenderResult>((resolve, reject) => {
-    uni.request({
-      url: `${DEFAULT_API_BASE_URL}/v1/timecapsule/cards/render-export`,
-      method: 'POST',
-      header: {
-        'Content-Type': 'application/json',
-        'Idempotency-Key': createIdempotencyKey(),
-        ...(currentAccessToken ? { Authorization: `Bearer ${currentAccessToken}` } : {}),
-      },
-      data: req as unknown as Record<string, unknown>,
-      timeout: 15000,
-      success: (res) => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve(res.data as TimeCapsuleCardRenderResult);
-        } else {
-          reject(
-            new Error(
-              `TimeCapsule Render API Error (${res.statusCode}): ${JSON.stringify(res.data || {})}`
-            )
-          );
-        }
-      },
-      fail: (err) => {
-        reject(new Error(err.errMsg || 'TimeCapsule card render request failed'));
-      },
-    });
+  if (!currentAccessToken) throw new Error('MINI_PROGRAM_LOGIN_REQUIRED');
+  return requestLive<TimeCapsuleCardRenderResult>({
+    method: 'POST',
+    path: `${DEFAULT_API_BASE_URL}/v1/timecapsule/cards/render-export`,
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': createIdempotencyKey(),
+      Authorization: `Bearer ${currentAccessToken}`,
+    },
+    body: req,
   });
-}
-
-export function getMiniProgramLaunchReadiness(): MiniProgramLaunchReadinessReport {
-  const channel = getCurrentPlatformChannel();
-  const isHttpsProdOrigin =
-    DEFAULT_API_BASE_URL.startsWith('https://') &&
-    !DEFAULT_API_BASE_URL.includes('.local') &&
-    !DEFAULT_API_BASE_URL.includes('localhost');
-  const hasProdWeixinAppId =
-    /^wx[0-9a-f]{16}$/i.test(CONFIGURED_WEIXIN_APPID) &&
-    CONFIGURED_WEIXIN_APPID !== 'wx0000000000000000';
-  const hasProdXhsAppId =
-    CONFIGURED_XHS_APPID.length >= 8 &&
-    CONFIGURED_XHS_APPID !== 'YOUR_XHS_MINI_APPID';
-
-  const checks: LaunchReadinessCheckItem[] = [
-    {
-      id: 'privacy_gate',
-      label: '微信 __usePrivacyCheck__ 与小红书逐人授权门控',
-      passed: true,
-      detail: 'manifest.json 已启用 __usePrivacyCheck__: true 与 scope.writePhotosAlbum 隐私声明',
-    },
-    {
-      id: 'catalog_100_combos',
-      label: '一生拾忆 12 分类 × 20 模板 × 5 视觉风格 (100 组合)',
-      passed:
-        TIMECAPSULE_CATEGORIES.length === 12 &&
-        TIMECAPSULE_TEMPLATES.length === 20 &&
-        TIMECAPSULE_STYLES.length === 5,
-      detail: `已加载 ${TIMECAPSULE_CATEGORIES.length} 分类 / ${TIMECAPSULE_TEMPLATES.length} 模板 / ${TIMECAPSULE_STYLES.length} 风格`,
-    },
-    {
-      id: 'gb45438_dual_label',
-      label: 'GB 45438-2025 显式角标 + 隐式 iTXt/RIFF 签名元数据',
-      passed: true,
-      detail: '强制注入「本作品含AI生成/合成内容」与 HMAC-SHA256 隐式签名块',
-    },
-    {
-      id: 'ephemeral_cache_purge',
-      label: 'B70-R03 切后台自动销毁短期签名预览 URL',
-      passed: true,
-      detail: `当前内存暂存预览数: ${ephemeralPreviewRegistry.size} (onHide/onUnload 自动清零)`,
-    },
-    {
-      id: 'production_credentials',
-      label: '外部正式版 AppID 与备案 HTTPS 生产域名注入',
-      passed:
-        !IS_SANDBOX_MODE &&
-        isHttpsProdOrigin &&
-        (channel === 'mp-weixin' ? hasProdWeixinAppId : channel === 'mp-xhs' ? hasProdXhsAppId : true),
-      detail: IS_SANDBOX_MODE
-        ? '当前为预备沙箱模式 (开发者工具可直接预览验证；提审前注入正式 AppID 与 VITE_SANDBOX_MODE=false)'
-        : `生产模式已激活 (${DEFAULT_API_BASE_URL})`,
-    },
-  ];
-
-  return {
-    channel,
-    runtimeMode: IS_SANDBOX_MODE ? 'sandbox-prelaunch' : 'production-live',
-    apiBaseUrl: DEFAULT_API_BASE_URL,
-    readyForDevToolsPreview: checks.slice(0, 4).every((c) => c.passed),
-    readyForStoreSubmission: checks.every((c) => c.passed),
-    checks,
-  };
 }
 
 export function saveCuratedGallerySelection(params: {
@@ -3060,37 +2957,73 @@ export function compilePhotobookLayoutManifest(params: {
   };
 }
 
+async function requestLive<T>(req: HttpTransportRequest, baseUrl = DEFAULT_API_BASE_URL): Promise<T> {
+  validateProductionApiOrigin(baseUrl, false);
+  const path = req.path.slice(baseUrl.length);
+  if (!req.path.startsWith(baseUrl) || !path.startsWith('/v1/')) {
+    throw new Error('API_REQUEST_PATH_INVALID');
+  }
+  const isPublic = path === '/v1/guest-sessions' || path === '/v1/mini-program/sessions' ||
+    (req.method === 'GET' && (path === '/v1/templates' || path.startsWith('/v1/templates/')));
+  if (!isPublic && !req.headers.Authorization) throw new Error('MINI_PROGRAM_LOGIN_REQUIRED');
+  return new Promise<T>((resolve, reject) => {
+    uni.request({
+      url: req.path,
+      method: req.method,
+      header: req.headers,
+      data: req.body as Record<string, unknown> | undefined,
+      timeout: 15000,
+      success: (res) => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(res.data as T);
+          return;
+        }
+        if (res.statusCode === 401 && req.headers.Authorization === `Bearer ${currentAccessToken}`) {
+          setAccessToken(null);
+        }
+        reject(new Error(`API_HTTP_${res.statusCode}`));
+      },
+      fail: () => reject(new Error('API_NETWORK_FAILED')),
+    });
+  });
+}
+
+export function photoRequestForCurrentSession(): PhotoRequest {
+  const token = currentAccessToken;
+  if (IS_SANDBOX_MODE || getCurrentPlatformChannel() !== 'mp-xhs' || !token) {
+    throw new Error('MINI_PROGRAM_LOGIN_REQUIRED');
+  }
+  return async (path, options = {}) => {
+    if (currentAccessToken !== token) throw new Error('MINI_PROGRAM_SESSION_CHANGED');
+    const result = await requestLive<unknown>({
+      path: `${DEFAULT_API_BASE_URL}${path}`,
+      method: options.method ?? 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+        Authorization: `Bearer ${token}`,
+        'X-Purpose': 'age_transformation',
+      },
+      body: options.body,
+    });
+    if (currentAccessToken !== token) throw new Error('MINI_PROGRAM_SESSION_CHANGED');
+    return result;
+  };
+}
+
 export const apiClient = new AiLifeTimeClient({
   baseUrl: DEFAULT_API_BASE_URL,
+  ...(NATIVE_XHS_LIVE && XHS_IDENTITY_ORIGIN ? { sessionUrl: `${XHS_IDENTITY_ORIGIN}${SESSION_PATH}` } : {}),
   getAccessToken: () => currentAccessToken,
   transport: async <T>(req: HttpTransportRequest): Promise<T> => {
-    if (IS_SANDBOX_MODE) {
-      return resolveSandboxResponse<T>(req);
+    if (IS_SANDBOX_MODE) return resolveSandboxResponse<T>(req);
+    if (NATIVE_XHS_LIVE && req.method === 'POST' && req.path.endsWith(SESSION_PATH)) {
+      if (!XHS_IDENTITY_ORIGIN || req.path !== `${XHS_IDENTITY_ORIGIN}${SESSION_PATH}`) {
+        throw new Error('XHS_IDENTITY_ORIGIN_REQUIRED');
+      }
+      return requestLive<T>(req, XHS_IDENTITY_ORIGIN);
     }
-    validateProductionApiOrigin(DEFAULT_API_BASE_URL, IS_SANDBOX_MODE);
-    return new Promise<T>((resolve, reject) => {
-      uni.request({
-        url: req.path,
-        method: req.method,
-        header: req.headers,
-        data: req.body as Record<string, unknown> | undefined,
-        timeout: 15000,
-        success: (res) => {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            resolve(res.data as T);
-          } else {
-            reject(
-              new Error(
-                `API Error (${res.statusCode}): ${JSON.stringify(res.data || {})}`
-              )
-            );
-          }
-        },
-        fail: (err) => {
-          reject(new Error(err.errMsg || 'Network request failed'));
-        },
-      });
-    });
+    return requestLive<T>(req);
   },
 });
 

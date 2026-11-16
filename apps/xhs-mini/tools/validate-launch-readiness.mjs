@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateMiniProgram } from "../../wechat-mini/tools/validate-miniprogram.mjs";
@@ -51,6 +52,31 @@ function computeDirectoryBytes(dirPath) {
     }
   }
   return { totalBytes: total, fileCount: files };
+}
+
+function isPublicHttpsOrigin(value) {
+  if (typeof value !== "string" || value !== value.trim()) return false;
+  try {
+    const parsed = new URL(value);
+    return value === parsed.origin && parsed.protocol === "https:" && !parsed.port &&
+      /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/.test(parsed.hostname) &&
+      !/\.(?:localhost|local|test|example|invalid)$/.test(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function validateArtifactBinding(dir, platform, appId, expectedOrigin, expectedIdentityOrigin) {
+  const binding = readJson(join(dir, "release-build.json"));
+  const api = readFileSync(join(dir, "services/api.js"));
+  if (binding.version !== 1 || binding.platform !== platform || binding.appId !== appId ||
+      !isPublicHttpsOrigin(binding.apiOrigin) || (expectedOrigin && binding.apiOrigin !== expectedOrigin) ||
+      !api.includes(JSON.stringify(binding.apiOrigin)) || api.includes("st_sandbox_") ||
+      !isPublicHttpsOrigin(binding.identityOrigin) || binding.identityOrigin !== expectedIdentityOrigin ||
+      !api.includes(JSON.stringify(binding.identityOrigin)) ||
+      binding.apiSha256 !== createHash("sha256").update(api).digest("hex")) {
+    fail("PRODUCTION_XHS_ARTIFACT_CONFIG_MISMATCH", `${platform} build configuration does not match the artifact`);
+  }
 }
 
 export function validateDualMiniProgramLaunchReadiness(options = {}) {
@@ -124,7 +150,7 @@ export function validateDualMiniProgramLaunchReadiness(options = {}) {
     fail("MP_XHS_PACKAGE_TOO_LARGE", `${mpXhsStats.totalBytes} > ${MAX_MAIN_PACKAGE_BYTES}`);
   }
 
-  // 5. Verify TimeCapsule 20x5 catalog, GB 45438-2025 dual labels, and security guards in compiled bundles
+  // 5. Verify required integration references in the compiled bundles.
   for (const [bundleLabel, dir] of [
     ["mp-weixin", mpWeixinDir],
     ["mp-xhs", mpXhsDir],
@@ -136,39 +162,49 @@ export function validateDualMiniProgramLaunchReadiness(options = {}) {
     for (const requiredToken of [
       "life_0_100",
       "personal_intro",
-      "PNG:iTXt:AIGeneratedContent",
-      "WEBP:RIFF:AIGC",
       "PRODUCTION_API_ORIGIN_INVALID",
-      "native_payment_accepted_pending_server_verification",
       "/v1/timecapsule/cards/render-export",
     ]) {
       if (!combined.includes(requiredToken)) {
         fail("BUNDLE_CONTRACT_TOKEN_MISSING", `${bundleLabel} missing required token: ${requiredToken}`);
       }
     }
+    if (combined.includes("native_payment_accepted_pending_server_verification")) {
+      fail("UNVERIFIED_NATIVE_PAYMENT_CLAIM", `${bundleLabel} contains a local cashier acceptance receipt`);
+    }
   }
 
-  // 6. When running in strict store-submission release mode, verify production AppIDs & HTTPS API origin
+  // 6. Release admission is stricter than local artifact validation.
   if (release) {
-    const xhsAppId = options.xhsAppId ?? process.env.LTM_XHS_APP_ID ?? mpXhsProject.appid;
-    if (typeof xhsAppId !== "string" || xhsAppId.trim().length < 8 || xhsAppId === "YOUR_XHS_MINI_APPID") {
+    const xhsAppId = options.xhsAppId ?? process.env.LTM_XHS_APP_ID;
+    if (typeof xhsAppId !== "string" || !/^[A-Za-z0-9_-]{8,128}$/.test(xhsAppId) ||
+        /placeholder|^your_|^tourist/i.test(xhsAppId)) {
       fail("PRODUCTION_XHS_APP_ID_REQUIRED", "set LTM_XHS_APP_ID to the enrolled Xiaohongshu mini-program app id");
     }
-    const prodApiOrigin = options.productionApiOrigin ?? process.env.LTM_PRODUCTION_API_ORIGIN ?? "";
-    if (
-      typeof prodApiOrigin !== "string" ||
-      !prodApiOrigin.startsWith("https://") ||
-      prodApiOrigin.includes(".local") ||
-      prodApiOrigin.includes("localhost") ||
-      prodApiOrigin.includes("127.0.0.1")
-    ) {
-      fail("PRODUCTION_API_ORIGIN_REQUIRED", "set LTM_PRODUCTION_API_ORIGIN to an ICP-registered HTTPS origin");
+    const apiOrigin = options.productionApiOrigin ?? process.env.LTM_PRODUCTION_API_ORIGIN;
+    if (!isPublicHttpsOrigin(apiOrigin)) {
+      fail("PRODUCTION_API_ORIGIN_REQUIRED", "provide a canonical public HTTPS origin");
     }
+    if (mpXhsProject.appid !== xhsAppId) {
+      fail("PRODUCTION_XHS_ARTIFACT_APP_ID_MISMATCH", "the built Xiaohongshu project must embed the enrolled AppID");
+    }
+    const identityOrigin = options.xhsIdentityOrigin ?? process.env.LTM_XHS_IDENTITY_ORIGIN;
+    if (!isPublicHttpsOrigin(identityOrigin)) {
+      fail("PRODUCTION_XHS_IDENTITY_ORIGIN_REQUIRED", "provide the enrolled identity broker HTTPS origin");
+    }
+    validateArtifactBinding(mpXhsDir, "mp-xhs", xhsAppId, apiOrigin, identityOrigin);
+    const wechatAppId = options.wechatAppId ?? process.env.LTM_WECHAT_APP_ID;
+    if (!wechatAppId || readJson(join(wechatRoot, "project.config.json")).appid !== wechatAppId) {
+      fail("PRODUCTION_WECHAT_ARTIFACT_APP_ID_MISMATCH", "the native WeChat project must embed the enrolled AppID");
+    }
+    fail("PLATFORM_RELEASE_EVIDENCE_REQUIRED",
+      "release admission requires verified live API binding, merchant capability, device evidence and platform review");
   }
 
   return Object.freeze({
-    status: "READY_FOR_LAUNCH",
-    mode: release ? "production-submission" : "prelaunch-verified",
+    status: "LOCAL_ARTIFACTS_VALIDATED",
+    mode: "local",
+    platformRelease: "NOT_CERTIFIED",
     nativeWechatMini: nativeWechatReport,
     uniWeixinMini: {
       pages: mpWeixinApp.pages.length,
