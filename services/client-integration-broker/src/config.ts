@@ -49,6 +49,7 @@ export function loadBrokerConfiguration(environment: NodeJS.ProcessEnv): BrokerC
     "APP_ENV",
     ["test", "development", "staging", "production"] as const,
   );
+  const deployed = appEnvironment === "staging" || appEnvironment === "production";
   const tlsCertificateFile = absolute(required(environment.LTM_BROKER_TLS_CERT_FILE, "LTM_BROKER_TLS_CERT_FILE"), "LTM_BROKER_TLS_CERT_FILE");
   const tlsPrivateKeyFile = absolute(required(environment.LTM_BROKER_TLS_KEY_FILE, "LTM_BROKER_TLS_KEY_FILE"), "LTM_BROKER_TLS_KEY_FILE");
   const tlsCertificateAuthorityFile = absolute(required(
@@ -65,7 +66,10 @@ export function loadBrokerConfiguration(environment: NodeJS.ProcessEnv): BrokerC
   const redisUrl = required(environment.LTM_BROKER_REDIS_URL, "LTM_BROKER_REDIS_URL", 2_048);
   let parsedRedis: URL;
   try { parsedRedis = new URL(redisUrl); } catch { throw configuration("LTM_BROKER_REDIS_URL is invalid"); }
-  if (appEnvironment === "production" && parsedRedis.protocol !== "rediss:") throw configuration("production Redis must use TLS");
+  if (deployed && parsedRedis.protocol !== "rediss:") throw configuration(`${appEnvironment} Redis must use TLS`);
+  if (appEnvironment === "staging" && (!parsedRedis.hostname || !parsedRedis.password)) {
+    throw configuration("staging Redis requires an authenticated endpoint");
+  }
   const identityProviderUrl = required(environment.LTM_ENTERPRISE_IDP_URL, "LTM_ENTERPRISE_IDP_URL", 2_048);
   try {
     if (new URL(identityProviderUrl).protocol !== "https:") throw new Error("not HTTPS");
@@ -104,9 +108,9 @@ export function loadBrokerConfiguration(environment: NodeJS.ProcessEnv): BrokerC
   const mediaSafetyExpectedEnvironment = mediaSafetyExpectedEnvironmentValue === undefined
     ? undefined
     : oneOf(mediaSafetyExpectedEnvironmentValue, "LTM_MEDIA_SAFETY_EXPECTED_ENVIRONMENT", ["test", "development", "staging", "production"] as const);
-  if (appEnvironment === "production" && (mediaSafetyScannerUrl === undefined || mediaSafetyScannerTokenFile === undefined ||
-      !scannerAuthorityConfigured || mediaSafetyExpectedEnvironment !== "production")) {
-    throw configuration("production requires a signed production media safety scanner receipt authority");
+  if (deployed && (mediaSafetyScannerUrl === undefined || mediaSafetyScannerTokenFile === undefined ||
+      !scannerAuthorityConfigured || mediaSafetyExpectedEnvironment !== appEnvironment)) {
+    throw configuration(`${appEnvironment} requires a signed ${appEnvironment} media safety scanner receipt authority`);
   }
   const mediaLifecycleCatalogFileValue = optional(environment.LTM_MEDIA_LIFECYCLE_CATALOG_FILE, 4_096);
   const mediaLifecycleTrustPublicKeyFileValue = optional(environment.LTM_MEDIA_LIFECYCLE_TRUST_PUBLIC_KEY_FILE, 4_096);
@@ -123,15 +127,15 @@ export function loadBrokerConfiguration(environment: NodeJS.ProcessEnv): BrokerC
   if (!lifecycleConfigured && mediaLifecycleTargetSecretRootValue !== undefined) {
     throw configuration("media lifecycle target secret root requires the signed lifecycle catalog configuration");
   }
-  if (appEnvironment === "production" && !lifecycleConfigured) throw configuration("production requires a signed media lifecycle catalog");
+  if (deployed && !lifecycleConfigured) throw configuration(`${appEnvironment} requires a signed media lifecycle catalog`);
   const mediaLifecycleExpectedEnvironment = mediaLifecycleExpectedEnvironmentValue === undefined
     ? undefined
     : oneOf(mediaLifecycleExpectedEnvironmentValue, "LTM_MEDIA_LIFECYCLE_EXPECTED_ENVIRONMENT", ["test", "development", "staging", "production"] as const);
-  if (appEnvironment === "production" && mediaLifecycleExpectedEnvironment !== "production") {
-    throw configuration("production requires a production media lifecycle catalog environment");
+  if (deployed && mediaLifecycleExpectedEnvironment !== appEnvironment) {
+    throw configuration(`${appEnvironment} requires a ${appEnvironment} media lifecycle catalog environment`);
   }
-  if (appEnvironment === "production" && mediaLifecycleTargetSecretRootValue === undefined) {
-    throw configuration("production requires LTM_MEDIA_LIFECYCLE_TARGET_SECRET_ROOT");
+  if (deployed && mediaLifecycleTargetSecretRootValue === undefined) {
+    throw configuration(`${appEnvironment} requires LTM_MEDIA_LIFECYCLE_TARGET_SECRET_ROOT`);
   }
   const mediaDownloadPrivateKeyFileValue = optional(environment.LTM_MEDIA_DOWNLOAD_PRIVATE_KEY_FILE, 4_096);
   const mediaDownloadPublicKeyFileValue = optional(environment.LTM_MEDIA_DOWNLOAD_PUBLIC_KEY_FILE, 4_096);
@@ -141,7 +145,7 @@ export function loadBrokerConfiguration(environment: NodeJS.ProcessEnv): BrokerC
     .every((value) => value !== undefined);
   if (!downloadConfigured && [mediaDownloadPrivateKeyFileValue, mediaDownloadPublicKeyFileValue, mediaDownloadBaseUrl, mediaDownloadIssuer]
       .some((value) => value !== undefined)) throw configuration("media download key pair, base URL, and issuer must be configured together");
-  if (appEnvironment === "production" && !downloadConfigured) throw configuration("production requires media download authorization signing configuration");
+  if (deployed && !downloadConfigured) throw configuration(`${appEnvironment} requires media download authorization signing configuration`);
   if (mediaDownloadBaseUrl !== undefined) {
     try {
       const url = new URL(mediaDownloadBaseUrl);
@@ -154,8 +158,8 @@ export function loadBrokerConfiguration(environment: NodeJS.ProcessEnv): BrokerC
   if (mediaLifecycleMaintenanceTenantIds.some((value) => !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(value))) {
     throw configuration("LTM_MEDIA_LIFECYCLE_MAINTENANCE_TENANT_IDS contains an invalid tenant ID");
   }
-  if (appEnvironment === "production" && mediaLifecycleMaintenanceTenantIds.length < 1) {
-    throw configuration("production requires LTM_MEDIA_LIFECYCLE_MAINTENANCE_TENANT_IDS");
+  if (deployed && mediaLifecycleMaintenanceTenantIds.length < 1) {
+    throw configuration(`${appEnvironment} requires LTM_MEDIA_LIFECYCLE_MAINTENANCE_TENANT_IDS`);
   }
   return {
     appEnvironment,

@@ -1,4 +1,13 @@
 import assert from "node:assert/strict";
+import { execFile, spawnSync } from "node:child_process";
+import { generateKeyPairSync } from "node:crypto";
+import { once } from "node:events";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import test from "node:test";
 import { BrokerError } from "./contracts.js";
 import { loadBrokerConfiguration } from "./config.js";
@@ -121,4 +130,114 @@ test("production configuration fails closed on plaintext Redis, HTTP IdP, inline
       (error: unknown) => error instanceof BrokerError && error.code === "CONFIGURATION_INVALID",
     );
   }
+});
+
+function stagingEnvironment(): NodeJS.ProcessEnv {
+  return {
+    ...productionEnvironment(),
+    APP_ENV: "staging",
+    LTM_MEDIA_S3_BUCKET: "ltm-staging-media",
+    LTM_MEDIA_SAFETY_EXPECTED_ENVIRONMENT: "staging",
+    LTM_MEDIA_SAFETY_EXPECTED_PROVIDER: "staging-media-scanner",
+    LTM_MEDIA_LIFECYCLE_EXPECTED_KEY_ID: "media-policy-staging-1",
+    LTM_MEDIA_LIFECYCLE_EXPECTED_ENVIRONMENT: "staging",
+    LTM_MEDIA_LIFECYCLE_MAINTENANCE_TENANT_IDS: "tenant-staging-1",
+  };
+}
+
+test("staging requires scoped media trust, authenticated TLS Redis, and explicit lifecycle maintenance", () => {
+  const staging = loadBrokerConfiguration(stagingEnvironment());
+  assert.equal(staging.appEnvironment, "staging");
+  assert.equal(staging.mediaSafetyExpectedEnvironment, "staging");
+  assert.equal(staging.mediaLifecycleExpectedEnvironment, "staging");
+  assert.equal(staging.mediaLifecycleTargetSecretRoot, "/var/run/secrets/ltm-media-lifecycle-targets");
+  assert.deepEqual(staging.mediaLifecycleMaintenanceTenantIds, ["tenant-staging-1"]);
+
+  const overrides: NodeJS.ProcessEnv[] = [
+    { LTM_BROKER_REDIS_URL: "redis://broker:fixture@127.0.0.1:6380/0" }, // secret-scan: allow-test-fixture
+    { LTM_BROKER_REDIS_URL: "rediss://redis.example.com:6380/0" },
+    { LTM_MEDIA_SAFETY_EXPECTED_ENVIRONMENT: "production" },
+    { LTM_MEDIA_LIFECYCLE_EXPECTED_ENVIRONMENT: "production" },
+    { LTM_MEDIA_LIFECYCLE_TARGET_SECRET_ROOT: undefined },
+    { LTM_MEDIA_LIFECYCLE_MAINTENANCE_TENANT_IDS: undefined },
+  ];
+  const full = stagingEnvironment();
+  for (const prefix of ["LTM_MEDIA_SAFETY_", "LTM_MEDIA_LIFECYCLE_", "LTM_MEDIA_DOWNLOAD_"]) {
+    const absent = Object.fromEntries(Object.keys(full).filter(key => key.startsWith(prefix)).map(key => [key, undefined]));
+    overrides.push(absent);
+  }
+  for (const override of overrides) {
+    assert.throws(() => loadBrokerConfiguration({ ...full, ...override }), {
+      name: "BrokerError", code: "CONFIGURATION_INVALID",
+    }, Object.keys(override).join(","));
+  }
+  const unsignedScanner = Object.fromEntries(
+    Object.keys(full)
+      .filter(key => key.startsWith("LTM_MEDIA_SAFETY_") && !key.endsWith("_URL") && !key.endsWith("_TOKEN_FILE"))
+      .map(key => [key, undefined]),
+  );
+  assert.throws(() => loadBrokerConfiguration({ ...full, ...unsignedScanner }), /signed staging media safety/);
+  const development = loadBrokerConfiguration({
+    ...full, ...unsignedScanner, APP_ENV: "development",
+    LTM_BROKER_REDIS_URL: "redis://broker:fixture@127.0.0.1:6380/0", // secret-scan: allow-test-fixture
+  });
+  assert.equal(development.mediaSafetyReceiptPublicKeyFile, undefined);
+});
+
+test("the staging process rejects cross-environment media trust before accessing mounted files or listening", () => {
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL("./main.js", import.meta.url))], {
+    env: { ...stagingEnvironment(), LTM_MEDIA_LIFECYCLE_EXPECTED_ENVIRONMENT: "production" },
+    encoding: "utf8",
+    timeout: 5_000,
+  });
+  assert.ifError(result.error);
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, "");
+  assert.deepEqual(
+    { ...JSON.parse(result.stderr), timestamp: "[time]" },
+    { timestamp: "[time]", level: "error", event: "client_integration_broker.start_failed", error: "BrokerError" },
+  );
+});
+
+test("invalid projected lifecycle policy stops staging startup before dialing Redis", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "ltm-broker-startup-"));
+  context.after(() => rmSync(directory, { recursive: true, force: true }));
+  const publicKeyFile = join(directory, "trust.pem");
+  const privateKeyFile = join(directory, "signing.pem");
+  const catalogFile = join(directory, "catalog.json");
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  writeFileSync(publicKeyFile, publicKey.export({ type: "spki", format: "pem" }), { mode: 0o400 });
+  writeFileSync(privateKeyFile, privateKey.export({ type: "pkcs8", format: "pem" }), { mode: 0o400 });
+  writeFileSync(catalogFile, '{"schemaVersion":"ltm.media-lifecycle-policy-catalog.v1"}', { mode: 0o400 });
+  let connections = 0;
+  const listener = createServer(socket => {
+    connections++;
+    socket.destroy();
+  });
+  listener.listen(0, "127.0.0.1");
+  await once(listener, "listening");
+  context.after(() => new Promise<void>(resolve => listener.close(() => resolve())));
+  const address = listener.address();
+  assert.ok(address && typeof address === "object");
+  const env = {
+    ...stagingEnvironment(),
+    LTM_BROKER_TLS_CERT_FILE: publicKeyFile,
+    LTM_BROKER_TLS_CA_FILE: publicKeyFile,
+    LTM_BROKER_TLS_KEY_FILE: privateKeyFile,
+    LTM_MEDIA_SAFETY_RECEIPT_PUBLIC_KEY_FILE: publicKeyFile,
+    LTM_MEDIA_LIFECYCLE_CATALOG_FILE: catalogFile,
+    LTM_MEDIA_LIFECYCLE_TRUST_PUBLIC_KEY_FILE: publicKeyFile,
+    LTM_BROKER_REDIS_URL: `rediss://:fixture@127.0.0.1:${address.port}/0`, // secret-scan: allow-test-fixture
+  };
+  const exec = promisify(execFile);
+  await assert.rejects(
+    exec(process.execPath, [fileURLToPath(new URL("./main.js", import.meta.url))], { env, timeout: 5_000 }),
+    (error: { code?: unknown; stdout?: unknown; stderr?: string }) => {
+      assert.equal(error.code, 1);
+      assert.equal(error.stdout, "");
+      assert.equal(JSON.parse(error.stderr ?? "").event, "client_integration_broker.start_failed");
+      return true;
+    },
+  );
+  assert.equal(connections, 0);
 });

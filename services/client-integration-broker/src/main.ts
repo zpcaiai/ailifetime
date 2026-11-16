@@ -17,18 +17,16 @@ import {
 import { handleBrokerRequest } from "./server.js";
 
 let brokerForCleanup: ClientIntegrationBroker | undefined;
+let redisForStartupCleanup: RedisBrokerStore | undefined;
 let maintenanceTimer: NodeJS.Timeout | undefined;
 
 async function run(): Promise<void> {
   const configuration = loadBrokerConfiguration(process.env);
   safeTlsFile(configuration.tlsCertificateAuthorityFile, 1_048_576);
+  const serverCertificate = safeTlsFile(configuration.tlsCertificateFile, 1_048_576);
+  const serverPrivateKey = safeTlsFile(configuration.tlsPrivateKeyFile, 1_048_576);
   const appSecret = new RotatingSecretFile(configuration.wechatAppSecretFile, 16, 512);
   const idpCredential = new RotatingSecretFile(configuration.identityProviderTokenFile, 20, 8_192);
-  const redis = await RedisBrokerStore.connect(
-    configuration.redisUrl,
-    configuration.appEnvironment !== "production",
-    configuration.dependencyTimeoutMs,
-  );
   const objects = new AwsS3MultipartObjectStore(
     configuration.s3Bucket,
     configuration.s3KmsKeyId,
@@ -85,6 +83,12 @@ async function run(): Promise<void> {
         issuer: configuration.mediaDownloadIssuer,
         maximumTtlSeconds: configuration.mediaDownloadMaximumTtlSeconds,
       });
+  const redis = await RedisBrokerStore.connect(
+    configuration.redisUrl,
+    configuration.appEnvironment === "test" || configuration.appEnvironment === "development",
+    configuration.dependencyTimeoutMs,
+  );
+  redisForStartupCleanup = redis;
   const broker = new ClientIntegrationBroker({
     wechat: new OfficialWechatCodeExchange(
       configuration.wechatAppId,
@@ -109,6 +113,7 @@ async function run(): Promise<void> {
     objectKeyPrefix: configuration.objectKeyPrefix,
   });
   brokerForCleanup = broker;
+  redisForStartupCleanup = undefined;
   let maintenanceRunning = false;
   const runMaintenance = async (): Promise<void> => {
     if (maintenanceRunning) return;
@@ -136,8 +141,8 @@ async function run(): Promise<void> {
     void runMaintenance();
   }
   const server = createServer({
-    cert: safeTlsFile(configuration.tlsCertificateFile, 1_048_576),
-    key: safeTlsFile(configuration.tlsPrivateKeyFile, 1_048_576),
+    cert: serverCertificate,
+    key: serverPrivateKey,
     minVersion: "TLSv1.2",
     honorCipherOrder: true,
     requestCert: false,
@@ -186,6 +191,7 @@ function safeTlsFile(path: string, maximum: number): Buffer {
 void run().catch(async (error: unknown) => {
   if (maintenanceTimer !== undefined) clearInterval(maintenanceTimer);
   await brokerForCleanup?.close().catch(() => undefined);
+  await redisForStartupCleanup?.close().catch(() => undefined);
   process.stderr.write(`${JSON.stringify({
     timestamp: new Date().toISOString(),
     level: "error",
