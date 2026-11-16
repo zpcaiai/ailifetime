@@ -166,7 +166,6 @@ test("resumable upload overrides a product-operation session for create, chunks,
     getExtConfigSync: () => ({ apiBaseUrl: "https://api.product.cn", apiAllowedOrigins: ["https://api.product.cn"] }),
     getAccountInfoSync: () => ({ miniProgram: { envVersion: "release", appId: "wx0123456789abcdef" } }),
     getRandomValues: (value) => { value.fill(7); },
-    arrayBufferToBase64: () => "AQIDBA==",
     getFileSystemManager: () => ({
       readFile: (input) => input.success({ data: Uint8Array.from({ length: input.length }, (_, index) => index + 1).buffer }),
     }),
@@ -211,6 +210,8 @@ test("resumable upload overrides a product-operation session for create, chunks,
     "/v1/uploads/upload-2/cancel",
   ]);
   assert.equal(requests.every(({ header }) => header["X-Purpose"] === "age_transformation"), true);
+  assert.deepEqual([...new Uint8Array(requests[1].data)], [1, 2, 3, 4]);
+  assert.equal(requests[1].header["X-Chunk-Sha256"], "9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a");
 });
 
 test("mini incremental SHA-256 matches the standard vector across chunk boundaries", () => {
