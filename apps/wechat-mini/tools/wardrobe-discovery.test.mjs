@@ -63,17 +63,17 @@ test('a style search uses the matching photo and keeps general and unavailable s
  assert.match(ageLimited.lookNames, /当前不适用/u);
 });
 test('mini view exposes collection controls, real descriptions and illustrative card labels',()=>{
- const view=readFileSync(new URL('../miniprogram/pages/wardrobe/index.wxml',import.meta.url),'utf8');
+ const view=wardrobeView('wxml');
  for(const binding of ['searchSeries','filterCategory','filterAvailable','clearDiscovery','visibleSeries','selectedSeries.tagline','focusedTemplate.features','item.previewSrc','focusedTemplate.previewSrc','seriesItem.availability','seriesItem.coverStyle'])assert.ok(view.includes(binding),binding);
  assert.ok(view.includes('AI 衣着预览'));assert.ok(view.includes('maxlength="40"'));assert.ok(view.includes('aria-label="搜索衣橱系列'));
- const css=readFileSync(new URL('../miniprogram/pages/wardrobe/index.wxss',import.meta.url),'utf8');assert.ok(css.includes('calc(50% - 5px)'));assert.ok(css.includes('white-space: normal'));assert.ok(css.includes('min-width: 0'));
+ const css=wardrobeView('wxss');assert.ok(css.includes('calc(50% - 5px)'));assert.ok(css.includes('white-space: normal'));assert.ok(css.includes('min-width: 0'));
  assert.match(view, /visibleSeries\.length === 1 \? 'single-result'/u);
  assert.match(css, /\.series-options\.single-result \.series-option\s*\{[^}]*flex-basis:\s*100%/u);
 });
 
 test('series covers, grid thumbnails and detail preserve square photos without cropping', () => {
- const view = readFileSync(new URL('../miniprogram/pages/wardrobe/index.wxml', import.meta.url), 'utf8');
- const css = readFileSync(new URL('../miniprogram/pages/wardrobe/index.wxss', import.meta.url), 'utf8');
+ const view = wardrobeView('wxml');
+ const css = wardrobeView('wxss');
  for (const binding of ['seriesItem.coverLooks[0].previewSrc', 'look.previewSrc', 'item.previewSrc', 'focusedTemplate.previewSrc']) {
   const image = [...view.matchAll(/<image\s[^>]*\/>/gu)].find(([element]) => element.includes(`src="{{${binding}}}"`));
   assert.ok(image, binding);
@@ -82,6 +82,12 @@ test('series covers, grid thumbnails and detail preserve square photos without c
  assert.match(css, /\.wardrobe-image::before\s*\{[^}]*padding-top:\s*100%/u);
  assert.match(css, /\.template-tile\s*\{[^}]*33\.333%/u);
 });
+function wardrobeView(ext) {
+ const entry = new URL(`../miniprogram/pages/wardrobe/index.${ext}`, import.meta.url);
+ const source = readFileSync(entry,'utf8');
+ const shared = /^(?:<include src=|@import )"([^"]+)"/.exec(source);
+ return shared ? readFileSync(new URL(shared[1],entry),'utf8') : source;
+}
 
 test('v2 history and nine-look presentation retain bounded readable covers and distinct garment designs',()=>{
  const c=context();const older={...c,catalogVersion:'lifetime-wardrobe.v2',styles:c.styles.slice(0,98)};assert.equal(discover(older.styles,catalog(older)).styleCount,95);
@@ -134,27 +140,31 @@ test('all 216 catalog looks have a distinct bundled photo used by the grid and d
  const {main}=validateMiniProgram().packages;
  assert.ok(main <= 2_000_000, `Mini Program main package is ${main} bytes`);
 });
-test('all 234 royal costume previews match the active catalog and fit their native subpackage',()=>{
- const program=new URL('../miniprogram/',import.meta.url), first=context(), version='lifetime-wardrobe.v4';
+for (const [version, collection, packagePath, styleCount, seriesCount, categories] of [
+ ['lifetime-wardrobe.v4','royal','pages/wardrobe',234,26,['princess','prince']],
+ ['lifetime-wardrobe.v5','cinema','pages/wardrobe-cinema',108,12,['women','men']],
+]) test(`all ${styleCount} ${collection} previews match their catalog and fit their native subpackage`,()=>{
+ const program=new URL('../miniprogram/',import.meta.url), first=context();
  const catalogStyles=wardrobeStylesForCatalog(version);
  const c={...first,catalogVersion:version,series:wardrobeSeriesForCatalog(version),styles:catalogStyles.map(s=>({...s,
   description:s.description??s.label,seriesId:s.seriesId??'legacy',seriesLabel:s.seriesLabel??'原有基础款',minAge:s.minAge??0,maxAge:s.maxAge??100,minPeople:s.minPeople??1,
   available:true,unavailableReason:'',legacy:!s.seriesId}))};
  const groups=catalog(c), view=discover(c.styles,groups);
- assert.equal(view.styleCount,234);assert.equal(view.series.length,26);
- for(const category of ['princess','prince'])assert.equal(discover(c.styles,groups,{category}).visibleSeries.length,13);
- const files=new Set(readdirSync(new URL('pages/wardrobe/assets/', program))), hashes=new Set();
+ assert.equal(view.styleCount,styleCount);assert.equal(view.series.length,seriesCount);
+ for(const category of categories)assert.equal(discover(c.styles,groups,{category}).visibleSeries.length,seriesCount/2);
+ if (collection==='cinema') assert.deepEqual(discover(c.styles,groups,{query:'西部'}).visibleSeries.map(group=>group.id),['cinema-western-women','cinema-western-men']);
+ const files=new Set(readdirSync(new URL(packagePath+'/assets/', program))), hashes=new Set();
  for(const group of view.series) {
   const looks=c.styles.filter(s=>s.seriesId===group.id);
   assert.equal(looks.length,9);assert.equal(group.coverLooks.length,3);
   for(const [index,s] of looks.entries()){
    const {previewSrc}=presentStyle(s,index,group.palette);
-   assert.equal(previewSrc,`/pages/wardrobe/assets/${s.id}.webp`);assert.ok(files.delete(`${s.id}.webp`));
+   assert.equal(previewSrc,`/${packagePath}/assets/${s.id}.webp`);assert.ok(files.delete(`${s.id}.webp`));
    const bytes=readFileSync(new URL(previewSrc.slice(1),program));
    assert.equal(bytes.toString('ascii',0,4),'RIFF');assert.equal(bytes.toString('ascii',8,12),'WEBP');
    hashes.add(createHash('sha256').update(bytes).digest('hex'));
   }
  }
- assert.equal(files.size,0);assert.equal(hashes.size,234);
- assert.ok(validateMiniProgram().packages['pages/wardrobe']<=2_000_000);
+ assert.equal(files.size,0);assert.equal(hashes.size,styleCount);
+ assert.ok(validateMiniProgram().packages[packagePath]<=2_000_000);
 });

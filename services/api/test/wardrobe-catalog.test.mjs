@@ -1,9 +1,28 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
-import { WARDROBE_STYLES, WARDROBE_SERIES, WARDROBE_CATALOG_VERSION, wardrobeStylesForCatalog, parseWardrobeEdit, buildWardrobePlan, wardrobeBinding } from '../../../packages/capabilities/dist/wardrobe-plan.js';
+import { WARDROBE_STYLES, WARDROBE_SERIES, WARDROBE_CATALOG_VERSION, wardrobeStylesForCatalog, wardrobeSeriesForCatalog, parseWardrobeEdit, buildWardrobePlan, wardrobeBinding } from '../../../packages/capabilities/dist/wardrobe-plan.js';
 const image={id:'age-image',sha256:'a'.repeat(64),mimeType:'image/png',width:64,height:64,byteLength:100};
 const edit=(style,age,count)=>({schemaVersion:'ltm.wardrobe-edit.v1',sourceRootCommandId:'root',sourceCommandId:'root',targetAge:age,sourceImage:image,selections:Array.from({length:count},(_,i)=>({participantId:i?'partner':'user',styleId:style.id}))});
+test('the cinema catalog binds each of six female and male series to nine distinct costume cuts',()=>{
+ const version='lifetime-wardrobe.v5';
+ const groups=wardrobeSeriesForCatalog(version);
+ const styles=wardrobeStylesForCatalog(version).filter(style=>style.seriesId);
+ assert.equal(groups.length,12);
+ assert.equal(styles.length,108);
+ assert.equal(new Set(styles.map(style=>style.id)).size,108);
+ assert.equal(new Set(styles.map(style=>style.instruction)).size,108);
+ for(const group of groups){
+  const looks=styles.filter(style=>style.seriesId===group.id);
+  assert.equal(looks.length,9);
+  for(const style of looks){
+   for(const age of [0,37,100]){
+    for(const people of [1,2])assert.deepEqual(parseWardrobeEdit(edit(style,age,people)),edit(style,age,people));
+   }
+   assert.match(style.instruction,/opaque modest age-appropriate variants/);
+  }
+ }
+});
 test('all eight series contain every approved look and legacy IDs remain unchanged',()=>{
  assert.equal(createHash('sha256').update(JSON.stringify(WARDROBE_STYLES.slice(0,34))).digest('hex'),'198555e1e7e8180cceac78638eb291bfa83a90d14210c5e8edd308c6186904cf');
  const expected={east:['素雅盘扣','宋风日常','旗袍长衫','改良汉服'],retro:['八十年代衣着','九十年代港风','千禧牛仔','经典白衬衫'],together:['同色针织','白衬衫','经典风衣','银发对服'],daily:['白衬衫','奶油针织','亚麻衬衣','简约西装'],wedding:['简约婚纱西装','复古婚礼','中式礼服','银婚金婚'],milestone:['毕业纪念','初入职场','生日礼服','退休纪念'],winter:['毛呢','围巾','针织','羽绒'],newyear:['喜庆中式','红色针织','情侣对服']};

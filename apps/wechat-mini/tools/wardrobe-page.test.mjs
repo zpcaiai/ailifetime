@@ -12,10 +12,10 @@ function seriesResult(age=37,seriesId='daily',statuses=[]) {
  const items=styles.map((style,i)=>({itemId:style.id,title:style.label,targetAge:age,commandId:'series-job-'+i,status:statuses[i]||'ready',attempts:0,canRetry:statuses[i]==='failed',asset:{sha256:String(i+2).padStart(64,'0')},downloadPath:`/v1/timelines/series-job-${i}/nodes/${age}/image`}));
  return{purchaseId:'photo-suite',sku:'wardrobe-series',catalogVersion:'lifetime-wardrobe.v3',sourceRootCommandId:'root',seriesId,seriesTitle:styles[0]?.seriesLabel,expectedCount:styles.length,amountMinor:990,currency:'CNY',readyCount:items.filter(item=>item.status==='ready').length,paymentState:'paid',items};
 }
-function page(request,mediaOverrides={}){
- let p,n=0;const timers=new Map(),removed=[],saves=[],calls=[],scrolls=[];
+function page(request,mediaOverrides={},version){
+ let n=0;const timers=new Map(),removed=[],saves=[],calls=[],scrolls=[],redirects=[],mod={exports:{}};
  const media={download:async node=>'private-'+node.asset.sha256,remove:async path=>removed.push(path),save:async node=>saves.push(node),...mediaOverrides};
- runInNewContext(readFileSync(new URL('../miniprogram/pages/wardrobe/index.js',import.meta.url),'utf8'),{Page:x=>p=x,require:name=>{
+ runInNewContext(readFileSync(new URL('../miniprogram/services/wardrobe-page.js',import.meta.url),'utf8'),{module:mod,require:name=>{
   if(name.endsWith('/api'))return{idempotencyKey:prefix=>prefix+'-'+(++n),requestForPurpose:async(path,purpose,options)=>{calls.push({path,purpose,options});return request(path.split('?')[0],options,purpose);}};
   if(name.endsWith('/session'))return{get:()=>({actorId:'user'}),requireSession:()=>({actorId:'user'})};
   if(name.endsWith('/photo-purchases')) {
@@ -26,42 +26,65 @@ function page(request,mediaOverrides={}){
   }
   if(name.endsWith('/wardrobe-catalog'))return discoveryModule.exports;
   if(name.endsWith('/timeline-media'))return media;if(name.endsWith('/wardrobe'))return{version:'wardrobe-edit-consent-v1'};throw Error(name);
- },wx:{navigateTo(){},switchTab(){},pageScrollTo:options=>scrolls.push(options.selector)},setTimeout:fn=>{const id=++n;timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id),console});
- p.setData=(data, rendered)=>{Object.assign(p.data,data);rendered?.();};return{p,calls,removed,saves,timers,scrolls};
+ },wx:{navigateTo(){},redirectTo:options=>redirects.push(options.url),switchTab(){},pageScrollTo:options=>scrolls.push(options.selector)},setTimeout:fn=>{const id=++n;timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id),console});
+ const p=mod.exports(version);
+ p.setData=(data, rendered)=>{Object.assign(p.data,data);rendered?.();};return{p,calls,removed,saves,timers,scrolls,redirects};
 }
-test('royal catalog renders the nine exact templates, previews detail and opens a version-bound quote',async()=>{
- const version='lifetime-wardrobe.v4', styles=wardrobeStylesForCatalog(version), series=wardrobeSeriesForCatalog(version);
+for (const [version, packagePath, styleCount, seriesCount, defaultCategory, otherCategory] of [
+ ['lifetime-wardrobe.v4','pages/wardrobe',234,26,'princess','prince'],
+ ['lifetime-wardrobe.v5','pages/wardrobe-cinema',108,12,'women','men'],
+]) test(`${version} renders nine exact templates, detail and a version-bound quote`,async()=>{
+ const styles=wardrobeStylesForCatalog(version), series=wardrobeSeriesForCatalog(version);
  const ctx={...context(),catalogVersion:version,series,styles:styles.map(s=>({...s,description:s.description??s.label,seriesId:s.seriesId??'legacy',
   seriesLabel:s.seriesLabel??'原有基础款',minAge:s.minAge??0,maxAge:s.maxAge??100,minPeople:s.minPeople??1,available:true,unavailableReason:'',legacy:!s.seriesId}))};
- const [group]=series.filter(s=>s.category==='prince');
+ const group=series.find(s=>s.category===otherCategory);
  const items=styles.filter(s=>s.seriesId===group.id).map(s=>({itemId:s.id,targetAge:37,status:'awaiting_payment'}));
  const quote={purchaseId:'photo-royal-test',catalogVersion:version,sku:'wardrobe-series',seriesId:group.id,sourceRootCommandId:'root',amountMinor:1990,expectedCount:9,items};
- const f=page(async path=>({data:path.endsWith('/wardrobe')?ctx:quote}));
+ const requestQuote=async path=>({data:path.endsWith('/wardrobe')?ctx:quote});
+ const f=page(requestQuote,{},version);
  await f.p.onLoad({rootId:'root',age:'37'});
  assert.ok(f.calls[0].path.endsWith('/wardrobe?catalogVersion='+version));
- assert.equal(f.p.data.series.length,26);assert.equal(f.p.data.styleCount,234);
+ assert.equal(f.p.data.series.length,seriesCount);assert.equal(f.p.data.styleCount,styleCount);
  assert.equal(f.p.data.bundleCount,9);assert.equal(f.p.data.priceSeries,'¥19.90');
- assert.ok(f.p.data.selectedSeries.id.endsWith('-princess'));
- f.p.filterCategory({currentTarget:{dataset:{category:'prince'}}});
- assert.equal(f.p.data.visibleSeries.length,13);
+ assert.ok(f.p.data.selectedSeries.id.endsWith('-'+defaultCategory));
+ f.p.filterCategory({currentTarget:{dataset:{category:otherCategory}}});
+ assert.equal(f.p.data.visibleSeries.length,seriesCount/2);
  await f.p.selectBundle({currentTarget:{dataset:{series:group.id}}});
  assert.deepEqual(Array.from(f.p.data.templateStyles,s=>s.id),items.map(s=>s.itemId));
  f.p.previewOutfit({currentTarget:{dataset:{style:items[8].itemId}}});
- assert.equal(f.p.data.focusedTemplate.previewSrc,'/pages/wardrobe/assets/'+items[8].itemId+'.webp');
+ assert.equal(f.p.data.focusedTemplate.previewSrc,'/'+packagePath+'/assets/'+items[8].itemId+'.webp');
  assert.equal(f.p.data.templatePosition,9);assert.equal(f.scrolls.at(-1),'#wardrobe-template-detail');
  f.p.data.accepted=true;
  await f.p.submit();
  const body=f.calls.find(call=>call.path==='/v1/photo-purchases').options.data;
  assert.equal(body.catalogVersion,version);assert.equal(body.seriesId,group.id);assert.equal(f.p.data.seriesItems.length,9);
- const reopened=page(async path=>({data:path.endsWith('/wardrobe')?ctx:quote}));
+ const reopened=page(requestQuote,{},version);
  await reopened.p.onLoad({purchaseId:quote.purchaseId});
  assert.equal(reopened.p.data.seriesPurchase.catalogVersion,version);
  assert.equal(reopened.p.data.templateStyles.length,9);
  const view=result();view.wardrobeSource.selections[0].styleId=items[8].itemId;
- const reopenedResult=page(async path=>({data:path.endsWith('/wardrobe')?ctx:view}));
+ const requestResult=async path=>({data:path.endsWith('/wardrobe')?ctx:view});
+ const reopenedResult=page(requestResult,{},version);
  await reopenedResult.p.onLoad({rootId:'root',age:'37',commandId:'outfit'});
  assert.ok(reopenedResult.p.data.resultPath);
  assert.equal(reopenedResult.p.data.people[0].styleId,items[8].itemId);
+ if (version==='lifetime-wardrobe.v5') {
+  const fromOrders=page(requestQuote);
+  await fromOrders.p.onLoad({purchaseId:quote.purchaseId});
+  assert.deepEqual(fromOrders.redirects,['/pages/wardrobe-cinema/index?purchaseId='+quote.purchaseId]);
+  const fromLibrary=page(requestResult);
+  await fromLibrary.p.onLoad({rootId:'root',age:'37',commandId:'outfit'});
+  assert.deepEqual(fromLibrary.redirects,['/pages/wardrobe-cinema/index?rootId=root&age=37&commandId=outfit']);
+ }
+});
+test('collection switch uses the same source photo and blocks unresolved purchases',async()=>{
+ const f=page(async()=>({data:context()}));
+ await f.p.onLoad({rootId:'root',age:'37'});
+ f.p.switchCollection();
+ assert.deepEqual(f.redirects,['/pages/wardrobe-cinema/index?rootId=root&age=37']);
+ f.p.intent={uncertain:true};
+ f.p.switchCollection();
+ assert.equal(f.redirects.length,1);
 });
 test('reopened9.90 wardrobe quote displays its stored price while new series remain19.90',async()=>{
  const current=seriesResult(),quote={...current,amountMinor:990,catalogVersion:'lifetime-wardrobe.v2',expectedCount:4,readyCount:4,items:current.items.slice(0,4)};const f=page(async path=>({data:path.endsWith('/wardrobe')?context():quote}));
@@ -121,7 +144,10 @@ test('large preview steps through eligible styles in order, respects boundaries 
  await f.p.onHide();
  step('next');
  assert.equal(f.p.data.templatePosition, 0);
- const view = readFileSync(new URL('../miniprogram/pages/wardrobe/index.wxml', import.meta.url), 'utf8');
+ const entry = new URL('../miniprogram/pages/wardrobe/index.wxml', import.meta.url);
+ const pageSource = readFileSync(entry,'utf8');
+ const shared = /^<include src="([^"]+)"/.exec(pageSource);
+ const view = shared ? readFileSync(new URL(shared[1],entry),'utf8') : pageSource;
  assert.match(view, /data-step="previous" bindtap="stepTemplate"/u);
  assert.match(view, /data-step="next" bindtap="stepTemplate"/u);
 });

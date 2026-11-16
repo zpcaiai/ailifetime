@@ -46,6 +46,13 @@ for(const couple of [false,true])test(`actual operator wardrobe HTTP ${couple?'c
     assert.equal(royal.styles.filter(style=>!style.legacy).length,234);
     assert.equal(new Set(royal.series.map(group=>group.category)).size,2);
     assert.ok(royal.styles.filter(style=>!style.legacy).every(style=>style.id.startsWith('royal-')&&style.available));
+    const cinemaResponse = await fetch(base+path+'?catalogVersion=lifetime-wardrobe.v5',{headers});
+    assert.equal(cinemaResponse.status,200);
+    const cinema = (await cinemaResponse.json()).data;
+    assert.equal(cinema.catalogVersion,'lifetime-wardrobe.v5');
+    assert.equal(cinema.series.length,12);
+    assert.equal(cinema.styles.filter(style=>!style.legacy).length,108);
+    for(const category of ['women','men'])assert.equal(cinema.series.filter(group=>group.category===category).length,6);
     assert.equal((await fetch(base+path+'?catalogVersion=future',{headers})).status,422);
     assert.equal((await request(base,{selections:f.edit.selections})).status,409);
     for(const participantId of f.participantIds){

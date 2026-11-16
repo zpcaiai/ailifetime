@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { canonicalJson, DomainError, type ActorContext, type JsonObject, type JsonValue, type LifeTimeMachineRuntimePort, type RecordEnvelope } from "@ltm/core";
-import { buildAgeGenerationPlan, type CapabilityRegistry } from "@ltm/capabilities";
+import { buildAgeGenerationPlan, isWardrobeRetailCatalog, type CapabilityRegistry } from "@ltm/capabilities";
 import { agePhotoProduct, photoProduct, wardrobeSeriesProduct } from "./photo-catalog.js";
 import { WardrobeService, wardrobeCommandId } from "./wardrobe.js";
 import { TimelineDeliveryService } from "./timeline-delivery.js";
@@ -32,7 +32,7 @@ export class PhotoPurchaseService {
     if (input.sku === "wardrobe-series") {
       closed(input, ["sku", "sourceRootCommandId", "targetAge", "seriesId"], ["catalogVersion"]);
       const catalogVersion = input.catalogVersion === undefined ? "lifetime-wardrobe.v3" : input.catalogVersion;
-      if (catalogVersion !== "lifetime-wardrobe.v3" && catalogVersion !== "lifetime-wardrobe.v4")
+      if (!isWardrobeRetailCatalog(catalogVersion))
         throw new DomainError("VALIDATION_FAILED", "unsupported wardrobe purchase catalog version");
       if (!identifier(input.sourceRootCommandId)) throw new DomainError("VALIDATION_FAILED", "invalid source timeline");
       const source = await new WardrobeService(this.runtime, this.registry, this.artifacts).context(actor, input.sourceRootCommandId, input.targetAge as number);

@@ -9,11 +9,15 @@ import { MiniProgramValidationError, validateMiniProgram } from "./validate-mini
 
 test("the checked-in mini-program has complete pages and fail-closed controls", () => {
   const result = validateMiniProgram();
-  assert.equal(result.pages, 11);
+  assert.equal(result.pages, 12);
   const app = JSON.parse(readFileSync(new URL("../miniprogram/app.json", import.meta.url)));
-  assert.deepEqual(app.subpackages, [{root:"pages/wardrobe",pages:["index"]}]);
+  assert.deepEqual(app.subpackages, [
+    {root:"pages/wardrobe",pages:["index"]},
+    {root:"pages/wardrobe-cinema",pages:["index"]}
+  ]);
   assert.ok(result.packages.main > 0 && result.packages.main <= 2_000_000);
   assert.ok(result.packages["pages/wardrobe"] > 0 && result.packages["pages/wardrobe"] <= 2_000_000);
+  assert.ok(result.packages["pages/wardrobe-cinema"] > 0 && result.packages["pages/wardrobe-cinema"] <= 2_000_000);
   const cover = readFileSync(new URL("../miniprogram/assets/wardrobe-invite.png", import.meta.url));
   assert.deepEqual([...cover.subarray(0,8)], [137,80,78,71,13,10,26,10]);
   assert.equal(cover.readUInt32BE(16),500);assert.equal(cover.readUInt32BE(20),400);

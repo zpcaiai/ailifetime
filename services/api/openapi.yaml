@@ -241,7 +241,7 @@ paths:
         schema: { type: integer, minimum: 0, maximum: 100 }
     get:
       operationId: getWardrobeContext
-      description: Owned, accepted generated age photo only. Returns ordered people, wardrobe consent flags and the requested age-appropriate catalog. Use v4 for royal costume sets and v3 to read earlier styles.
+      description: Owned, accepted generated age photo only. Returns ordered people, wardrobe consent flags and the requested age-appropriate catalog. Use v5 for cinema costumes, v4 for royal costumes and v3 for earlier styles.
       security:
         - bearerAuth: []
       parameters:
@@ -1023,7 +1023,7 @@ components:
         - { type: string, maxLength: 128, pattern: '^[a-z][a-z0-9]*(?:-[a-z0-9]+)+-v1$' }
     WardrobeDiscoveryVersion:
       type: string
-      enum: [lifetime-wardrobe.v3, lifetime-wardrobe.v4]
+      enum: [lifetime-wardrobe.v3, lifetime-wardrobe.v4, lifetime-wardrobe.v5]
       default: lifetime-wardrobe.v3
     WardrobeContextResponse:
       type: object
@@ -1042,9 +1042,16 @@ components:
               styles: { minItems: 237, maxItems: 237 }
               series: { minItems: 26, maxItems: 26 }
           else:
-            properties:
-              styles: { minItems: 219, maxItems: 219 }
-              series: { minItems: 24, maxItems: 24 }
+            if:
+              properties: { catalogVersion: { const: lifetime-wardrobe.v5 } }
+            then:
+              properties:
+                styles: { minItems: 111, maxItems: 111 }
+                series: { minItems: 12, maxItems: 12 }
+            else:
+              properties:
+                styles: { minItems: 219, maxItems: 219 }
+                series: { minItems: 24, maxItems: 24 }
           properties:
             sourceAssetId: { type: string }
             sourceRootCommandId: { type: string }

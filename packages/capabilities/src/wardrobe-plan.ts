@@ -5,6 +5,7 @@ import { buildAgeGenerationPlan } from "./age-generation-plan.js";
 import { ADDITIONAL_WARDROBE_STYLES, WARDROBE_SERIES } from "./wardrobe-collection.js";
 import { NINE_WARDROBE_STYLES, NINE_CATALOG_VERSION } from "./wardrobe-nine.js";
 import { ROYAL_CATALOG_VERSION, ROYAL_WARDROBE_SERIES, ROYAL_WARDROBE_STYLES } from "./wardrobe-royal.js";
+import { CINEMA_CATALOG_VERSION, CINEMA_WARDROBE_SERIES, CINEMA_WARDROBE_STYLES } from "./wardrobe-cinema.js";
 export { WARDROBE_SERIES };
 export { ROYAL_CATALOG_VERSION as WARDROBE_CATALOG_VERSION };
 
@@ -70,18 +71,25 @@ export const WARDROBE_STYLES: readonly WardrobeStyle[] = Object.freeze([
 ]);
 /** Historical memberships are immutable because purchases bind exact style IDs. */
 const royalCatalog = Object.freeze([...WARDROBE_STYLES.slice(0, 3), ...ROYAL_WARDROBE_STYLES]);
-const styleById = new Map([...WARDROBE_STYLES, ...ROYAL_WARDROBE_STYLES].map(style => [style.id, style]));
+const cinemaCatalog = Object.freeze([...WARDROBE_STYLES.slice(0, 3), ...CINEMA_WARDROBE_STYLES]);
+const styleById = new Map([...WARDROBE_STYLES, ...ROYAL_WARDROBE_STYLES, ...CINEMA_WARDROBE_STYLES].map(style => [style.id, style]));
+
+export function isWardrobeRetailCatalog(version: unknown): version is typeof NINE_CATALOG_VERSION | typeof ROYAL_CATALOG_VERSION | typeof CINEMA_CATALOG_VERSION {
+  return version === NINE_CATALOG_VERSION || version === ROYAL_CATALOG_VERSION || version === CINEMA_CATALOG_VERSION;
+}
 
 export function wardrobeStylesForCatalog(version: unknown = ROYAL_CATALOG_VERSION): readonly WardrobeStyle[] {
   if (version === "lifetime-wardrobe.v1") return WARDROBE_STYLES.slice(0,34);
   if (version === "lifetime-wardrobe.v2") return WARDROBE_STYLES.slice(0,98);
   if (version === NINE_CATALOG_VERSION) return WARDROBE_STYLES;
   if (version === ROYAL_CATALOG_VERSION) return royalCatalog;
+  if (version === CINEMA_CATALOG_VERSION) return cinemaCatalog;
   throw new DomainError("VALIDATION_FAILED", "unknown wardrobe catalog version");
 }
 export function wardrobeSeriesForCatalog(version: unknown) {
   wardrobeStylesForCatalog(version);
   if (version === ROYAL_CATALOG_VERSION) return ROYAL_WARDROBE_SERIES;
+  if (version === CINEMA_CATALOG_VERSION) return CINEMA_WARDROBE_SERIES;
   return version === "lifetime-wardrobe.v1" ? WARDROBE_SERIES.slice(0, 8) : WARDROBE_SERIES;
 }
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
