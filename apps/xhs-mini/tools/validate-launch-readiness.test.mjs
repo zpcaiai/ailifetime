@@ -22,7 +22,7 @@ test("local validation covers the native WeChat source and both uni-app artifact
   assert.equal(report.status, "LOCAL_ARTIFACTS_VALIDATED");
   assert.equal(report.mode, "local");
   assert.equal(report.platformRelease, "NOT_CERTIFIED");
-  assert.equal(report.nativeWechatMini.pages, 11);
+  assert.equal(report.nativeWechatMini.pages, 12);
   assert.equal(report.uniWeixinMini.pages, 4);
   assert.equal(report.uniWeixinMini.privacyCheckEnabled, true);
   assert.ok(report.uniWeixinMini.totalBytes > 10_000 && report.uniWeixinMini.totalBytes < 2 * 1024 * 1024);
