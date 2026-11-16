@@ -683,6 +683,7 @@ export interface CheckoutSession {
 
 export type OrderState =
   | 'awaiting-consent'
+  | 'awaiting-payment'
   | 'paid'
   | 'processing'
   | 'partial'
@@ -691,6 +692,18 @@ export type OrderState =
   | 'refunded'
   | 'disputed';
 
+/** Short-lived payment parameters projected by the authenticated order service. */
+export interface XhsCustomCheckout {
+  order_id: string;
+  provider_order_id: string;
+  pay_token: string;
+  expires_at_unix: number;
+  amount_minor: number;
+  currency: 'CNY';
+  wx_url?: string;
+  zfb_url?: string;
+}
+
 export interface Order {
   id: string;
   state: OrderState;
@@ -698,6 +711,7 @@ export interface Order {
   amount_minor: number;
   currency: string;
   delivery_manifest_url?: string | null;
+  xhs_custom_checkout?: XhsCustomCheckout;
 }
 
 export interface FutureSelfMessageRequest {
